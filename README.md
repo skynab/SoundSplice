@@ -9,6 +9,10 @@ A cross-platform **audio editor** written in C++, in the spirit of Audacity.
 >   the piano instrument, generative loops, and the synth editor with its tone/preset library.
 >   Older `.looper` projects still open: Drum and Guitar tracks load as synth tracks with their
 >   notes intact, and their kit/guitar settings are dropped.
+> - **Also removed:** group bus tracks, the shared send bus (and each track's send level), sidechain
+>   ducking, tempo changes/ramps on the ruler, and clip warping with tempo detection. A project has
+>   one tempo. Older projects still open: bus tracks are dropped (their members go to the master),
+>   tempo maps collapse to the starting tempo, and warped clips play at their own rate.
 > - **Kept for review:** the Session view, plus the minimum it needs to play — MIDI clips, one
 >   basic synth (default settings, no editor) and the piano roll for writing clips.
 > - **Not yet renamed:** the `looper::` namespace, `looper_*` build targets, `LOOPER_*` CMake

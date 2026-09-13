@@ -73,10 +73,8 @@ public:
 
     /** Renders one instrument track per pattern, at the given per-track gains (dB),
         solo flags, clip start offsets (beats — the track stays silent until the
-        transport reaches this point, then plays and loops indefinitely), and
-        pre-fader send levels (0..1) into a shared send-bus reverb (always fully
-        wet; returnGain scales the wet return before it's summed into the mix).
-        Solo follows the same "solo overrides, mute always wins" rule as the live
+        transport reaches this point, then plays and loops indefinitely). Solo
+        follows the same "solo overrides, mute always wins" rule as the live
         engine.
 
         If @p automation is set, each track is given its curves and applies
@@ -85,28 +83,16 @@ public:
         back in with a per-sample curve, because InstrumentTrack could only
         apply one flat gain per block; now that it ramps natively, that whole
         second code path is gone and an export runs exactly the same automation
-        code as live playback.
-
-        The send bus applies reverb (sendRoomSize/sendDamping) when
-        @p sendBusEffectType is 0, or delay (sendDelayTimeMs/sendDelayFeedback)
-        when it's 1 — matching AudioEngine::setSendBusEffectType's convention. */
+        code as live playback. */
     static juce::AudioBuffer<float> render(const std::vector<Pattern>& patterns,
                                            const std::vector<float>&   gainsDb,
                                            const std::vector<bool>&    soloFlags,
                                            const std::vector<double>&  clipStartBeats,
-                                           const std::vector<float>&   sendLevels,
-                                           bool  sendBusEnabled,
-                                           float sendRoomSize,
-                                           float sendDamping,
-                                           float sendReturnGain,
                                            double bpm,
                                            double sampleRate,
                                            double numSeconds,
                                            int    blockSize = 512,
-                                           const TrackAutomationList* automation = nullptr,
-                                           int    sendBusEffectType = 0,
-                                           float  sendDelayTimeMs = 300.0f,
-                                           float  sendDelayFeedback = 0.35f)
+                                           const TrackAutomationList* automation = nullptr)
     {
         const int totalSamples = (int) std::ceil(numSeconds * sampleRate);
         juce::AudioBuffer<float> output(2, std::max(1, totalSamples));
@@ -132,8 +118,6 @@ public:
                 track->gainDb.store(gainsDb[i]);
             if (i < soloFlags.size())
                 track->solo.store(soloFlags[i]);
-            if (i < sendLevels.size())
-                track->sendLevel.store(sendLevels[i]);
 
             // Handed over the same way the live engine does it; the track
             // picks it up on its first render() and applies it itself.
@@ -147,22 +131,7 @@ public:
         for (auto& track : tracks)
             anySolo |= track->solo.load();
 
-        ReverbEffect sendReverb;
-        sendReverb.prepare(sampleRate, blockSize);
-        sendReverb.setEnabled(true);
-        sendReverb.setMix(1.0f); // a return bus is always fully wet
-        sendReverb.setRoomSize(sendRoomSize);
-        sendReverb.setDamping(sendDamping);
-
-        DelayEffect sendDelay;
-        sendDelay.prepare(sampleRate, blockSize);
-        sendDelay.setEnabled(true);
-        sendDelay.setMix(1.0f); // a return bus is always fully wet
-        sendDelay.setTimeMs(sendDelayTimeMs);
-        sendDelay.setFeedback(sendDelayFeedback);
-
         juce::AudioBuffer<float> block(2, blockSize);
-        juce::AudioBuffer<float> sendBus(2, blockSize);
         juce::MidiBuffer         noLiveMidi;
 
         int64_t playhead = 0;
@@ -171,8 +140,6 @@ public:
             const int n = std::min(blockSize, totalSamples - pos);
             block.setSize(2, n, false, false, true);
             block.clear();
-            sendBus.setSize(2, n, false, false, true);
-            sendBus.clear();
 
             ProcessContext ctx;
             ctx.sampleRate                = sampleRate;
@@ -182,18 +149,7 @@ public:
             fillTransport(ctx, playhead, n, bpm, sampleRate);
 
             for (auto& track : tracks)
-                track->render(block, sendBus, noLiveMidi, ctx, false, anySolo);
-
-            if (sendBusEnabled)
-            {
-                if (sendBusEffectType == 1)
-                    sendDelay.process(sendBus);
-                else
-                    sendReverb.process(sendBus);
-
-                for (int ch = 0; ch < 2; ++ch)
-                    block.addFrom(ch, 0, sendBus, ch, 0, n, sendReturnGain);
-            }
+                track->render(block, noLiveMidi, ctx, false, anySolo);
 
             for (int ch = 0; ch < 2; ++ch)
                 output.copyFrom(ch, pos, block, ch, 0, n);
@@ -204,18 +160,7 @@ public:
         return output;
     }
 
-    /** Convenience overload: no send bus. */
-    static juce::AudioBuffer<float> render(const std::vector<Pattern>& patterns,
-                                           const std::vector<float>&   gainsDb,
-                                           const std::vector<bool>&    soloFlags,
-                                           const std::vector<double>&  clipStartBeats,
-                                           double bpm, double sampleRate, double numSeconds, int blockSize = 512)
-    {
-        return render(patterns, gainsDb, soloFlags, clipStartBeats, std::vector<float>{},
-                      false, 0.5f, 0.5f, 0.0f, bpm, sampleRate, numSeconds, blockSize);
-    }
-
-    /** Convenience overload: no solo flags, no clip-start offsets, no send bus. */
+    /** Convenience overload: no solo flags, no clip-start offsets. */
     static juce::AudioBuffer<float> render(const std::vector<Pattern>& patterns,
                                            const std::vector<float>&   gainsDb,
                                            const std::vector<bool>&    soloFlags,
@@ -264,7 +209,6 @@ public:
         track.sequencer.submitClips(new std::vector<ClipSlot>(clips));
 
         juce::AudioBuffer<float> block(2, blockSize);
-        juce::AudioBuffer<float> sendBus(2, blockSize);
         juce::MidiBuffer         noLiveMidi;
 
         int64_t playhead = 0;
@@ -273,15 +217,13 @@ public:
             const int n = std::min(blockSize, totalSamples - pos);
             block.setSize(2, n, false, false, true);
             block.clear();
-            sendBus.setSize(2, n, false, false, true);
-            sendBus.clear();
 
             ProcessContext ctx;
             ctx.sampleRate                = sampleRate;
             ctx.numSamples                = n;
             fillTransport(ctx, playhead, n, bpm, sampleRate);
 
-            track.render(block, sendBus, noLiveMidi, ctx, false, false);
+            track.render(block, noLiveMidi, ctx, false, false);
 
             for (int ch = 0; ch < 2; ++ch)
                 output.copyFrom(ch, pos, block, ch, 0, n);
@@ -294,7 +236,7 @@ public:
 
     /** Renders a single track's audio-clip player alone (bypassing patterns) at
         the given gain and clip-start offset — for verifying that a decoded
-        audio clip plays back through the exact same per-track gain/send/peak
+        audio clip plays back through the exact same per-track gain/peak
         pipeline as synth content, with the same clip-start gating. */
     static juce::AudioBuffer<float> renderAudioClip(const ClipData& clipData, double clipStartBeats,
                                                     float gainDb, double bpm, double sampleRate,
@@ -310,7 +252,6 @@ public:
         track.audioPlayer.submitSingleClip(new ClipData(clipData), clipStartBeats);
 
         juce::AudioBuffer<float> block(2, blockSize);
-        juce::AudioBuffer<float> sendBus(2, blockSize);
         juce::MidiBuffer         noLiveMidi;
 
         int64_t playhead = 0;
@@ -319,15 +260,13 @@ public:
             const int n = std::min(blockSize, totalSamples - pos);
             block.setSize(2, n, false, false, true);
             block.clear();
-            sendBus.setSize(2, n, false, false, true);
-            sendBus.clear();
 
             ProcessContext ctx;
             ctx.sampleRate                = sampleRate;
             ctx.numSamples                = n;
             fillTransport(ctx, playhead, n, bpm, sampleRate);
 
-            track.render(block, sendBus, noLiveMidi, ctx, false, false);
+            track.render(block, noLiveMidi, ctx, false, false);
 
             for (int ch = 0; ch < 2; ++ch)
                 output.copyFrom(ch, pos, block, ch, 0, n);
@@ -358,7 +297,6 @@ public:
         track.audioPlayer.submitClips(new std::vector<AudioClipSlot>(clips));
 
         juce::AudioBuffer<float> block(2, blockSize);
-        juce::AudioBuffer<float> sendBus(2, blockSize);
         juce::MidiBuffer         noLiveMidi;
 
         int64_t playhead = 0;
@@ -367,15 +305,13 @@ public:
             const int n = std::min(blockSize, totalSamples - pos);
             block.setSize(2, n, false, false, true);
             block.clear();
-            sendBus.setSize(2, n, false, false, true);
-            sendBus.clear();
 
             ProcessContext ctx;
             ctx.sampleRate                = sampleRate;
             ctx.numSamples                = n;
             fillTransport(ctx, playhead, n, bpm, sampleRate);
 
-            track.render(block, sendBus, noLiveMidi, ctx, false, false);
+            track.render(block, noLiveMidi, ctx, false, false);
 
             for (int ch = 0; ch < 2; ++ch)
                 output.copyFrom(ch, pos, block, ch, 0, n);

@@ -23,13 +23,6 @@ static Song makeSampleSong()
     s.reverb.roomSize    = 0.7f;
     s.reverb.damping     = 0.4f;
     s.reverb.mix         = 0.25f;
-    s.sendBus.enabled       = true;
-    s.sendBus.effectType    = SendBusEffectType::Delay;
-    s.sendBus.roomSize      = 0.6f;
-    s.sendBus.damping       = 0.3f;
-    s.sendBus.delayTimeMs   = 250.0f;
-    s.sendBus.delayFeedback = 0.4f;
-    s.sendBus.returnLevel   = 0.45f;
     s.eq.enabled   = true;
     s.eq.bassDb    = 4.5f;
     s.eq.midDb     = -2.0f;
@@ -74,7 +67,6 @@ static Song makeSampleSong()
     s.tracks[2].colour    = 0xffb0413e;
     s.tracks[0].gainDb    = -4.5f;
     s.tracks[0].solo      = true;
-    s.tracks[0].sendLevel = 0.65f;
     s.tracks[0].pan       = -0.75f;
     s.tracks[1].gainDb    = 3.25f; // above unity, and positive
     s.tracks[1].pan       = 0.5f;
@@ -83,7 +75,6 @@ static Song makeSampleSong()
     s.tracks[0].laneFor(TrackParam::Gain).addPoint(4.0, 0.0f);
     s.tracks[0].laneFor(TrackParam::Pan).addPoint(0.0, -1.0f);
     s.tracks[0].laneFor(TrackParam::Pan).addPoint(8.0, 1.0f);
-    s.tracks[1].laneFor(TrackParam::SendLevel).addPoint(2.0, 0.25f);
 
     s.tracks[0].synthSettings.waveform        = 2; // square
     s.tracks[0].synthSettings.attackMs        = 12.0f;
@@ -737,24 +728,6 @@ TEST_CASE("A project from before per-clip gain opens at unity", "[model][io]")
     REQUIRE(song.tracks[0].clips[0].gainDb == 0.0f);
 }
 
-TEST_CASE("Tempo changes round-trip", "[model][io]")
-{
-    Song original = makeSampleSong();
-    original.bpm = 128.0;
-    original.tempoChanges = { { 16.0, 90.0 }, { 32.0, 160.0 } };
-
-    Song        restored;
-    std::string error;
-    REQUIRE(deserialize(serialize(original), restored, &error));
-
-    CHECK(restored.bpm == 128.0);
-    REQUIRE(restored.tempoChanges.size() == 2);
-    CHECK(restored.tempoChanges[0].beat == 16.0);
-    CHECK(restored.tempoChanges[0].bpm == 90.0);
-    CHECK(restored.tempoChanges[1].beat == 32.0);
-    CHECK(restored.tempoChanges[1].bpm == 160.0);
-}
-
 TEST_CASE("A v31 project is one tempo for the whole song", "[model][io]")
 {
     // No TEMPOS record at all. Absent has to mean "one tempo", which is what
@@ -781,333 +754,60 @@ TEST_CASE("A v31 project is one tempo for the whole song", "[model][io]")
     REQUIRE(deserialize(v31, song, &error));
 
     CHECK(song.bpm == 137.0);
-    CHECK(song.tempoChanges.empty());
 }
 
-TEST_CASE("A tempo change with a nonsense value is dropped, not loaded", "[model][io]")
+TEST_CASE("Removed routing, tempo and warp records in older files are skipped", "[model][io]")
 {
-    // These come from a document. A zero or negative tempo divides by zero
-    // deep inside playback, and beat 0 belongs to BPM.
-    const std::string bad =
-        "LOOPER 32\n"
-        "BPM 120\n"
-        "TEMPOS 4\n"
-        "TEMPOAT 8 0\n"
-        "TEMPOAT 12 -40\n"
-        "TEMPOAT 0 200\n"
-        "TEMPOAT 16 90\n"
+    // A v41 file from before the second strip-down: a tempo map, a send bus,
+    // a group bus with a member routed into it, a send-level lane, a warped
+    // clip and a sidechained compressor. It must open, as one tempo, with the
+    // bus track dropped and everything else intact.
+    const std::string v41 =
+        "LOOPER 41\n"
+        "BPM 128\n"
+        "TEMPOS 2\n"
+        "TEMPOAT 16 90 0\n"
+        "TEMPOAT 32 150 1\n"
         "TSNUM 4\n"
         "TSDEN 4\n"
-        "NEXTID 3\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "EQ 0 0 0 0\n"
-        "MASTERING 0 0 0 0 0 0 0 0 0 0 200 0.707 1000 0.707 4000 0.707\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
+        "NEXTID 9\n"
+        "SENDBUS 1 1 0.5 0.5 250 0.4 0.6\n"
         "SCENES 0\n"
-        "TRACKS 0\n";
+        "TRACKS 2\n"
+        "TRACK 1 4 -3 0 0 0 0 0 Drum Bus\n"
+        "TRACKBUS -1\n"
+        "TAUTOS 0\n"
+        "CLIPS 0\n"
+        "TRACK 2 1 0 0 0 0.7 0 0 Loop\n"
+        "TRACKBUS 1\n"
+        "TAUTOS 2\n"
+        "TLANE 0 1\n"
+        "TAPT 0 -6\n"
+        "TLANE 2 1\n"
+        "TAPT 4 0.5\n"
+        "CLIPS 1\n"
+        "CLIP 3 1 0 16 4 /loops/break 174.wav\n"
+        "CLIPGAIN 0\n"
+        "CLIPWARP 1 174\n"
+        "NOTES 0\n";
 
     Song        song;
     std::string error;
-    REQUIRE(deserialize(bad, song, &error));
+    REQUIRE(deserialize(v41, song, &error));
 
-    REQUIRE(song.tempoChanges.size() == 1);
-    CHECK(song.tempoChanges[0].beat == 16.0);
-    CHECK(song.tempoChanges[0].bpm == 90.0);
-}
+    CHECK(song.bpm == 128.0);
 
-TEST_CASE("The song's tempo map joins its starting tempo to its changes", "[model][tempo]")
-{
-    // Two fields, one map. Anything assembling its own would be the second
-    // definition of how they combine, which is how the two drift.
-    Song song;
-    song.bpm = 100.0;
-    song.tempoChanges = { { 8.0, 140.0 }, { 24.0, 70.0 } };
+    REQUIRE(song.tracks.size() == 1); // the bus is gone
+    const auto& loop = song.tracks[0];
+    CHECK(loop.name == "Loop");
+    CHECK(loop.type == TrackType::Audio);
 
-    const auto map = tempoMapFor(song);
+    // The gain lane survives; the send-level lane does not.
+    CHECK(loop.lane(TrackParam::Gain) != nullptr);
+    CHECK(loop.automation.size() == 1);
 
-    REQUIRE(map.size() == 3);
-    CHECK(map[0].beat == 0.0);
-    CHECK(map[0].bpm == 100.0);
-    CHECK(map[1].beat == 8.0);
-    CHECK(map[2].beat == 24.0);
-}
-
-TEST_CASE("The tempo at a beat is the last change at or before it", "[model][tempo]")
-{
-    Song song;
-    song.bpm = 100.0;
-    song.tempoChanges = { { 8.0, 140.0 }, { 24.0, 70.0 } };
-
-    CHECK(tempoAtBeat(song, 0.0) == 100.0);
-    CHECK(tempoAtBeat(song, 7.99) == 100.0);
-    CHECK(tempoAtBeat(song, 8.0) == 140.0);   // a change owns its own instant
-    CHECK(tempoAtBeat(song, 23.9) == 140.0);
-    CHECK(tempoAtBeat(song, 24.0) == 70.0);
-    CHECK(tempoAtBeat(song, 1000.0) == 70.0);
-
-    // Before the start reads as the starting tempo rather than as nothing.
-    CHECK(tempoAtBeat(song, -5.0) == 100.0);
-}
-
-TEST_CASE("A song with no changes has a one-entry map", "[model][tempo]")
-{
-    Song song;
-    song.bpm = 118.0;
-
-    const auto map = tempoMapFor(song);
-    REQUIRE(map.size() == 1);
-    CHECK(map[0].beat == 0.0);
-    CHECK(map[0].bpm == 118.0);
-    CHECK(tempoAtBeat(song, 999.0) == 118.0);
-}
-
-TEST_CASE("A tempo ramp round-trips", "[model][io]")
-{
-    Song original = makeSampleSong();
-    original.bpm = 90.0;
-    original.tempoChanges = { { 8.0, 150.0, true }, { 24.0, 100.0, false } };
-
-    Song        restored;
-    std::string error;
-    REQUIRE(deserialize(serialize(original), restored, &error));
-
-    REQUIRE(restored.tempoChanges.size() == 2);
-    CHECK(restored.tempoChanges[0].ramp);
-    CHECK_FALSE(restored.tempoChanges[1].ramp);
-    CHECK(restored == original);
-}
-
-TEST_CASE("A v32 tempo change is a step, not a ramp", "[model][io]")
-{
-    // v32's TEMPOAT line ends after the tempo. Absent has to mean "step",
-    // which is what every change written before ramps existed was — reading
-    // one as a ramp would silently reshape an existing arrangement.
-    const std::string v32 =
-        "LOOPER 32\n"
-        "BPM 120\n"
-        "TEMPOS 1\n"
-        "TEMPOAT 16 80\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 3\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "EQ 0 0 0 0\n"
-        "MASTERING 0 0 0 0 0 0 0 0 0 0 200 0.707 1000 0.707 4000 0.707\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
-        "SCENES 0\n"
-        "TRACKS 0\n";
-
-    Song        song;
-    std::string error;
-    REQUIRE(deserialize(v32, song, &error));
-
-    REQUIRE(song.tempoChanges.size() == 1);
-    CHECK(song.tempoChanges[0].bpm == 80.0);
-    CHECK_FALSE(song.tempoChanges[0].ramp);
-}
-
-TEST_CASE("Clip warp settings round-trip", "[model][io]")
-{
-    Song s;
-    const int trackId = addTrack(s, TrackType::Audio, "Loop").id;
-
-    Clip clip;
-    clip.type        = ClipType::Audio;
-    clip.audioFile   = "/loops/break 174.wav"; // a space, since CLIP's path is rest-of-line
-    clip.startBeats  = 8.0;
-    clip.lengthBeats = 16.0;
-    clip.sourceBpm   = 174.0;
-    clip.warpEnabled = true;
-    addClip(s, trackId, clip);
-
-    Song restored;
-    REQUIRE(deserialize(serialize(s), restored));
-    REQUIRE(restored.tracks.size() == 1);
-    REQUIRE(restored.tracks[0].clips.size() == 1);
-
-    const auto& out = restored.tracks[0].clips[0];
-    REQUIRE(out.warpEnabled);
-    REQUIRE(out.sourceBpm == 174.0);
-    // The record sits between CLIPGAIN and NOTES, so the path either side of
-    // it has to survive intact too.
-    REQUIRE(out.audioFile == "/loops/break 174.wav");
-}
-
-TEST_CASE("A clip with a known tempo need not be warped", "[model][io]")
-{
-    // The two fields are independent on purpose: "set the project tempo from
-    // this clip" wants the tempo without the stretching.
-    Song s;
-    const int trackId = addTrack(s, TrackType::Audio, "Loop").id;
-
-    Clip clip;
-    clip.type        = ClipType::Audio;
-    clip.sourceBpm   = 92.5;
-    clip.warpEnabled = false;
-    addClip(s, trackId, clip);
-
-    Song restored;
-    REQUIRE(deserialize(serialize(s), restored));
-
-    const auto& out = restored.tracks[0].clips[0];
-    REQUIRE_FALSE(out.warpEnabled);
-    REQUIRE(out.sourceBpm == 92.5);
-}
-
-TEST_CASE("A file written before warping existed reads as unwarped", "[model][io]")
-{
-    // The compatibility claim in the format notes: no CLIPWARP record means
-    // the clip plays at its own rate, which is how those files always played.
-    Song s;
-    const int trackId = addTrack(s, TrackType::Audio, "Loop").id;
-
-    Clip clip;
-    clip.type      = ClipType::Audio;
-    clip.audioFile = "/loops/old.wav";
-    addClip(s, trackId, clip);
-
-    // Strip the record the way an older writer would simply never have emitted.
-    std::string text = serialize(s);
-    const auto  start = text.find("CLIPWARP");
-    REQUIRE(start != std::string::npos);
-    text.erase(start, text.find('\n', start) - start + 1);
-    REQUIRE(text.find("CLIPWARP") == std::string::npos);
-
-    Song restored;
-    REQUIRE(deserialize(text, restored));
-
-    const auto& out = restored.tracks[0].clips[0];
-    REQUIRE_FALSE(out.warpEnabled);
-    REQUIRE(out.sourceBpm == 0.0);
-    REQUIRE(out.audioFile == "/loops/old.wav");
-}
-
-TEST_CASE("A compressor's sidechain routing round-trips", "[model][io]")
-{
-    Song s;
-    const int kickId = addTrack(s, TrackType::Instrument, "Kick").id;
-    const int bassId = addTrack(s, TrackType::Instrument, "Bass").id;
-
-    EffectSlot ducker;
-    ducker.kind                          = EffectKind::Compressor;
-    ducker.enabled                       = true;
-    ducker.compressor.enabled            = true;
-    ducker.compressor.sidechainTrackId   = kickId;
-    findTrack(s, bassId)->effectChain.push_back(ducker);
-
-    Song restored;
-    REQUIRE(deserialize(serialize(s), restored));
-
-    const auto* bass = findTrack(restored, bassId);
-    REQUIRE(bass != nullptr);
-    REQUIRE(bass->effectChain.size() == 1);
-    // The *id*, not an index — which is the whole point: it has to survive
-    // the track order changing.
-    REQUIRE(bass->effectChain[0].compressor.sidechainTrackId == kickId);
-}
-
-TEST_CASE("A compressor with no sidechain round-trips as unrouted", "[model][io]")
-{
-    Song s;
-    const int trackId = addTrack(s, TrackType::Instrument, "Lead").id;
-
-    EffectSlot plain;
-    plain.kind               = EffectKind::Compressor;
-    plain.enabled            = true;
-    plain.compressor.enabled = true;
-    findTrack(s, trackId)->effectChain.push_back(plain);
-
-    Song restored;
-    REQUIRE(deserialize(serialize(s), restored));
-    REQUIRE(findTrack(restored, trackId)->effectChain[0].compressor.sidechainTrackId == -1);
-}
-
-TEST_CASE("A file written before sidechains reads as unrouted", "[model][io]")
-{
-    // v35 appended the field to FXSLOT's positional line; an older file simply
-    // ends sooner, and the extraction leaves the default in place.
-    Song s;
-    const int trackId = addTrack(s, TrackType::Instrument, "Lead").id;
-
-    EffectSlot ducker;
-    ducker.kind                        = EffectKind::Compressor;
-    ducker.enabled                     = true;
-    ducker.compressor.enabled          = true;
-    ducker.compressor.sidechainTrackId = 7;
-    findTrack(s, trackId)->effectChain.push_back(ducker);
-
-    // Truncate the line where a pre-v35 writer would have stopped: before the
-    // sidechain field and everything appended after it.
-    //
-    // Written as "drop the last N fields" rather than "drop the last field",
-    // because it *was* the latter and silently stopped testing anything the
-    // moment v39 and v40 appended two more — it then stripped the cabinet-IR
-    // flag and asserted a sidechain that was still present. Any future
-    // appended field has to be counted here too.
-    constexpr int kFieldsAfterV34 = 3; // sidechain id, drive stages, cabinet IR
-
-    std::string text  = serialize(s);
-    const auto  start = text.find("FXSLOT");
-    REQUIRE(start != std::string::npos);
-
-    auto lineEnd = text.find('\n', start);
-    for (int i = 0; i < kFieldsAfterV34; ++i)
-    {
-        const auto lastSpace = text.rfind(' ', lineEnd);
-        REQUIRE(lastSpace != std::string::npos);
-        REQUIRE(lastSpace > start);
-        text.erase(lastSpace, lineEnd - lastSpace);
-        lineEnd = text.find('\n', start);
-    }
-
-    Song restored;
-    REQUIRE(deserialize(text, restored));
-    REQUIRE(findTrack(restored, trackId)->effectChain[0].compressor.sidechainTrackId == -1);
-}
-
-TEST_CASE("Group bus routing round-trips", "[model][io]")
-{
-    Song s;
-    const int busId  = addTrack(s, TrackType::Bus, "Drum Bus").id;
-    const int kickId = addTrack(s, TrackType::Instrument, "Kick").id;
-    findTrack(s, kickId)->outputBusId = busId;
-
-    Song restored;
-    REQUIRE(deserialize(serialize(s), restored));
-
-    const auto* bus = findTrack(restored, busId);
-    REQUIRE(bus != nullptr);
-    REQUIRE(bus->type == TrackType::Bus);
-
-    // The id, not an index — the whole reason it is stored that way.
-    REQUIRE(findTrack(restored, kickId)->outputBusId == busId);
-    // A bus itself goes to the master.
-    REQUIRE(bus->outputBusId == -1);
-}
-
-TEST_CASE("A file written before group buses reads as feeding the master", "[model][io]")
-{
-    Song s;
-    const int trackId = addTrack(s, TrackType::Instrument, "Lead").id;
-    findTrack(s, trackId)->outputBusId = 3;
-
-    std::string text  = serialize(s);
-    const auto  start = text.find("TRACKBUS");
-    REQUIRE(start != std::string::npos);
-    text.erase(start, text.find('\n', start) - start + 1);
-    REQUIRE(text.find("TRACKBUS") == std::string::npos);
-
-    Song restored;
-    REQUIRE(deserialize(text, restored));
-    REQUIRE(findTrack(restored, trackId)->outputBusId == -1);
+    REQUIRE(loop.clips.size() == 1);
+    CHECK(loop.clips[0].audioFile == "/loops/break 174.wav");
 }
 
 TEST_CASE("Sustain-pedal movements round-trip", "[model][io]")

@@ -63,37 +63,6 @@ struct EqSettings
     bool operator==(const EqSettings&) const = default;
 };
 
-/** Which effect the shared send bus applies (see SendBusSettings). */
-enum class SendBusEffectType { Reverb, Delay };
-
-/**
-    The shared send/return bus: every track can send a pre-fader portion of its
-    signal into it (Track::sendLevel), summed and passed through one effect —
-    reverb or delay, chosen by effectType — then mixed back into the master
-    before its own effects chain. Unlike the master versions of these effects,
-    the send bus's effect is always fully wet — there's no "dry" concept for a
-    return bus — so returnLevel is the only level control (a plain output gain
-    on the wet return), shared by both effect types. roomSize/damping apply
-    when effectType is Reverb; delayTimeMs/delayFeedback when it's Delay —
-    both sets of params are always stored so switching types doesn't lose
-    whichever one isn't currently active.
-*/
-struct SendBusSettings
-{
-    bool              enabled    = false;
-    SendBusEffectType effectType = SendBusEffectType::Reverb;
-
-    float roomSize = 0.5f; // 0..1, reverb only
-    float damping  = 0.5f; // 0..1, reverb only
-
-    float delayTimeMs   = 300.0f; // delay only
-    float delayFeedback = 0.35f;  // 0..0.95, delay only
-
-    float returnLevel = 0.5f; // 0..1, linear gain on the wet return
-
-    bool operator==(const SendBusSettings&) const = default;
-};
-
 
 
 /** Which plugin format an entry came from. The numeric values go into the
@@ -192,14 +161,13 @@ enum class EffectKind
     One effect in a track's chain: a built-in or a hosted plugin.
 
     Every built-in's settings are stored regardless of which kind the slot
-    currently is, so switching kind doesn't lose the others — the same
-    trade (a slightly fat struct for no lost state) SendBusSettings already
-    makes for its reverb-or-delay choice.
+    currently is, so switching kind doesn't lose the others — a slightly fat
+    struct in exchange for no lost state.
 
     `enabled` belongs to the slot rather than to the settings structs, so
     bypass means the same thing for a plugin as for a built-in. The
-    per-settings `enabled` flags stay for the master bus and send bus, which
-    are single fixed effects rather than chain slots.
+    per-settings `enabled` flags stay for the master bus, whose effects are
+    single fixed effects rather than chain slots.
 */
 /** An overdrive/distortion pedal. `hardClip` picks a fuzz's flat ceiling over
     an overdrive's gradual compression; `cabinet` is on by default because
@@ -274,16 +242,6 @@ struct CompressorSettings
     float attackMs    = 10.0f;
     float releaseMs   = 120.0f;
     float makeUpDb    = 0.0f;
-
-    /** The track whose signal drives the detector, by track id, or -1 for
-        "this one" — an ordinary compressor.
-
-        A track *id* rather than an index, because indices move when a track is
-        deleted or reordered and a sidechain silently re-pointing at a
-        different instrument is the kind of bug nobody would think to look for.
-        -1 by default, so every existing compressor keeps behaving exactly as
-        it did. */
-    int   sidechainTrackId = -1;
 
     bool operator==(const CompressorSettings&) const = default;
 };

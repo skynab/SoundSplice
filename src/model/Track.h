@@ -12,26 +12,13 @@
 namespace looper::model
 {
 /** The numeric values are written to the project file, so they are part of
-    the format. 2 and 3 were the Drum and Guitar types, which have been
-    removed; the deserializer reads them as Instrument, so the gap must stay. */
+    the format. 2, 3 and 4 were the Drum, Guitar and Bus types, which have
+    been removed: the deserializer reads Drum and Guitar tracks as Instrument
+    and drops Bus tracks, so those values must never be reused. */
 enum class TrackType
 {
     Instrument = 0, // MIDI clips driving a synth
-    Audio      = 1, // audio-file clips
-
-    /**
-        A group bus: a track that *receives* other tracks' output instead of
-        generating any of its own.
-
-        Deliberately a track type rather than a separate Bus entity alongside
-        Song::tracks. A bus needs a fader, pan, mute, a meter, an insert chain,
-        automation and a mixer strip — every one of which a Track already has
-        and every one of which would otherwise have to be built again, along
-        with a second selection model for the panes to understand. What makes a
-        bus different is only where its audio comes from, and that is one field
-        (Track::outputBusId on its members) rather than a parallel hierarchy.
-    */
-    Bus = 4
+    Audio      = 1  // audio-file clips
 };
 
 /** Which of a track's parameters an automation lane drives (see
@@ -45,8 +32,8 @@ enum class TrackType
 enum class TrackParam
 {
     Gain      = 0, // dB
-    Pan       = 1, // -1..+1
-    SendLevel = 2  // 0..1
+    Pan       = 1  // -1..+1
+    // 2 was SendLevel (the removed send bus); older lanes for it are dropped on load.
 };
 
 /** One cell of the session grid: a clip, or nothing. A vector of these on a
@@ -72,20 +59,11 @@ struct Track
     float             pan        = 0.0f; // -1 = hard left, 0 = centre, +1 = hard right
     bool              muted      = false;
     bool              solo       = false;
-    float             sendLevel  = 0.0f; // 0..1, pre-fader send to the shared send bus
 
     // ARGB, or 0 for the default lane colour. Stored as the value rather than
     // as an index into the palette so extending or reordering that palette
     // can't silently recolour existing projects.
     unsigned int      colour     = 0;
-    /** The id of the Bus track this one feeds, or -1 for the master.
-
-        An id rather than an index, for the same reason a sidechain source is
-        one: indices move when a track is deleted or reordered, and a track
-        silently re-routing itself into a different group would be a bug nobody
-        would think to look for. -1 by default, so every existing track goes
-        straight to the master exactly as it always has. */
-    int               outputBusId = -1;
 
     std::vector<Clip> clips;
 

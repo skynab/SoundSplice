@@ -30,25 +30,6 @@ struct Clip
         already expressible per note via velocity. */
     float gainDb = 0.0f;
 
-    /** The tempo this clip's audio was recorded/rendered at, in BPM, or 0 if
-        it isn't known. Detected on import (see engine::detectTempo) and
-        overridable by hand, because a detector is a guess and the user may
-        simply know better.
-
-        Stored separately from warpEnabled so that switching warp off and on
-        again doesn't throw away the answer — and so a clip can carry a known
-        tempo without being warped, which is what "set the project tempo from
-        this clip" needs. Audio clips only; an Instrument clip's notes are
-        already expressed in beats and so follow the tempo by construction. */
-    double sourceBpm = 0.0;
-
-    /** Whether this clip stretches to follow the project tempo.
-
-        Off by default, which is what keeps every project made before warping
-        existed sounding exactly as it did: an unwarped audio clip plays at its
-        own rate, the behaviour AudioFilePlayerNode has always had. */
-    bool warpEnabled = false;
-
     bool operator==(const Clip&) const = default;
 };
 

@@ -26,20 +26,10 @@ struct Scene
 
 struct Song
 {
-    /** The tempo at the start of the song.
-
-        Kept alongside tempoChanges rather than replaced by it: it is read in
-        fifteen places across the app, and every one of them is correct for a
-        single-tempo project. tempoChanges[0] mirrors it, and the two are kept
-        in step by model::tempoChangesFor / applyTempo below. */
+    /** The project tempo. One tempo for the whole song. */
     double bpm                = 120.0;
     int    timeSigNumerator   = 4;
     int    timeSigDenominator = 4;
-
-    /** Tempo changes after the start, sorted by beat. Empty means one tempo
-        for the whole song, which is what every project written before format
-        version 32 means. See engine::TempoMap. */
-    std::vector<engine::TempoChange> tempoChanges;
 
     std::vector<Track> tracks;
     std::vector<Scene> scenes; // session-grid rows; every track's sessionSlots matches this length
@@ -47,7 +37,6 @@ struct Song
     FilterSettings     filter;
     DelaySettings      delay;
     ReverbSettings     reverb;
-    SendBusSettings    sendBus;
     EqSettings         eq;
     MasteringSettings  mastering;
     AutomationLane     masterGainDb; // master gain automation (dB over beats)
@@ -264,40 +253,6 @@ inline bool removeScene(Song& song, int sceneIndex)
             track.sessionSlots.erase(track.sessionSlots.begin() + sceneIndex);
 
     return true;
-}
-
-/**
-    The song's tempo map as one list: the starting tempo followed by every
-    change after it.
-
-    The document keeps those two apart — `bpm` because fifteen places in the
-    app read it and are right to, `tempoChanges` because they came later — and
-    this is the single place that knows they join. Anything handing a map to
-    engine::TempoMap should go through here rather than assembling its own,
-    which is how the two would drift.
-*/
-inline std::vector<engine::TempoChange> tempoMapFor(const Song& song)
-{
-    std::vector<engine::TempoChange> map;
-    map.reserve(song.tempoChanges.size() + 1);
-    map.push_back({ 0.0, song.bpm });
-
-    for (const auto& change : song.tempoChanges)
-        map.push_back(change);
-
-    return map;
-}
-
-/** The tempo in force at @p beat — what the transport bar should show, and
-    what a beats-from-seconds conversion at that point needs. */
-inline double tempoAtBeat(const Song& song, double beat)
-{
-    double tempo = song.bpm;
-    for (const auto& change : song.tempoChanges)
-        if (beat >= change.beat)
-            tempo = change.bpm;
-
-    return tempo;
 }
 
 } // namespace looper::model

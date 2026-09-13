@@ -50,12 +50,6 @@ AudioEngine::AudioEngine()
 
     deviceManager_.addAudioCallback(this);
 
-    for (auto& source : sidechainSource_)
-        source.store(-1, std::memory_order_relaxed);
-
-    for (auto& bus : outputBus_)
-        bus.store(-1, std::memory_order_relaxed);
-
     refreshMidiInputs();
 }
 
@@ -208,88 +202,6 @@ std::shared_ptr<ClipData> AudioEngine::decodeOrGetCached(const juce::File& file)
     return shared;
 }
 
-TempoEstimate AudioEngine::detectFileTempo(const juce::File& file)
-{
-    auto decoded = decodeOrGetCached(file);
-    if (decoded == nullptr || decoded->lengthSamples <= 0)
-        return {};
-
-    // The *unwarped* audio, deliberately: detection has to describe the file
-    // as it is on disk, or re-detecting a warped clip would report the tempo
-    // it was warped to and then warp it again from there.
-    const int numChannels = juce::jmax(1, decoded->audio.getNumChannels());
-    const int length      = decoded->lengthSamples;
-
-    std::vector<std::vector<float>> channels((size_t) numChannels);
-    for (int channel = 0; channel < numChannels; ++channel)
-    {
-        const float* read = decoded->audio.getReadPointer(channel);
-        channels[(size_t) channel].assign(read, read + length);
-    }
-
-    return detectTempo(channels, decoded->sourceSampleRate);
-}
-
-std::shared_ptr<ClipData> AudioEngine::warpedOrGetCached(const juce::File& file, double stretchFactor)
-{
-    auto source = decodeOrGetCached(file);
-
-    // Not warped, or warped by so little it would only cost quality: the
-    // phase vocoder is not transparent, so running it for a 0.01% correction
-    // makes the audio worse rather than better.
-    if (source == nullptr || std::abs(stretchFactor - 1.0) < 1.0e-4)
-        return source;
-
-    const auto path = file.getFullPathName();
-
-    auto cached = audioWarpCache_.find(path);
-    if (cached != audioWarpCache_.end()
-        && std::abs(cached->second.stretchFactor - stretchFactor) < 1.0e-9
-        && cached->second.data != nullptr)
-    {
-        return cached->second.data;
-    }
-
-    const int numChannels = juce::jmax(1, source->numChannels);
-    const int length      = source->lengthSamples;
-    if (length <= 0)
-        return source;
-
-    auto warped = std::make_shared<ClipData>();
-    warped->sourceSampleRate = source->sourceSampleRate;
-    warped->numChannels      = numChannels;
-
-    // Channel at a time, since timeStretch works on a plain vector. Each
-    // channel is stretched by the same factor and so comes back the same
-    // length; the shortest is taken as the truth rather than assumed, because
-    // a length mismatch here would read as one channel of silence at the end.
-    std::vector<std::vector<float>> stretched((size_t) numChannels);
-    int stretchedLength = std::numeric_limits<int>::max();
-
-    for (int channel = 0; channel < numChannels; ++channel)
-    {
-        const float* read = source->audio.getReadPointer(juce::jmin(channel, source->audio.getNumChannels() - 1));
-
-        std::vector<float> samples((size_t) length);
-        std::copy(read, read + length, samples.begin());
-
-        stretched[(size_t) channel] = timestretch::timeStretch(samples, stretchFactor);
-        stretchedLength = juce::jmin(stretchedLength, (int) stretched[(size_t) channel].size());
-    }
-
-    if (stretchedLength <= 0 || stretchedLength == std::numeric_limits<int>::max())
-        return source; // the vocoder declined (too short to frame); play it unwarped
-
-    warped->audio.setSize(numChannels, stretchedLength);
-    warped->lengthSamples = stretchedLength;
-
-    for (int channel = 0; channel < numChannels; ++channel)
-        warped->audio.copyFrom(channel, 0, stretched[(size_t) channel].data(), stretchedLength);
-
-    audioWarpCache_[path] = { stretchFactor, warped };
-    return warped;
-}
-
 bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>& clips)
 {
     if (index < 0 || index >= kMaxTracks)
@@ -301,7 +213,7 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
 
     for (const auto& spec : clips)
     {
-        auto decoded = warpedOrGetCached(spec.file, spec.stretchFactor);
+        auto decoded = decodeOrGetCached(spec.file);
         if (decoded == nullptr)
         {
             allOk = false;
@@ -315,42 +227,6 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
     track.audioPlayer.collectRetiredClips();
     track.audioPlayer.submitClips(slots);
     return allOk;
-}
-
-void AudioEngine::setTrackSidechainSource(int index, int sourceTrackIndex)
-{
-    if (index < 0 || index >= kMaxTracks)
-        return;
-
-    // A track cannot duck itself: that is just an ordinary compressor with
-    // extra routing, and treating it as a sidechain would mean reading the
-    // very buffer being written.
-    const int resolved = (sourceTrackIndex >= 0 && sourceTrackIndex < kMaxTracks
-                          && sourceTrackIndex != index)
-                             ? sourceTrackIndex : -1;
-
-    sidechainSource_[(size_t) index].store(resolved, std::memory_order_relaxed);
-}
-
-void AudioEngine::setTrackIsBus(int index, bool isBus)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].isBus.store(isBus, std::memory_order_relaxed);
-}
-
-void AudioEngine::setTrackOutputBus(int index, int busTrackIndex)
-{
-    if (index < 0 || index >= kMaxTracks)
-        return;
-
-    // A track cannot feed itself, and a bus feeding a bus is not supported in
-    // this pass — both resolve to the master rather than to a routing loop the
-    // audio thread would have to detect every block.
-    const bool valid = busTrackIndex >= 0 && busTrackIndex < kMaxTracks
-                    && busTrackIndex != index
-                    && ! tracks_[(size_t) index].isBus.load(std::memory_order_relaxed);
-
-    outputBus_[(size_t) index].store(valid ? busTrackIndex : -1, std::memory_order_relaxed);
 }
 
 int64_t AudioEngine::countInLeadInSamples() const
@@ -435,13 +311,6 @@ bool AudioEngine::trackContributesToMix(int index) const noexcept
     return ! anySolo || track.solo.load(std::memory_order_relaxed);
 }
 
-void AudioEngine::setTempoChanges(const std::vector<TempoChange>& changes)
-{
-    auto* copy = new TempoChangeList(changes);
-    if (! tempoInbox_.push(copy))
-        delete copy; // the queue is full; the next edit will carry the same map
-}
-
 void AudioEngine::setTrackGainDb(int index, float gainDb)
 {
     if (index >= 0 && index < kMaxTracks)
@@ -452,12 +321,6 @@ void AudioEngine::setTrackPan(int index, float pan)
 {
     if (index >= 0 && index < kMaxTracks)
         tracks_[(size_t) index].pan.store(juce::jlimit(-1.0f, 1.0f, pan), std::memory_order_relaxed);
-}
-
-void AudioEngine::setTrackSendLevel(int index, float level)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].sendLevel.store(level, std::memory_order_relaxed);
 }
 
 void AudioEngine::setTrackSessionSlots(int index, const std::vector<SessionSlotData>& slots)
@@ -739,27 +602,10 @@ void AudioEngine::pump() noexcept
     }
 
     filePlayer_.collectRetiredClips();
-
-    TempoChangeList* retiredTempo = nullptr;
-    while (tempoReclaim_.pop(retiredTempo))
-        delete retiredTempo;
 }
 
 void AudioEngine::drainCommandQueue() noexcept
 {
-    // The tempo map, if a new one has arrived. Ahead of the commands below so
-    // a tempo change and a SetTempo submitted together land in that order —
-    // SetTempo edits beat 0 of whatever map is current.
-    TempoChangeList* incomingTempo = nullptr;
-    while (tempoInbox_.pop(incomingTempo))
-    {
-        if (incomingTempo != nullptr)
-        {
-            transport_.tempoMap().setTempoChanges(*incomingTempo);
-            tempoReclaim_.push(incomingTempo);
-        }
-    }
-
     EngineCommand command;
     while (commandQueue_.pop(command))
     {
@@ -930,32 +776,13 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
 {
     const int numSamples = context.numSamples;
 
-    // A bus's solo is not counted: buses are never silenced by solo (see
-    // InstrumentTrack::render), so letting one *arm* solo would mute every
-    // real track while the bus that carries them stayed open — silence with
-    // no obvious cause.
     bool anySolo = false;
     for (auto& track : tracks_)
-        if (! track.isBus.load(std::memory_order_relaxed))
-            anySolo |= track.solo.load(std::memory_order_relaxed);
-
-    sendBus_.setSize(2, numSamples, false, false, true);
-
-    // Kept at the block length for the same reason sendBus_ is: a detector
-    // shorter than the block is ignored by the compressor, which would
-    // silently turn ducking off on the first short block.
-    if (silentDetector_.getNumSamples() < numSamples)
-    {
-        silentDetector_.setSize(2, numSamples, false, false, true);
-        silentDetector_.clear();
-    }
-    sendBus_.clear();
+        anySolo |= track.solo.load(std::memory_order_relaxed);
 
     // Launch quantization is expressed in beats and converted here, once per
-    // block, from the tempo actually in force.
-    // From the block's own musical span rather than from a global tempo:
-    // launch quantisation waits for the next N-beat boundary, and where that
-    // falls depends on the tempo in force there.
+    // block, from the block's own musical span: launch quantisation waits for
+    // the next N-beat boundary, and where that falls depends on the tempo.
     const double blockBeats           = context.transport.blockLengthBeats();
     const double samplesPerBeat       = blockBeats > 0.0
                                           ? (double) numSamples / blockBeats : 0.0;
@@ -963,100 +790,8 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
 
     const int armed = armedTrack_.load(std::memory_order_relaxed);
 
-    // Sidechain sources have to be rendered before the tracks that listen to
-    // them, or the detector reads a buffer that hasn't been filled yet.
-    //
-    // The order is only rearranged when a sidechain actually exists. That is
-    // not an optimisation: float addition isn't associative, so summing the
-    // same tracks in a different order changes the mix in the last bits, and
-    // a project with no sidechain must render bit-identically to how it always
-    // has (the bounce tool's rmsDry sentinel would catch it, which is the
-    // point).
-    std::array<int, kMaxTracks> order {};
-    int orderCount = 0;
-    bool anySidechain = false;
-    bool anyBus       = false;
-
     for (int i = 0; i < kMaxTracks; ++i)
     {
-        if (sidechainSource_[(size_t) i].load(std::memory_order_relaxed) >= 0)
-            anySidechain = true;
-        if (tracks_[(size_t) i].isBus.load(std::memory_order_relaxed))
-            anyBus = true;
-    }
-
-    // A bus receives what its members write, so its buffer has to be empty
-    // before any of them render — the bus itself renders last and cannot clear
-    // it without discarding the whole group.
-    if (anyBus)
-    {
-        for (int i = 0; i < kMaxTracks; ++i)
-            if (tracks_[(size_t) i].isBus.load(std::memory_order_relaxed)
-                && tracks_[(size_t) i].active.load(std::memory_order_relaxed))
-            {
-                tracks_[(size_t) i].prepareBusInput(numSamples);
-            }
-    }
-
-    if (! anySidechain && ! anyBus)
-    {
-        for (int i = 0; i < kMaxTracks; ++i)
-            order[(size_t) orderCount++] = i;
-    }
-    else if (anyBus && ! anySidechain)
-    {
-        // Members first, buses last: a bus mixes what it was given, so
-        // everything routed into it must already have run.
-        for (int i = 0; i < kMaxTracks; ++i)
-            if (! tracks_[(size_t) i].isBus.load(std::memory_order_relaxed))
-                order[(size_t) orderCount++] = i;
-        for (int i = 0; i < kMaxTracks; ++i)
-            if (tracks_[(size_t) i].isBus.load(std::memory_order_relaxed))
-                order[(size_t) orderCount++] = i;
-    }
-    else
-    {
-        // Sources first, then everyone else, each in index order. A full
-        // topological sort would be the general answer, but with one detector
-        // per track the only case it buys is a chain of sidechains (A ducks B
-        // ducks C), and against that it would also have to define what a cycle
-        // means. Two passes handle the case people actually build — a kick
-        // ducking several tracks — and anything deeper simply reads the
-        // silence-safe fallback below rather than misbehaving.
-        std::array<bool, kMaxTracks> isSource {};
-        for (int i = 0; i < kMaxTracks; ++i)
-        {
-            const int source = sidechainSource_[(size_t) i].load(std::memory_order_relaxed);
-            if (source >= 0 && source < kMaxTracks)
-                isSource[(size_t) source] = true;
-        }
-
-        auto isBusTrack = [this](int i)
-        {
-            return tracks_[(size_t) i].isBus.load(std::memory_order_relaxed);
-        };
-
-        // Sidechain sources, then ordinary tracks, then buses. Buses stay last
-        // whatever else is true: a bus that rendered before its members would
-        // mix an empty buffer, which is a silent group rather than a subtly
-        // wrong one.
-        for (int i = 0; i < kMaxTracks; ++i)
-            if (isSource[(size_t) i] && ! isBusTrack(i))
-                order[(size_t) orderCount++] = i;
-        for (int i = 0; i < kMaxTracks; ++i)
-            if (! isSource[(size_t) i] && ! isBusTrack(i))
-                order[(size_t) orderCount++] = i;
-        for (int i = 0; i < kMaxTracks; ++i)
-            if (isBusTrack(i))
-                order[(size_t) orderCount++] = i;
-    }
-
-    trackOutputs_.fill(nullptr);
-
-    for (int slot = 0; slot < orderCount; ++slot)
-    {
-        const int i = order[(size_t) slot];
-
         // A stem renders one track. Note that anySolo is still whatever the
         // whole pool says, and the track still applies mute/solo itself — this
         // only decides who gets *asked*, so a stem is that track exactly as it
@@ -1067,58 +802,7 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
         if (! tracks_[(size_t) i].active.load(std::memory_order_relaxed))
             continue;
 
-        const juce::AudioBuffer<float>* detector = nullptr;
-        const int source = sidechainSource_[(size_t) i].load(std::memory_order_relaxed);
-
-        if (source >= 0 && source < kMaxTracks)
-        {
-            // Silence when the source produced nothing (muted, soloed out, or
-            // not yet rendered): the honest reading, and the one that stops
-            // ducking rather than falling back to self-compression, which
-            // would change the sound of the track for a reason the user never
-            // asked for.
-            detector = trackOutputs_[(size_t) source] != nullptr
-                         ? trackOutputs_[(size_t) source]
-                         : &silentDetector_;
-        }
-
-        // Where this track's audio goes: its group bus if it has one and that
-        // bus is really a bus and really active, otherwise straight to the
-        // master. Checked here rather than trusted, because a stale routing
-        // (to a track that has since stopped being a bus) must degrade to the
-        // master rather than write into another instrument's scratch.
-        juce::AudioBuffer<float>* destination = &output;
-
-        if (! tracks_[(size_t) i].isBus.load(std::memory_order_relaxed))
-        {
-            const int busIndex = outputBus_[(size_t) i].load(std::memory_order_relaxed);
-
-            if (busIndex >= 0 && busIndex < kMaxTracks
-                && tracks_[(size_t) busIndex].isBus.load(std::memory_order_relaxed)
-                && tracks_[(size_t) busIndex].active.load(std::memory_order_relaxed)
-                && soloTrack < 0) // a stem renders one track in isolation, straight out
-            {
-                destination = &tracks_[(size_t) busIndex].busInput();
-            }
-        }
-
-        tracks_[(size_t) i].render(*destination, sendBus_, midi, context, i == armed, anySolo,
-                                   launchQuantumSamples, detector);
-
-        trackOutputs_[(size_t) i] = tracks_[(size_t) i].blockOutput();
-    }
-
-    if (sendBusEnabled_.load(std::memory_order_relaxed))
-    {
-        if (sendBusEffectType_.load(std::memory_order_relaxed) == 1) // 1 = delay, 0 = reverb
-            sendBusDelay_.process(sendBus_);
-        else
-            sendBusReverb_.process(sendBus_);
-
-        const float returnGain = sendReturnGain_.load(std::memory_order_relaxed);
-        const int   channels   = juce::jmin(output.getNumChannels(), sendBus_.getNumChannels());
-        for (int ch = 0; ch < channels; ++ch)
-            output.addFrom(ch, 0, sendBus_, ch, 0, numSamples, returnGain);
+        tracks_[(size_t) i].render(output, midi, context, i == armed, anySolo, launchQuantumSamples);
     }
 
     if (applyMasterBus)
@@ -1283,20 +967,6 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
     masterEq_.prepare(sampleRate, blockSize);
     mastering_.prepare(sampleRate, blockSize);
     master_.prepare(sampleRate, blockSize);
-
-    sendBus_.setSize(2, blockSize);
-
-    // Prepared here, never on the audio thread, and cleared once: nothing ever
-    // writes to it, so it stays silent for the engine's lifetime.
-    silentDetector_.setSize(2, juce::jmax(1, blockSize));
-    silentDetector_.clear();
-    sendBusReverb_.prepare(sampleRate, blockSize);
-    sendBusReverb_.setEnabled(true); // always on internally; sendBusEnabled_ gates the mix-back
-    sendBusReverb_.setMix(1.0f);     // a return bus is always fully wet
-
-    sendBusDelay_.prepare(sampleRate, blockSize);
-    sendBusDelay_.setEnabled(true); // same convention as sendBusReverb_ above
-    sendBusDelay_.setMix(1.0f);     // a return bus is always fully wet
 
     recorder_.prepare(sampleRate, 2);
     metronome_.prepare(sampleRate);

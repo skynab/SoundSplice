@@ -315,14 +315,7 @@ MainComponent::MainComponent()
     timeSigLabel_.setText("Time", juce::dontSendNotification);
     timeSigLabel_.attachToComponent(&timeSigBox_, true);
 
-    tempoSlider.onValueChange = [this]
-    {
-        // Edits whichever tempo is in force at the playhead, not always the
-        // one at beat 0 — with a tempo map, "the tempo" is a position-dependent
-        // question, and a slider that always wrote beat 0 would silently edit
-        // a different part of the song from the one being listened to.
-        setTempoAtPlayhead(tempoSlider.getValue());
-    };
+    tempoSlider.onValueChange = [this] { setProjectTempo(tempoSlider.getValue()); };
     leftPane_.addAndMakeVisible(tempoSlider);
     tempoLabel.attachToComponent(&tempoSlider, true);
 
@@ -337,9 +330,6 @@ MainComponent::MainComponent()
 
     addTrackButton.onClick = [this] { addTrack(); };
     mixerView_.addAndMakeVisible(addTrackButton);
-
-    addBusTrackButton_.onClick = [this] { addBusTrack(); };
-    mixerView_.addAndMakeVisible(addBusTrackButton_);
 
     // ---- master panel: its own dock tab (see workspace_.registerPanel
     // below), not a pull-out inside Mixer — it applies to the whole song,
@@ -576,99 +566,6 @@ MainComponent::MainComponent()
     masterPanel_.addAndMakeVisible(eqTrebleSlider);
     masterPanel_.addAndMakeVisible(eqCurveView_);
 
-    // ---- send bus: a shared reverb-or-delay every track can send into (stored in the document) ----
-    sendBusButton.onClick = [this]
-    {
-        const bool on = sendBusButton.getToggleState();
-        history_.edit(on ? "Enable send bus" : "Disable send bus",
-                      [on](model::Song& s) { s.sendBus.enabled = on; });
-        engine_.setSendBusEnabled(on);
-    };
-    masterPanel_.addAndMakeVisible(sendBusButton);
-
-    sendEffectTypeBox_.addItem("Reverb", 1);
-    sendEffectTypeBox_.addItem("Delay", 2);
-    sendEffectTypeBox_.setSelectedId(1, juce::dontSendNotification);
-    sendEffectTypeBox_.onChange = [this]
-    {
-        const auto type = sendEffectTypeBox_.getSelectedId() == 2 ? model::SendBusEffectType::Delay
-                                                                  : model::SendBusEffectType::Reverb;
-        history_.edit("Set send bus type", [type](model::Song& s) { s.sendBus.effectType = type; });
-        engine_.setSendBusEffectType((int) type);
-        updateSendBusEffectVisibility();
-    };
-    masterPanel_.addAndMakeVisible(sendEffectTypeBox_);
-
-    sendRoomSlider.setRange(0.0, 100.0, 1.0);
-    sendRoomSlider.setValue(60.0, juce::dontSendNotification);
-    sendRoomSlider.setTextValueSuffix(" room");
-    sendRoomSlider.onValueChange = [this]
-    {
-        const float v = (float) (sendRoomSlider.getValue() / 100.0);
-        history_.mutableCurrent().sendBus.roomSize = v;
-        engine_.setSendBusRoomSize(v);
-    };
-    wireUndoableSlider(sendRoomSlider, "Set send bus room size",
-                       [](const model::Song& s) { return s.sendBus.roomSize; },
-                       [](model::Song& s, float v) { s.sendBus.roomSize = v; });
-    masterPanel_.addAndMakeVisible(sendRoomSlider);
-
-    sendDampSlider.setRange(0.0, 100.0, 1.0);
-    sendDampSlider.setValue(40.0, juce::dontSendNotification);
-    sendDampSlider.setTextValueSuffix(" damp");
-    sendDampSlider.onValueChange = [this]
-    {
-        const float v = (float) (sendDampSlider.getValue() / 100.0);
-        history_.mutableCurrent().sendBus.damping = v;
-        engine_.setSendBusDamping(v);
-    };
-    wireUndoableSlider(sendDampSlider, "Set send bus damping",
-                       [](const model::Song& s) { return s.sendBus.damping; },
-                       [](model::Song& s, float v) { s.sendBus.damping = v; });
-    masterPanel_.addAndMakeVisible(sendDampSlider);
-
-    sendDelayTimeSlider.setRange(20.0, 1000.0, 1.0);
-    sendDelayTimeSlider.setValue(300.0, juce::dontSendNotification);
-    sendDelayTimeSlider.setTextValueSuffix(" ms");
-    sendDelayTimeSlider.onValueChange = [this]
-    {
-        const float ms = (float) sendDelayTimeSlider.getValue();
-        history_.mutableCurrent().sendBus.delayTimeMs = ms;
-        engine_.setSendBusDelayTimeMs(ms);
-    };
-    wireUndoableSlider(sendDelayTimeSlider, "Set send bus delay time",
-                       [](const model::Song& s) { return s.sendBus.delayTimeMs; },
-                       [](model::Song& s, float v) { s.sendBus.delayTimeMs = v; });
-    masterPanel_.addAndMakeVisible(sendDelayTimeSlider);
-
-    sendDelayFbSlider.setRange(0.0, 95.0, 1.0);
-    sendDelayFbSlider.setValue(35.0, juce::dontSendNotification);
-    sendDelayFbSlider.setTextValueSuffix(" %");
-    sendDelayFbSlider.onValueChange = [this]
-    {
-        const float fb = (float) (sendDelayFbSlider.getValue() / 100.0);
-        history_.mutableCurrent().sendBus.delayFeedback = fb;
-        engine_.setSendBusDelayFeedback(fb);
-    };
-    wireUndoableSlider(sendDelayFbSlider, "Set send bus delay feedback",
-                       [](const model::Song& s) { return s.sendBus.delayFeedback; },
-                       [](model::Song& s, float v) { s.sendBus.delayFeedback = v; });
-    masterPanel_.addAndMakeVisible(sendDelayFbSlider);
-
-    sendReturnSlider.setRange(0.0, 100.0, 1.0);
-    sendReturnSlider.setValue(50.0, juce::dontSendNotification);
-    sendReturnSlider.setTextValueSuffix(" ret");
-    sendReturnSlider.onValueChange = [this]
-    {
-        const float v = (float) (sendReturnSlider.getValue() / 100.0);
-        history_.mutableCurrent().sendBus.returnLevel = v;
-        engine_.setSendBusReturnLevel(v);
-    };
-    wireUndoableSlider(sendReturnSlider, "Set send bus return level",
-                       [](const model::Song& s) { return s.sendBus.returnLevel; },
-                       [](model::Song& s, float v) { s.sendBus.returnLevel = v; });
-    masterPanel_.addAndMakeVisible(sendReturnSlider);
-
     // ---- gain automation: arm, then move the master fader or a track's fader
     // while playing (Rec Auto arms both; Clr Auto clears both, the master lane
     // and the currently selected track's) ----
@@ -694,10 +591,8 @@ MainComponent::MainComponent()
         strip->onFaderDragEnd   = [this, i](MixerStrip::Fader f) { endFaderDrag(i, f); };
         strip->onMuteChange = [this, i](bool m)   { setTrackMuted(i, m); };
         strip->onSoloChange = [this, i](bool s)   { setTrackSolo(i, s); };
-        strip->onSendChange = [this, i](float lv) { setTrackSendLevel(i, lv); };
         strip->onPanChange  = [this, i](float p)  { setTrackPan(i, p); };
         strip->onSelect     = [this, i]           { selectTrack(i); };
-        strip->onOutputBusChange = [this, i](int busId) { setTrackOutputBus(i, busId); };
         trackStrips_.add(strip);
         mixerView_.addAndMakeVisible(strip);
     }
@@ -1038,14 +933,6 @@ MainComponent::MainComponent()
         setClipLength(trackIndex, clipIndex, newLengthBeats);
     };
 
-    arrangementView_.onTempoChangeRequested = [this](double beat) { editTempoChangeAt(beat); };
-    arrangementView_.onTempoChangeRemoved    = [this](double beat) { removeTempoChangeAt(beat); };
-    arrangementView_.onTempoRampToggled      = [this](double beat) { toggleTempoRamp(beat); };
-    arrangementView_.onTempoChangeMoved      = [this](double from, double to)
-    {
-        moveTempoChange(from, to);
-    };
-
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)
     {
         importAudioFileAtBeat(file, dropBeat, trackIndex);
@@ -1068,7 +955,6 @@ MainComponent::MainComponent()
     updateEqControls();
     updateMasteringControls();
     updateEditingLabel();
-    updateSendBusControls();
 
     engine_.deviceManager().addChangeListener(this);
     logAudioDeviceStatus();
@@ -1181,22 +1067,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
             menu.addItem(58, "Fade Out",       hasSelection, false);
             menu.addItem(59, "Reverse Audio",  hasSelection, false);
 
-            // Warping, unlike everything above it, acts on the whole clip
-            // rather than a selection — and is non-destructive, which is why
-            // it is a tick rather than an action that rewrites samples the way
-            // "Speed and pitch" does.
-            menu.addSeparator();
-
-            const auto* audioClip = selectedAudioClip();
-            const bool  knowsTempo = audioClip != nullptr && audioClip->sourceBpm > 0.0;
-
-            menu.addItem(60, knowsTempo
-                                 ? "Warp Clip to Project Tempo   (clip is "
-                                       + juce::String(audioClip->sourceBpm, 1) + " BPM)"
-                                 : juce::String("Warp Clip to Project Tempo"),
-                         knowsTempo, audioClip != nullptr && audioClip->warpEnabled);
-            menu.addItem(61, "Detect Clip Tempo...", hasAudio, false);
-            menu.addItem(62, "Set Project Tempo from Clip", knowsTempo, false);
         }
         menu.addSeparator();
         addItem(menu, 17, "Copy Clip", keys::copyClip);
@@ -1286,10 +1156,6 @@ void MainComponent::menuItemSelected(int menuItemID, int)
         case 58: fadeOutAudioSelection(); break;
         case 59: reverseAudioSelection(); break;
 
-        case 60: toggleClipWarp(); break;
-        case 61: detectSelectedClipTempo(); break;
-        case 62: setProjectTempoFromClip(); break;
-
         case 33:
         {
             const bool snap = ! arrangementView_.snapsToGrid();
@@ -1373,12 +1239,7 @@ void MainComponent::createEmptyProject()
     selectedTrackIndex_ = 0;
     tempoSlider.setValue(song.bpm, juce::dontSendNotification);
 
-    // The whole map, not just the starting tempo: a project that carries tempo
-    // changes has to arrive in the engine with them, or it plays back at one
-    // tempo while the document says otherwise.
-    const auto tempoMap = model::tempoMapFor(song);
-    uiTempoMap_.setTempoChanges(tempoMap);
-    engine_.setTempoChanges(tempoMap);
+    uiTempoMap_.setTempo(song.bpm);
     post(Cmd::SetTempo, song.bpm);
     refreshFromModel();
     clipLabel.setText("No clip loaded", juce::dontSendNotification);
@@ -1478,38 +1339,6 @@ void MainComponent::addTrack()
 double MainComponent::beatsPerBar() const
 {
     return juce::jmax(1.0, uiTempoMap_.quartersPerBar());
-}
-
-/** Adds a group bus: a track that receives other tracks' output rather than
-    generating any (see model::TrackType::Bus). No clip is created for it —
-    a bus has nothing to play, and an empty clip on one would show up in the
-    arrangement as something you could open and edit. */
-void MainComponent::addBusTrack()
-{
-    if (trackCount() >= engine_.maxTracks())
-    {
-        showError("Track limit reached");
-        return;
-    }
-
-    history_.edit("Add group bus", [](model::Song& s)
-    {
-        const auto name = "Bus " + juce::String((int) s.tracks.size() + 1);
-        model::addTrack(s, model::TrackType::Bus, name.toStdString());
-    });
-
-    selectedTrackIndex_ = trackCount() - 1;
-    selectedClipIndex_  = 0;
-    syncEngineTracks();
-    refreshPianoRollForSelected();
-    refreshEffectChainForSelected();
-    refreshAudioEditorForSelected();
-    refreshAutomationPaneForSelected();
-    refreshSessionView();
-    arrangementView_.setSong(history_.current());
-    updateMixerStrips();
-    updateEditingLabel();
-    showStatus("Added a group bus - route tracks into it from their mixer strip");
 }
 
 /** Adds a new clip to the currently selected track, positioned 2 beats after
@@ -1646,22 +1475,7 @@ void MainComponent::refreshEffectChainForSelected()
         return;
     }
 
-    // Populated before setChain, so that when setChain selects the stored
-    // routing the item it names is already in the list — the other order
-    // silently resets every sidechain to "this track" on load.
-    const auto& tracks = history_.current().tracks;
-    std::vector<std::pair<int, juce::String>> sources;
-    sources.reserve(tracks.size());
-
-    for (int i = 0; i < (int) tracks.size(); ++i)
-    {
-        if (i == selectedTrackIndex_)
-            continue; // a track ducking itself is just an ordinary compressor
-        sources.emplace_back(tracks[(size_t) i].id, juce::String(tracks[(size_t) i].name));
-    }
-
-    effectChain_.setSidechainSources(sources);
-    effectChain_.setChain(tracks[(size_t) selectedTrackIndex_].effectChain);
+    effectChain_.setChain(history_.current().tracks[(size_t) selectedTrackIndex_].effectChain);
 }
 
 /** Live tweak from the Track FX pane — updates the document in place (not a
@@ -2537,7 +2351,6 @@ static engine::TrackAutomation toTrackAutomation(const model::Track& track)
 
     copyLane(model::TrackParam::Gain, curves.gain);
     copyLane(model::TrackParam::Pan, curves.pan);
-    copyLane(model::TrackParam::SendLevel, curves.sendLevel);
     return curves;
 }
 
@@ -2583,7 +2396,6 @@ void MainComponent::syncEngineTracks()
             spec.startBeats  = clip.startBeats;
             spec.lengthBeats = clip.lengthBeats;
             spec.gainDb      = clip.gainDb;
-            spec.stretchFactor = warpFactorFor(clip);
             audioSpecs.push_back(spec);
         }
         // Submitted even when empty, which the guard here used to skip: the
@@ -2614,7 +2426,6 @@ void MainComponent::syncEngineTracks()
             sessionSlots.push_back(std::move(data));
         }
         engine_.setTrackSessionSlots(i, sessionSlots);
-        engine_.setTrackSendLevel(i, track.sendLevel);
 
         const auto& synth = track.synthSettings;
         engine_.setTrackSynthWaveform(i, synth.waveform);
@@ -2636,34 +2447,6 @@ void MainComponent::syncEngineTracks()
         engine_.setTrackSynthSubOscLevel(i, synth.subOscLevel);
         engine_.setTrackSynthUnisonVoices(i, synth.unisonVoices);
         engine_.setTrackSynthUnisonDetuneCents(i, synth.unisonDetuneCents);
-
-        // Sidechain routing: the document names the source by track *id*, the
-        // engine addresses its pool by index, and this is the only place that
-        // knows both. Resolving here (rather than storing an index) is what
-        // stops deleting or reordering a track from silently re-pointing a
-        // sidechain at whatever instrument inherited that slot.
-        //
-        // The last compressor with a source set wins if a chain somehow holds
-        // two: the engine routes one detector per track, and picking the last
-        // is at least a rule rather than an accident of iteration order.
-        int sidechainSourceIndex = -1;
-        for (const auto& slot : track.effectChain)
-        {
-            if (slot.kind != model::EffectKind::Compressor || slot.compressor.sidechainTrackId < 0)
-                continue;
-
-            const int sourceIndex = trackIndexForId(slot.compressor.sidechainTrackId);
-            if (sourceIndex >= 0 && sourceIndex != i)
-                sidechainSourceIndex = sourceIndex;
-        }
-        engine_.setTrackSidechainSource(i, sidechainSourceIndex);
-
-        // Group-bus routing. Both sides go through the id->index bridge for
-        // the same reason the sidechain does: the document names tracks by id
-        // so that deleting or reordering one cannot silently re-route audio
-        // into whatever inherited its slot.
-        engine_.setTrackIsBus(i, track.type == model::TrackType::Bus);
-        engine_.setTrackOutputBus(i, trackIndexForId(track.outputBusId));
 
         // The chain's shape, in order. Only pushed when it actually changed —
         // rebuilding resets every tail in the chain, so an unrelated edit must
@@ -2737,143 +2520,6 @@ void MainComponent::refreshPianoRollForSelected()
 /** The selected clip if it's an Audio clip that actually references a file,
     or nullptr. Everything the audio editor does needs all three of those to
     hold, so they're checked once here rather than at each call site. */
-/** The time-stretch this clip needs to sit at the project's tempo.
-
-    The tempo is taken *at the clip's start* rather than as one project-wide
-    number, because with a tempo map there is no such single number. That is
-    also this feature's honest v1 limit: a clip spanning a tempo change warps
-    to the tempo it begins at and then drifts, which is a deliberate deferral
-    (see docs/PLAN.md §29) rather than an oversight — warping across a ramp
-    means a time-varying ratio and a different rendering strategy entirely. */
-int MainComponent::trackIndexForId(int trackId) const
-{
-    if (trackId < 0)
-        return -1;
-
-    const auto& tracks = history_.current().tracks;
-    for (int i = 0; i < (int) tracks.size(); ++i)
-        if (tracks[(size_t) i].id == trackId)
-            return i;
-
-    // A source track that has since been deleted. Reported as "no sidechain"
-    // rather than clamped to some other track — the routing is gone, and the
-    // compressor falling back to its own input is the least surprising thing
-    // that can happen.
-    return -1;
-}
-
-double MainComponent::warpFactorFor(const model::Clip& clip) const
-{
-    return engine::warpStretchFactor(clip.sourceBpm,
-                                     model::tempoAtBeat(history_.current(), clip.startBeats),
-                                     clip.warpEnabled);
-}
-
-/** Runs tempo detection over a clip's decoded audio. Message thread, and not
-    instant on a long file — the caller shows a busy message. */
-engine::TempoEstimate MainComponent::detectTempoForClip(const model::Clip& clip)
-{
-    if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
-        return {};
-
-    return engine_.detectFileTempo(juce::File(clip.audioFile));
-}
-
-/** Switches warping on or off for the selected audio clip. */
-void MainComponent::toggleClipWarp()
-{
-    const auto* clip = selectedAudioClip();
-    if (clip == nullptr)
-        return;
-
-    if (clip->sourceBpm <= 0.0)
-    {
-        // Nothing to warp *to*. Reachable only if the menu item's enablement
-        // and the model disagree, but saying so beats silently doing nothing.
-        showError("This clip's tempo isn't known - use Detect Clip Tempo first");
-        return;
-    }
-
-    const int  trackIndex = selectedTrackIndex_;
-    const int  clipIndex  = selectedClipIndex_;
-    const bool turningOn  = ! clip->warpEnabled;
-
-    history_.edit(turningOn ? "Warp clip" : "Unwarp clip", [trackIndex, clipIndex, turningOn](model::Song& s)
-    {
-        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
-            return;
-        auto& clips = s.tracks[(size_t) trackIndex].clips;
-        if (clipIndex < 0 || clipIndex >= (int) clips.size())
-            return;
-        clips[(size_t) clipIndex].warpEnabled = turningOn;
-    });
-
-    // Rendering the stretch happens inside this call, on the message thread,
-    // so a long clip pauses briefly here rather than glitching the audio
-    // thread — the whole reason warping is pre-rendered.
-    if (turningOn)
-        showBusy("Warping clip...");
-
-    syncEngineTracks();
-
-    const double projectBpm = model::tempoAtBeat(history_.current(), clip->startBeats);
-    showStatus(turningOn
-        ? "Warped " + juce::String(clip->sourceBpm, 1) + " BPM clip to "
-              + juce::String(projectBpm, 1) + " BPM"
-        : juce::String("Warping off - clip plays at its own rate"));
-}
-
-/** Detects (or re-detects) the selected clip's tempo and stores it. */
-void MainComponent::detectSelectedClipTempo()
-{
-    const auto* clip = selectedAudioClip();
-    if (clip == nullptr)
-        return;
-
-    showBusy("Detecting tempo...");
-
-    const auto estimate = detectTempoForClip(*clip);
-    if (! estimate.isUsable())
-    {
-        showError("Could not detect a tempo in this clip");
-        return;
-    }
-
-    const int trackIndex = selectedTrackIndex_;
-    const int clipIndex  = selectedClipIndex_;
-    const double detected = estimate.bpm;
-
-    history_.edit("Detect clip tempo", [trackIndex, clipIndex, detected](model::Song& s)
-    {
-        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
-            return;
-        auto& clips = s.tracks[(size_t) trackIndex].clips;
-        if (clipIndex < 0 || clipIndex >= (int) clips.size())
-            return;
-        clips[(size_t) clipIndex].sourceBpm = detected;
-    });
-
-    syncEngineTracks();
-
-    // The confidence is reported rather than hidden: a detector that always
-    // answers, with no way to tell a sure 128 from a coin-flip 91, is one that
-    // will eventually warp something to a tempo it invented.
-    showStatus("Detected " + juce::String(estimate.bpm, 1) + " BPM"
-               + (estimate.confidence < 0.5 ? "  (low confidence - check it)" : ""));
-}
-
-/** Makes the project follow the clip rather than the other way round. */
-void MainComponent::setProjectTempoFromClip()
-{
-    const auto* clip = selectedAudioClip();
-    if (clip == nullptr || clip->sourceBpm <= 0.0)
-        return;
-
-    const double bpm = clip->sourceBpm;
-    setTempoAtPlayhead(bpm);
-    showStatus("Project tempo set to " + juce::String(bpm, 1) + " BPM from the clip");
-}
-
 const model::Clip* MainComponent::selectedAudioClip() const
 {
     const auto& song = history_.current();
@@ -4091,14 +3737,6 @@ void MainComponent::updateMixerStrips()
 {
     const auto& song = history_.current();
 
-    // The buses anything may feed. Built once rather than per strip, and a bus
-    // is excluded from its own list below — a bus feeding itself is a loop,
-    // and a bus feeding another bus is not supported in this pass.
-    std::vector<std::pair<int, juce::String>> buses;
-    for (const auto& track : song.tracks)
-        if (track.type == model::TrackType::Bus)
-            buses.emplace_back(track.id, juce::String(track.name));
-
     for (int i = 0; i < engine_.maxTracks(); ++i)
     {
         auto* strip  = trackStrips_[i];
@@ -4112,19 +3750,7 @@ void MainComponent::updateMixerStrips()
             strip->setGainDb(track.gainDb);
             strip->setMuted(track.muted);
             strip->setSoloed(track.solo);
-            strip->setSendLevel(track.sendLevel);
             strip->setPan(track.pan);
-
-            if (track.type == model::TrackType::Bus)
-            {
-                // A bus always goes to the master here, so it gets no picker
-                // rather than one offering a routing it cannot take.
-                strip->setOutputOptions({}, -1);
-            }
-            else
-            {
-                strip->setOutputOptions(buses, track.outputBusId);
-            }
         }
         strip->setSelected(i == selectedTrackIndex_);
     }
@@ -4190,37 +3816,6 @@ void MainComponent::updateEqControls()
     eqCurveView_.setSettings(eq);
 }
 
-void MainComponent::updateSendBusControls()
-{
-    const auto& sb = history_.current().sendBus;
-    sendBusButton.setToggleState(sb.enabled, juce::dontSendNotification);
-    sendEffectTypeBox_.setSelectedId(sb.effectType == model::SendBusEffectType::Delay ? 2 : 1,
-                                     juce::dontSendNotification);
-    sendRoomSlider.setValue(sb.roomSize * 100.0, juce::dontSendNotification);
-    sendDampSlider.setValue(sb.damping * 100.0, juce::dontSendNotification);
-    sendDelayTimeSlider.setValue(sb.delayTimeMs, juce::dontSendNotification);
-    sendDelayFbSlider.setValue(sb.delayFeedback * 100.0, juce::dontSendNotification);
-    sendReturnSlider.setValue(sb.returnLevel * 100.0, juce::dontSendNotification);
-    updateSendBusEffectVisibility();
-
-    engine_.setSendBusEnabled(sb.enabled);
-    engine_.setSendBusEffectType((int) sb.effectType);
-    engine_.setSendBusRoomSize(sb.roomSize);
-    engine_.setSendBusDamping(sb.damping);
-    engine_.setSendBusDelayTimeMs(sb.delayTimeMs);
-    engine_.setSendBusDelayFeedback(sb.delayFeedback);
-    engine_.setSendBusReturnLevel(sb.returnLevel);
-}
-
-void MainComponent::updateSendBusEffectVisibility()
-{
-    const bool isDelay = history_.current().sendBus.effectType == model::SendBusEffectType::Delay;
-    sendRoomSlider.setVisible(! isDelay);
-    sendDampSlider.setVisible(! isDelay);
-    sendDelayTimeSlider.setVisible(isDelay);
-    sendDelayFbSlider.setVisible(isDelay);
-}
-
 void MainComponent::setTrackGain(int index, float gainDb)
 {
     // Live tweak: update the current document in place (not a separate undo step).
@@ -4232,7 +3827,7 @@ void MainComponent::setTrackGain(int index, float gainDb)
 
         // The same global "Rec Auto" toggle arms every automatable per-track
         // parameter — touch whichever control you want to automate while it's
-        // on (see also setTrackPan and setTrackSendLevel).
+        // on (see also setTrackPan).
         if (recordAutomation_ && engine_.isPlaying())
             track.laneFor(model::TrackParam::Gain)
                  .addPoint(uiTempoMap_.ppqFromSamples(engine_.playheadSamples()), gainDb);
@@ -4251,7 +3846,6 @@ static float readFader(const model::Song& song, int index, MixerStrip::Fader fad
     {
         case MixerStrip::Fader::Gain: return track.gainDb;
         case MixerStrip::Fader::Pan:  return track.pan;
-        case MixerStrip::Fader::Send: return track.sendLevel;
     }
     return 0.0f;
 }
@@ -4266,7 +3860,6 @@ static void writeFader(model::Song& song, int index, MixerStrip::Fader fader, fl
     {
         case MixerStrip::Fader::Gain: track.gainDb    = value; break;
         case MixerStrip::Fader::Pan:  track.pan       = value; break;
-        case MixerStrip::Fader::Send: track.sendLevel = value; break;
     }
 }
 
@@ -4276,7 +3869,6 @@ static const char* faderName(MixerStrip::Fader fader)
     {
         case MixerStrip::Fader::Gain: return "Set track gain";
         case MixerStrip::Fader::Pan:  return "Set track pan";
-        case MixerStrip::Fader::Send: return "Set track send";
     }
     return "Set track level";
 }
@@ -4456,29 +4048,6 @@ void MainComponent::setTrackSolo(int index, bool solo)
     updateMixerStrips();
 }
 
-/** Routes a track into a group bus, or back to the master (@p busTrackId -1).
-
-    A real undo step rather than an in-place edit like the faders: this is a
-    structural change to the mix, not a continuous control being dragged, and
-    it is the kind of thing you want to be able to take back. */
-void MainComponent::setTrackOutputBus(int index, int busTrackId)
-{
-    if (index < 0 || index >= trackCount())
-        return;
-
-    if (history_.current().tracks[(size_t) index].outputBusId == busTrackId)
-        return; // repopulating the picker must not manufacture an undo step
-
-    history_.edit("Route track", [index, busTrackId](model::Song& s)
-    {
-        if (index >= 0 && index < (int) s.tracks.size())
-            s.tracks[(size_t) index].outputBusId = busTrackId;
-    });
-
-    syncEngineTracks();
-    updateMixerStrips();
-}
-
 void MainComponent::setTrackPan(int index, float pan)
 {
     auto& song = history_.mutableCurrent();
@@ -4491,20 +4060,6 @@ void MainComponent::setTrackPan(int index, float pan)
                  .addPoint(uiTempoMap_.ppqFromSamples(engine_.playheadSamples()), pan);
     }
     engine_.setTrackPan(index, pan);
-}
-
-void MainComponent::setTrackSendLevel(int index, float level)
-{
-    auto& song = history_.mutableCurrent();
-    if (index >= 0 && index < (int) song.tracks.size())
-    {
-        auto& track = song.tracks[(size_t) index];
-        track.sendLevel = level;
-        if (recordAutomation_ && engine_.isPlaying())
-            track.laneFor(model::TrackParam::SendLevel)
-                 .addPoint(uiTempoMap_.ppqFromSamples(engine_.playheadSamples()), level);
-    }
-    engine_.setTrackSendLevel(index, level);
 }
 
 void MainComponent::selectTrack(int index)
@@ -4568,7 +4123,6 @@ void MainComponent::refreshFromModel()
     updateReverbControls();
     updateEqControls();
     updateMasteringControls();
-    updateSendBusControls();
     fileBrowser_.setProjectRootFolder(history_.current().projectRootFolder.empty()
                                           ? juce::File{}
                                           : juce::File(history_.current().projectRootFolder));
@@ -4842,7 +4396,7 @@ void MainComponent::importAudioToNewTrack()
     instrument clips. Any other drop target (empty space, or a non-Audio
     track) creates a brand-new Audio track instead, as it always has. */
 void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBeats,
-                                          int targetTrackIndex, bool isRecordedTake)
+                                          int targetTrackIndex)
 {
     const auto& song = history_.current();
     const bool  addToExistingTrack = targetTrackIndex >= 0 && targetTrackIndex < (int) song.tracks.size()
@@ -4866,106 +4420,11 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
     const double lengthBeats     = measured > 0.0 ? measured : 4.0;
     const auto   path            = file.getFullPathName().toStdString();
 
-    // Tempo detection, which is what makes a dropped loop actually usable:
-    // without it every import plays at whatever tempo it was recorded at,
-    // against everything else in the project.
-    //
-    // Warping is switched on only when the detector is confident *and* the
-    // tempo genuinely differs. A low-confidence result is still stored - it
-    // costs nothing, and it means "Warp Clip to Project Tempo" is available to
-    // accept by hand - but it is not acted on, because a sustained pad that
-    // happens to correlate at 91 BPM must not be silently stretched. Either
-    // way the status line says what happened, so warping is never a mystery.
-    const double projectBpm = model::tempoAtBeat(song, juce::jmax(0.0, startBeats));
-
-    // A recorded take is at the project tempo by definition — it was just
-    // played against this project's click. Its tempo is recorded as such
-    // (which makes it usable later, e.g. if the project tempo changes) but it
-    // is never analysed and never warped on arrival.
-    if (isRecordedTake)
-    {
-        const double takeBpm = projectBpm;
-
-        if (addToExistingTrack)
-        {
-            int newClipIndex = -1;
-            history_.edit("Add audio clip", [targetTrackIndex, &path, startBeats, lengthBeats,
-                                             takeBpm, &newClipIndex](model::Song& s)
-            {
-                auto& track = s.tracks[(size_t) targetTrackIndex];
-
-                model::Clip clip;
-                clip.id          = model::allocateId(s);
-                clip.type        = model::ClipType::Audio;
-                clip.startBeats  = juce::jmax(0.0, startBeats);
-                clip.lengthBeats = lengthBeats;
-                clip.audioFile   = path;
-                clip.sourceBpm   = takeBpm;
-                track.clips.push_back(clip);
-
-                newClipIndex = (int) track.clips.size() - 1;
-            });
-
-            syncEngineTracks();
-            selectTrackAndClip(targetTrackIndex, newClipIndex);
-            arrangementView_.setSong(history_.current());
-            return;
-        }
-
-        if (trackCount() >= engine_.maxTracks())
-        {
-            showError("Track limit reached");
-            return;
-        }
-
-        int newTrackIndex = -1;
-        history_.edit("Import audio track", [&path, &newTrackIndex, startBeats, lengthBeats,
-                                             takeBpm](model::Song& s)
-        {
-            const auto name = "Audio " + juce::String((int) s.tracks.size() + 1);
-            model::addTrack(s, model::TrackType::Audio, name.toStdString());
-
-            model::Clip clip;
-            clip.id          = model::allocateId(s);
-            clip.type        = model::ClipType::Audio;
-            clip.startBeats  = juce::jmax(0.0, startBeats);
-            clip.lengthBeats = lengthBeats;
-            clip.audioFile   = path;
-            clip.sourceBpm   = takeBpm;
-            s.tracks.back().clips.push_back(clip);
-
-            newTrackIndex = (int) s.tracks.size() - 1;
-        });
-
-        selectTrackAndRefreshAll(newTrackIndex);
-        return;
-    }
-
-    // Decoding the whole file to analyse it is not instant, and this is
-    // reached by a drag-and-drop, where an unexplained pause reads as a hang.
-    showBusy("Analysing tempo...");
-    const auto estimate = engine_.detectFileTempo(file);
-
-    const bool tempoDiffers = estimate.isUsable() && projectBpm > 0.0
-                           && std::abs(estimate.bpm - projectBpm) > 0.5;
-    const bool autoWarp     = tempoDiffers && estimate.confidence >= 0.5;
-
-    const double detectedBpm = estimate.isUsable() ? estimate.bpm : 0.0;
-
-    juce::String tempoNote;
-    if (autoWarp)
-        tempoNote = "  (" + juce::String(detectedBpm, 1) + " BPM, warped to "
-                  + juce::String(projectBpm, 1) + ")";
-    else if (estimate.isUsable() && tempoDiffers)
-        tempoNote = "  (" + juce::String(detectedBpm, 1) + " BPM? - low confidence, not warped)";
-    else if (estimate.isUsable())
-        tempoNote = "  (" + juce::String(detectedBpm, 1) + " BPM)";
-
     if (addToExistingTrack)
     {
         int newClipIndex = -1;
         history_.edit("Add audio clip", [targetTrackIndex, &path, startBeats, lengthBeats,
-                                         detectedBpm, autoWarp, &newClipIndex](model::Song& s)
+                                         &newClipIndex](model::Song& s)
         {
             auto& track = s.tracks[(size_t) targetTrackIndex];
 
@@ -4975,8 +4434,6 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
             clip.startBeats  = juce::jmax(0.0, startBeats);
             clip.lengthBeats = lengthBeats;
             clip.audioFile   = path;
-            clip.sourceBpm   = detectedBpm;
-            clip.warpEnabled = autoWarp;
             track.clips.push_back(clip);
 
             newClipIndex = (int) track.clips.size() - 1;
@@ -4985,7 +4442,7 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
         syncEngineTracks();
         selectTrackAndClip(targetTrackIndex, newClipIndex);
         arrangementView_.setSong(history_.current());
-        showStatus("Imported: " + file.getFileName() + "  (added clip)" + tempoNote);
+        showStatus("Imported: " + file.getFileName() + "  (added clip)");
         return;
     }
 
@@ -4996,8 +4453,7 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
     }
 
     int newTrackIndex = -1;
-    history_.edit("Import audio track", [&path, &newTrackIndex, startBeats, lengthBeats,
-                                        detectedBpm, autoWarp](model::Song& s)
+    history_.edit("Import audio track", [&path, &newTrackIndex, startBeats, lengthBeats](model::Song& s)
     {
         const auto name = "Audio " + juce::String((int) s.tracks.size() + 1);
         model::addTrack(s, model::TrackType::Audio, name.toStdString());
@@ -5008,15 +4464,13 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
         clip.startBeats  = juce::jmax(0.0, startBeats);
         clip.lengthBeats = lengthBeats;
         clip.audioFile   = path;
-        clip.sourceBpm   = detectedBpm;
-        clip.warpEnabled = autoWarp;
         s.tracks.back().clips.push_back(clip);
 
         newTrackIndex = (int) s.tracks.size() - 1;
     });
 
     selectTrackAndRefreshAll(newTrackIndex);
-    showStatus("Imported: " + file.getFileName() + "  (new track)" + tempoNote);
+    showStatus("Imported: " + file.getFileName() + "  (new track)");
 }
 
 /** Points the whole UI at a track: every pane that shows per-track state is
@@ -5322,7 +4776,7 @@ void MainComponent::finishRecordingIfReady()
     // path — which measures the file's real duration rather than guessing, and
     // appends to the target track rather than always making a new one. This
     // used to be a second, hand-written copy of that logic here.
-    importAudioFileAtBeat(file, startBeats, recordingTargetTrack_, /*isRecordedTake=*/true);
+    importAudioFileAtBeat(file, startBeats, recordingTargetTrack_);
 
     recordingFile_        = juce::File{};
     recordingTargetTrack_ = -1;
@@ -6038,179 +5492,27 @@ double MainComponent::playheadBeat() const
     return juce::jmax(0.0, uiTempoMap_.ppqFromSamples(engine_.playheadSamples()));
 }
 
-/** Applies @p bpm to whichever tempo is in force at the playhead.
-
-    At the start of the song that is the song's tempo; inside a section with a
-    tempo change it is that change. Both go through history_, so a tempo edit
-    undoes like any other. */
-void MainComponent::setTempoAtPlayhead(double bpm)
+/** Sets the project tempo as one undoable edit. */
+void MainComponent::setProjectTempo(double bpm)
 {
-    const double beat = playheadBeat();
+    if (std::abs(history_.current().bpm - bpm) < 1.0e-9)
+        return;
 
-    history_.edit("Tempo", [beat, bpm](model::Song& s)
-    {
-        // Which entry the playhead is inside: the last change at or before it,
-        // or the song's own tempo when it is before them all.
-        int index = -1;
-        for (int i = 0; i < (int) s.tempoChanges.size(); ++i)
-            if (beat >= s.tempoChanges[(size_t) i].beat)
-                index = i;
-
-        if (index >= 0)
-            s.tempoChanges[(size_t) index].bpm = bpm;
-        else
-            s.bpm = bpm;
-    });
-
+    history_.edit("Tempo", [bpm](model::Song& s) { s.bpm = bpm; });
     pushTempoMap();
 }
 
-/** Adds a tempo change at @p beat, or edits the one already there. */
-void MainComponent::editTempoChangeAt(double beat)
-{
-    const auto& song = history_.current();
-    double      current = model::tempoAtBeat(song, beat);
-
-    for (const auto& change : song.tempoChanges)
-        if (std::abs(change.beat - beat) < 1.0e-9)
-            current = change.bpm;
-
-    auto* window = new juce::AlertWindow("Tempo change", {},
-                                         juce::MessageBoxIconType::NoIcon, this);
-
-    const double qpb = juce::jmax(1.0, uiTempoMap_.quartersPerBar());
-    window->addTextEditor("bpm", juce::String(current, 2),
-                          "Tempo at bar " + juce::String((int) std::round(beat / qpb) + 1) + ":");
-    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, beat](int result)
-        {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double bpm = window->getTextEditorContents("bpm").getDoubleValue();
-
-            // Refused rather than clamped: a tempo someone mistyped is worth
-            // saying no to, and a silently corrected 0 would be a mystery.
-            if (bpm < 20.0 || bpm > 400.0)
-            {
-                self->showError("Tempo must be between 20 and 400 bpm");
-                return;
-            }
-
-            self->applyTempoChange(beat, bpm);
-        }));
-}
-
-void MainComponent::applyTempoChange(double beat, double bpm)
-{
-    history_.edit("Tempo change", [beat, bpm](model::Song& s)
-    {
-        // Beat 0 is the song's own tempo rather than an entry in the list —
-        // see model::tempoMapFor for why the two are kept apart.
-        if (beat <= 0.0)
-        {
-            s.bpm = bpm;
-            return;
-        }
-
-        for (auto& change : s.tempoChanges)
-        {
-            if (std::abs(change.beat - beat) < 1.0e-9)
-            {
-                change.bpm = bpm;
-                return;
-            }
-        }
-
-        s.tempoChanges.push_back({ beat, bpm });
-        std::sort(s.tempoChanges.begin(), s.tempoChanges.end(),
-                  [](const engine::TempoChange& a, const engine::TempoChange& b)
-                  { return a.beat < b.beat; });
-    });
-
-    pushTempoMap();
-}
-
-/** Moves the tempo change at @p fromBeat to @p toBeat.
-
-    Dropping one onto another merges rather than leaving two changes at the
-    same position: only one of them could ever be in force, and a hidden
-    duplicate is worse than a visible replacement. */
-void MainComponent::moveTempoChange(double fromBeat, double toBeat)
-{
-    if (toBeat <= 0.0)
-        return; // beat 0 is the song's own tempo, not a change — see model::tempoMapFor
-
-    history_.edit("Move tempo change", [fromBeat, toBeat](model::Song& s)
-    {
-        double bpm = 0.0;
-        for (const auto& change : s.tempoChanges)
-            if (std::abs(change.beat - fromBeat) < 1.0e-9)
-                bpm = change.bpm;
-
-        if (bpm <= 0.0)
-            return; // it went away underneath the drag
-
-        s.tempoChanges.erase(std::remove_if(s.tempoChanges.begin(), s.tempoChanges.end(),
-                                            [fromBeat, toBeat](const engine::TempoChange& c)
-                                            {
-                                                return std::abs(c.beat - fromBeat) < 1.0e-9
-                                                    || std::abs(c.beat - toBeat) < 1.0e-9;
-                                            }),
-                             s.tempoChanges.end());
-
-        s.tempoChanges.push_back({ toBeat, bpm });
-        std::sort(s.tempoChanges.begin(), s.tempoChanges.end(),
-                  [](const engine::TempoChange& a, const engine::TempoChange& b)
-                  { return a.beat < b.beat; });
-    });
-
-    pushTempoMap();
-}
-
-/** Switches the change at @p beat between jumping to its tempo and sliding to
-    it from the one before. */
-void MainComponent::toggleTempoRamp(double beat)
-{
-    history_.edit("Tempo ramp", [beat](model::Song& s)
-    {
-        for (auto& change : s.tempoChanges)
-            if (std::abs(change.beat - beat) < 1.0e-9)
-                change.ramp = ! change.ramp;
-    });
-
-    pushTempoMap();
-}
-
-void MainComponent::removeTempoChangeAt(double beat)
-{
-    history_.edit("Remove tempo change", [beat](model::Song& s)
-    {
-        s.tempoChanges.erase(std::remove_if(s.tempoChanges.begin(), s.tempoChanges.end(),
-                                            [beat](const engine::TempoChange& c)
-                                            { return std::abs(c.beat - beat) < 1.0e-9; }),
-                             s.tempoChanges.end());
-    });
-
-    pushTempoMap();
-}
-
-/** Hands the current map to the engine and the UI's own copy, and refreshes
+/** Hands the project tempo to the engine and the UI's own map, and refreshes
     everything that depends on where beats fall. */
 void MainComponent::pushTempoMap()
 {
     const auto& song = history_.current();
-    const auto  map  = model::tempoMapFor(song);
 
-    uiTempoMap_.setTempoChanges(map);
-    engine_.setTempoChanges(map);
+    uiTempoMap_.setTempo(song.bpm);
+    post(Cmd::SetTempo, song.bpm);
 
     // The loop region is a musical position, so where it lands in samples
-    // changed with the map.
+    // changed with the tempo.
     updateLoopRegion();
 
     arrangementView_.setSong(song);
@@ -6334,7 +5636,6 @@ void MainComponent::timerCallback()
     stopAtEndOfArrangement();
 
     addTrackButton.setEnabled(trackCount() < engine_.maxTracks());
-    addBusTrackButton_.setEnabled(trackCount() < engine_.maxTracks());
     addClipButton_.setEnabled(selectedTrackIndex_ >= 0 && selectedTrackIndex_ < trackCount());
 
     const double sampleRate = engine_.sampleRate();
@@ -6358,15 +5659,13 @@ void MainComponent::timerCallback()
                                                   bb.bar, bb.beat, seconds, transportState),
                           juce::dontSendNotification);
 
-    // The slider follows the playhead through the tempo map, so playing into a
-    // section with a different tempo shows that tempo rather than the song's
-    // first one. Skipped while it is being dragged, or it would fight the
-    // hand that is moving it.
+    // The slider follows the document (undo, load), skipped while it is being
+    // dragged, or it would fight the hand that is moving it.
     if (! tempoSlider.isMouseButtonDown())
     {
-        const double atPlayhead = model::tempoAtBeat(history_.current(), playheadBeat());
-        if (std::abs(tempoSlider.getValue() - atPlayhead) > 1.0e-6)
-            tempoSlider.setValue(atPlayhead, juce::dontSendNotification);
+        const double bpm = history_.current().bpm;
+        if (std::abs(tempoSlider.getValue() - bpm) > 1.0e-6)
+            tempoSlider.setValue(bpm, juce::dontSendNotification);
     }
 
     meter_.setLevel(0, engine_.masterPeak(0));
@@ -6449,8 +5748,6 @@ void MainComponent::timerCallback()
                 trackStrips_[i]->setGainDb(lane->valueAt(beat, track.gainDb));
             if (const auto* lane = track.lane(model::TrackParam::Pan))
                 trackStrips_[i]->setPan(lane->valueAt(beat, track.pan));
-            if (const auto* lane = track.lane(model::TrackParam::SendLevel))
-                trackStrips_[i]->setSendLevel(lane->valueAt(beat, track.sendLevel));
         }
     }
 }
@@ -6896,8 +6193,6 @@ void MainComponent::layoutMixerView()
 
     auto toolbar = area.removeFromTop(28);
     addTrackButton.setBounds(toolbar.removeFromLeft(100));
-    toolbar.removeFromLeft(6);
-    addBusTrackButton_.setBounds(toolbar.removeFromLeft(100));
     area.removeFromTop(8);
 
     // ---- per-track channel strips, filling the remaining width ----
@@ -6975,23 +6270,6 @@ void MainComponent::layoutMasterPanel()
     eqCurveView_.setBounds(masterArea.removeFromTop(48));
     masterArea.removeFromTop(6);
 
-    auto sendRow = masterArea.removeFromTop(26);
-    sendBusButton.setBounds(sendRow.removeFromLeft(70));
-    sendRow.removeFromLeft(8);
-    sendEffectTypeBox_.setBounds(sendRow.removeFromLeft(80));
-    sendRow.removeFromLeft(8);
-    const int sw           = juce::jmax(50, (sendRow.getWidth() - 16) / 3);
-    const auto param1Bounds = sendRow.removeFromLeft(sw);
-    sendRow.removeFromLeft(8);
-    const auto param2Bounds = sendRow.removeFromLeft(sw);
-    sendRow.removeFromLeft(8);
-    // Reverb (room/damp) and delay (time/feedback) share the same two slots —
-    // only one pair is visible at a time (see updateSendBusEffectVisibility).
-    sendRoomSlider.setBounds(param1Bounds);
-    sendDampSlider.setBounds(param2Bounds);
-    sendDelayTimeSlider.setBounds(param1Bounds);
-    sendDelayFbSlider.setBounds(param2Bounds);
-    sendReturnSlider.setBounds(sendRow);
     masterArea.removeFromTop(8);
 
     meter_.setBounds(masterArea.removeFromTop(44));

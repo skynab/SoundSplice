@@ -36,22 +36,6 @@ public:
     void setReleaseMs(float ms)       { releaseMs_.store(ms, std::memory_order_relaxed); }
     void setMakeUpDb(float db)        { makeUpDb_.store(db, std::memory_order_relaxed); }
 
-    /**
-        The signal the detector listens to, or nullptr to listen to the audio
-        being compressed (the default, and what a pedal does).
-
-        This is what makes ducking possible: pointed at a kick track, the bass
-        this sits on is pushed down by the kick's transients rather than by its
-        own. Set once per block by whoever renders the chain; the buffer is
-        borrowed for that block only and never retained.
-
-        Deliberately a *signal* rather than a level: the compressor's whole
-        behaviour is its attack and release against a waveform, and handing it
-        a pre-averaged number would flatten exactly the transients the effect
-        exists to respond to.
-    */
-    void setSidechainInput(const juce::AudioBuffer<float>* input) noexcept { sidechain_ = input; }
-
     void process(juce::AudioBuffer<float>& buffer)
     {
         if (! enabled_.load(std::memory_order_relaxed))
@@ -68,32 +52,13 @@ public:
         const int numChannels = buffer.getNumChannels();
         const int numSamples  = buffer.getNumSamples();
 
-        // The detector reads the sidechain when one is routed in, and the
-        // signal itself otherwise. Only sampled where both agree on length: a
-        // shorter sidechain block would otherwise read past its end, and
-        // "the source track is silent here" is the correct reading anyway.
-        const juce::AudioBuffer<float>* detector = sidechain_;
-        if (detector != nullptr
-            && (detector->getNumChannels() <= 0 || detector->getNumSamples() < numSamples))
-        {
-            detector = nullptr;
-        }
-
         for (int n = 0; n < numSamples; ++n)
         {
             // The detector sees the loudest channel, so the pair ducks
             // together on whichever one is actually loud.
             float peak = 0.0f;
-            if (detector != nullptr)
-            {
-                for (int channel = 0; channel < detector->getNumChannels(); ++channel)
-                    peak = juce::jmax(peak, std::abs(detector->getSample(channel, n)));
-            }
-            else
-            {
-                for (int channel = 0; channel < numChannels; ++channel)
-                    peak = juce::jmax(peak, std::abs(buffer.getSample(channel, n)));
-            }
+            for (int channel = 0; channel < numChannels; ++channel)
+                peak = juce::jmax(peak, std::abs(buffer.getSample(channel, n)));
 
             const float gain = compressor_.gainFor(peak) * makeUp;
 
@@ -104,11 +69,6 @@ public:
 
 private:
     Compressor compressor_;
-
-    // Borrowed for one block, set from the same thread that calls process().
-    // Not atomic because it never crosses a thread boundary — unlike the
-    // parameters below, which the message thread writes.
-    const juce::AudioBuffer<float>* sidechain_ = nullptr;
 
     std::atomic<bool>  enabled_     { false };
     std::atomic<float> thresholdDb_ { -18.0f };

@@ -16,8 +16,6 @@
 #include "engine/AudioFilePlayerNode.h"
 #include "engine/AudioRecorder.h"
 #include "engine/MidiRecorder.h"
-#include "engine/TempoDetect.h"
-#include "engine/TimeStretch.h"
 #include "engine/ClipSlot.h"
 #include "engine/DelayEffect.h"
 #include "engine/EqEffect.h"
@@ -47,23 +45,6 @@ struct AudioClipSpec
     double     startBeats  = 0.0;
     double     lengthBeats = 0.0;
     float      gainDb      = 0.0f;
-
-    /**
-        Time-stretch applied before playback, in timeStretch()'s terms: 2.0 is
-        twice as long, 0.5 half, 1.0 (the default) no stretching at all.
-
-        A *ratio*, not a pair of tempos, deliberately — the engine has no idea
-        what a BPM is and does not need one, exactly as it has no idea what
-        automation is and takes a curve callback instead. The caller knows the
-        project tempo and the clip's own; the engine only has to render.
-
-        The stretch is applied to the decoded audio on the message thread, so
-        a warped clip reaches the audio thread as an ordinary buffer that is
-        simply the right length. That is why nothing in AudioFilePlayerNode
-        changes for this: a phase vocoder is not a real-time operation, and
-        pre-rendering means it never has to be one.
-    */
-    double stretchFactor = 1.0;
 };
 
 /**
@@ -92,12 +73,6 @@ public:
         (used by the File > Import Audio quick-preview). Message thread. */
     bool loadAudioFile(const juce::File& file);
 
-    /** Estimates @p file's tempo (see engine::detectTempo), decoding it
-        through the same cache setTrackAudioClips uses so a file already
-        loaded isn't read twice. Message thread — analysis is not instant on a
-        long file. Returns an unusable estimate if the file can't be read. */
-    TempoEstimate detectFileTempo(const juce::File& file);
-
     /** Reads just @p file's header to get its duration — cheap (no sample
         decode), unlike loadAudioFile/setTrackAudioClips. Returns 0.0 if the
         file can't be read. Used to size a new clip to its actual duration
@@ -114,26 +89,6 @@ public:
         other gating" behaviour. Message thread. Returns false if any clip's
         file couldn't be read (the others still load). */
     bool setTrackAudioClips(int index, const std::vector<AudioClipSpec>& clips);
-
-    /**
-        Routes @p sourceTrackIndex's signal into @p index's compressor as its
-        detector — sidechain ducking. -1 (the default) means the compressor
-        listens to its own input, i.e. an ordinary compressor.
-
-        Takes indices because that is what the engine's fixed pool is addressed
-        by; the document stores a track *id* and MainComponent resolves it, so
-        deleting or reordering a track can't silently re-point a sidechain at a
-        different instrument. Message thread.
-    */
-    void setTrackSidechainSource(int index, int sourceTrackIndex);
-
-    /** Marks a track as a group bus: it generates nothing and instead receives
-        whatever other tracks route into it. Message thread. */
-    void setTrackIsBus(int index, bool isBus);
-
-    /** Routes @p index's output into the bus track at @p busTrackIndex, or -1
-        for straight to the master. Message thread. */
-    void setTrackOutputBus(int index, int busTrackIndex);
 
     // Metronome (thread-safe atomics). Summed in after the master chain, so
     // it never passes through the master effects or reaches the meter — and
@@ -272,17 +227,6 @@ public:
     void setTrackMuted(int index, bool muted);
     void setTrackSolo(int index, bool solo);
 
-    /** Hands the audio thread a new tempo map.
-
-        The scalar tempo goes through the command queue like every other
-        parameter, but a map is a vector — so it uses the same pointer swap the
-        rest of the engine's variable-sized state uses (see
-        Sequencer::submitClips): built here, applied on the audio thread, and
-        the old one handed back to be freed in pump().
-
-        Message thread. */
-    void setTempoChanges(const std::vector<TempoChange>& changes);
-
     /** Whether track @p index currently produces sound in the mix: active, not
         muted, and either soloed or with nothing else soloed.
 
@@ -294,7 +238,6 @@ public:
     bool trackContributesToMix(int index) const noexcept;
     void setTrackGainDb(int index, float gainDb);
     void setTrackPan(int index, float pan);
-    void setTrackSendLevel(int index, float level);
 
     // ---- session view (message thread) ----
     /** Replaces a track's session column. Slot index is the scene. */
@@ -401,19 +344,6 @@ public:
     void setMasterEqBassDb(float db)           { masterEq_.setBassDb(db); }
     void setMasterEqMidDb(float db)            { masterEq_.setMidDb(db); }
     void setMasterEqTrebleDb(float db)         { masterEq_.setTrebleDb(db); }
-
-    // Shared send bus: every track can send a pre-fader portion of its signal
-    // into one always-fully-wet effect — reverb or delay, chosen by
-    // setSendBusEffectType — which mixes back into the master before the
-    // master's own effects chain (thread-safe atomics).
-    void setSendBusEnabled(bool enabled)  { sendBusEnabled_.store(enabled, std::memory_order_relaxed); }
-    /** 0 = reverb, 1 = delay. */
-    void setSendBusEffectType(int type)   { sendBusEffectType_.store(type, std::memory_order_relaxed); }
-    void setSendBusRoomSize(float v)      { sendBusReverb_.setRoomSize(v); }
-    void setSendBusDamping(float v)       { sendBusReverb_.setDamping(v); }
-    void setSendBusDelayTimeMs(float ms)  { sendBusDelay_.setTimeMs(ms); }
-    void setSendBusDelayFeedback(float v) { sendBusDelay_.setFeedback(v); }
-    void setSendBusReturnLevel(float v)   { sendReturnGain_.store(v, std::memory_order_relaxed); }
 
     /** Housekeeping to run periodically on the message thread (frees retired clips/patterns). */
     void pump() noexcept;
@@ -558,7 +488,7 @@ public:
 private:
     void drainCommandQueue() noexcept;
 
-    /** One block of the mixer: tracks, send bus, file player, master chain,
+    /** One block of the mixer: tracks, file player, master chain,
         transport advance. Shared verbatim by the device callback and
         renderOffline() so an export cannot drift from what's heard — see
         renderOffline's comment for why that sharing is the design and not a
@@ -589,12 +519,6 @@ private:
         from the audio thread. */
     std::shared_ptr<ClipData> decodeOrGetCached(const juce::File& file);
 
-    /** The decoded audio of @p file, time-stretched by @p stretchFactor (see
-        AudioClipSpec). Returns the unstretched cache entry when the factor is
-        1. Message thread — this runs a phase vocoder, which is emphatically
-        not something to do in a callback. */
-    std::shared_ptr<ClipData> warpedOrGetCached(const juce::File& file, double stretchFactor);
-
     juce::AudioDeviceManager          deviceManager_;
     juce::AudioFormatManager          formatManager_;
     juce::MidiMessageCollector        midiCollector_;
@@ -614,26 +538,7 @@ private:
     MasterBusNode       master_;
     Transport           transport_;
 
-    // Send bus: accumulated from every track's pre-fader send, passed through
-    // one always-fully-wet effect (sendBusEffectType_: 0 = reverb, 1 =
-    // delay), and mixed back into the main output before the master effects
-    // chain. Both effect instances stay prepared/configured regardless of
-    // which is selected, so switching types takes effect immediately.
-    juce::AudioBuffer<float> sendBus_;
-    ReverbEffect             sendBusReverb_;
-    DelayEffect              sendBusDelay_;
-    std::atomic<bool>        sendBusEnabled_    { false };
-    std::atomic<int>         sendBusEffectType_ { 0 };
-    std::atomic<float>       sendReturnGain_    { 0.0f };
-
     std::atomic<double> sampleRate_ { 0.0 };
-
-    // The tempo map, handed over whole rather than a field at a time. Sized
-    // small: a map is submitted when a project loads or a change is edited,
-    // never per block.
-    using TempoChangeList = std::vector<TempoChange>;
-    rt::SpscRingBuffer<TempoChangeList*> tempoInbox_   { 8 };
-    rt::SpscRingBuffer<TempoChangeList*> tempoReclaim_ { 16 };
 
     juce::String  inputOpenError_;
 
@@ -699,43 +604,8 @@ private:
 
     // Decoded-audio cache, keyed by absolute path (message thread only) — see
     // decodeOrGetCached.
-    /** Per-track output bus index, or -1 for the master. Message thread
-        writes, audio thread reads. */
-    std::array<std::atomic<int>, kMaxTracks> outputBus_;
-
-    /** Per-track sidechain source index, or -1. Message thread writes, audio
-        thread reads — hence atomic, like every other per-track control. */
-    std::array<std::atomic<int>, kMaxTracks> sidechainSource_;
-
-    /** This block's rendered audio per track, filled in as each renders.
-        Audio thread only, and rebuilt every block — a track that produced
-        nothing stays null. */
-    std::array<const juce::AudioBuffer<float>*, kMaxTracks> trackOutputs_ {};
-
-    /** Handed to a compressor whose source track produced no audio this block.
-        Silence is the correct detector reading there — a muted kick should
-        stop ducking the bass, not leave it ducking to a stale signal or fall
-        back to compressing itself. Sized in prepare, never on the audio
-        thread. */
-    juce::AudioBuffer<float> silentDetector_;
 
     std::map<juce::String, std::shared_ptr<ClipData>> audioDecodeCache_;
-
-    /** Warped renderings, at most one per file — keyed by path, holding the
-        factor it was rendered at.
-
-        One per path rather than one per (path, factor) on purpose: keying by
-        both would grow without bound as someone drags the tempo around, and
-        every superseded entry is a whole decoded file's worth of RAM held for
-        a tempo nobody is at any more. Changing the tempo re-renders; sitting
-        at one tempo costs a single rendering, which is the case that matters.
-        Message thread only. */
-    struct WarpedClip
-    {
-        double                    stretchFactor = 1.0;
-        std::shared_ptr<ClipData> data;
-    };
-    std::map<juce::String, WarpedClip> audioWarpCache_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };

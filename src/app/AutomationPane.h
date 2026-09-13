@@ -52,7 +52,6 @@ public:
     {
         paramBox_.addItem("Volume", 1 + (int) model::TrackParam::Gain);
         paramBox_.addItem("Pan",    1 + (int) model::TrackParam::Pan);
-        paramBox_.addItem("Send",   1 + (int) model::TrackParam::SendLevel);
         paramBox_.setSelectedId(1 + (int) model::TrackParam::Gain, juce::dontSendNotification);
         paramBox_.onChange = [this]
         {

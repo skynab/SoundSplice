@@ -141,16 +141,6 @@ struct EffectProcessor
         to thread through a value none of them read. */
     virtual void setBpm(double /*bpm*/) {}
 
-    /** The detector signal for this block, or nullptr for "listen to your own
-        input" — pushed once per block before process(), exactly like setBpm,
-        and a no-op for every node but the compressor for exactly the same
-        reason: a filter has no use for another track's audio, and widening
-        process() would make eight call sites thread through a value one of
-        them reads.
-
-        The buffer belongs to whoever rendered it and is only valid for the
-        duration of this block. Nothing here retains it. */
-    virtual void setSidechainInput(const juce::AudioBuffer<float>* /*input*/) {}
 };
 
 struct FilterNode final : EffectProcessor
@@ -191,10 +181,6 @@ struct CompressorNode final : EffectProcessor
     void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
     void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
-    void setSidechainInput(const juce::AudioBuffer<float>* input) override
-    {
-        effect.setSidechainInput(input);
-    }
 };
 
 struct TremoloNode final : EffectProcessor
@@ -389,15 +375,6 @@ public:
     {
         for (auto& node : nodes_)
             node->setBpm(bpm);
-    }
-
-    /** The detector signal for this block, pushed to every node the same way
-        setBpm is; only a compressor does anything with it. nullptr (the
-        default state) means every compressor here listens to its own input. */
-    void setSidechainInput(const juce::AudioBuffer<float>* input)
-    {
-        for (auto& node : nodes_)
-            node->setSidechainInput(input);
     }
 
     /** Applies one slot's parameters, addressed by *position*. By index rather

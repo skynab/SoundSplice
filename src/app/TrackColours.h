@@ -59,7 +59,6 @@ inline const char* trackTypeTag(model::TrackType type)
     {
         case model::TrackType::Instrument: return "SYN";
         case model::TrackType::Audio:      return "AUD";
-        case model::TrackType::Bus:        return "BUS";
     }
     return "SYN";
 }

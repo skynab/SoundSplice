@@ -216,8 +216,7 @@ TEST_CASE("Every track type has a tag, and they are distinct", "[gui][arrangemen
 {
     // Renaming a track is only free if something else still says what kind it
     // is. Two types sharing a tag would defeat that for one of them.
-    const model::TrackType types[] = { model::TrackType::Instrument, model::TrackType::Audio,
-                                       model::TrackType::Bus };
+    const model::TrackType types[] = { model::TrackType::Instrument, model::TrackType::Audio };
 
     std::vector<std::string> tags;
     for (auto type : types)
@@ -396,7 +395,6 @@ TEST_CASE("A clip can only be dragged onto a track of the same type", "[gui][arr
     using Type = model::TrackType;
 
     REQUIRE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Instrument, Type::Instrument));
-    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Instrument, Type::Bus));
 
     // Audio never qualifies, not even against itself: a file-backed clip
     // has no Pattern to move onto another track's timeline the same way.

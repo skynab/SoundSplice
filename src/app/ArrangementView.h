@@ -96,14 +96,6 @@ public:
     std::function<void(int trackIndex)> onTrackDuplicateRequested;
     std::function<void(const juce::File& file, double dropBeat, int trackIndex)> onFileDropped;
 
-    /** Tempo editing on the ruler. The view never edits the song itself — it
-        says what was asked for and the owner does it through history_, which
-        is what puts a tempo change in undo alongside every other edit. */
-    std::function<void(double beat)> onTempoChangeRequested; // add or edit at this beat
-    std::function<void(double beat)> onTempoChangeRemoved;
-    std::function<void(double fromBeat, double toBeat)> onTempoChangeMoved;
-    std::function<void(double beat)> onTempoRampToggled;
-
     void setSong(const model::Song& song)
     {
         song_ = song;
@@ -168,114 +160,6 @@ public:
         }
     }
 
-    /** Tempo changes, drawn along the bottom of the ruler.
-
-        A marker is drawn for every change *after* the start, not for the
-        starting tempo: beat 0's tempo is what the transport's slider shows, and
-        a marker there would suggest it could be dragged away from the start,
-        which it cannot. */
-    void paintTempoMarkers(juce::Graphics& g, float height)
-    {
-        if (song_.tempoChanges.empty())
-            return;
-
-        const float markerTop = geometry_.rulerHeight * 0.5f;
-
-        for (int i = 0; i < (int) song_.tempoChanges.size(); ++i)
-        {
-            const auto&  change = song_.tempoChanges[(size_t) i];
-            const double beat   = i == draggingTempo_ ? tempoDragToBeat_ : change.beat;
-            const float  x      = geometry_.xForBeat(beat);
-            if (x < geometry_.gutterWidth - 2.0f || x > (float) getWidth())
-                continue;
-
-            // A full-height line as well as the flag: a tempo change is a
-            // property of the timeline, not of the ruler, and the clips it
-            // affects are below.
-            g.setColour(juce::Colours::orange.withAlpha(0.25f));
-            g.fillRect(x, geometry_.rulerHeight, 1.0f, height - geometry_.rulerHeight);
-
-            g.setColour(juce::Colours::orange.withAlpha(0.9f));
-            g.fillRect(x, markerTop, 2.0f, geometry_.rulerHeight - markerTop);
-
-            // A ramp is drawn as a slope running back to the previous change,
-            // because that is the span it actually covers — a marker alone
-            // would say the tempo arrives here without saying it has been
-            // moving the whole way.
-            if (change.ramp)
-            {
-                const double previousBeat = i > 0 ? song_.tempoChanges[(size_t) i - 1].beat : 0.0;
-                const float  fromX        = geometry_.xForBeat(previousBeat);
-
-                g.setColour(juce::Colours::orange.withAlpha(0.55f));
-                g.drawLine(fromX, geometry_.rulerHeight - 1.0f, x, markerTop, 1.5f);
-            }
-
-            g.setFont(juce::FontOptions(10.0f));
-            g.drawText(juce::String(change.bpm, 0),
-                       (int) x + 4, (int) markerTop, 44,
-                       (int) (geometry_.rulerHeight - markerTop),
-                       juce::Justification::centredLeft);
-        }
-    }
-
-    /** Add, edit or remove a tempo change at the clicked position.
-
-        Snapped to the bar it was clicked in: a tempo change on an off-beat is
-        almost never what someone means, and a marker a fraction of a beat away
-        from the bar line reads as a mistake even when it was deliberate. */
-    void showTempoMenu(float x)
-    {
-        const int    existing = tempoChangeAt(x);
-        const double qpb      = quartersPerBar();
-        const double rawBeat  = geometry_.beatForX(x);
-        const double barBeat  = std::max(0.0, std::round(rawBeat / qpb) * qpb);
-
-        juce::PopupMenu menu;
-
-        if (existing >= 0)
-        {
-            const bool ramped = song_.tempoChanges[(size_t) existing].ramp;
-
-            menu.addItem(1, "Edit tempo here...");
-            menu.addItem(3, ramped ? "Jump to this tempo" : "Slide to this tempo (ramp)");
-            menu.addSeparator();
-            menu.addItem(2, "Remove tempo change");
-        }
-        else
-        {
-            menu.addItem(1, "Add tempo change at bar "
-                             + juce::String((int) std::round(barBeat / qpb) + 1) + "...");
-        }
-
-        const double beat = existing >= 0 ? song_.tempoChanges[(size_t) existing].beat : barBeat;
-
-        menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(this),
-                           [self = juce::Component::SafePointer<ArrangementView>(this), beat](int result)
-        {
-            if (self == nullptr || result == 0)
-                return;
-
-            if (result == 1 && self->onTempoChangeRequested)
-                self->onTempoChangeRequested(beat);
-            else if (result == 2 && self->onTempoChangeRemoved)
-                self->onTempoChangeRemoved(beat);
-            else if (result == 3 && self->onTempoRampToggled)
-                self->onTempoRampToggled(beat);
-        });
-    }
-
-    /** The tempo change under @p x on the ruler, or -1. Hit width is generous
-        because the marker is two pixels wide and nobody can click that. */
-    int tempoChangeAt(float x) const
-    {
-        for (int i = 0; i < (int) song_.tempoChanges.size(); ++i)
-            if (std::abs(geometry_.xForBeat(song_.tempoChanges[(size_t) i].beat) - x) <= 5.0f)
-                return i;
-
-        return -1;
-    }
-
     void paint(juce::Graphics& g) override
     {
         g.fillAll(juce::Colour(0xff1e1e22));
@@ -321,7 +205,6 @@ public:
                        juce::Justification::centredLeft);
         }
 
-        paintTempoMarkers(g, height);
 
         // Track lanes + clips.
         for (int i = 0; i < (int) song_.tracks.size(); ++i)
@@ -722,27 +605,6 @@ private:
         // clip anyway — and checking first keeps the two from ever competing.
         if (isOnRuler(e.position))
         {
-            // Right-click edits the tempo map; left-click still scrubs, so the
-            // ruler's primary gesture is unchanged.
-            if (e.mods.isPopupMenu())
-            {
-                showTempoMenu(e.position.x);
-                return;
-            }
-
-            // Pressing a marker drags it; pressing anywhere else on the ruler
-            // scrubs. Checked first because the marker sits on top of the
-            // scrub area, so the two would otherwise compete for the same
-            // press and scrubbing would always win.
-            const int marker = tempoChangeAt(e.position.x);
-            if (marker >= 0)
-            {
-                draggingTempo_     = marker;
-                tempoDragFromBeat_ = song_.tempoChanges[(size_t) marker].beat;
-                tempoDragToBeat_   = tempoDragFromBeat_;
-                return;
-            }
-
             scrubbing_ = true;
             scrubTo(e.position.x);
             return;
@@ -800,16 +662,6 @@ private:
                 duplicateDragMoved_ = true;
                 repaint();
             }
-            return;
-        }
-
-        if (draggingTempo_ >= 0)
-        {
-            // Snapped to the bar, like adding one: a tempo change a fraction of
-            // a beat off the bar line reads as a mistake even when deliberate.
-            const double qpb = quartersPerBar();
-            tempoDragToBeat_ = std::max(qpb, std::round(geometry_.beatForX(e.position.x) / qpb) * qpb);
-            repaint();
             return;
         }
 
@@ -871,22 +723,6 @@ private:
 
             if (dragged && onTrackDuplicateRequested)
                 onTrackDuplicateRequested(track);
-            return;
-        }
-
-        if (draggingTempo_ >= 0)
-        {
-            const double from = tempoDragFromBeat_;
-            const double to   = tempoDragToBeat_;
-
-            draggingTempo_ = -1;
-            repaint();
-
-            // Only for an actual move: a plain click on a marker would
-            // otherwise push a no-op onto the undo stack.
-            if (std::abs(to - from) > 1.0e-9 && onTempoChangeMoved)
-                onTempoChangeMoved(from, to);
-
             return;
         }
 
@@ -1169,9 +1005,6 @@ private:
     // Which tempo marker is being dragged, and where it has reached. The song
     // is only edited on release, so a drag in progress is drawn from here
     // rather than by rewriting the document on every mouse move.
-    int    draggingTempo_     = -1;
-    double tempoDragFromBeat_ = 0.0;
-    double tempoDragToBeat_   = 0.0;
     int  duplicateDragTrack_  = -1;    // the header being alt-dragged, or -1
     bool duplicateDragMoved_  = false; // ...and whether it has moved far enough to count
 

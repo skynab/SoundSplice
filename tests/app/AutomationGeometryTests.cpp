@@ -19,7 +19,7 @@ TEST_CASE("Higher values sit higher on screen", "[app][automationgeometry]")
 {
     // The one property nobody reads the lane without assuming.
     AutomationGeometry geometry;
-    const auto range = automationRangeFor(model::TrackParam::SendLevel);
+    const auto range = automationRangeFor(model::TrackParam::Gain);
 
     const float loud  = geometry.yForValue(1.0f, range, kLaneTop, kLaneHeight);
     const float quiet = geometry.yForValue(0.0f, range, kLaneTop, kLaneHeight);
@@ -31,8 +31,7 @@ TEST_CASE("A value round-trips through y and back", "[app][automationgeometry]")
 {
     AutomationGeometry geometry;
 
-    for (auto param : { model::TrackParam::Gain, model::TrackParam::Pan,
-                        model::TrackParam::SendLevel })
+    for (auto param : { model::TrackParam::Gain, model::TrackParam::Pan })
     {
         const auto range = automationRangeFor(param);
 
@@ -94,11 +93,10 @@ TEST_CASE("Gain's centre is unity, not the middle of its range",
     REQUIRE(range.defaultValue != (range.minValue + range.maxValue) * 0.5f);
 }
 
-TEST_CASE("Pan and send default to where the control already sits",
+TEST_CASE("Pan defaults to where the control already sits",
           "[app][automationgeometry]")
 {
     REQUIRE(automationRangeFor(model::TrackParam::Pan).defaultValue == 0.0f);  // centre
-    REQUIRE(automationRangeFor(model::TrackParam::SendLevel).defaultValue == 0.0f); // no send
 }
 
 TEST_CASE("Hit-testing is a radius, not a rectangle", "[app][automationgeometry]")

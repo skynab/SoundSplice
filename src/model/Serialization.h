@@ -103,7 +103,14 @@ namespace looper::model
 
     SoundSplice removed the Drum and Guitar track types without a version
     bump: DRUMKIT/DPAD and GUITAR are no longer written, are skipped when an
-    older file carries them, and a TRACK of either type loads as Instrument. */
+    older file carries them, and a TRACK of either type loads as Instrument.
+
+    A second pass removed group buses, the send bus, sidechain ducking, tempo
+    changes and clip warping, also without a bump. TEMPOS/TEMPOAT, SENDBUS,
+    TRACKBUS and CLIPWARP are no longer written and are skipped on load; Bus
+    tracks (type 4) and send-level lanes (param 2) are dropped. TRACK's send
+    level and FXSLOT's sidechain id are positional, so they are still written
+    (as 0 and -1) and ignored when read. */
 inline constexpr int kFormatVersion = 41;
 namespace detail
 {
@@ -128,7 +135,6 @@ namespace detail
         // makes an older file readable unchanged — readTagged leaves the
         // cursor alone when the tag isn't there, and the default stands.
         out << "CLIPGAIN " << num((double) clip.gainDb) << "\n";
-        out << "CLIPWARP " << (clip.warpEnabled ? 1 : 0) << " " << num(clip.sourceBpm) << "\n";
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
             out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
@@ -155,12 +161,6 @@ inline std::string serialize(const Song& song)
     out << "LOOPER " << kFormatVersion << "\n";
     out << "BPM " << detail::num(song.bpm) << "\n";
 
-    // Only the changes *after* the start: BPM already carries beat 0, and
-    // writing it twice would give two sources of truth for the same number.
-    out << "TEMPOS " << song.tempoChanges.size() << "\n";
-    for (const auto& change : song.tempoChanges)
-        out << "TEMPOAT " << detail::num(change.beat) << " " << detail::num(change.bpm)
-            << " " << (change.ramp ? 1 : 0) << "\n";
     out << "TSNUM " << song.timeSigNumerator << "\n";
     out << "TSDEN " << song.timeSigDenominator << "\n";
     out << "NEXTID " << song.nextId << "\n";
@@ -175,13 +175,6 @@ inline std::string serialize(const Song& song)
         << detail::num((double) song.reverb.roomSize) << " "
         << detail::num((double) song.reverb.damping) << " "
         << detail::num((double) song.reverb.mix) << "\n";
-    out << "SENDBUS " << (song.sendBus.enabled ? 1 : 0) << " "
-        << (int) song.sendBus.effectType << " "
-        << detail::num((double) song.sendBus.roomSize) << " "
-        << detail::num((double) song.sendBus.damping) << " "
-        << detail::num((double) song.sendBus.delayTimeMs) << " "
-        << detail::num((double) song.sendBus.delayFeedback) << " "
-        << detail::num((double) song.sendBus.returnLevel) << "\n";
     out << "EQ " << (song.eq.enabled ? 1 : 0) << " "
         << detail::num((double) song.eq.bassDb) << " "
         << detail::num((double) song.eq.midDb) << " "
@@ -214,14 +207,11 @@ inline std::string serialize(const Song& song)
     {
         out << "TRACK " << track.id << " " << (int) track.type << " "
             << detail::num((double) track.gainDb) << " " << (track.muted ? 1 : 0)
-            << " " << (track.solo ? 1 : 0) << " " << detail::num((double) track.sendLevel)
+            << " " << (track.solo ? 1 : 0) << " " << 0 // the removed send level; positional
             << " " << detail::num((double) track.pan)
             << " " << track.colour
             << " " << track.name << "\n";
 
-        // Its own record for the reason CLIPGAIN has one: TRACK's name takes
-        // the rest of its line, so nothing can follow it there.
-        out << "TRACKBUS " << track.outputBusId << "\n";
         // Only non-empty lanes are written, so an unautomated track costs one
         // "TAUTOS 0" line rather than one empty record per automatable
         // parameter (a list that will only grow).
@@ -311,7 +301,7 @@ inline std::string serialize(const Song& song)
                 // Appended for the same reason v30's fields were: the line is
                 // positional, so anything inserted mid-line would make every
                 // older file read its values into the wrong slots.
-                << slot.compressor.sidechainTrackId
+                << -1 // the removed sidechain source; positional
                 << " " << slot.drive.stages
                 << " " << (slot.drive.cabinetIr ? 1 : 0) << "\n";
 
@@ -415,15 +405,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         if (readTagged("CLIPGAIN", rest))
             clip.gainDb = (float) std::strtod(rest.c_str(), nullptr);
 
-        // Optional: absent before v34, where "not warped, tempo unknown" is
-        // exactly how those files already played.
-        if (readTagged("CLIPWARP", rest))
-        {
-            std::istringstream ws(rest);
-            int warp = 0;
-            ws >> warp >> clip.sourceBpm;
-            clip.warpEnabled = warp != 0;
-        }
+        // Clip warping was removed; an older file's record is skipped.
+        readTagged("CLIPWARP", rest);
 
         // Optional: absent before v41, where a clip had no way to hold one.
         if (readTagged("PEDALS", rest))
@@ -491,30 +474,14 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
     if (! readTagged("BPM", rest))    return fail("missing tempo"); song.bpm = std::strtod(rest.c_str(), nullptr);
 
-    // Read only if present: a file written before v32 has no tempo changes,
-    // which is exactly what one tempo for the whole song means.
+    // Tempo changes were removed: the project is one tempo (BPM). An older
+    // file's tempo map is consumed and discarded.
     if (readTagged("TEMPOS", rest))
     {
         const int count = std::atoi(rest.c_str());
         for (int i = 0; i < count; ++i)
-        {
             if (! readTagged("TEMPOAT", rest))
                 return fail("truncated tempo map");
-
-            std::istringstream ts(rest);
-            engine::TempoChange change;
-
-            // Seeded false: a v32 line stops after the tempo, and every change
-            // written before ramps existed was a step.
-            int ramp = 0;
-            ts >> change.beat >> change.bpm >> ramp;
-            change.ramp = ramp != 0;
-
-            // Dropped rather than trusted: a zero or negative tempo divides by
-            // zero deep inside playback, and beat 0 is BPM's job.
-            if (change.bpm > 0.0 && change.beat > 0.0)
-                song.tempoChanges.push_back(change);
-        }
     }
     if (! readTagged("TSNUM", rest))  return fail("missing time signature"); song.timeSigNumerator = std::atoi(rest.c_str());
     if (! readTagged("TSDEN", rest))  return fail("missing time signature"); song.timeSigDenominator = std::atoi(rest.c_str());
@@ -559,20 +526,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         song.reverb.mix      = (float) mix;
     }
 
-    if (readTagged("SENDBUS", rest))
-    {
-        std::istringstream sb(rest);
-        int    enabled = 0, effectType = 0;
-        double roomSize = 0.0, damping = 0.0, delayTimeMs = 0.0, delayFeedback = 0.0, returnLevel = 0.0;
-        sb >> enabled >> effectType >> roomSize >> damping >> delayTimeMs >> delayFeedback >> returnLevel;
-        song.sendBus.enabled       = enabled != 0;
-        song.sendBus.effectType    = (SendBusEffectType) effectType;
-        song.sendBus.roomSize      = (float) roomSize;
-        song.sendBus.damping       = (float) damping;
-        song.sendBus.delayTimeMs   = (float) delayTimeMs;
-        song.sendBus.delayFeedback = (float) delayFeedback;
-        song.sendBus.returnLevel   = (float) returnLevel;
-    }
+    // The send bus was removed; an older file's record is skipped.
+    readTagged("SENDBUS", rest);
 
     if (readTagged("EQ", rest)) // added in v25; older files keep the defaults (flat)
     {
@@ -666,19 +621,22 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             return fail("truncated track list");
 
         Track track;
+        bool  removedBusTrack = false;
         {
             std::istringstream ts(rest);
             int typeInt = 0, muteInt = 0, soloInt = 0;
-            double gain = 0.0, sendLevel = 0.0;
-            ts >> track.id >> typeInt >> gain >> muteInt >> soloInt >> sendLevel;
+            double gain = 0.0, ignoredSendLevel = 0.0;
+            ts >> track.id >> typeInt >> gain >> muteInt >> soloInt >> ignoredSendLevel;
             // 2 and 3 were Drum and Guitar. Their clips hold ordinary note
             // patterns, so they come back as synth tracks rather than failing.
-            track.type      = (typeInt == 2 || typeInt == 3) ? TrackType::Instrument
-                                                             : (TrackType) typeInt;
+            // 4 was a group bus, which generated nothing of its own: it is
+            // read to keep the cursor aligned and then dropped.
+            removedBusTrack = typeInt == 4;
+            track.type      = (typeInt == 2 || typeInt == 3 || typeInt == 4) ? TrackType::Instrument
+                                                                             : (TrackType) typeInt;
             track.gainDb    = (float) gain;
             track.muted     = muteInt != 0;
             track.solo      = soloInt != 0;
-            track.sendLevel = (float) sendLevel;
 
             // Pan joined this record in v15, ahead of the rest-of-line name.
             // Like DPAD, the field count can't be used to detect it, so the
@@ -705,9 +663,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             track.name = detail::trimLeadingSpace(std::move(name));
         }
 
-        // Optional: absent before v36, where every track fed the master.
-        if (readTagged("TRACKBUS", rest))
-            track.outputBusId = std::atoi(rest.c_str());
+        // Group buses were removed, so every track feeds the master.
+        readTagged("TRACKBUS", rest);
 
         // Before v16 a track had exactly one lane, always gain, written as a
         // bare TAUTO point list. Read it straight into the Gain lane so an
@@ -735,7 +692,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 int paramId = 0, pointCount = 0;
                 ls >> paramId >> pointCount;
 
-                auto& lane = track.automation[paramId];
+                AutomationLane lane;
                 for (int p = 0; p < pointCount; ++p)
                 {
                     if (! readTagged("TAPT", rest)) return fail("truncated track automation");
@@ -744,6 +701,10 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                     ps >> beat >> value;
                     lane.addPoint(beat, (float) value);
                 }
+
+                // 2 was the removed send level.
+                if (paramId != 2)
+                    track.automation[paramId] = lane;
             }
         }
 
@@ -874,7 +835,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double eqLowHz = 100.0, eqLowDb = 0.0;
                 double eqMidHz = 800.0, eqMidDb = 0.0, eqMidQ = 1.0;
                 double eqHighHz = 4000.0, eqHighDb = 0.0;
-                int    compSidechainTrackId = -1; // absent before v35: no sidechain
+                int    ignoredSidechainTrackId = -1; // the removed sidechain source
                 int    driveStages          = 1;  // absent before v39: one clipper
                 int    driveCabinetIr       = 0;  // absent before v40: filtered cabinet
 
@@ -888,7 +849,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> gateThreshold >> gateRange >> gateAttack >> gateHold >> gateRelease
                    >> driveAsymmetry >> driveOversample
                    >> eqLowHz >> eqLowDb >> eqMidHz >> eqMidDb >> eqMidQ >> eqHighHz >> eqHighDb
-                   >> compSidechainTrackId >> driveStages >> driveCabinetIr;
+                   >> ignoredSidechainTrackId >> driveStages >> driveCabinetIr;
 
                 EffectSlot slot;
                 slot.kind              = (EffectKind) kind;
@@ -921,7 +882,6 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.compressor.attackMs    = (float) compAttack;
                 slot.compressor.releaseMs   = (float) compRelease;
                 slot.compressor.makeUpDb    = (float) compMakeUp;
-                slot.compressor.sidechainTrackId = compSidechainTrackId;
                 slot.tremolo.enabled        = slot.enabled && slot.kind == EffectKind::Tremolo;
                 slot.tremolo.rateHz         = (float) tremRate;
                 slot.tremolo.depth          = (float) tremDepth;
@@ -993,7 +953,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             track.clips.push_back(std::move(clip));
         }
 
-        song.tracks.push_back(std::move(track));
+        if (! removedBusTrack)
+
+            song.tracks.push_back(std::move(track));
     }
 
     out = std::move(song);

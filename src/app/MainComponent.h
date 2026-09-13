@@ -110,12 +110,7 @@ private:
     void stepByBars(int bars);
     double songEndBeats() const;
     double playheadBeat() const;
-    void   setTempoAtPlayhead(double bpm);
-    void   editTempoChangeAt(double beat);
-    void   applyTempoChange(double beat, double bpm);
-    void   toggleTempoRamp(double beat);
-    void   moveTempoChange(double fromBeat, double toBeat);
-    void   removeTempoChangeAt(double beat);
+    void   setProjectTempo(double bpm);
     void   pushTempoMap();
     void chooseFile();
     void showStatus(const juce::String& message);
@@ -156,38 +151,18 @@ private:
                                        const juce::File& masterFile);
     void                   showAudioSettings();
     void                   importAudioToNewTrack();
-    /** @p isRecordedTake suppresses tempo detection: a take was just played
-        against this project's own click, so it is at the project tempo by
-        definition. Detecting a tempo for it could only ever agree (pointless)
-        or disagree (wrong, and on a confident mis-detection it would stretch
-        the performance the user just gave). */
     void                   importAudioFileAtBeat(const juce::File& file, double startBeats,
-                                                 int targetTrackIndex = -1,
-                                                 bool isRecordedTake = false);
+                                                 int targetTrackIndex = -1);
     void                   previewAudioFile(const juce::File& file);
     void                   importMidiFileDialog();
     void                   exportMidiFileDialog();
     void                   setProjectRootFolderDialog();
     void                   repairRecordedClipLengths();
 
-    // --- Tempo-aware audio clips (see docs/PLAN.md §29).
-    /** The time-stretch factor a clip needs to sit at the project tempo, or
-        1.0 when it isn't warped or its own tempo isn't known. */
-    /** The engine-pool index of the track with @p trackId, or -1. The bridge
-        between the document's stable ids and the engine's positional pool. */
-    int                    trackIndexForId(int trackId) const;
-
-    double                 warpFactorFor(const model::Clip& clip) const;
-    engine::TempoEstimate  detectTempoForClip(const model::Clip& clip);
-    void                   addBusTrack();
     void                   refreshAutomationPaneForSelected();
     /** Commits an edited lane for the selected track as one undo step. */
     void                   applyEditedAutomationLane(model::TrackParam param,
                                                      const model::AutomationLane& lane);
-    void                   setTrackOutputBus(int index, int busTrackId);
-    void                   toggleClipWarp();
-    void                   detectSelectedClipTempo();
-    void                   setProjectTempoFromClip();
     void                   toggleRecording();
     void                   finishRecordingIfReady();
 
@@ -334,8 +309,6 @@ private:
     void                   updateFilterControls();
     void                   updateReverbControls();
     void                   updateEqControls();
-    void                   updateSendBusControls();
-    void                   updateSendBusEffectVisibility();
     void                   updateMixerStrips();
     void                   beginFaderDrag(int trackIndex, MixerStrip::Fader fader);
     void                   endFaderDrag(int trackIndex, MixerStrip::Fader fader);
@@ -345,7 +318,6 @@ private:
     void                   setTrackMuted(int index, bool muted);
     void                   setTrackSolo(int index, bool solo);
     void                   setTrackPan(int index, float pan);
-    void                   setTrackSendLevel(int index, float level);
     void                   selectTrack(int index);
     void                   selectTrackAndClip(int trackIndex, int clipIndex);
     void                   addClipToSelectedTrack();
@@ -499,7 +471,6 @@ private:
     juce::DrawableButton lastFrameButton     { "Last",     juce::DrawableButton::ImageFitted };
     juce::DrawableButton recordButton { "Record", juce::DrawableButton::ImageFitted };
     juce::TextButton   addTrackButton { "Add Track" };
-    juce::TextButton   addBusTrackButton_ { "Add Bus" };
     juce::ToggleButton loopButton      { "Loop" };
     // Collapses the transport pane to its first row, so the pane can be
     // dragged down to a single strip when the readouts aren't wanted.
@@ -522,11 +493,6 @@ private:
     juce::ToggleButton eqButton { "EQ" };
     juce::Slider       eqBassSlider, eqMidSlider, eqTrebleSlider;
     EqCurveView        eqCurveView_;
-    juce::ToggleButton sendBusButton { "Send FX" };
-    juce::ComboBox     sendEffectTypeBox_;
-    juce::Slider       sendRoomSlider, sendDampSlider; // shown when the send bus effect is Reverb
-    juce::Slider       sendDelayTimeSlider, sendDelayFbSlider; // shown when it's Delay
-    juce::Slider       sendReturnSlider;
     juce::ToggleButton autoRecButton   { "Rec Auto" };
     juce::TextButton   autoClearButton { "Clr Auto" };
     juce::Label        tempoLabel  { {}, "Tempo" };

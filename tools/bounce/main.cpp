@@ -22,8 +22,6 @@
 #include "engine/SessionPlayer.h"
 #include "engine/MidiFileIO.h"
 #include "engine/MidiRecorder.h"
-#include "engine/TempoDetect.h"
-#include "engine/TimeStretch.h"
 #include "engine/MasteringProcessor.h"
 #include "engine/OfflineRenderer.h"
 #include "engine/ReverbEffect.h"
@@ -396,31 +394,6 @@ int main(int argc, char** argv)
                                                              delayedStart.getNumSamples() - oneSecondSamples);
     const bool  clipStartGates    = rmsBeforeStart < 1.0e-5f && rmsAfterStart > 0.01f;
 
-    // Send-bus check: with a track sending fully into the bus, enabling the
-    // send-bus reverb must change the output relative to the send bus being off.
-    const auto  noSendBus   = OfflineRenderer::render(one, std::vector<float> { 0.0f }, std::vector<bool>{},
-                                                      std::vector<double>{}, std::vector<float> { 1.0f },
-                                                      false, 0.6f, 0.4f, 0.7f, bpm, sampleRate, seconds);
-    const auto  withSendBus = OfflineRenderer::render(one, std::vector<float> { 0.0f }, std::vector<bool>{},
-                                                      std::vector<double>{}, std::vector<float> { 1.0f },
-                                                      true, 0.6f, 0.4f, 0.7f, bpm, sampleRate, seconds);
-    const float rmsNoSendBus   = noSendBus.getRMSLevel(0, 0, noSendBus.getNumSamples());
-    const float rmsWithSendBus = withSendBus.getRMSLevel(0, 0, withSendBus.getNumSamples());
-    const bool  sendBusChanged = std::abs(rmsWithSendBus - rmsNoSendBus) > 1.0e-4f;
-
-    // Send-bus DELAY check: same setup, but with the bus's effect type set to
-    // Delay (1) instead of the default Reverb (0) — must differ from both
-    // "bus off" and the reverb-based bus above, confirming the engine
-    // genuinely switches which effect processes the send bus.
-    const auto  withSendBusDelay     = OfflineRenderer::render(one, std::vector<float> { 0.0f }, std::vector<bool>{},
-                                                               std::vector<double>{}, std::vector<float> { 1.0f },
-                                                               true, 0.6f, 0.4f, 0.7f, bpm, sampleRate, seconds,
-                                                               512, nullptr,
-                                                               1, 250.0f, 0.4f);
-    const float rmsWithSendBusDelay  = withSendBusDelay.getRMSLevel(0, 0, withSendBusDelay.getNumSamples());
-    const bool  sendBusDelayWorks    = std::abs(rmsWithSendBusDelay - rmsNoSendBus) > 1.0e-4f
-                                     && std::abs(rmsWithSendBusDelay - rmsWithSendBus) > 1.0e-4f;
-
     // Multi-clip check: two clips on one track (0-4 beats, then 6-10 beats,
     // leaving a 2-beat gap and nothing after) must produce sound only inside
     // each clip's own window — real length gating, not the single-clip
@@ -546,56 +519,6 @@ int main(int argc, char** argv)
     }
 
 
-    // Warp check (see engine/TempoDetect.h): a loop recorded at one tempo has
-    // to *end up* the right musical length when stretched to another. The
-    // detector's accuracy is covered by headless tests against synthetic click
-    // trains; what those cannot cover is the part that matters here — that
-    // detect -> warpStretchFactor -> timeStretch composes into audio which
-    // actually lines up with the grid, rather than three individually correct
-    // steps that disagree about which direction "faster" is.
-    bool warpFitsTheGrid = false;
-    {
-        // Four beats at 160 BPM: a loop faster than the 120 BPM project.
-        constexpr double kLoopBpm = 160.0;
-        const double     loopSeconds = 4.0 * 60.0 / kLoopBpm;
-
-        std::vector<float> loop((size_t) (loopSeconds * sampleRate), 0.0f);
-        const double samplesPerLoopBeat = sampleRate * 60.0 / kLoopBpm;
-
-        // A click on each of its four beats, so it has a detectable tempo.
-        for (int beat = 0; beat < 4; ++beat)
-        {
-            const auto at = (size_t) ((double) beat * samplesPerLoopBeat);
-            for (int i = 0; i < (int) (0.02 * sampleRate); ++i)
-            {
-                const size_t index = at + (size_t) i;
-                if (index >= loop.size())
-                    break;
-                const double decay = std::exp(-40.0 * i / sampleRate);
-                loop[index] += (float) (0.5 * decay
-                    * (std::sin(2.0 * juce::MathConstants<double>::pi * 200.0 * i / sampleRate)
-                     + 0.6 * std::sin(2.0 * juce::MathConstants<double>::pi * 1700.0 * i / sampleRate)));
-            }
-        }
-
-        const auto estimate = detectTempo(loop, sampleRate);
-
-        // Warped to the project's 120 BPM, the same call the app makes.
-        const double factor  = warpStretchFactor(estimate.bpm, bpm, true);
-        const auto   warped  = timestretch::timeStretch(loop, factor);
-
-        // Four beats at 120 BPM is exactly 2 seconds. The vocoder pads its
-        // output by a frame, so this checks the *musical* length is right to
-        // within a small tolerance rather than demanding sample equality.
-        const double warpedSeconds   = (double) warped.size() / sampleRate;
-        const double expectedSeconds = 4.0 * 60.0 / bpm;
-
-        warpFitsTheGrid = estimate.isUsable()
-                       && std::abs(estimate.bpm - kLoopBpm) < 4.0
-                       && factor > 1.0 // slower project => longer, not shorter
-                       && std::abs(warpedSeconds - expectedSeconds) < 0.1;
-    }
-
     // MIDI-recording check (see engine/MidiRecorder.h, engine/MidiCapture.h):
     // drives a synthetic performance through the *whole* capture chain the
     // way the app does — blocks pushed at MidiRecorder::process with a
@@ -714,8 +637,7 @@ int main(int argc, char** argv)
 
         const OfflineRenderer::TrackAutomationList curves { sweep };
 
-        const auto swept = OfflineRenderer::render({ arp }, { 0.0f }, {}, {}, { 0.0f },
-                                                   false, 0.5f, 0.5f, 0.5f,
+        const auto swept = OfflineRenderer::render({ arp }, { 0.0f }, {}, {},
                                                    bpm, sampleRate, renderSeconds, 512, &curves);
 
         const int window = (int) (sampleRate * 0.5);
@@ -810,7 +732,6 @@ int main(int argc, char** argv)
                     slot.lengthBeats = 1.0e9;
                     track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-                    juce::AudioBuffer<float> sendBus(2, 512);
                     juce::MidiBuffer         noLiveMidi;
 
                     for (int pos = 0; pos < totalSamples; pos += 512)
@@ -825,11 +746,9 @@ int main(int argc, char** argv)
                         context.transport.timeSigNumerator   = 4;
                         context.transport.timeSigDenominator = 4;
 
-                        sendBus.setSize(2, n, false, false, true);
-                        sendBus.clear();
 
                         juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                        track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                        track.render(blockView, noLiveMidi, context, false, false);
                     }
                     return mix;
                 };
@@ -869,154 +788,6 @@ int main(int argc, char** argv)
                           << "), peak=" << peak << ", bypassDelta=" << bypassDelta << "\n";
             }
         }
-    }
-
-    // Tempo changes.
-    //
-    // The check the whole tempo-map conversion rests on, and the only one that
-    // renders audio with two tempos in it: everything else proves the
-    // *single*-tempo case is unchanged, which is the regression half of the
-    // job rather than the feature half.
-    //
-    // Driven through Sequencer directly rather than OfflineRenderer, because
-    // that harness renders at one constant BPM by construction. Building the
-    // per-block snapshots from a real TempoMap here is exactly what
-    // AudioEngine does live, so it exercises the converted scheduling path.
-    bool tempoChangeMovesNotes = false;
-    bool tempoRampAccelerates  = false;
-    {
-        constexpr double tempoRate  = 48000.0;
-        constexpr int    tempoBlock = 512;
-
-        // A note on every beat for eight beats, at 120bpm until beat 4 and
-        // 60bpm after — so beats 4..7 should take twice as long as beats 0..3.
-        Pattern pattern;
-        pattern.lengthBeats = 64.0; // long enough not to loop within the render
-        for (int beat = 0; beat < 8; ++beat)
-            pattern.notes.push_back({ (double) beat, 0.25, 60, 0.9f });
-
-        auto onsetsFor = [&](const TempoMap& map)
-        {
-            Sequencer sequencer;
-            ClipSlot slot;
-            slot.pattern     = pattern;
-            slot.startBeats  = 0.0;
-            slot.lengthBeats = 64.0;
-            sequencer.submitClips(new std::vector<ClipSlot> { slot });
-
-            std::vector<int> onsets;
-            const int total = (int) (tempoRate * 14.0);
-
-            for (int pos = 0; pos < total; pos += tempoBlock)
-            {
-                const int n = std::min(tempoBlock, total - pos);
-
-                ProcessContext context;
-                context.sampleRate                   = tempoRate;
-                context.numSamples                   = n;
-                context.transport.playing            = true;
-                context.transport.playheadSamples    = pos;
-                context.transport.timeSigNumerator   = 4;
-                context.transport.timeSigDenominator = 4;
-                context.transport.ppqPosition        = map.ppqFromSamples(pos);
-                context.transport.ppqAtBlockEnd      = map.ppqFromSamples(pos + n);
-                context.transport.bpm                = map.tempoAtBeat(context.transport.ppqPosition);
-
-                juce::MidiBuffer midi;
-                sequencer.renderBlock(midi, context);
-
-                for (const auto metadata : midi)
-                    if (metadata.getMessage().isNoteOn())
-                        onsets.push_back(pos + metadata.samplePosition);
-            }
-            return onsets;
-        };
-
-        TempoMap steady;
-        steady.setSampleRate(tempoRate);
-        steady.setTempo(120.0);
-
-        TempoMap changing;
-        changing.setSampleRate(tempoRate);
-        changing.setTempoChanges({ { 0.0, 120.0 }, { 4.0, 60.0 } });
-
-        const auto steadyOnsets   = onsetsFor(steady);
-        const auto changingOnsets = onsetsFor(changing);
-
-        // Eight notes either way: a tempo change must move notes, not lose them.
-        const bool bothPlayedEverything = steadyOnsets.size() == 8 && changingOnsets.size() == 8;
-
-        bool beforeMatches = false, afterMoved = false, landsWhereMapSays = false;
-
-        if (bothPlayedEverything)
-        {
-            // Before the change the two renders agree...
-            beforeMatches = true;
-            for (int i = 0; i < 4; ++i)
-                if (std::abs(steadyOnsets[(size_t) i] - changingOnsets[(size_t) i]) > tempoBlock)
-                    beforeMatches = false;
-
-            // ...and after it they measurably do not. Without this a map that
-            // was ignored entirely would pass everything else here.
-            afterMoved = changingOnsets[7] > steadyOnsets[7] + (int) tempoRate;
-
-            // And each onset is where the map says, not merely somewhere later.
-            landsWhereMapSays = true;
-            for (int beat = 0; beat < 8; ++beat)
-            {
-                const auto expected = (int) changing.samplesFromPpq((double) beat);
-                if (std::abs(changingOnsets[(size_t) beat] - expected) > tempoBlock)
-                    landsWhereMapSays = false;
-            }
-        }
-
-        tempoChangeMovesNotes = bothPlayedEverything && beforeMatches && afterMoved
-                             && landsWhereMapSays;
-
-        // A ramp accelerates *through* the segment rather than stepping at it.
-        //
-        // Checked as the gap between consecutive onsets: under a step the gaps
-        // are two constant values with one jump between them, while under a
-        // ramp every gap is shorter than the last. That difference is the
-        // whole feature, and a ramp implemented as a step would pass a
-        // "notes moved" check but not this one.
-        {
-            TempoMap ramp;
-            ramp.setSampleRate(tempoRate);
-            ramp.setTempoChanges({ { 0.0, 60.0 }, { 8.0, 180.0, true } });
-
-            const auto rampOnsets = onsetsFor(ramp);
-
-            bool everyGapShorter = rampOnsets.size() == 8;
-            for (size_t i = 2; i < rampOnsets.size() && everyGapShorter; ++i)
-            {
-                const int previousGap = rampOnsets[i - 1] - rampOnsets[i - 2];
-                const int thisGap     = rampOnsets[i] - rampOnsets[i - 1];
-
-                // Strictly shorter, allowing a block of scheduling slack.
-                if (thisGap > previousGap - 1)
-                    everyGapShorter = false;
-            }
-
-            // And each onset is where the integral says, not merely earlier.
-            bool matchesIntegral = rampOnsets.size() == 8;
-            for (int beat = 0; beat < 8 && matchesIntegral; ++beat)
-                if (std::abs(rampOnsets[(size_t) beat] - (int) ramp.samplesFromPpq((double) beat))
-                        > tempoBlock)
-                    matchesIntegral = false;
-
-            tempoRampAccelerates = everyGapShorter && matchesIntegral;
-
-            std::cout << "tempo ramp: gaps=";
-            for (size_t i = 1; i < rampOnsets.size(); ++i)
-                std::cout << (rampOnsets[i] - rampOnsets[i - 1]) << " ";
-            std::cout << "\n";
-        }
-
-        std::cout << "tempo map: notes=" << changingOnsets.size()
-                  << " lastSteady=" << (steadyOnsets.size() == 8 ? steadyOnsets[7] : -1)
-                  << " lastChanging=" << (changingOnsets.size() == 8 ? changingOnsets[7] : -1)
-                  << " expectedLast=" << changing.samplesFromPpq(7.0) << "\n";
     }
 
     // Chain-order check.
@@ -1068,7 +839,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -1083,11 +853,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
             return mix;
         };
@@ -1192,198 +960,6 @@ int main(int argc, char** argv)
                             && cascadeDensity > singleDensity * 1.1;
     }
 
-    // Group bus: a track that receives instead of generating (TrackType::Bus).
-    // The risky part of that change is InstrumentTrack::render — a bus must
-    // *not* clear the buffer its members already summed into, must still apply
-    // its own gain and inserts, and must still be silenced by its own mute.
-    // All four are checked here, because getting any of them wrong is silence
-    // or a doubled signal rather than a subtle difference.
-    bool groupBusWorks = false;
-    {
-        auto renderThroughBus = [&](float busGainDb, bool busMuted, bool routeIntoBus)
-        {
-            const int totalSamples = (int) (sampleRate * 1.0);
-            juce::AudioBuffer<float> mix(2, totalSamples);
-            mix.clear();
-
-            InstrumentTrack member;
-            member.prepare(sampleRate, 512);
-            member.active.store(true);
-
-            InstrumentTrack busTrack;
-            busTrack.prepare(sampleRate, 512);
-            busTrack.active.store(true);
-            busTrack.isBus.store(true);
-            busTrack.gainDb.store(busGainDb);
-            busTrack.muted.store(busMuted);
-
-            ClipSlot slot;
-            slot.pattern     = arp;
-            slot.startBeats  = 0.0;
-            slot.lengthBeats = 1.0e9;
-            member.sequencer.submitClips(new std::vector<ClipSlot> { slot });
-
-            juce::AudioBuffer<float> sendBus(2, 512);
-            juce::MidiBuffer         noLiveMidi;
-
-            for (int pos = 0; pos < totalSamples; pos += 512)
-            {
-                const int n = std::min(512, totalSamples - pos);
-
-                ProcessContext context;
-                context.sampleRate                   = sampleRate;
-                context.numSamples                   = n;
-                context.transport.playing            = true;
-                OfflineRenderer::fillTransport(context, pos, n, bpm, sampleRate);
-                context.transport.timeSigNumerator   = 4;
-                context.transport.timeSigDenominator = 4;
-
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
-
-                juce::AudioBuffer<float> blockMix(2, n);
-                blockMix.clear();
-
-                // Exactly the order AudioEngine::processBlock uses: clear the
-                // bus's input, render members into it, then render the bus.
-                busTrack.prepareBusInput(n);
-
-                if (routeIntoBus)
-                    member.render(busTrack.busInput(), sendBus, noLiveMidi, context, false, false);
-                else
-                    member.render(blockMix, sendBus, noLiveMidi, context, false, false);
-
-                busTrack.render(blockMix, sendBus, noLiveMidi, context, false, false);
-
-                for (int ch = 0; ch < 2; ++ch)
-                    mix.copyFrom(ch, pos, blockMix, ch, 0, n);
-            }
-
-            return mix;
-        };
-
-        const auto direct   = renderThroughBus(0.0f,  false, false); // member straight to the mix
-        const auto throughBus = renderThroughBus(0.0f, false, true); // member via the bus
-        const auto quietBus = renderThroughBus(-6.0f, false, true);
-        const auto mutedBus = renderThroughBus(0.0f,  true,  true);
-
-        const float rmsDirect  = direct.getRMSLevel(0, 0, direct.getNumSamples());
-        const float rmsThrough = throughBus.getRMSLevel(0, 0, throughBus.getNumSamples());
-        const float rmsQuietBus = quietBus.getRMSLevel(0, 0, quietBus.getNumSamples());
-        const float rmsMuted   = mutedBus.getRMSLevel(0, 0, mutedBus.getNumSamples());
-
-        const float busGainRatio = rmsThrough > 0.0f ? rmsQuietBus / rmsThrough : 0.0f;
-
-        groupBusWorks = rmsDirect > 0.01f
-                      // Routed through a unity bus, the group arrives intact:
-                      // not silent (the bus cleared what it was given) and not
-                      // doubled (it summed and then generated as well).
-                      && std::abs(rmsThrough - rmsDirect) < rmsDirect * 0.02f
-                      // The bus's own fader moves the whole group.
-                      && busGainRatio > 0.47f && busGainRatio < 0.53f
-                      // And muting the bus mutes the group, not just itself.
-                      && rmsMuted < 1.0e-5f;
-    }
-
-    // Sidechain ducking: a steady tone compressed by a *separate* pulsing
-    // signal, which is the whole feature — the bass has to dip where the kick
-    // hits, not where the bass itself is loud.
-    //
-    // Measured here rather than headless because it is a claim about audio,
-    // and it is the check that would catch the plumbing being wrong in the way
-    // that matters: a compressor that quietly falls back to its own input
-    // still compresses, still passes every "does it reduce gain" test, and is
-    // completely useless. A steady tone can only dip *periodically* if the
-    // detector really is the other signal.
-    bool sidechainDucks = false;
-    {
-        const int totalSamples = (int) (sampleRate * 1.0);
-
-        // The thing being ducked: a constant-amplitude tone, so any variation
-        // in its output came from the sidechain and nothing else.
-        juce::AudioBuffer<float> duckedTone(2, totalSamples);
-        for (int ch = 0; ch < 2; ++ch)
-            for (int i = 0; i < totalSamples; ++i)
-                duckedTone.setSample(ch, i, 0.4f * (float) std::sin(
-                    2.0 * juce::MathConstants<double>::pi * 110.0 * i / sampleRate));
-
-        // The detector: four short loud pulses a quarter-second apart.
-        juce::AudioBuffer<float> kick(2, totalSamples);
-        kick.clear();
-        for (int pulse = 0; pulse < 4; ++pulse)
-        {
-            const int at = (int) (pulse * 0.25 * sampleRate);
-            for (int i = 0; i < (int) (0.05 * sampleRate); ++i)
-            {
-                const int index = at + i;
-                if (index >= totalSamples)
-                    break;
-                const double decay = std::exp(-20.0 * i / sampleRate);
-                for (int ch = 0; ch < 2; ++ch)
-                    kick.setSample(ch, index, (float) (0.9 * decay));
-            }
-        }
-
-        CompressorEffect ducker;
-        ducker.prepare(sampleRate, 512);
-        ducker.setEnabled(true);
-        ducker.setThresholdDb(-30.0f);
-        ducker.setRatio(10.0f);
-        ducker.setAttackMs(2.0f);
-        ducker.setReleaseMs(120.0f);
-        ducker.setSidechainInput(&kick);
-        ducker.process(duckedTone);
-
-        // At each pulse the tone must be pushed well down; between pulses it
-        // must come back. Both halves matter: something permanently quieter is
-        // not ducking, it is just a gain change.
-        const int   window   = (int) (0.02 * sampleRate);
-        float       atPulses = 0.0f;
-        float       between  = 1.0f;
-
-        for (int pulse = 0; pulse < 4; ++pulse)
-        {
-            const int hit = (int) (pulse * 0.25 * sampleRate) + (int) (0.005 * sampleRate);
-            atPulses = juce::jmax(atPulses, duckedTone.getRMSLevel(0, hit, window));
-
-            // Just before the next pulse, i.e. as released as it ever gets.
-            const int recovered = (int) ((pulse + 1) * 0.25 * sampleRate) - window - 1;
-            if (recovered > 0 && recovered + window < totalSamples)
-                between = juce::jmin(between, duckedTone.getRMSLevel(0, recovered, window));
-        }
-
-        sidechainDucks = atPulses > 0.0f && between > 0.05f
-                      && atPulses < between * 0.5f; // at least 6dB of duck
-
-        // And with no sidechain routed, the same steady tone must come out
-        // steady: proof the dip above is the routing and not the compressor
-        // reacting to the tone itself.
-        juce::AudioBuffer<float> unrouted(2, totalSamples);
-        for (int ch = 0; ch < 2; ++ch)
-            unrouted.copyFrom(ch, 0, duckedTone, ch, 0, totalSamples);
-        for (int ch = 0; ch < 2; ++ch)
-            for (int i = 0; i < totalSamples; ++i)
-                unrouted.setSample(ch, i, 0.4f * (float) std::sin(
-                    2.0 * juce::MathConstants<double>::pi * 110.0 * i / sampleRate));
-
-        CompressorEffect plain;
-        plain.prepare(sampleRate, 512);
-        plain.setEnabled(true);
-        plain.setThresholdDb(-30.0f);
-        plain.setRatio(10.0f);
-        plain.setAttackMs(2.0f);
-        plain.setReleaseMs(120.0f);
-        plain.setSidechainInput(nullptr);
-        plain.process(unrouted);
-
-        const float plainEarly = unrouted.getRMSLevel(0, (int) (0.30 * sampleRate), window);
-        const float plainLate  = unrouted.getRMSLevel(0, (int) (0.72 * sampleRate), window);
-        const bool  plainSteady = plainEarly > 0.0f
-                               && std::abs(plainLate - plainEarly) < plainEarly * 0.2f;
-
-        sidechainDucks = sidechainDucks && plainSteady;
-    }
-
     // Compressor and tremolo in a real chain. Both are claims about what comes
     // out of the speakers, so both are measured here and not only headless.
     bool compressorSquashes = false;
@@ -1429,7 +1005,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -1444,11 +1019,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
             return mix;
         };
@@ -1678,7 +1251,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -1693,11 +1265,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
             return mix;
         };
@@ -1763,7 +1333,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -1778,11 +1347,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
             return mix;
         };
@@ -1847,7 +1414,6 @@ int main(int argc, char** argv)
             chain->prepare(sampleRate, 512);
             track.setEffectChain(chain.release());
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -1862,11 +1428,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
             return mix;
         };
@@ -1914,7 +1478,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -1929,11 +1492,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
             return mix;
         };
@@ -2029,7 +1590,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -2044,11 +1604,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
             return mix;
         };
@@ -2103,7 +1661,6 @@ int main(int argc, char** argv)
             slots->push_back({ true, sessionPattern });
             track.session.submitSlots(slots);
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
             bool                     launched = false, stopped = false;
 
@@ -2132,11 +1689,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false, barSamples);
+                track.render(blockView, noLiveMidi, context, false, false, barSamples);
             }
             return mix;
         };
@@ -2184,7 +1739,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -2199,11 +1753,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
 
             return std::make_pair(mix.getRMSLevel(0, 0, totalSamples), mix.getRMSLevel(1, 0, totalSamples));
@@ -2252,7 +1804,6 @@ int main(int argc, char** argv)
             slot.lengthBeats = 1.0e9;
             track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
-            juce::AudioBuffer<float> sendBus(2, 512);
             juce::MidiBuffer         noLiveMidi;
 
             for (int pos = 0; pos < totalSamples; pos += 512)
@@ -2267,11 +1818,9 @@ int main(int argc, char** argv)
                 context.transport.timeSigNumerator   = 4;
                 context.transport.timeSigDenominator = 4;
 
-                sendBus.setSize(2, n, false, false, true);
-                sendBus.clear();
 
                 juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-                track.render(blockView, sendBus, noLiveMidi, context, false, false);
+                track.render(blockView, noLiveMidi, context, false, false);
             }
 
             return mix.getRMSLevel(0, 0, totalSamples);
@@ -2440,12 +1989,10 @@ int main(int argc, char** argv)
     // Isolate each track (the other silenced at -100 dB) so the comparison
     // below reflects one track's automation state, not the fixed two-track mix.
     const auto arpAloneAutomated  = OfflineRenderer::render({ arp, bass }, { 0.0f, -100.0f }, std::vector<bool>{},
-                                                            std::vector<double>{}, std::vector<float>{},
-                                                            false, 0.5f, 0.5f, 0.0f,
+                                                            std::vector<double>{},
                                                             bpm, sampleRate, seconds, 512, &perTrackCurves);
     const auto bassAloneNoAuto    = OfflineRenderer::render({ arp, bass }, { -100.0f, 0.0f }, std::vector<bool>{},
-                                                            std::vector<double>{}, std::vector<float>{},
-                                                            false, 0.5f, 0.5f, 0.0f,
+                                                            std::vector<double>{},
                                                             bpm, sampleRate, seconds, 512, &perTrackCurves);
 
     const int   halfArp             = arpAloneAutomated.getNumSamples() / 2;
@@ -2487,18 +2034,13 @@ int main(int argc, char** argv)
               << "  soloMatchesArpOnly=" << (soloMatchesArpOnly ? 1 : 0)
               << "  stemsSumToMix=" << (stemsSumToMix ? 1 : 0)
               << "  clipStartGates=" << (clipStartGates ? 1 : 0)
-              << "  sendBusChanged=" << (sendBusChanged ? 1 : 0)
-              << "  sendBusDelayWorks=" << (sendBusDelayWorks ? 1 : 0)
               << "  multiClipGates=" << (multiClipGates ? 1 : 0)
               << "  audioTrackWorks=" << (audioTrackWorks ? 1 : 0)
               << "  multiClipAudioGates=" << (multiClipAudioGates ? 1 : 0)
               << "  midiRoundTripWorks=" << (midiRoundTripWorks ? 1 : 0)
               << "  midiRecordingWorks=" << (midiRecordingWorks ? 1 : 0)
-              << "  warpFitsTheGrid=" << (warpFitsTheGrid ? 1 : 0)
               << "  pluginsScanned=" << pluginsScanned
               << "  pluginHostWorks=" << (pluginHostWorks ? 1 : 0)
-              << "  tempoChangeMovesNotes=" << (tempoChangeMovesNotes ? 1 : 0)
-              << "  tempoRampAccelerates=" << (tempoRampAccelerates ? 1 : 0)
               << "  chorusChangesSound=" << (chorusChangesSound ? 1 : 0)
               << "  chorusDepthMatters=" << (chorusDepthMatters ? 1 : 0)
               << "  wobbleChangesSound=" << (wobbleChangesSound ? 1 : 0)
@@ -2508,8 +2050,6 @@ int main(int argc, char** argv)
               << "  subOscChangesSound=" << (subOscChangesSound ? 1 : 0)
               << "  unisonChangesSound=" << (unisonChangesSound ? 1 : 0)
               << "  compressorSquashes=" << (compressorSquashes ? 1 : 0)
-              << "  sidechainDucks=" << (sidechainDucks ? 1 : 0)
-              << "  groupBusWorks=" << (groupBusWorks ? 1 : 0)
               << "  cascadedStagesEnrich=" << (cascadedStagesEnrich ? 1 : 0)
               << "  tremoloModulates=" << (tremoloModulates ? 1 : 0)
               << "  gateClosesQuiet=" << (gateClosesQuiet ? 1 : 0)
@@ -2548,11 +2088,11 @@ int main(int argc, char** argv)
                  && gainRatio > 0.47f && gainRatio < 0.53f
                  && delayChanged && filterAttenuates && reverbChanged && automationFades
                  && perTrackAutomationWorks
-                 && soloMatchesArpOnly && stemsSumToMix && clipStartGates && sendBusChanged && sendBusDelayWorks && multiClipGates
+                 && soloMatchesArpOnly && stemsSumToMix && clipStartGates && multiClipGates
                  && audioTrackWorks && multiClipAudioGates && midiRoundTripWorks
-                 && midiRecordingWorks && warpFitsTheGrid && sidechainDucks && groupBusWorks
+                 && midiRecordingWorks
                  && cascadedStagesEnrich
-                 && pluginHostWorks && tempoChangeMovesNotes && tempoRampAccelerates
+                 && pluginHostWorks
                  && filterEnvChangesSound && subOscChangesSound && unisonChangesSound
                  && effectChainOrderMatters && effectChainRunsAllNodes
                  && sessionLaunchQuantizes && sessionStopWorks

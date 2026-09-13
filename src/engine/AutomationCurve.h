@@ -70,8 +70,8 @@ private:
 
 /**
     Every automated parameter of one track, swapped onto the audio thread as a
-    single unit — the same whole-object hand-off shape as Sequencer::ClipList
-    and DrumKitNode's DrumPadMap, for the same reason: one pointer swap can't
+    single unit — the same whole-object hand-off shape as Sequencer::ClipList,
+    for the same reason: one pointer swap can't
     be observed half-applied.
 
     An empty curve means "not automated", and the track falls back to its
@@ -81,9 +81,8 @@ struct TrackAutomation
 {
     AutomationCurve gain;      // dB
     AutomationCurve pan;       // -1..+1
-    AutomationCurve sendLevel; // 0..1
 
-    bool any() const noexcept { return ! gain.empty() || ! pan.empty() || ! sendLevel.empty(); }
+    bool any() const noexcept { return ! gain.empty() || ! pan.empty(); }
 };
 
 } // namespace looper::engine

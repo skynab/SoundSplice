@@ -43,8 +43,7 @@ struct AutomationRange
     Gain is in decibels over a range chosen to be useful rather than complete:
     a fader's full travel goes to -inf, but an automation lane spending half
     its height between -60 and -inf dB would waste it on differences nobody can
-    hear. Pan and send are their natural full ranges, which really are the
-    whole control.
+    hear. Pan is its natural full range, which really is the whole control.
 */
 inline AutomationRange automationRangeFor(model::TrackParam param)
 {
@@ -54,8 +53,6 @@ inline AutomationRange automationRangeFor(model::TrackParam param)
             return { -60.0f, 6.0f, "+6 dB", "-60 dB", 0.0f };
         case model::TrackParam::Pan:
             return { -1.0f, 1.0f, "R", "L", 0.0f };
-        case model::TrackParam::SendLevel:
-            return { 0.0f, 1.0f, "100%", "0%", 0.0f };
     }
     return { 0.0f, 1.0f, "1", "0", 0.0f };
 }

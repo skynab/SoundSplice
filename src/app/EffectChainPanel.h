@@ -155,9 +155,6 @@ public:
         filterMode_.onChange = [this] { reportInstantEdit(); };
         addAndMakeVisible(filterMode_);
 
-        compSidechain_.onChange = [this] { reportInstantEdit(); };
-        addAndMakeVisible(compSidechain_);
-
         // Laying out, showing and hiding a component that was never parented
         // all succeed silently and draw nothing — which is exactly how the
         // drive pedal shipped invisible. So parenting is taken from the same
@@ -182,34 +179,6 @@ public:
 
     /** The scanned plugins offered by the Add menu. */
     void setAvailablePlugins(std::vector<engine::PluginEntry> plugins) { plugins_ = std::move(plugins); }
-
-    /**
-        The tracks a compressor here can take its detector from: (id, name)
-        pairs, excluding the track this chain belongs to — a track ducking
-        itself is just an ordinary compressor, and offering it would be
-        offering a no-op.
-
-        Rebuilt whenever the selection or the track list changes, because a
-        track that has been renamed, added or deleted has to be reflected here;
-        the *selected* value is preserved across the rebuild, so repopulating
-        the list can't silently unset someone's routing.
-    */
-    void setSidechainSources(const std::vector<std::pair<int, juce::String>>& tracks)
-    {
-        const int previous = compSidechain_.getSelectedId();
-
-        compSidechain_.clear(juce::dontSendNotification);
-        compSidechain_.addItem("This track (no sidechain)", 1);
-
-        for (const auto& [id, name] : tracks)
-            compSidechain_.addItem(name, id + 2); // +2: see the member's docs
-
-        // Restores the routing if that track still exists, and falls back to
-        // "no sidechain" if it was the one deleted.
-        compSidechain_.setSelectedId(previous > 0 ? previous : 1, juce::dontSendNotification);
-        if (compSidechain_.getSelectedId() == 0)
-            compSidechain_.setSelectedId(1, juce::dontSendNotification);
-    }
 
     void setChain(const std::vector<model::EffectSlot>& chain)
     {
@@ -344,7 +313,6 @@ public:
         else if (kind == model::EffectKind::Compressor)
         {
             row(compThreshold_); row(compRatio_); row(compAttack_); row(compRelease_); row(compMakeUp_);
-            row(compSidechain_);
         }
         else if (kind == model::EffectKind::Tremolo) { row(tremRate_); row(tremDepth_); }
         else if (kind == model::EffectKind::Chorus)
@@ -493,7 +461,7 @@ private:
         merely unlikely. */
     std::vector<juce::Component*> paramControls()
     {
-        return { &filterMode_, &compSidechain_, &cutoff_, &resonance_, &timeMs_,
+        return { &filterMode_, &cutoff_, &resonance_, &timeMs_,
                  &feedback_, &mix_, &roomSize_, &damping_, &editorButton_,
                  &driveAmount_, &driveTone_, &driveLevel_,
                  &driveAsymmetry_, &driveHardClip_, &driveCabinet_, &driveOversample_,
@@ -585,12 +553,9 @@ private:
                 compAttack_.setValue(slot.compressor.attackMs, juce::dontSendNotification);
                 compRelease_.setValue(slot.compressor.releaseMs, juce::dontSendNotification);
                 compMakeUp_.setValue(slot.compressor.makeUpDb, juce::dontSendNotification);
-                compSidechain_.setSelectedId(slot.compressor.sidechainTrackId >= 0
-                                                 ? slot.compressor.sidechainTrackId + 2 : 1,
-                                             juce::dontSendNotification);
                 compThreshold_.setVisible(true); compRatio_.setVisible(true);
                 compAttack_.setVisible(true); compRelease_.setVisible(true);
-                compMakeUp_.setVisible(true); compSidechain_.setVisible(true);
+                compMakeUp_.setVisible(true);
                 break;
 
             case model::EffectKind::Tremolo:
@@ -692,8 +657,6 @@ private:
                 slot.compressor.attackMs    = (float) compAttack_.getValue();
                 slot.compressor.releaseMs   = (float) compRelease_.getValue();
                 slot.compressor.makeUpDb    = (float) compMakeUp_.getValue();
-                slot.compressor.sidechainTrackId = compSidechain_.getSelectedId() > 1
-                                                     ? compSidechain_.getSelectedId() - 2 : -1;
                 break;
             case model::EffectKind::Tremolo:
                 slot.tremolo.rateHz = (float) tremRate_.getValue();
@@ -763,10 +726,6 @@ private:
     juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_;
     juce::ComboBox   filterMode_;
 
-    /** Which track's signal drives a compressor's detector. Item id 1 is
-        "this track" (an ordinary compressor); every other id is a track id + 2,
-        so ids stay positive and distinct from JUCE's "nothing selected" 0. */
-    juce::ComboBox   compSidechain_;
     juce::Slider     cutoff_, resonance_, timeMs_, feedback_, mix_, roomSize_, damping_;
     juce::Slider       driveAmount_, driveTone_, driveLevel_;
     juce::Slider       compThreshold_, compRatio_, compAttack_, compRelease_, compMakeUp_;

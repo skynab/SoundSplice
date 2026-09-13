@@ -241,11 +241,6 @@ TEST_CASE("Controls hidden for lack of room come back when there is room", "[gui
     MixerStrip strip;
     strip.setVisible(true);
 
-    // The output picker only applies once a bus exists, and this test is about
-    // controls hidden for lack of *room* — so it is given one, or the picker
-    // would be counted as missing for a reason this test isn't checking.
-    strip.setOutputOptions({ { 7, "Drum Bus" } }, -1);
-
     strip.setBounds(0, 0, 34, 320);
     strip.resized();
     const auto crampedFindings = paneaudit::audit(strip);

@@ -17,8 +17,8 @@ namespace looper::engine
 {
 /**
     One mixer channel: a synth driven by its own sequencer, *and* an audio-clip
-    player, both summed into the same per-track gain, mute, solo, pre-fader
-    send, and post-gain peak metering. A track only uses whichever of these
+    player, both summed into the same per-track gain, pan, mute, solo and
+    post-gain peak metering. A track only uses whichever of these
     it's been given content for — an Instrument-type track gets a pattern for
     the synth, an Audio-type track gets a decoded clip via audioPlayer — but
     both nodes always exist on every pool slot, so there's no track-type
@@ -35,11 +35,6 @@ namespace looper::engine
     is currently soloed (a single scan of atomics, done once per block), and this
     track goes silent if it's muted, or if some other track is soloed and this one
     isn't — the standard "solo overrides, mute always wins" behaviour.
-
-    sendLevel sends a copy of the raw (pre-fader) synth output into the caller's
-    shared send bus, independent of the track's own gainDb — so a track can be
-    faded down in the main mix while still reaching the send bus at a fixed level
-    (the usual "aux send" behaviour), or vice versa.
 */
 struct InstrumentTrack
 {
@@ -48,10 +43,8 @@ struct InstrumentTrack
     SessionPlayer            session;
     AudioFilePlayerNode      audioPlayer;
 
-    // This track's insert chain, applied to its own output before the fader
-    // (and therefore before the send too, so a send carries the processed
-    // sound — the usual behaviour). Owned by the audio thread and replaced
-    // whole; see setEffectChain.
+    // This track's insert chain, applied to its own output before the fader.
+    // Owned by the audio thread and replaced whole; see setEffectChain.
     EffectChain*                     effectChain_ = nullptr;
     rt::SpscRingBuffer<EffectChain*> effectChainInbox_   { 8 };
     rt::SpscRingBuffer<EffectChain*> effectChainReclaim_ { 16 };
@@ -59,19 +52,11 @@ struct InstrumentTrack
     std::atomic<bool>        muted       { false };
     std::atomic<bool>        solo        { false };
 
-    /** A group bus: its scratch is filled by other tracks before it renders,
-        so it generates nothing of its own and must not clear what it was
-        given. See AudioEngine::processBlock, which does the clearing at the
-        top of the block instead. */
-    std::atomic<bool>        isBus       { false };
     std::atomic<float>       gainDb      { 0.0f };
     std::atomic<float>       pan         { 0.0f }; // -1 = hard left, 0 = centre, +1 = hard right
-    std::atomic<float>       sendLevel   { 0.0f }; // 0..1, pre-fader
     juce::MidiBuffer         trackMidi;
     juce::AudioBuffer<float> scratch;
 
-    /** Whether `scratch` holds this block's audio. Audio thread only. */
-    bool hasBlockOutput_ = false;
     std::atomic<float>       channelPeak_[2] {};
 
     TrackAutomation*                     automation_ = nullptr; // audio-thread owned
@@ -147,10 +132,6 @@ private:
     {
         return (automation_ != nullptr && ! automation_->pan.empty()) ? &automation_->pan : nullptr;
     }
-    const AutomationCurve* automationSend() const noexcept
-    {
-        return (automation_ != nullptr && ! automation_->sendLevel.empty()) ? &automation_->sendLevel : nullptr;
-    }
 
     static float decibelsAt(const AutomationCurve* curve, double beat, float staticDb)
     {
@@ -182,47 +163,12 @@ public:
             : 0.0f;
     }
 
-    /** Audio thread: render this track (post-gain) additively into @p mix, and
-        its pre-fader send additively into @p sendBus. */
-    /** @p sidechainInput is the detector signal for any compressor in this
-        track's chain, or nullptr for "each compressor listens to its own
-        input". Borrowed for this block only. */
-    /** Readies a bus to receive this block: sizes and clears the buffer its
-        members will sum into. Called by the engine before any member renders,
-        because the bus itself renders *after* them and so cannot do it. */
-    void prepareBusInput(int numSamples)
-    {
-        scratch.setSize(2, juce::jmax(1, numSamples), false, false, true);
-        scratch.clear();
-        hasBlockOutput_ = false;
-    }
-
-    /** The buffer a bus's members sum into — its scratch, before it renders.
-        Only meaningful on a bus track, and only between prepareBusInput() and
-        this track's own render(). */
-    juce::AudioBuffer<float>& busInput() noexcept { return scratch; }
-
-    /** This block's rendered audio (post-inserts, pre-fader), or nullptr if
-        the track produced none — inactive, muted, or soloed out. Valid only
-        until the next render(). */
-    const juce::AudioBuffer<float>* blockOutput() const noexcept
-    {
-        return hasBlockOutput_ ? &scratch : nullptr;
-    }
-
-    void render(juce::AudioBuffer<float>& mix, juce::AudioBuffer<float>& sendBus,
+    /** Audio thread: render this track (post-gain) additively into @p mix. */
+    void render(juce::AudioBuffer<float>& mix,
                 const juce::MidiBuffer& liveMidi,
                 const ProcessContext& context, bool receivesLiveMidi, bool anySoloActive,
-                double launchQuantumSamples = 0.0,
-                const juce::AudioBuffer<float>* sidechainInput = nullptr)
+                double launchQuantumSamples = 0.0)
     {
-        // Cleared up front so an early return below cannot leave last block's
-        // audio readable as if it were this block's — a stale detector signal
-        // would duck another track to a kick that isn't playing any more.
-        const bool bus = isBus.load(std::memory_order_relaxed);
-        if (! bus)
-            hasBlockOutput_ = false;
-
         TrackAutomation* incoming = nullptr;
         while (automationInbox_.pop(incoming))
         {
@@ -246,13 +192,8 @@ public:
         if (receivesLiveMidi)
             trackMidi.addEvents(liveMidi, 0, context.numSamples, 0);
 
-        // A bus is not silenced by another track's solo: soloing a kick has to
-        // keep playing *through* the drum bus, and a bus that vanished when
-        // anyone hit solo would take its members' audio with it. Its own mute
-        // still works, and muting a bus mutes the whole group — which is one
-        // of the two reasons to have one.
         const bool audible = ! muted.load(std::memory_order_relaxed)
-                           && (bus || ! anySoloActive || solo.load(std::memory_order_relaxed));
+                           && (! anySoloActive || solo.load(std::memory_order_relaxed));
 
         if (! audible)
         {
@@ -263,21 +204,14 @@ public:
 
         const int numSamples = context.numSamples;
 
-        if (! bus)
-        {
-            // No reallocation: scratch was prepared to the maximum block size.
-            scratch.setSize(2, juce::jmax(1, numSamples), false, false, true);
-            scratch.clear();
-            synth.process(scratch, trackMidi, context);
-            audioPlayer.process(scratch, trackMidi, context); // adds in; midi is ignored
-        }
-        // A bus's scratch already holds everything routed into it, summed
-        // there by its members' own render() calls. Clearing it here would
-        // throw away the entire group, which is precisely what it is for.
+        // No reallocation: scratch was prepared to the maximum block size.
+        scratch.setSize(2, juce::jmax(1, numSamples), false, false, true);
+        scratch.clear();
+        synth.process(scratch, trackMidi, context);
+        audioPlayer.process(scratch, trackMidi, context); // adds in; midi is ignored
 
-        // Inserts run on the summed track output, before gain and before the
-        // send is taken — so lowering the fader doesn't change the effect, and
-        // the send carries the processed sound.
+        // Inserts run on the summed track output, before gain — so lowering
+        // the fader doesn't change the effect.
         EffectChain* incomingChain = nullptr;
         while (effectChainInbox_.pop(incomingChain))
         {
@@ -293,20 +227,11 @@ public:
             // reaches a wobble immediately instead of waiting for the next
             // structural rebuild.
             effectChain_->setBpm(context.transport.bpm);
-            effectChain_->setSidechainInput(sidechainInput);
             effectChain_->process(scratch);
         }
 
-        // Readable by other tracks as a sidechain source from here on: the
-        // track's own sound, after its inserts but before its fader — the same
-        // point the send is taken from, and for the same reason. Pulling a
-        // fader down should change how loud a track is, not how hard it ducks
-        // something else.
-        hasBlockOutput_ = true;
-
         const float staticGainDb = gainDb.load(std::memory_order_relaxed);
         const float staticPan    = pan.load(std::memory_order_relaxed);
-        const float staticSend   = sendLevel.load(std::memory_order_relaxed);
 
         // Automation is evaluated at both ends of the block and ramped across
         // it, rather than held at one value per block. Within a straight
@@ -321,15 +246,12 @@ public:
         const float gainEnd   = decibelsAt(automationGain(), beatAtEnd, staticGainDb);
         const float panStart  = automationPan() != nullptr ? automationPan()->valueAt(beatAtStart, staticPan) : staticPan;
         const float panEnd    = automationPan() != nullptr ? automationPan()->valueAt(beatAtEnd, staticPan) : staticPan;
-        const float sendStart = automationSend() != nullptr ? automationSend()->valueAt(beatAtStart, staticSend) : staticSend;
-        const float sendEnd   = automationSend() != nullptr ? automationSend()->valueAt(beatAtEnd, staticSend) : staticSend;
 
         const int channels = juce::jmin(mix.getNumChannels(), scratch.getNumChannels());
 
         for (int ch = 0; ch < channels; ++ch)
         {
-            // A linear pan law with a unity centre, the same one the drum pads
-            // use: at pan 0 both sides stay at 1.0, so a centred track sums
+            // A linear pan law with a unity centre: at pan 0 both sides stay at 1.0, so a centred track sums
             // bit-identically to how it did before panning existed. An
             // equal-power law would drop every centred track to ~0.707.
             const float channelGainStart = gainStart * panGainFor(ch, panStart);
@@ -340,17 +262,6 @@ public:
             else
                 mix.addFromWithRamp(ch, 0, scratch.getReadPointer(ch), numSamples,
                                     channelGainStart, channelGainEnd);
-
-            // The send stays pre-fader *and* pre-pan: it's a mono-ish aux
-            // feed, and panning it would move the track's reverb around the
-            // stereo field independently of the track, which isn't wanted.
-            if (ch < sendBus.getNumChannels() && (sendStart > 0.0f || sendEnd > 0.0f))
-            {
-                if (sendStart == sendEnd)
-                    sendBus.addFrom(ch, 0, scratch, ch, 0, numSamples, sendStart);
-                else
-                    sendBus.addFromWithRamp(ch, 0, scratch.getReadPointer(ch), numSamples, sendStart, sendEnd);
-            }
 
             if (ch < 2)
             {
