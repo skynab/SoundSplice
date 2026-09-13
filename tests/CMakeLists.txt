@@ -52,7 +52,8 @@ add_executable(soundsplice_tests
   app/RecordSourceChoiceTests.cpp
   app/AutomationGeometryTests.cpp
   app/DragCommitTests.cpp
-  app/ClipWindowTests.cpp)
+  app/ClipWindowTests.cpp
+  app/AutosaveTests.cpp)
 
 target_link_libraries(soundsplice_tests
   PRIVATE

@@ -1004,7 +1004,21 @@ MainComponent::MainComponent()
 
     setWantsKeyboardFocus(true);
     setSize(900, 800);
+
+    // Set before the timer starts, so the first tick can't treat a recovery
+    // file waiting to be offered as a stale one to clear away.
+    recoveryPending_ = autosaveFile().existsAsFile();
+    lastAutosaveMs_  = juce::Time::getMillisecondCounterHiRes();
+
     startTimerHz(30);
+
+    // Offered once the window is up rather than from inside the constructor,
+    // so the question has something to appear in front of.
+    juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)]
+    {
+        if (safe != nullptr)
+            safe->offerAutosaveRecovery();
+    });
 }
 
 MainComponent::~MainComponent()
@@ -1017,6 +1031,12 @@ MainComponent::~MainComponent()
         renderJob_->stopThread(5000);
         renderJob_.reset();
     }
+
+    // A clean document leaves nothing to recover. A dirty one only gets here
+    // past the discard prompt, which has already cleared it, so an autosave
+    // that survives into the next launch is one a crash left behind.
+    if (! hasUnsavedChanges() && ! recoveryPending_)
+        discardAutosave();
 
     saveDockLayout();
     stopTimer();
@@ -5442,6 +5462,7 @@ bool MainComponent::writeProjectTo(const juce::File& file)
 
     projectFile_   = file;
     savedStateId_  = stateWritten;
+    discardAutosave(); // on disk for real now; an edit made during the save gets autosaved afresh
     updateWindowTitle();
     return true;
 }
@@ -5502,6 +5523,10 @@ void MainComponent::confirmDiscardChanges(std::function<void()> onProceed)
         return;
     }
 
+    // Past this point the user is choosing what happens to the changes, so
+    // no recovery offer is still outstanding for them.
+    recoveryPending_ = false;
+
     const juce::String name = (projectFile_ == juce::File{})
                                   ? juce::String("this project")
                                   : projectFile_.getFileName();
@@ -5523,6 +5548,10 @@ void MainComponent::confirmDiscardChanges(std::function<void()> onProceed)
             }
             else if (result == 2) // No: discard
             {
+                // Deliberately thrown away, so never offered back at the next
+                // launch. If this was Open and the chooser is then cancelled,
+                // the next autosave tick simply writes it again.
+                self->discardAutosave();
                 if (onProceed)
                     onProceed();
             }
@@ -5554,18 +5583,159 @@ void MainComponent::chooseProjectToOpen()
             return;
         }
 
-        history_.reset(song);
-        selectedTrackIndex_ = 0;
-
-        tempoSlider.setValue(song.bpm, juce::dontSendNotification);
-        uiTempoMap_.setTempo(song.bpm);
-        post(Cmd::SetTempo, song.bpm);
-        refreshFromModel();
+        loadSongIntoEditor(song);
 
         projectFile_  = file;
         savedStateId_ = history_.stateId(); // what's on screen is what's on disk
         updateWindowTitle();
     });
+}
+
+/** Makes @p song the whole document: history, tempo and every view. Shared by
+    Open and by recovering an autosave, which differ only in what they say
+    about the file afterwards. */
+void MainComponent::loadSongIntoEditor(const model::Song& song)
+{
+    history_.reset(song);
+    selectedTrackIndex_ = 0;
+
+    tempoSlider.setValue(song.bpm, juce::dontSendNotification);
+    uiTempoMap_.setTempo(song.bpm);
+    post(Cmd::SetTempo, song.bpm);
+    refreshFromModel();
+}
+
+/** How long unsaved changes can go unprotected. Long enough that writing the
+    project costs nothing noticeable, short enough that a crash loses little. */
+static constexpr double kAutosaveIntervalSeconds = 30.0;
+
+/** Where the unsaved document is kept: beside the app's settings rather than
+    beside the project. An untitled project has no folder of its own, and a
+    recovery file next to a real project would look like part of it.
+
+    One file for the app, so two copies running at once would share it — a
+    known limit, and a rare way to use this app. */
+juce::File MainComponent::autosaveFile() const
+{
+    return settings_.getFile().getSiblingFile("Autosave").getChildFile("recovery.soundsplice-autosave");
+}
+
+/** Writes the document to the autosave file when there is something new to
+    protect (see app::autosaveDue), and removes the file once there isn't.
+    Called from the timer. */
+void MainComponent::autosaveIfDue()
+{
+    // The file on disk is the one being offered back; leave it alone until
+    // the user has answered.
+    if (recoveryPending_)
+        return;
+
+    // Back to what's on disk, by saving or by undoing to the saved state:
+    // nothing left to recover.
+    if (! hasUnsavedChanges())
+    {
+        if (autosavedStateId_ != 0)
+            discardAutosave();
+        return;
+    }
+
+    const auto   stateId = history_.stateId();
+    const double now     = juce::Time::getMillisecondCounterHiRes();
+
+    if (! app::autosaveDue(stateId, savedStateId_, autosavedStateId_, (now - lastAutosaveMs_) / 1000.0,
+                           kAutosaveIntervalSeconds))
+        return;
+
+    // Taken even if the write fails: retrying a failing disk thirty times a
+    // second would help nobody.
+    lastAutosaveMs_ = now;
+
+    const auto file = autosaveFile();
+    if (file.getParentDirectory().createDirectory().failed())
+        return;
+
+    const auto text = app::wrapAutosave(model::serialize(history_.current()),
+                                        projectFile_.getFullPathName().toStdString());
+
+    // Through a temporary file, so a crash in the middle of writing leaves the
+    // previous autosave intact rather than half of this one.
+    juce::TemporaryFile temp(file);
+    if (temp.getFile().replaceWithText(juce::String::fromUTF8(text.c_str()))
+        && temp.overwriteTargetFileWithTemporary())
+        autosavedStateId_ = stateId;
+}
+
+void MainComponent::discardAutosave()
+{
+    autosaveFile().deleteFile();
+    autosavedStateId_ = 0;
+}
+
+/** At launch: if the last session ended while holding changes it neither
+    saved nor discarded (a crash, a power cut, the process being killed),
+    offer them back. */
+void MainComponent::offerAutosaveRecovery()
+{
+    const auto file = autosaveFile();
+    if (! file.existsAsFile())
+    {
+        recoveryPending_ = false;
+        return;
+    }
+
+    app::AutosaveContents contents;
+    model::Song           song;
+    std::string           error;
+
+    if (! app::unwrapAutosave(file.loadFileAsString().toStdString(), contents)
+        || ! model::deserialize(contents.projectText, song, &error))
+    {
+        // Not offered, but kept under another name rather than deleted, in
+        // case it's worth digging out by hand.
+        file.moveFileTo(file.withFileExtension("damaged").getNonexistentSibling());
+        recoveryPending_ = false;
+        return;
+    }
+
+    const juce::File original = contents.originalPath.empty()
+                                    ? juce::File{}
+                                    : juce::File(juce::String::fromUTF8(contents.originalPath.c_str()));
+    const juce::String name = original == juce::File{} ? juce::String("an untitled project")
+                                                      : original.getFileName();
+
+    juce::NativeMessageBox::showYesNoBox(
+        juce::MessageBoxIconType::QuestionIcon,
+        "Recover unsaved changes?",
+        "SoundSplice closed without saving " + name + ".\n\n"
+            "Recover the changes it was holding? Choosing No deletes them.",
+        this,
+        juce::ModalCallbackFunction::create([safe = juce::Component::SafePointer<MainComponent>(this),
+                                             song, original](int result)
+        {
+            if (safe == nullptr)
+                return;
+
+            safe->recoveryPending_ = false;
+
+            if (result != 1)
+            {
+                safe->discardAutosave();
+                safe->showStatus("Unsaved changes discarded");
+                return;
+            }
+
+            safe->loadSongIntoEditor(song);
+
+            // Pointed back at the project it came from, so Save goes where it
+            // would have, but still unsaved: none of this is in that file yet.
+            safe->projectFile_ = original != juce::File{} && original.getParentDirectory().isDirectory()
+                                     ? original
+                                     : juce::File{};
+            safe->history_.mutableCurrent(); // moves the state id, so the document reads as unsaved
+            safe->autosavedStateId_ = safe->history_.stateId(); // the file already holds exactly this
+            safe->updateWindowTitle();
+            safe->showStatus("Recovered unsaved changes - save to keep them");
+        }));
 }
 
 /** Asks what kind of file to write, then where to put it, then writes it.
@@ -5973,6 +6143,7 @@ void MainComponent::timerCallback()
         engine_.refreshMidiInputs();
     }
     updateWindowTitle();
+    autosaveIfDue();
     stopAtEndOfArrangement();
 
     addTrackButton.setEnabled(trackCount() < engine_.maxTracks());

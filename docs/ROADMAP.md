@@ -69,7 +69,7 @@ all three.
 | 0.5 | ✅ **Auto-generated effect UI** from those descriptors (the Track FX panel and Apply Effects dialog), plus **user presets** and factory presets per effect (`src/model/EffectPresets.h`; the Presets button above an effect's controls) | Audacity, Audition and REAPER all have presets on every effect |
 | 0.6 | ✅ **Variable-length effect chain** (several of the same kind, reorderable). The engine chain already addressed slots by position; only a stale comment said otherwise. | Needed by 0.4 and by mastering chains |
 | 0.7 | **Split `MainComponent.cpp`** into command modules (edit, transport, record, export, effects) behind a command registry | Keeps the file from doubling; the registry also drives macros (7.1) and the command palette (7.3) |
-| 0.8 | **Auto-save and crash recovery** | Table stakes in all three apps, and more urgent once edits stop writing whole new files |
+| 0.8 | ✅ **Auto-save and crash recovery** (unsaved changes written every 30s beside the app settings; offered back at the next launch; see `src/app/Autosave.h`) | Table stakes in all three apps, and more urgent once edits stop writing whole new files |
 
 ### Phase 1 — Editing parity (Audacity core)
 

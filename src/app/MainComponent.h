@@ -39,6 +39,7 @@
 #include "PianoRoll.h"
 #include "PluginEditorWindow.h"
 #include "ApplyEffectsDialog.h"
+#include "Autosave.h"
 #include "ClipWindow.h"
 #include "DragCommit.h"
 #include "TrackSelection.h"
@@ -141,6 +142,11 @@ private:
     void                   openProject();
     void                   chooseProjectToOpen();
     void                   updateWindowTitle();
+    void                   loadSongIntoEditor(const model::Song& song);
+    juce::File             autosaveFile() const;
+    void                   autosaveIfDue();
+    void                   discardAutosave();
+    void                   offerAutosaveRecovery();
     static bool            isSilentAudioFile(const juce::File& file);
     void                   exportAudioDialog();
     struct ExportTask;
@@ -440,6 +446,14 @@ private:
     juce::File         projectFile_;
     unsigned long long savedStateId_ = 0;
     juce::String       windowTitle_;
+
+    // Crash recovery (see autosaveIfDue): the state last written to the
+    // autosave file (0 while none of ours is on disk), when that was, and
+    // whether a recovery offer is still waiting for an answer, during which
+    // the file on disk must be left alone.
+    unsigned long long autosavedStateId_ = 0;
+    double             lastAutosaveMs_   = 0.0;
+    bool               recoveryPending_  = false;
 
     // Where a fader was grabbed, so the whole drag can be committed as one
     // undo step when it is released rather than one step per pixel.
