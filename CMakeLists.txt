@@ -31,9 +31,9 @@ if(MSVC)
   add_compile_definitions(_USE_MATH_DEFINES)
 endif()
 
-option(LOOPER_BUILD_APP   "Build the SoundSplice application (pulls JUCE)" ON)
-option(LOOPER_BUILD_TESTS "Build unit tests (pulls Catch2)"                 ON)
-option(LOOPER_BUILD_TOOLS "Build command-line tools (needs JUCE)"          ON)
+option(SOUNDSPLICE_BUILD_APP   "Build the SoundSplice application (pulls JUCE)" ON)
+option(SOUNDSPLICE_BUILD_TESTS "Build unit tests (pulls Catch2)"                 ON)
+option(SOUNDSPLICE_BUILD_TOOLS "Build command-line tools (needs JUCE)"          ON)
 
 enable_testing()
 
@@ -45,7 +45,7 @@ include(cmake/get_cpm.cmake)
 add_subdirectory(src/rt)
 
 # ---- Application (JUCE) ------------------------------------------------------
-if(LOOPER_BUILD_APP)
+if(SOUNDSPLICE_BUILD_APP)
   CPMAddPackage(
     NAME JUCE
     GITHUB_REPOSITORY juce-framework/JUCE
@@ -60,13 +60,13 @@ if(LOOPER_BUILD_APP)
   add_subdirectory(src/app)
 
   # Tools link JUCE, so they build only when the app (and thus JUCE) is enabled.
-  if(LOOPER_BUILD_TOOLS)
+  if(SOUNDSPLICE_BUILD_TOOLS)
     add_subdirectory(tools/bounce)
   endif()
 endif()
 
 # ---- Tests -------------------------------------------------------------------
-if(LOOPER_BUILD_TESTS)
+if(SOUNDSPLICE_BUILD_TESTS)
   CPMAddPackage(
     NAME Catch2
     GITHUB_REPOSITORY catchorg/Catch2
@@ -79,6 +79,6 @@ endif()
 message(STATUS "")
 message(STATUS "SoundSplice ${PROJECT_VERSION}")
 message(STATUS "  Build type : ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Build app  : ${LOOPER_BUILD_APP}")
-message(STATUS "  Build tests: ${LOOPER_BUILD_TESTS}")
+message(STATUS "  Build app  : ${SOUNDSPLICE_BUILD_APP}")
+message(STATUS "  Build tests: ${SOUNDSPLICE_BUILD_TESTS}")
 message(STATUS "")

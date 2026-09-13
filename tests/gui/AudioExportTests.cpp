@@ -31,7 +31,7 @@ juce::AudioBuffer<float> makeTestBuffer()
 juce::File scratchFile (ExportFormat format)
 {
     return juce::File::getSpecialLocation (juce::File::tempDirectory)
-               .getNonexistentChildFile ("looper-export-test",
+               .getNonexistentChildFile ("soundsplice-export-test",
                                          "." + extensionFor (format));
 }
 

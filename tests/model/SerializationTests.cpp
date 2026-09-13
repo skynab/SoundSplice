@@ -27,7 +27,7 @@ static Song makeSampleSong()
     s.eq.bassDb    = 4.5f;
     s.eq.midDb     = -2.0f;
     s.eq.trebleDb  = 3.0f;
-    s.projectRootFolder     = "/Users/test/My Looper Projects"; // with a space, deliberately
+    s.projectRootFolder     = "/Users/test/My SoundSplice Projects"; // with a space, deliberately
     s.masterGainDb.addPoint(0.0, -40.0f);
     s.masterGainDb.addPoint(4.0, 0.0f);
     s.masterGainDb.addPoint(8.0, -6.0f);
@@ -220,9 +220,9 @@ TEST_CASE("An empty song round-trips", "[model][io]")
 TEST_CASE("deserialize rejects malformed input", "[model][io]")
 {
     Song out;
-    REQUIRE_FALSE(deserialize("not a looper file", out));
+    REQUIRE_FALSE(deserialize("not a SoundSplice file", out));
     REQUIRE_FALSE(deserialize("", out));
-    REQUIRE_FALSE(deserialize("LOOPER 1\nBPM 120\n", out)); // truncated (missing later records)
+    REQUIRE_FALSE(deserialize("SOUNDSPLICE 1\nBPM 120\n", out)); // truncated (missing later records)
 }
 
 TEST_CASE("deserialize reports why it failed", "[model][io]")
@@ -230,7 +230,7 @@ TEST_CASE("deserialize reports why it failed", "[model][io]")
     Song        out;
     std::string error;
 
-    REQUIRE_FALSE(deserialize("not a looper file", out, &error));
+    REQUIRE_FALSE(deserialize("not a SoundSplice file", out, &error));
     REQUIRE_FALSE(error.empty());
 }
 
@@ -238,7 +238,7 @@ TEST_CASE("A file from a newer build is refused, not part-parsed", "[model][io]"
 {
     // Reading it with this build's rules would silently drop whatever records
     // it gained — worse than declining to open it.
-    const std::string newer = "LOOPER " + std::to_string(kFormatVersion + 1) + "\nBPM 120\n";
+    const std::string newer = "SOUNDSPLICE " + std::to_string(kFormatVersion + 1) + "\nBPM 120\n";
 
     Song        out;
     std::string error;
@@ -246,43 +246,34 @@ TEST_CASE("A file from a newer build is refused, not part-parsed", "[model][io]"
     REQUIRE(error.find("newer") != std::string::npos);
 }
 
-TEST_CASE("Drum and Guitar tracks from older files load as synth tracks", "[model][io]")
+TEST_CASE("A Looper-Audio project is not read", "[model][io]")
 {
-    // Track types 2 and 3 were Drum and Guitar. Their clips are ordinary note
-    // patterns, so the notes survive and the track plays through the synth.
-    const std::string v41 =
-        "LOOPER 41\n"
+    // SoundSplice started from Looper-Audio but does not open its files: the
+    // header is different, and the parse stops there with a reason.
+    const std::string looper = "LOOPER 41\nBPM 120\nTSNUM 4\nTSDEN 4\nNEXTID 1\nTRACKS 0\n";
+
+    Song        out;
+    std::string error;
+    REQUIRE_FALSE(deserialize(looper, out, &error));
+    REQUIRE(error.find("SoundSplice") != std::string::npos);
+}
+
+TEST_CASE("A track of an unknown type is refused, not guessed at", "[model][io]")
+{
+    const std::string text =
+        "SOUNDSPLICE 1\n"
         "BPM 120\n"
         "TSNUM 4\n"
         "TSDEN 4\n"
-        "NEXTID 9\n"
-        "TRACKS 2\n"
-        "TRACK 1 2 0 0 0 0 0 0 Drums\n"
-        "TAUTOS 0\n"
-        "DRUMKIT 2\n"
-        "DPAD 36 Kick 0 0 0 0 0 samples/Kick 808.wav\n"
-        "DPAD 38 Snare 0 0 0 0 0 \n"
-        "CLIPS 1\n"
-        "CLIP 2 0 0 4 4 \n"
-        "NOTES 1\n"
-        "NOTE 0 0.25 36 1 0\n"
-        "TRACK 3 3 0 0 0 0 0 0 Gtr\n"
-        "TAUTOS 0\n"
-        "GUITAR 38 45 50 55 59 64 4.5 0.35 0.11 0.9 0.25 4200 2.25 0.3 0.4 1 0.1 0.5 0.2\n"
+        "NEXTID 2\n"
+        "TRACKS 1\n"
+        "TRACK 1 7 0 0 0 0 0 Mystery\n"
         "CLIPS 0\n";
 
-    Song        restored;
+    Song        out;
     std::string error;
-    REQUIRE(deserialize(v41, restored, &error));
-    REQUIRE(restored.tracks.size() == 2);
-
-    REQUIRE(restored.tracks[0].type == TrackType::Instrument);
-    REQUIRE(restored.tracks[0].name == "Drums");
-    REQUIRE(restored.tracks[0].clips.size() == 1);
-    REQUIRE(restored.tracks[0].clips[0].pattern.notes.size() == 1);
-
-    REQUIRE(restored.tracks[1].type == TrackType::Instrument);
-    REQUIRE(restored.tracks[1].name == "Gtr");
+    REQUIRE_FALSE(deserialize(text, out, &error));
+    REQUIRE(error.find("track type") != std::string::npos);
 }
 
 TEST_CASE("An effect chain round-trips with its order and mixed kinds", "[model][io]")
@@ -341,45 +332,6 @@ TEST_CASE("An effect chain round-trips with its order and mixed kinds", "[model]
     REQUIRE(chain[1].plugin.state == "YmFzZTY0LXN0YXRl");
 }
 
-TEST_CASE("A project with the old fixed effect trio migrates into the chain", "[model][io]")
-{
-    // v17 and earlier stored TFX: one filter, one delay, one reverb, always in
-    // that order. They must come back as three slots in the same order, or an
-    // existing project's effects would silently rearrange.
-    const std::string v17 =
-        "LOOPER 17\n"
-        "BPM 120\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 3\n"
-        "TRACKS 1\n"
-        "TRACK 1 0 0 0 0 0 0 Lead\n"
-        "TAUTOS 0\n"
-        "DRUMKIT 0\n"
-        "SYNTH 0 5 120 0.7 250 0 0 1000 0.707 0\n"
-        "TFX 1 1 900 1.4 1 275 0.5 0.45 0 0.5 0.5 0.3\n"
-        "CLIPS 0\n";
-
-    Song        restored;
-    std::string error;
-    REQUIRE(deserialize(v17, restored, &error));
-
-    const auto& chain = restored.tracks[0].effectChain;
-    REQUIRE(chain.size() == 3);
-    REQUIRE(chain[0].kind == EffectKind::Filter);
-    REQUIRE(chain[1].kind == EffectKind::Delay);
-    REQUIRE(chain[2].kind == EffectKind::Reverb);
-
-    // The filter and delay were on, the reverb off — and their settings come
-    // across, so the track sounds as it did.
-    REQUIRE(chain[0].enabled);
-    REQUIRE(chain[0].filter.mode == 1);
-    REQUIRE(chain[0].filter.cutoff == 900.0f);
-    REQUIRE(chain[1].enabled);
-    REQUIRE(chain[1].delay.timeMs == 275.0f);
-    REQUIRE_FALSE(chain[2].enabled);
-}
-
 TEST_CASE("The session grid round-trips, empty cells included", "[model][io]")
 {
     const Song original = makeSampleSong();
@@ -402,86 +354,6 @@ TEST_CASE("The session grid round-trips, empty cells included", "[model][io]")
 
     REQUIRE(sessionClip(restored, 0, 1) == nullptr); // deliberately empty
     REQUIRE(sessionClip(restored, 2, 1) != nullptr);
-}
-
-TEST_CASE("A project from before per-track synths still opens", "[model][io]")
-{
-    // A v11 file: no SYNTH record, and DPAD in its old note/label/path shape.
-    // This is exactly what was on disk before those two format bumps, and it
-    // must still load — with the new fields at their defaults. Its track was
-    // a Drum track, which no longer exists: it loads as a synth track, and
-    // the kit records are skipped.
-    const std::string v11 =
-        "LOOPER 11\n"
-        "BPM 100\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 5\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
-        "TRACKS 1\n"
-        "TRACK 1 2 0 0 0 0 Drums\n"
-        "TAUTO 2\n"
-        "TAPT 0 -12\n"
-        "TAPT 4 0\n"
-        "DRUMKIT 1\n"
-        "DPAD 36 Kick samples/Kick 808.wav\n"
-        "CLIPS 1\n"
-        "CLIP 2 0 0 4 4 \n"
-        "NOTES 1\n"
-        "NOTE 0 0.25 36 1\n";
-
-    Song        restored;
-    std::string error;
-    REQUIRE(deserialize(v11, restored, &error));
-
-    REQUIRE(restored.bpm == 100.0);
-    REQUIRE(restored.tracks.size() == 1);
-
-    const auto& track = restored.tracks[0];
-    REQUIRE(track.type == TrackType::Instrument);
-    REQUIRE(track.clips.size() == 1);
-    REQUIRE(track.clips[0].pattern.notes.size() == 1);
-
-    // And the synth settings this file predates are the defaults.
-    REQUIRE(track.synthSettings == SynthSettings{});
-
-    // Likewise the insert effects, added later still: all off, so a project
-    // from before they existed sounds exactly as it did.
-    // v11 predates inserts entirely, so there's no chain at all.
-    REQUIRE(track.effectChain.empty());
-
-    // The master EQ arrived in v25; a file this old has no EQ line, so it
-    // reads as flat/disabled rather than failing to parse.
-    REQUIRE(restored.eq == EqSettings {});
-
-    // The session grid arrived in v17; a file this old simply has none.
-    REQUIRE(restored.scenes.empty());
-    REQUIRE(track.sessionSlots.empty());
-
-    // Pan joined TRACK in v15; this file predates it, so it reads as centred.
-    REQUIRE(track.pan == 0.0f);
-
-    // Its single unkeyed gain lane (all v15-and-earlier files had exactly
-    // one, always gain) must land in the Gain lane rather than be dropped.
-    const auto* gainLane = track.lane(TrackParam::Gain);
-    REQUIRE(gainLane != nullptr);
-    REQUIRE(gainLane->points().size() == 2);
-    REQUIRE(track.lane(TrackParam::Pan) == nullptr);
-}
-
-TEST_CASE("A current-format file still round-trips after the version work", "[model][io]")
-{
-    const Song original = makeSampleSong();
-
-    Song        restored;
-    std::string error;
-    REQUIRE(deserialize(serialize(original), restored, &error));
-    REQUIRE(restored == original);
 }
 
 TEST_CASE("The mastering rack round-trips", "[model][io]")
@@ -513,85 +385,6 @@ TEST_CASE("The mastering rack round-trips", "[model][io]")
     REQUIRE(restored == original);
 }
 
-TEST_CASE("A project from before the mastering rack opens neutral", "[model][io]")
-{
-    // A v28 file has no MASTERING record. Every field's default is a no-op,
-    // so an old project must open sounding exactly as it did — in particular
-    // the rack must come back *disabled*, and the filter frequencies must be
-    // real values rather than zeros, which would be broken filters.
-    const std::string v28 =
-        "LOOPER 28\n"
-        "BPM 120\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 3\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "EQ 0 0 0 0\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
-        "SCENES 0\n"
-        "TRACKS 1\n"
-        "TRACK 1 0 0 0 0 0 Synth\n"
-        "TAUTOS 0\n"
-        "FXCHAIN 0\n"
-        "SESSION 0\n"
-        "CLIPS 1\n"
-        "CLIP 2 0 0 4 4 \n"
-        "CLIPGAIN 0\n"
-        "NOTES 0\n";
-
-    Song        song;
-    std::string error;
-    REQUIRE(deserialize(v28, song, &error));
-    REQUIRE(song.mastering == MasteringSettings {});
-    REQUIRE_FALSE(song.mastering.enabled);
-    REQUIRE(song.mastering.peakQ > 0.0f);
-    REQUIRE(song.mastering.lowShelfHz > 0.0f);
-}
-
-TEST_CASE("An older file's GUITAR record is skipped, not misread", "[model][io]")
-{
-    // Guitar settings were removed, but files written before that carry a
-    // GUITAR line per track. It has to be consumed so the records after it
-    // (the effect chain, session and clips) still line up.
-    const std::string v29 =
-        "LOOPER 29\n"
-        "BPM 120\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 3\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "EQ 0 0 0 0\n"
-        "MASTERING 0 0 0 0 0 0 0 0 0 0 200 0.707 1000 0.707 4000 0.707\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
-        "SCENES 0\n"
-        "TRACKS 1\n"
-        "TRACK 1 0 0 0 0 2 Guitar\n"
-        "TAUTOS 0\n"
-        "GUITAR 40 45 50 55 59 64 3 0.7 0.22 0.6 0.25\n"
-        "FXCHAIN 0\n"
-        "SESSION 0\n"
-        "CLIPS 1\n"
-        "CLIP 2 0 0 4 4 \n"
-        "CLIPGAIN 0\n"
-        "NOTES 0\n";
-
-    Song        song;
-    std::string error;
-    REQUIRE(deserialize(v29, song, &error));
-    REQUIRE(song.tracks.size() == 1);
-
-    REQUIRE(song.tracks.front().clips.size() == 1);
-    REQUIRE(song.tracks.front().effectChain.empty());
-}
-
 TEST_CASE("Note articulation round-trips", "[model][io]")
 {
     Song original = makeSampleSong();
@@ -616,48 +409,6 @@ TEST_CASE("Note articulation round-trips", "[model][io]")
     // relies on — a field that round-trips but breaks operator== would make
     // every save look like an edit.
     CHECK(restored == original);
-}
-
-TEST_CASE("A v30 note opens as an open note", "[model][io]")
-{
-    // v30's NOTE line ends after the velocity. Absent must mean Normal: every
-    // note written before articulations existed was played open, and reading
-    // one as a palm mute would silently rewrite old parts.
-    const std::string v30 =
-        "LOOPER 30\n"
-        "BPM 120\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 3\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "EQ 0 0 0 0\n"
-        "MASTERING 0 0 0 0 0 0 0 0 0 0 200 0.707 1000 0.707 4000 0.707\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
-        "SCENES 0\n"
-        "TRACKS 1\n"
-        "TRACK 1 0 0 0 0 0 Synth\n"
-        "TAUTOS 0\n"
-        "FXCHAIN 0\n"
-        "SESSION 0\n"
-        "CLIPS 1\n"
-        "CLIP 2 0 0 4 4 \n"
-        "CLIPGAIN 0\n"
-        "NOTES 1\n"
-        "NOTE 0 1 60 0.8\n";
-
-    Song        song;
-    std::string error;
-    REQUIRE(deserialize(v30, song, &error));
-    REQUIRE(song.tracks.size() == 1);
-
-    const auto& notes = song.tracks.front().clips.front().pattern.notes;
-    REQUIRE(notes.size() == 1);
-    CHECK(notes[0].noteNumber == 60);
-    CHECK(notes[0].articulation == soundsplice::engine::Articulation::Normal);
 }
 
 TEST_CASE("Per-clip gain round-trips", "[model][io]")
@@ -692,124 +443,6 @@ TEST_CASE("Clip gain survives an audio path containing spaces", "[model][io]")
     REQUIRE(restored.tracks[0].clips[0].gainDb == 3.0f);
 }
 
-TEST_CASE("A project from before per-clip gain opens at unity", "[model][io]")
-{
-    // A v27 file: CLIP goes straight to NOTES with no CLIPGAIN between them.
-    // Silence is not a safe default for a gain, so the check that matters is
-    // that the missing record leaves 0 dB rather than -inf or garbage.
-    const std::string v27 =
-        "LOOPER 27\n"
-        "BPM 120\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 3\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "EQ 0 0 0 0\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
-        "SCENES 0\n"
-        "TRACKS 1\n"
-        "TRACK 1 0 0 0 0 0 Synth\n"
-        "TAUTOS 0\n"
-        "FXCHAIN 0\n"
-        "SESSION 0\n"
-        "CLIPS 1\n"
-        "CLIP 2 0 0 4 4 \n"
-        "NOTES 0\n";
-
-    Song        song;
-    std::string error;
-    REQUIRE(deserialize(v27, song, &error));
-    REQUIRE(song.tracks.size() == 1);
-    REQUIRE(song.tracks[0].clips.size() == 1);
-    REQUIRE(song.tracks[0].clips[0].gainDb == 0.0f);
-}
-
-TEST_CASE("A v31 project is one tempo for the whole song", "[model][io]")
-{
-    // No TEMPOS record at all. Absent has to mean "one tempo", which is what
-    // BPM alone always meant — so an old project migrates by definition.
-    const std::string v31 =
-        "LOOPER 31\n"
-        "BPM 137\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 3\n"
-        "FILTER 0 0 1000 0.707\n"
-        "DELAY 0 300 0.35 0.3\n"
-        "REVERB 0 0.5 0.5 0.3\n"
-        "SENDBUS 0 0 0.5 0.5 300 0.35 0.5\n"
-        "EQ 0 0 0 0\n"
-        "MASTERING 0 0 0 0 0 0 0 0 0 0 200 0.707 1000 0.707 4000 0.707\n"
-        "PROJECTROOT \n"
-        "AUTO 0\n"
-        "SCENES 0\n"
-        "TRACKS 0\n";
-
-    Song        song;
-    std::string error;
-    REQUIRE(deserialize(v31, song, &error));
-
-    CHECK(song.bpm == 137.0);
-}
-
-TEST_CASE("Removed routing, tempo and warp records in older files are skipped", "[model][io]")
-{
-    // A v41 file from before the second strip-down: a tempo map, a send bus,
-    // a group bus with a member routed into it, a send-level lane, a warped
-    // clip and a sidechained compressor. It must open, as one tempo, with the
-    // bus track dropped and everything else intact.
-    const std::string v41 =
-        "LOOPER 41\n"
-        "BPM 128\n"
-        "TEMPOS 2\n"
-        "TEMPOAT 16 90 0\n"
-        "TEMPOAT 32 150 1\n"
-        "TSNUM 4\n"
-        "TSDEN 4\n"
-        "NEXTID 9\n"
-        "SENDBUS 1 1 0.5 0.5 250 0.4 0.6\n"
-        "SCENES 0\n"
-        "TRACKS 2\n"
-        "TRACK 1 4 -3 0 0 0 0 0 Drum Bus\n"
-        "TRACKBUS -1\n"
-        "TAUTOS 0\n"
-        "CLIPS 0\n"
-        "TRACK 2 1 0 0 0 0.7 0 0 Loop\n"
-        "TRACKBUS 1\n"
-        "TAUTOS 2\n"
-        "TLANE 0 1\n"
-        "TAPT 0 -6\n"
-        "TLANE 2 1\n"
-        "TAPT 4 0.5\n"
-        "CLIPS 1\n"
-        "CLIP 3 1 0 16 4 /loops/break 174.wav\n"
-        "CLIPGAIN 0\n"
-        "CLIPWARP 1 174\n"
-        "NOTES 0\n";
-
-    Song        song;
-    std::string error;
-    REQUIRE(deserialize(v41, song, &error));
-
-    CHECK(song.bpm == 128.0);
-
-    REQUIRE(song.tracks.size() == 1); // the bus is gone
-    const auto& loop = song.tracks[0];
-    CHECK(loop.name == "Loop");
-    CHECK(loop.type == TrackType::Audio);
-
-    // The gain lane survives; the send-level lane does not.
-    CHECK(loop.lane(TrackParam::Gain) != nullptr);
-    CHECK(loop.automation.size() == 1);
-
-    REQUIRE(loop.clips.size() == 1);
-    CHECK(loop.clips[0].audioFile == "/loops/break 174.wav");
-}
-
 TEST_CASE("Sustain-pedal movements round-trip", "[model][io]")
 {
     Song s;
@@ -839,23 +472,3 @@ TEST_CASE("Sustain-pedal movements round-trip", "[model][io]")
     REQUIRE(findTrack(restored, trackId)->clips[0].pattern.notes.size() == 1);
 }
 
-TEST_CASE("A file written before pedals reads without them", "[model][io]")
-{
-    Song s;
-    const int trackId = addTrack(s, TrackType::Instrument, "Piano").id;
-
-    Clip clip;
-    clip.type = ClipType::Instrument;
-    clip.pattern.notes.push_back({ 0.0, 1.0, 60, 0.8f });
-    addClip(s, trackId, clip);
-
-    std::string text  = serialize(s);
-    const auto  start = text.find("PEDALS");
-    REQUIRE(start != std::string::npos);
-    text.erase(start, text.find('\n', start) - start + 1);
-
-    Song restored;
-    REQUIRE(deserialize(text, restored));
-    REQUIRE(findTrack(restored, trackId)->clips[0].pattern.pedals.empty());
-    REQUIRE(findTrack(restored, trackId)->clips[0].pattern.notes.size() == 1);
-}

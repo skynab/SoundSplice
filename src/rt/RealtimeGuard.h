@@ -11,7 +11,7 @@ namespace soundsplice::rt
     allowed to allocate, lock, or block never runs on the real-time path.
 
     Call markCurrentThreadAsAudioThread() at the top of the audio callback. Then
-    guard any non-real-time-safe function with LOOPER_ASSERT_NOT_AUDIO_THREAD().
+    guard any non-real-time-safe function with SOUNDSPLICE_ASSERT_NOT_AUDIO_THREAD().
     The assertions compile away entirely in release builds.
 */
 inline std::atomic<bool> gAudioThreadValid{false};
@@ -32,8 +32,8 @@ inline bool isAudioThread() noexcept
 } // namespace soundsplice::rt
 
 #if defined(NDEBUG)
-    #define LOOPER_ASSERT_NOT_AUDIO_THREAD() ((void) 0)
+    #define SOUNDSPLICE_ASSERT_NOT_AUDIO_THREAD() ((void) 0)
 #else
-    #define LOOPER_ASSERT_NOT_AUDIO_THREAD() \
+    #define SOUNDSPLICE_ASSERT_NOT_AUDIO_THREAD() \
         assert(!::soundsplice::rt::isAudioThread() && "This code path must not run on the audio thread")
 #endif

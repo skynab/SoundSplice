@@ -51,7 +51,7 @@ public:
         // defines in the CMake files. JUCE 8 deleted the old
         // addDefaultFormats() member in favour of a free function per module;
         // PluginModule.h picks the one matching this target.
-        LOOPER_ADD_PLUGIN_FORMATS(formatManager_);
+        SOUNDSPLICE_ADD_PLUGIN_FORMATS(formatManager_);
     }
 
     /** Formats actually available in this build, for the UI to offer. */

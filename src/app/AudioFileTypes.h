@@ -63,7 +63,7 @@ namespace audiofiles
         dragging from the directory tree worked. */
     inline juce::String dragDescriptionFor(const juce::File& file)
     {
-        return "looper:file:" + file.getFullPathName();
+        return "soundsplice:file:" + file.getFullPathName();
     }
 
     /** The file a drag description names, or an invalid File if it isn't
@@ -71,10 +71,10 @@ namespace audiofiles
     inline juce::File fileFromDragDescription(const juce::var& description)
     {
         const auto text = description.toString();
-        if (! text.startsWith("looper:file:"))
+        if (! text.startsWith("soundsplice:file:"))
             return {};
 
-        const juce::File file(text.fromFirstOccurrenceOf("looper:file:", false, false));
+        const juce::File file(text.fromFirstOccurrenceOf("soundsplice:file:", false, false));
         return file.existsAsFile() ? file : juce::File{};
     }
 

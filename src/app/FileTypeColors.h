@@ -16,7 +16,7 @@ inline FileKind classifyFile(const juce::File& file)
         return FileKind::Audio;
     if (file.hasFileExtension("mid;midi"))
         return FileKind::Midi;
-    if (file.hasFileExtension("looper"))
+    if (file.hasFileExtension("soundsplice"))
         return FileKind::Project;
     return FileKind::Other;
 }

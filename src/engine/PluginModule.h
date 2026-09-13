@@ -15,8 +15,8 @@
 
 #if defined(JUCE_MODULE_AVAILABLE_juce_audio_processors)
  #include <juce_audio_processors/juce_audio_processors.h>
- #define LOOPER_ADD_PLUGIN_FORMATS(manager) juce::addDefaultFormatsToManager(manager)
+ #define SOUNDSPLICE_ADD_PLUGIN_FORMATS(manager) juce::addDefaultFormatsToManager(manager)
 #else
  #include <juce_audio_processors_headless/juce_audio_processors_headless.h>
- #define LOOPER_ADD_PLUGIN_FORMATS(manager) juce::addHeadlessDefaultFormatsToManager(manager)
+ #define SOUNDSPLICE_ADD_PLUGIN_FORMATS(manager) juce::addHeadlessDefaultFormatsToManager(manager)
 #endif

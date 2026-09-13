@@ -11,107 +11,28 @@
 namespace soundsplice::model
 {
 /**
-    A small, line-based text format for the project document. Deliberately
-    JUCE-free so the round-trip can be unit-tested headless.
+    The SoundSplice project format: a small, line-based text format for the
+    project document. Deliberately JUCE-free so the round-trip can be
+    unit-tested headless.
 
     Layout is flat and count-prefixed so it parses deterministically. Numbers use
-    %.17g (exact IEEE double round-trip); string fields (track name, audio file)
-    are the rest of their line, so they may contain spaces.
+    %.17g (exact IEEE double round-trip); string fields (track name, audio file,
+    scene name, plugin fields) are the rest of their line, so they may contain
+    spaces — which is why a value that belongs with such a record lives in a
+    record of its own after it (CLIPGAIN after CLIP, for instance).
 
-    **Versioning.** `serialize` always writes kFormatVersion; there is no
-    "save as an older version", so there's one write path to reason about and
-    test. `deserialize` is the tolerant side: records introduced after a given
-    version are read only *if present*, so an older file simply leaves those
-    fields at their struct defaults (which are chosen to be behaviour-
-    preserving). Where a record's own shape changed rather than a new record
-    being added — only DPAD so far — the version decides how to read it.
+    **Versioning.** A file starts with "SOUNDSPLICE <version>", and `serialize`
+    always writes kFormatVersion. `deserialize` reads optional records only if
+    present, so a record added later leaves its fields at their struct defaults
+    when an earlier file lacks it; positional fields are only ever appended to
+    the end of their line, for the same reason. A file written by a *newer*
+    build is refused outright rather than part-parsed: silently dropping records
+    the user can't see would be worse than declining to open it.
 
-    A file written by a *newer* build is refused outright rather than
-    part-parsed: silently dropping records the user can't see would be worse
-    than declining to open it.
+    Looper-Audio's ".looper" files are not read.
 */
+inline constexpr int kFormatVersion = 1;
 
-/** Bumped whenever the format changes. History worth knowing:
-      11  the format before per-track synths
-      12  + SYNTH (per-track model::SynthSettings)
-      13  DPAD carries per-pad gain/pan/pitch/mute/solo before its sample path
-      14  + TFX (per-track insert filter/delay/reverb)
-      15  TRACK carries pan before its (rest-of-line) name
-      16  TAUTO (one gain lane) -> TAUTOS/TLANE (a lane per parameter)
-      17  + SCENES/SCENE and per-track SESSION/SSLOT (the session grid)
-      18  TFX (a fixed filter/delay/reverb trio) -> FXCHAIN/FXSLOT (an
-          ordered chain whose slots may be built-ins or hosted plugins)
-      19  + GUITAR (per-track model::GuitarSettings)
-      20  FXSLOT gains five drive fields (the guitar pedal). A file written
-          before this simply stops short of them, and the reader keeps the
-          defaults it started with.
-      21  + seven more on the same line: compressor and tremolo pedals,
-          read the same tolerant way.
-      22  TRACK carries its colour before the rest-of-line name, the same
-          way pan joined in v15.
-      23  + three more FXSLOT fields: the chorus pedal, read the same
-          tolerant way as 20's and 21's.
-      24  + five more FXSLOT fields: the wobble pedal, read the same
-          tolerant way as 20's, 21's, and 23's.
-      26  SYNTH gains nine more fields: the filter envelope (amount +
-          its own ADSR), the sub-oscillator, and unison — read the same
-          tolerant way as every prior SYNTH/FXSLOT extension.
-      27  + five more FXSLOT fields: the gate pedal, read the same
-          tolerant way as 20's, 21's, 23's, and 24's.
-      28  + CLIPGAIN, a per-clip trim. Its own record rather than another
-          CLIP field, because CLIP ends in the rest-of-line audioFile and
-          nothing can follow that; absent in older files, where 0dB is the
-          right answer anyway.
-      29  + MASTERING, the master-bus mastering rack. Read the same tolerant
-          way as EQ in v25: absent in older files, where every field's
-          default is a no-op, so an old project sounds identical.
-      30  GUITAR gains the pickup resonance (frequency + Q), and FXSLOT gains
-          nine more fields appended at the end of its line: two for the drive
-          (asymmetry, oversampling) and seven for the new EQ pedal. All read
-          the tolerant way, and every default is the behaviour that existed
-          before them. Appended rather than grouped with the other drive
-          fields because the line is positional.
-      34  + CLIPWARP, a clip's source tempo and whether it follows the
-          project's. Its own optional record for exactly the reason CLIPGAIN
-          is one - CLIP ends in a rest-of-line audioFile, so nothing can
-          follow it there. Absent in older files, where "not warped, tempo
-          unknown" is the behaviour those files already had.
-      35  FXSLOT gains one more field at the end of its line: a compressor's
-          sidechain source track id. Appended, like v30's, because the line is
-          positional. -1 in older files, which is "no sidechain" - exactly how
-          every compressor written before this behaved.
-      36  + TRACKBUS, a track's output bus id (-1 = master), and TrackType
-          gains Bus. Its own optional record rather than another TRACK field,
-          because TRACK ends in the rest-of-line name and nothing can follow
-          it there - the same shape as CLIPGAIN and CLIPWARP. Absent in older
-          files, where "straight to the master" is what they already did.
-      37  GUITAR gains three more fields at the end of its line: velocity
-          sensitivity, string coupling and stereo width. Appended, like v30's,
-          because the line is positional - and seeded from the defaults on the
-          way in, so an older file gets the improved instrument rather than a
-          silent, mono, uncoupled one.
-      38  GUITAR gains string stiffness, appended for the same reason and
-          seeded from the default the same way.
-      39  FXSLOT gains the drive's gain-stage count, appended at the end of
-          its positional line like v30's and v35's. 1 in older files, which is
-          the single-clipper behaviour they already had.
-      40  + the drive's cabinet-IR flag, appended the same way; 0 in older
-          files, which is the filter-chain cabinet they already had.
-      41  + PEDALS/PEDAL after a clip's notes: sustain-pedal movements, the
-          first performance data here that is not a note. Absent in older
-          files, which had no way to express one.
-
-    SoundSplice removed the Drum and Guitar track types without a version
-    bump: DRUMKIT/DPAD and GUITAR are no longer written, are skipped when an
-    older file carries them, and a TRACK of either type loads as Instrument.
-
-    A second pass removed group buses, the send bus, sidechain ducking, tempo
-    changes and clip warping, also without a bump. TEMPOS/TEMPOAT, SENDBUS,
-    TRACKBUS and CLIPWARP are no longer written and are skipped on load; Bus
-    tracks (type 4) and send-level lanes (param 2) are dropped. TRACK's send
-    level and FXSLOT's sidechain id are positional, so they are still written
-    (as 0 and -1) and ignored when read. */
-inline constexpr int kFormatVersion = 41;
 namespace detail
 {
     inline std::string num(double v)
@@ -131,9 +52,7 @@ namespace detail
 
         // Its own record rather than another field on CLIP: audioFile is a
         // rest-of-line field (a path may contain spaces), so nothing can
-        // follow it on that line. A separate optional record is also what
-        // makes an older file readable unchanged — readTagged leaves the
-        // cursor alone when the tag isn't there, and the default stands.
+        // follow it on that line.
         out << "CLIPGAIN " << num((double) clip.gainDb) << "\n";
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
@@ -158,9 +77,8 @@ namespace detail
 inline std::string serialize(const Song& song)
 {
     std::ostringstream out;
-    out << "LOOPER " << kFormatVersion << "\n";
+    out << "SOUNDSPLICE " << kFormatVersion << "\n";
     out << "BPM " << detail::num(song.bpm) << "\n";
-
     out << "TSNUM " << song.timeSigNumerator << "\n";
     out << "TSDEN " << song.timeSigDenominator << "\n";
     out << "NEXTID " << song.nextId << "\n";
@@ -207,14 +125,14 @@ inline std::string serialize(const Song& song)
     {
         out << "TRACK " << track.id << " " << (int) track.type << " "
             << detail::num((double) track.gainDb) << " " << (track.muted ? 1 : 0)
-            << " " << (track.solo ? 1 : 0) << " " << 0 // the removed send level; positional
+            << " " << (track.solo ? 1 : 0)
             << " " << detail::num((double) track.pan)
             << " " << track.colour
             << " " << track.name << "\n";
 
         // Only non-empty lanes are written, so an unautomated track costs one
         // "TAUTOS 0" line rather than one empty record per automatable
-        // parameter (a list that will only grow).
+        // parameter.
         size_t laneCount = 0;
         for (const auto& [param, lane] : track.automation)
             if (! lane.empty())
@@ -229,6 +147,7 @@ inline std::string serialize(const Song& song)
             for (const auto& pt : lane.points())
                 out << "TAPT " << detail::num(pt.beat) << " " << detail::num((double) pt.value) << "\n";
         }
+
         const auto& synth = track.synthSettings;
         out << "SYNTH " << synth.waveform << " "
             << detail::num((double) synth.attackMs) << " " << detail::num((double) synth.decayMs) << " "
@@ -266,6 +185,10 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.drive.level) << " "
                 << (slot.drive.hardClip ? 1 : 0) << " "
                 << (slot.drive.cabinet ? 1 : 0) << " "
+                << detail::num((double) slot.drive.asymmetry) << " "
+                << (slot.drive.oversample ? 1 : 0) << " "
+                << slot.drive.stages << " "
+                << (slot.drive.cabinetIr ? 1 : 0) << " "
                 << detail::num((double) slot.compressor.thresholdDb) << " "
                 << detail::num((double) slot.compressor.ratio) << " "
                 << detail::num((double) slot.compressor.attackMs) << " "
@@ -286,24 +209,13 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.gate.attackMs) << " "
                 << detail::num((double) slot.gate.holdMs) << " "
                 << detail::num((double) slot.gate.releaseMs) << " "
-                // Appended rather than written next to the other drive fields:
-                // the line is positional, so inserting mid-line would make
-                // every older file read its own values into the wrong slots.
-                << detail::num((double) slot.drive.asymmetry) << " "
-                << (slot.drive.oversample ? 1 : 0) << " "
                 << detail::num((double) slot.eqPedal.lowShelfHz) << " "
                 << detail::num((double) slot.eqPedal.lowShelfDb) << " "
                 << detail::num((double) slot.eqPedal.midHz) << " "
                 << detail::num((double) slot.eqPedal.midDb) << " "
                 << detail::num((double) slot.eqPedal.midQ) << " "
                 << detail::num((double) slot.eqPedal.highShelfHz) << " "
-                << detail::num((double) slot.eqPedal.highShelfDb) << " "
-                // Appended for the same reason v30's fields were: the line is
-                // positional, so anything inserted mid-line would make every
-                // older file read its values into the wrong slots.
-                << -1 // the removed sidechain source; positional
-                << " " << slot.drive.stages
-                << " " << (slot.drive.cabinetIr ? 1 : 0) << "\n";
+                << detail::num((double) slot.eqPedal.highShelfDb) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -350,7 +262,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
     // Buffered into lines with a cursor, rather than streamed, so a record can
     // be *offered* and declined without being consumed — which is what lets an
-    // older file skip records added in later versions (see readTagged below).
+    // optional record be absent (see readTagged below).
     std::vector<std::string> lines;
     {
         std::istringstream in(text);
@@ -363,8 +275,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
     /** Consumes the next line and returns its remainder *only* if it carries
         @p expectedTag; otherwise leaves the cursor alone and returns false.
-        Required records treat false as an error; records added in a later
-        format version simply let their defaults stand. */
+        Required records treat false as an error; optional ones simply let
+        their defaults stand. */
     auto readTagged = [&](const char* expectedTag, std::string& rest) -> bool
     {
         if (cursor >= lines.size())
@@ -395,20 +307,15 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             std::istringstream cs(rest);
             int typeInt = 0;
             cs >> clip.id >> typeInt >> clip.startBeats >> clip.lengthBeats >> clip.pattern.lengthBeats;
-            clip.type = (ClipType) typeInt;
+            clip.type = typeInt == (int) ClipType::Audio ? ClipType::Audio : ClipType::Instrument;
             std::string audio;
             std::getline(cs, audio);
             clip.audioFile = detail::trimLeadingSpace(std::move(audio));
         }
 
-        // Optional: absent in files written before v28, where 0 dB is right.
         if (readTagged("CLIPGAIN", rest))
             clip.gainDb = (float) std::strtod(rest.c_str(), nullptr);
 
-        // Clip warping was removed; an older file's record is skipped.
-        readTagged("CLIPWARP", rest);
-
-        // Optional: absent before v41, where a clip had no way to hold one.
         if (readTagged("PEDALS", rest))
         {
             const int pedalCount = std::atoi(rest.c_str());
@@ -437,10 +344,6 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             std::istringstream ns(rest);
             engine::Note note;
             double velocity = 0.0;
-
-            // Seeded with the default: a file written before v31 stops after
-            // the velocity, the extraction fails, and every note keeps the
-            // articulation it always had.
             int articulation = (int) engine::Articulation::Normal;
 
             ns >> note.startBeats >> note.lengthBeats >> note.noteNumber >> velocity
@@ -448,10 +351,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
             note.velocity = (float) velocity;
 
-            // Clamped rather than cast blindly: a newer file could carry an
-            // articulation this build has never heard of, and playing such a
-            // note normally is better than playing it as whatever that integer
-            // happens to alias to.
+            // Clamped rather than cast blindly, so an unknown value plays as
+            // an ordinary note instead of whatever that integer aliases to.
             note.articulation = articulation == (int) engine::Articulation::PalmMute
                                     ? engine::Articulation::PalmMute
                                     : engine::Articulation::Normal;
@@ -461,8 +362,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         return true;
     };
 
-    if (! readTagged("LOOPER", rest))
-        return fail("not a Looper project file");
+    if (! readTagged("SOUNDSPLICE", rest))
+        return fail("not a SoundSplice project file");
 
     const int version = std::atoi(rest.c_str());
     if (version <= 0)
@@ -473,23 +374,10 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
     Song song;
 
     if (! readTagged("BPM", rest))    return fail("missing tempo"); song.bpm = std::strtod(rest.c_str(), nullptr);
-
-    // Tempo changes were removed: the project is one tempo (BPM). An older
-    // file's tempo map is consumed and discarded.
-    if (readTagged("TEMPOS", rest))
-    {
-        const int count = std::atoi(rest.c_str());
-        for (int i = 0; i < count; ++i)
-            if (! readTagged("TEMPOAT", rest))
-                return fail("truncated tempo map");
-    }
     if (! readTagged("TSNUM", rest))  return fail("missing time signature"); song.timeSigNumerator = std::atoi(rest.c_str());
     if (! readTagged("TSDEN", rest))  return fail("missing time signature"); song.timeSigDenominator = std::atoi(rest.c_str());
     if (! readTagged("NEXTID", rest)) return fail("missing id counter"); song.nextId = std::atoi(rest.c_str());
 
-    // Everything from here to TRACKS is read only if present: each of these
-    // records joined the format at some point, so an older file just leaves
-    // the corresponding defaults in place.
     if (readTagged("FILTER", rest))
     {
         std::istringstream fs(rest);
@@ -526,10 +414,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         song.reverb.mix      = (float) mix;
     }
 
-    // The send bus was removed; an older file's record is skipped.
-    readTagged("SENDBUS", rest);
-
-    if (readTagged("EQ", rest)) // added in v25; older files keep the defaults (flat)
+    if (readTagged("EQ", rest))
     {
         std::istringstream eq(rest);
         int    enabled = 0;
@@ -541,15 +426,14 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         song.eq.trebleDb = (float) trebleDb;
     }
 
-    if (readTagged("MASTERING", rest)) // added in v29; older files keep the defaults (every stage a no-op)
+    if (readTagged("MASTERING", rest))
     {
         std::istringstream ms(rest);
         auto&              m = song.mastering;
 
         // Pre-set to the struct's own defaults before extraction, so a
-        // record truncated by a future/older writer leaves sane values
-        // rather than zeros — a zero lowShelfHz or peakQ would be a broken
-        // filter, not a neutral one.
+        // truncated record leaves sane values rather than zeros — a zero
+        // lowShelfHz or peakQ would be a broken filter, not a neutral one.
         int    enabled = 0;
         double lowHz = m.lowShelfHz, lowDb = m.lowShelfDb;
         double peakHz = m.peakHz, peakDb = m.peakDb, peakQ = m.peakQ;
@@ -593,7 +477,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         for (int i = 0; i < pointCount; ++i)
         {
             // Once a count-prefixed record is present its points are not
-            // optional — a short list means the file is damaged, not old.
+            // optional — a short list means the file is damaged.
             if (! readTagged("APT", rest)) return fail("truncated master automation");
             std::istringstream ps(rest);
             double beat = 0.0, value = 0.0;
@@ -602,7 +486,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         }
     }
 
-    if (readTagged("SCENES", rest)) // added in v17; older files have no session grid
+    if (readTagged("SCENES", rest))
     {
         const int sceneCount = std::atoi(rest.c_str());
         for (int s = 0; s < sceneCount; ++s)
@@ -621,68 +505,29 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             return fail("truncated track list");
 
         Track track;
-        bool  removedBusTrack = false;
         {
             std::istringstream ts(rest);
-            int typeInt = 0, muteInt = 0, soloInt = 0;
-            double gain = 0.0, ignoredSendLevel = 0.0;
-            ts >> track.id >> typeInt >> gain >> muteInt >> soloInt >> ignoredSendLevel;
-            // 2 and 3 were Drum and Guitar. Their clips hold ordinary note
-            // patterns, so they come back as synth tracks rather than failing.
-            // 4 was a group bus, which generated nothing of its own: it is
-            // read to keep the cursor aligned and then dropped.
-            removedBusTrack = typeInt == 4;
-            track.type      = (typeInt == 2 || typeInt == 3 || typeInt == 4) ? TrackType::Instrument
-                                                                             : (TrackType) typeInt;
-            track.gainDb    = (float) gain;
-            track.muted     = muteInt != 0;
-            track.solo      = soloInt != 0;
+            int          typeInt = 0, muteInt = 0, soloInt = 0;
+            double       gain = 0.0, pan = 0.0;
+            unsigned int colour = 0;
+            ts >> track.id >> typeInt >> gain >> muteInt >> soloInt >> pan >> colour;
 
-            // Pan joined this record in v15, ahead of the rest-of-line name.
-            // Like DPAD, the field count can't be used to detect it, so the
-            // version decides.
-            if (version >= 15)
-            {
-                double pan = 0.0;
-                ts >> pan;
-                track.pan = (float) pan;
-            }
+            if (typeInt != (int) TrackType::Instrument && typeInt != (int) TrackType::Audio)
+                return fail("unknown track type");
 
-            // Colour joined in v22, also ahead of the name. As with pan, the
-            // field count can't tell — a name beginning with digits would be
-            // read as one — so the version decides.
-            if (version >= 22)
-            {
-                unsigned int colour = 0;
-                ts >> colour;
-                track.colour = colour;
-            }
+            track.type   = (TrackType) typeInt;
+            track.gainDb = (float) gain;
+            track.muted  = muteInt != 0;
+            track.solo   = soloInt != 0;
+            track.pan    = (float) pan;
+            track.colour = colour;
 
             std::string name;
             std::getline(ts, name);
             track.name = detail::trimLeadingSpace(std::move(name));
         }
 
-        // Group buses were removed, so every track feeds the master.
-        readTagged("TRACKBUS", rest);
-
-        // Before v16 a track had exactly one lane, always gain, written as a
-        // bare TAUTO point list. Read it straight into the Gain lane so an
-        // older project keeps its automation rather than silently losing it.
-        if (readTagged("TAUTO", rest))
-        {
-            const int pointCount = std::atoi(rest.c_str());
-            auto&     gainLane   = track.laneFor(TrackParam::Gain);
-            for (int p = 0; p < pointCount; ++p)
-            {
-                if (! readTagged("TAPT", rest)) return fail("truncated track automation");
-                std::istringstream ps(rest);
-                double beat = 0.0, value = 0.0;
-                ps >> beat >> value;
-                gainLane.addPoint(beat, (float) value);
-            }
-        }
-        else if (readTagged("TAUTOS", rest))
+        if (readTagged("TAUTOS", rest))
         {
             const int laneCount = std::atoi(rest.c_str());
             for (int l = 0; l < laneCount; ++l)
@@ -692,7 +537,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 int paramId = 0, pointCount = 0;
                 ls >> paramId >> pointCount;
 
-                AutomationLane lane;
+                auto& lane = track.automation[paramId];
                 for (int p = 0; p < pointCount; ++p)
                 {
                     if (! readTagged("TAPT", rest)) return fail("truncated track automation");
@@ -701,52 +546,40 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                     ps >> beat >> value;
                     lane.addPoint(beat, (float) value);
                 }
-
-                // 2 was the removed send level.
-                if (paramId != 2)
-                    track.automation[paramId] = lane;
             }
         }
 
-        // Drum kits were removed. Older files still carry one per track, so
-        // the records are consumed and discarded to keep the cursor aligned.
-        if (readTagged("DRUMKIT", rest))
-        {
-            const int padCount = std::atoi(rest.c_str());
-            for (int p = 0; p < padCount; ++p)
-                if (! readTagged("DPAD", rest)) return fail("truncated drum kit");
-        }
-
-        if (readTagged("SYNTH", rest)) // added in v12; older files keep the defaults
+        if (readTagged("SYNTH", rest))
         {
             std::istringstream ss(rest);
-            int    waveform = 0, filterEnabled = 0, filterMode = 0;
-            double attackMs = 0.0, decayMs = 0.0, sustain = 0.0, releaseMs = 0.0;
-            double filterCutoff = 0.0, filterResonance = 0.0, gainDb = 0.0;
-            // Pre-set to model::SynthSettings' real defaults (not 0), since a
-            // file written before v26 has no tokens for these at all - the
-            // stream simply stops filling them in, same tolerant-read
-            // mechanism the whole SYNTH line already relies on.
-            double filterEnvAmount = 0.0, filterEnvAttackMs = 0.0, filterEnvDecayMs = 0.0;
-            double filterEnvSustain = 1.0, filterEnvReleaseMs = 0.0;
-            int    subOscEnabled = 0;
-            double subOscLevel = 0.3;
-            int    unisonVoices = 1;
-            double unisonDetuneCents = 12.0;
+            const SynthSettings defaults;
+            int    waveform = defaults.waveform, filterEnabled = defaults.filterEnabled ? 1 : 0;
+            int    filterMode = defaults.filterMode;
+            double attackMs = defaults.attackMs, decayMs = defaults.decayMs;
+            double sustain = defaults.sustain, releaseMs = defaults.releaseMs;
+            double filterCutoff = defaults.filterCutoff, filterResonance = defaults.filterResonance;
+            double gainDb = defaults.gainDb;
+            double filterEnvAmount = defaults.filterEnvAmount, filterEnvAttackMs = defaults.filterEnvAttackMs;
+            double filterEnvDecayMs = defaults.filterEnvDecayMs, filterEnvSustain = defaults.filterEnvSustain;
+            double filterEnvReleaseMs = defaults.filterEnvReleaseMs;
+            int    subOscEnabled = defaults.subOscEnabled ? 1 : 0;
+            double subOscLevel = defaults.subOscLevel;
+            int    unisonVoices = defaults.unisonVoices;
+            double unisonDetuneCents = defaults.unisonDetuneCents;
             ss >> waveform >> attackMs >> decayMs >> sustain >> releaseMs
                >> filterEnabled >> filterMode >> filterCutoff >> filterResonance >> gainDb
                >> filterEnvAmount >> filterEnvAttackMs >> filterEnvDecayMs >> filterEnvSustain >> filterEnvReleaseMs
                >> subOscEnabled >> subOscLevel >> unisonVoices >> unisonDetuneCents;
-            track.synthSettings.waveform        = waveform;
-            track.synthSettings.attackMs        = (float) attackMs;
-            track.synthSettings.decayMs         = (float) decayMs;
-            track.synthSettings.sustain         = (float) sustain;
-            track.synthSettings.releaseMs       = (float) releaseMs;
-            track.synthSettings.filterEnabled   = filterEnabled != 0;
-            track.synthSettings.filterMode      = filterMode;
-            track.synthSettings.filterCutoff    = (float) filterCutoff;
-            track.synthSettings.filterResonance = (float) filterResonance;
-            track.synthSettings.gainDb          = (float) gainDb;
+            track.synthSettings.waveform           = waveform;
+            track.synthSettings.attackMs           = (float) attackMs;
+            track.synthSettings.decayMs            = (float) decayMs;
+            track.synthSettings.sustain            = (float) sustain;
+            track.synthSettings.releaseMs          = (float) releaseMs;
+            track.synthSettings.filterEnabled      = filterEnabled != 0;
+            track.synthSettings.filterMode         = filterMode;
+            track.synthSettings.filterCutoff       = (float) filterCutoff;
+            track.synthSettings.filterResonance    = (float) filterResonance;
+            track.synthSettings.gainDb             = (float) gainDb;
             track.synthSettings.filterEnvAmount    = (float) filterEnvAmount;
             track.synthSettings.filterEnvAttackMs  = (float) filterEnvAttackMs;
             track.synthSettings.filterEnvDecayMs   = (float) filterEnvDecayMs;
@@ -758,53 +591,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             track.synthSettings.unisonDetuneCents  = (float) unisonDetuneCents;
         }
 
-        // Guitar settings were removed; an older file's single GUITAR line is
-        // consumed and discarded.
-        readTagged("GUITAR", rest);
-
-        // v14..v17 stored a fixed filter/delay/reverb trio. Migrate it into
-        // three chain slots in that same order, so an old project comes back
-        // with its effects in the order it had them and sounding the same.
-        if (readTagged("TFX", rest))
-        {
-            std::istringstream fs(rest);
-            int    filterOn = 0, filterMode = 0, delayOn = 0, reverbOn = 0;
-            double cutoff = 0.0, resonance = 0.0;
-            double delayTime = 0.0, delayFeedback = 0.0, delayMix = 0.0;
-            double room = 0.0, damping = 0.0, reverbMix = 0.0;
-            fs >> filterOn >> filterMode >> cutoff >> resonance
-               >> delayOn >> delayTime >> delayFeedback >> delayMix
-               >> reverbOn >> room >> damping >> reverbMix;
-
-            EffectSlot filterSlot;
-            filterSlot.kind             = EffectKind::Filter;
-            filterSlot.enabled          = filterOn != 0;
-            filterSlot.filter.enabled   = filterOn != 0;
-            filterSlot.filter.mode      = filterMode;
-            filterSlot.filter.cutoff    = (float) cutoff;
-            filterSlot.filter.resonance = (float) resonance;
-
-            EffectSlot delaySlot;
-            delaySlot.kind           = EffectKind::Delay;
-            delaySlot.enabled        = delayOn != 0;
-            delaySlot.delay.enabled  = delayOn != 0;
-            delaySlot.delay.timeMs   = (float) delayTime;
-            delaySlot.delay.feedback = (float) delayFeedback;
-            delaySlot.delay.mix      = (float) delayMix;
-
-            EffectSlot reverbSlot;
-            reverbSlot.kind            = EffectKind::Reverb;
-            reverbSlot.enabled         = reverbOn != 0;
-            reverbSlot.reverb.enabled  = reverbOn != 0;
-            reverbSlot.reverb.roomSize = (float) room;
-            reverbSlot.reverb.damping  = (float) damping;
-            reverbSlot.reverb.mix      = (float) reverbMix;
-
-            track.effectChain.push_back(filterSlot);
-            track.effectChain.push_back(delaySlot);
-            track.effectChain.push_back(reverbSlot);
-        }
-        else if (readTagged("FXCHAIN", rest)) // v18 onward
+        if (readTagged("FXCHAIN", rest))
         {
             const int slotCount = std::atoi(rest.c_str());
             for (int s = 0; s < slotCount; ++s)
@@ -812,70 +599,75 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 if (! readTagged("FXSLOT", rest)) return fail("truncated effect chain");
 
                 std::istringstream ss(rest);
-                int    kind = 0, enabled = 0, filterMode = 0;
-                double cutoff = 0.0, resonance = 0.0;
-                double delayTime = 0.0, delayFeedback = 0.0, delayMix = 0.0;
-                double room = 0.0, damping = 0.0, reverbMix = 0.0;
+                const EffectSlot defaults;
+                EffectSlot slot;
 
-                // Defaults matter: a file written before version 20 has no
-                // drive fields, the extractions below simply fail, and these
-                // values are what the slot keeps.
-                double driveAmount = 4.0, driveTone = 0.5, driveLevel = 0.7;
-                int    driveHard = 0, driveCab = 1;
-                double compThreshold = -18.0, compRatio = 4.0, compAttack = 10.0;
-                double compRelease = 120.0, compMakeUp = 0.0;
-                double tremRate = 5.0, tremDepth = 0.5;
-                double chorusRate = 0.6, chorusDepth = 0.5, chorusMix = 0.5;
-                double wobbleRateBeats = 0.25, wobbleDepth = 0.7, wobbleBaseCutoffHz = 200.0;
-                double wobbleResonance = 0.9, wobbleMix = 1.0;
-                double gateThreshold = -40.0, gateRange = 60.0, gateAttack = 2.0;
-                double gateHold = 20.0, gateRelease = 150.0;
-                double driveAsymmetry = 0.0;
-                int    driveOversample = 0;
-                double eqLowHz = 100.0, eqLowDb = 0.0;
-                double eqMidHz = 800.0, eqMidDb = 0.0, eqMidQ = 1.0;
-                double eqHighHz = 4000.0, eqHighDb = 0.0;
-                int    ignoredSidechainTrackId = -1; // the removed sidechain source
-                int    driveStages          = 1;  // absent before v39: one clipper
-                int    driveCabinetIr       = 0;  // absent before v40: filtered cabinet
+                int    kind = 0, enabled = 0;
+                int    filterMode = defaults.filter.mode;
+                double cutoff = defaults.filter.cutoff, resonance = defaults.filter.resonance;
+                double delayTime = defaults.delay.timeMs, delayFeedback = defaults.delay.feedback;
+                double delayMix = defaults.delay.mix;
+                double room = defaults.reverb.roomSize, damping = defaults.reverb.damping;
+                double reverbMix = defaults.reverb.mix;
+                double driveAmount = defaults.drive.drive, driveTone = defaults.drive.tone;
+                double driveLevel = defaults.drive.level;
+                int    driveHard = defaults.drive.hardClip ? 1 : 0, driveCab = defaults.drive.cabinet ? 1 : 0;
+                double driveAsymmetry = defaults.drive.asymmetry;
+                int    driveOversample = defaults.drive.oversample ? 1 : 0;
+                int    driveStages = defaults.drive.stages;
+                int    driveCabinetIr = defaults.drive.cabinetIr ? 1 : 0;
+                double compThreshold = defaults.compressor.thresholdDb, compRatio = defaults.compressor.ratio;
+                double compAttack = defaults.compressor.attackMs, compRelease = defaults.compressor.releaseMs;
+                double compMakeUp = defaults.compressor.makeUpDb;
+                double tremRate = defaults.tremolo.rateHz, tremDepth = defaults.tremolo.depth;
+                double chorusRate = defaults.chorus.rateHz, chorusDepth = defaults.chorus.depth;
+                double chorusMix = defaults.chorus.mix;
+                double wobbleRateBeats = defaults.wobble.rateBeats, wobbleDepth = defaults.wobble.depth;
+                double wobbleBaseCutoffHz = defaults.wobble.baseCutoffHz;
+                double wobbleResonance = defaults.wobble.resonance, wobbleMix = defaults.wobble.mix;
+                double gateThreshold = defaults.gate.thresholdDb, gateRange = defaults.gate.rangeDb;
+                double gateAttack = defaults.gate.attackMs, gateHold = defaults.gate.holdMs;
+                double gateRelease = defaults.gate.releaseMs;
+                double eqLowHz = defaults.eqPedal.lowShelfHz, eqLowDb = defaults.eqPedal.lowShelfDb;
+                double eqMidHz = defaults.eqPedal.midHz, eqMidDb = defaults.eqPedal.midDb;
+                double eqMidQ = defaults.eqPedal.midQ;
+                double eqHighHz = defaults.eqPedal.highShelfHz, eqHighDb = defaults.eqPedal.highShelfDb;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
                    >> delayTime >> delayFeedback >> delayMix >> room >> damping >> reverbMix
                    >> driveAmount >> driveTone >> driveLevel >> driveHard >> driveCab
+                   >> driveAsymmetry >> driveOversample >> driveStages >> driveCabinetIr
                    >> compThreshold >> compRatio >> compAttack >> compRelease >> compMakeUp
                    >> tremRate >> tremDepth
                    >> chorusRate >> chorusDepth >> chorusMix
                    >> wobbleRateBeats >> wobbleDepth >> wobbleBaseCutoffHz >> wobbleResonance >> wobbleMix
                    >> gateThreshold >> gateRange >> gateAttack >> gateHold >> gateRelease
-                   >> driveAsymmetry >> driveOversample
-                   >> eqLowHz >> eqLowDb >> eqMidHz >> eqMidDb >> eqMidQ >> eqHighHz >> eqHighDb
-                   >> ignoredSidechainTrackId >> driveStages >> driveCabinetIr;
+                   >> eqLowHz >> eqLowDb >> eqMidHz >> eqMidDb >> eqMidQ >> eqHighHz >> eqHighDb;
 
-                EffectSlot slot;
-                slot.kind              = (EffectKind) kind;
-                slot.enabled           = enabled != 0;
-                slot.filter.enabled    = slot.enabled && slot.kind == EffectKind::Filter;
-                slot.filter.mode       = filterMode;
-                slot.filter.cutoff     = (float) cutoff;
-                slot.filter.resonance  = (float) resonance;
-                slot.delay.enabled     = slot.enabled && slot.kind == EffectKind::Delay;
-                slot.delay.timeMs      = (float) delayTime;
-                slot.delay.feedback    = (float) delayFeedback;
-                slot.delay.mix         = (float) delayMix;
-                slot.reverb.enabled    = slot.enabled && slot.kind == EffectKind::Reverb;
-                slot.reverb.roomSize   = (float) room;
-                slot.reverb.damping    = (float) damping;
-                slot.reverb.mix        = (float) reverbMix;
-                slot.drive.enabled     = slot.enabled && slot.kind == EffectKind::Drive;
-                slot.drive.drive       = (float) driveAmount;
-                slot.drive.tone        = (float) driveTone;
-                slot.drive.level       = (float) driveLevel;
-                slot.drive.hardClip    = driveHard != 0;
-                slot.drive.cabinet     = driveCab != 0;
-                slot.drive.asymmetry   = (float) driveAsymmetry;
-                slot.drive.oversample  = driveOversample != 0;
-                slot.drive.stages      = driveStages > 0 ? driveStages : 1;
-                slot.drive.cabinetIr   = driveCabinetIr != 0;
+                slot.kind                   = (EffectKind) kind;
+                slot.enabled                = enabled != 0;
+                slot.filter.enabled         = slot.enabled && slot.kind == EffectKind::Filter;
+                slot.filter.mode            = filterMode;
+                slot.filter.cutoff          = (float) cutoff;
+                slot.filter.resonance       = (float) resonance;
+                slot.delay.enabled          = slot.enabled && slot.kind == EffectKind::Delay;
+                slot.delay.timeMs           = (float) delayTime;
+                slot.delay.feedback         = (float) delayFeedback;
+                slot.delay.mix              = (float) delayMix;
+                slot.reverb.enabled         = slot.enabled && slot.kind == EffectKind::Reverb;
+                slot.reverb.roomSize        = (float) room;
+                slot.reverb.damping         = (float) damping;
+                slot.reverb.mix             = (float) reverbMix;
+                slot.drive.enabled          = slot.enabled && slot.kind == EffectKind::Drive;
+                slot.drive.drive            = (float) driveAmount;
+                slot.drive.tone             = (float) driveTone;
+                slot.drive.level            = (float) driveLevel;
+                slot.drive.hardClip         = driveHard != 0;
+                slot.drive.cabinet          = driveCab != 0;
+                slot.drive.asymmetry        = (float) driveAsymmetry;
+                slot.drive.oversample       = driveOversample != 0;
+                slot.drive.stages           = driveStages > 0 ? driveStages : 1;
+                slot.drive.cabinetIr        = driveCabinetIr != 0;
                 slot.compressor.enabled     = slot.enabled && slot.kind == EffectKind::Compressor;
                 slot.compressor.thresholdDb = (float) compThreshold;
                 slot.compressor.ratio       = (float) compRatio;
@@ -895,20 +687,20 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.wobble.baseCutoffHz    = (float) wobbleBaseCutoffHz;
                 slot.wobble.resonance       = (float) wobbleResonance;
                 slot.wobble.mix             = (float) wobbleMix;
-                slot.eqPedal.enabled     = slot.enabled && slot.kind == EffectKind::Eq;
-                slot.eqPedal.lowShelfHz  = (float) eqLowHz;
-                slot.eqPedal.lowShelfDb  = (float) eqLowDb;
-                slot.eqPedal.midHz       = (float) eqMidHz;
-                slot.eqPedal.midDb       = (float) eqMidDb;
-                slot.eqPedal.midQ        = (float) eqMidQ;
-                slot.eqPedal.highShelfHz = (float) eqHighHz;
-                slot.eqPedal.highShelfDb = (float) eqHighDb;
                 slot.gate.enabled           = slot.enabled && slot.kind == EffectKind::Gate;
                 slot.gate.thresholdDb       = (float) gateThreshold;
                 slot.gate.rangeDb           = (float) gateRange;
                 slot.gate.attackMs          = (float) gateAttack;
                 slot.gate.holdMs            = (float) gateHold;
                 slot.gate.releaseMs         = (float) gateRelease;
+                slot.eqPedal.enabled        = slot.enabled && slot.kind == EffectKind::Eq;
+                slot.eqPedal.lowShelfHz     = (float) eqLowHz;
+                slot.eqPedal.lowShelfDb     = (float) eqLowDb;
+                slot.eqPedal.midHz          = (float) eqMidHz;
+                slot.eqPedal.midDb          = (float) eqMidDb;
+                slot.eqPedal.midQ           = (float) eqMidQ;
+                slot.eqPedal.highShelfHz    = (float) eqHighHz;
+                slot.eqPedal.highShelfDb    = (float) eqHighDb;
 
                 if (slot.kind == EffectKind::Plugin)
                 {
@@ -926,7 +718,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             }
         }
 
-        if (readTagged("SESSION", rest)) // added in v17
+        if (readTagged("SESSION", rest))
         {
             const int slotCount = std::atoi(rest.c_str());
             for (int s = 0; s < slotCount; ++s)
@@ -953,9 +745,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             track.clips.push_back(std::move(clip));
         }
 
-        if (! removedBusTrack)
-
-            song.tracks.push_back(std::move(track));
+        song.tracks.push_back(std::move(track));
     }
 
     out = std::move(song);

@@ -3,21 +3,17 @@
 A cross-platform **audio editor** written in C++, in the spirit of Audacity.
 
 > **Fork notice.** SoundSplice is forked from Looper-Audio, a loop-centric DAW, and is being
-> renamed and stripped down to a focused waveform editor.
+> stripped down to a focused waveform editor.
 >
 > - **Removed:** drum tracks and the Drums pane, guitar tracks and the Guitar (fretboard) pane,
->   the piano instrument, generative loops, and the synth editor with its tone/preset library.
->   Older `.looper` projects still open: Drum and Guitar tracks load as synth tracks with their
->   notes intact, and their kit/guitar settings are dropped.
-> - **Also removed:** group bus tracks, the shared send bus (and each track's send level), sidechain
->   ducking, tempo changes/ramps on the ruler, and clip warping with tempo detection. A project has
->   one tempo. Older projects still open: bus tracks are dropped (their members go to the master),
->   tempo maps collapse to the starting tempo, and warped clips play at their own rate.
+>   the piano instrument, generative loops, the synth editor with its tone/preset library, group
+>   bus tracks, the shared send bus, sidechain ducking, tempo changes/ramps, and clip warping
+>   with tempo detection. A project has one tempo.
 > - **Kept for review:** the Session view, plus the minimum it needs to play — MIDI clips, one
 >   basic synth (default settings, no editor) and the piano roll for writing clips.
-> - **Renamed:** the app and the C++ namespace (`soundsplice::`). **Not yet renamed:** the
->   `looper_*` build targets and `looper::rt` CMake alias, the `LOOPER_*` CMake options and the
->   `.looper` file format.
+> - **Renamed:** the app, the C++ namespace (`soundsplice::`), CMake targets and options
+>   (`soundsplice_*`, `SOUNDSPLICE_*`), and the project format. Projects are `.soundsplice` files
+>   starting with a `SOUNDSPLICE 1` header; Looper-Audio `.looper` files are not read.
 >
 > The status notes below describe the inherited Looper-Audio feature set and predate the removals.
 
@@ -456,7 +452,7 @@ cmake -S . -B build
 cmake --build build --parallel
 
 # Run the app — JUCE puts the GUI app under SoundSplice_artefacts/, not build/bin/
-# (build/bin/ only holds console tools like looper_tests and looper_bounce).
+# (build/bin/ only holds console tools like soundsplice_tests).
 open build/src/app/SoundSplice_artefacts/Release/SoundSplice.app                     # macOS
 # ./build/src/app/SoundSplice_artefacts/Release/SoundSplice.app/Contents/MacOS/SoundSplice  # macOS, attached to terminal
 # ./build/src/app/SoundSplice_artefacts/Release/SoundSplice                          # Linux
@@ -474,7 +470,7 @@ ctest --test-dir build --output-on-failure
 For a fast test-only loop that doesn't pull JUCE:
 
 ```bash
-cmake -S . -B build-tests -DLOOPER_BUILD_APP=OFF
+cmake -S . -B build-tests -DSOUNDSPLICE_BUILD_APP=OFF
 cmake --build build-tests --parallel
 ctest --test-dir build-tests --output-on-failure
 ```

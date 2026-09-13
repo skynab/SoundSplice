@@ -561,7 +561,7 @@ private:
     // Drains the recorder's FIFO to disk. Started once and left running: it
     // idles when nothing is recording, and starting a thread at the moment the
     // user hits record is exactly when not to be doing it.
-    juce::TimeSliceThread recordWriterThread_ { "LooperRecordWriter" };
+    juce::TimeSliceThread recordWriterThread_ { "SoundSpliceRecordWriter" };
 
     std::atomic<bool>  inputMonitoring_  { false };
     std::atomic<float> inputMonitorGain_ { 1.0f };

@@ -5125,7 +5125,7 @@ void MainComponent::saveProject(std::function<void(bool)> onDone)
 
 void MainComponent::saveProjectAs(std::function<void(bool)> onDone)
 {
-    chooser_ = std::make_unique<juce::FileChooser>("Save project", projectFile_, "*.looper");
+    chooser_ = std::make_unique<juce::FileChooser>("Save project", projectFile_, "*.soundsplice");
     const auto flags = juce::FileBrowserComponent::saveMode
                      | juce::FileBrowserComponent::canSelectFiles
                      | juce::FileBrowserComponent::warnAboutOverwriting;
@@ -5140,7 +5140,7 @@ void MainComponent::saveProjectAs(std::function<void(bool)> onDone)
             return;
         }
 
-        const bool saved = writeProjectTo(file.withFileExtension("looper"));
+        const bool saved = writeProjectTo(file.withFileExtension("soundsplice"));
         if (onDone)
             onDone(saved);
     });
@@ -5197,7 +5197,7 @@ void MainComponent::openProject()
 
 void MainComponent::chooseProjectToOpen()
 {
-    chooser_ = std::make_unique<juce::FileChooser>("Open project", projectFile_, "*.looper");
+    chooser_ = std::make_unique<juce::FileChooser>("Open project", projectFile_, "*.soundsplice");
     const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
 
     chooser_->launchAsync(flags, [this](const juce::FileChooser& fc)

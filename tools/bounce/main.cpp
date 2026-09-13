@@ -148,7 +148,7 @@ int main(int argc, char** argv)
             return true;
         };
 
-        const auto takeFile = tempDir.getNonexistentChildFile("looper-take", ".wav");
+        const auto takeFile = tempDir.getNonexistentChildFile("soundsplice-take", ".wav");
 
         AudioRecorder recorder;
         recorder.prepare(recSampleRate, 1); // mono; no capacity to prepare any more
@@ -205,7 +205,7 @@ int main(int argc, char** argv)
         AudioRecorder longRecorder;
         longRecorder.prepare(kLongRate, 1);
 
-        const auto longFile = tempDir.getNonexistentChildFile("looper-long-take", ".wav");
+        const auto longFile = tempDir.getNonexistentChildFile("soundsplice-long-take", ".wav");
         longRecorder.arm(longFile, writerThread);
 
         // 200 seconds' worth: past the old cap, which would have discarded
@@ -266,7 +266,7 @@ int main(int argc, char** argv)
         // dead until the app restarts.
         AudioRecorder countInRecorder;
         countInRecorder.prepare(recSampleRate, 1);
-        const auto countInFile = tempDir.getNonexistentChildFile("looper-countin", ".wav");
+        const auto countInFile = tempDir.getNonexistentChildFile("soundsplice-countin", ".wav");
         countInRecorder.arm(countInFile, writerThread, (int64_t) blockSize * 2);
 
         countInRecorder.process(channelPtrs, 1, blockSize, true, 0);
@@ -286,7 +286,7 @@ int main(int argc, char** argv)
 
         AudioRecorder abandonedRecorder;
         abandonedRecorder.prepare(recSampleRate, 1);
-        const auto abandonedFile = tempDir.getNonexistentChildFile("looper-abandoned", ".wav");
+        const auto abandonedFile = tempDir.getNonexistentChildFile("soundsplice-abandoned", ".wav");
         abandonedRecorder.arm(abandonedFile, writerThread, (int64_t) blockSize * 8); // a long count-in
         abandonedRecorder.process(channelPtrs, 1, blockSize, true, 0); // still counting in
         abandonedRecorder.disarm();                                    // ...and give up
@@ -666,7 +666,7 @@ int main(int argc, char** argv)
 
         PluginHost host;
         const auto deadMansPedal = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                       .getChildFile("looper_bounce_plugin_scan.tmp");
+                                       .getChildFile("soundsplice_bounce_plugin_scan.tmp");
 
         for (const auto& format : host.availableFormats())
             host.scanFormat(format, deadMansPedal, 24); // capped: probing instantiates each one

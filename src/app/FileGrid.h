@@ -107,7 +107,7 @@ public:
 private:
     static constexpr int kFavColumnId = 6;
     static constexpr const char* kWildcard =
-        "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.m4a;*.mp4;*.mid;*.midi;*.looper";
+        "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.m4a;*.mp4;*.mid;*.midi;*.soundsplice";
 
     bool isFavorite(const juce::File& file) const { return favorites_.count(file.getFullPathName()) > 0; }
 

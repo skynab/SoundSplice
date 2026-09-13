@@ -29,7 +29,7 @@ TEST_CASE("Extensions are matched case-insensitively", "[app][audiofiles]")
 
 TEST_CASE("Non-audio files are refused", "[app][audiofiles]")
 {
-    for (const char* name : { "song.looper", "notes.txt", "cover.png", "take", "take.wav.txt" })
+    for (const char* name : { "song.soundsplice", "notes.txt", "cover.png", "take", "take.wav.txt" })
     {
         INFO(name);
         REQUIRE_FALSE(audiofiles::isImportableAudioFile(juce::String(name)));
@@ -82,7 +82,7 @@ TEST_CASE("importableFilesIn keeps real files, in order", "[app][audiofiles]")
     // Order matters: a multi-file drop lays clips out in sequence, so the
     // result has to follow the order the drag reported.
     auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile("looper-audiofiles-test");
+                         .getChildFile("soundsplice-audiofiles-test");
     directory.deleteRecursively();
     directory.createDirectory();
 
@@ -158,7 +158,7 @@ TEST_CASE("Dropping several files on the mastering pane reports them all", "[gui
     JuceFixture fixture;
 
     auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile("looper-filedrop-test");
+                         .getChildFile("soundsplice-filedrop-test");
     directory.deleteRecursively();
     directory.createDirectory();
 
@@ -193,7 +193,7 @@ TEST_CASE("A multi-file drop on the timeline spaces the clips out", "[gui][filed
     JuceFixture fixture;
 
     auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile("looper-filedrop-timeline");
+                         .getChildFile("soundsplice-filedrop-timeline");
     directory.deleteRecursively();
     directory.createDirectory();
 
@@ -237,7 +237,7 @@ TEST_CASE("Dropping files on the audio editor reports the audio ones", "[gui][fi
     JuceFixture fixture;
 
     auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile("looper-audioeditor-drop");
+                         .getChildFile("soundsplice-audioeditor-drop");
     directory.deleteRecursively();
     directory.createDirectory();
 
@@ -267,7 +267,7 @@ TEST_CASE("Dropping files on the audio editor reports the audio ones", "[gui][fi
 TEST_CASE("A drag description round-trips to its file", "[gui][filedrop]")
 {
     auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile("looper-dragdesc");
+                         .getChildFile("soundsplice-dragdesc");
     directory.deleteRecursively();
     directory.createDirectory();
 
@@ -286,7 +286,7 @@ TEST_CASE("A foreign drag description is not mistaken for a file", "[gui][filedr
     // so a target must not treat every drag as a file drop.
     REQUIRE(audiofiles::fileFromDragDescription(juce::var("Mixer")) == juce::File{});
     REQUIRE(audiofiles::fileFromDragDescription(juce::var()) == juce::File{});
-    REQUIRE(audiofiles::fileFromDragDescription(juce::var("looper:file:/definitely/not/here.wav"))
+    REQUIRE(audiofiles::fileFromDragDescription(juce::var("soundsplice:file:/definitely/not/here.wav"))
             == juce::File{});
 }
 
@@ -298,7 +298,7 @@ TEST_CASE("The timeline accepts a drag from the Files pane", "[gui][filedrop]")
     JuceFixture fixture;
 
     auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile("looper-gridsource");
+                         .getChildFile("soundsplice-gridsource");
     directory.deleteRecursively();
     directory.createDirectory();
     const auto file = directory.getChildFile("take.wav");

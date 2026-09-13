@@ -6,7 +6,7 @@ namespace soundsplice
 {
 /**
     A transient message overlaid on the window: "Recorded: take3.wav",
-    "Could not open project.looper: bad version".
+    "Could not open project.soundsplice: bad version".
 
     Everything the app had to say used to go into the transport pane's clip
     label, which is a poor place for it twice over. It already had a job —

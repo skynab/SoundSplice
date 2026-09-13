@@ -381,7 +381,7 @@ private:
     void browserRootChanged(const juce::File&) override {}
 
     juce::WildcardFileFilter    audioFilter_;
-    juce::TimeSliceThread       fileThread_ { "LooperFileBrowser" };
+    juce::TimeSliceThread       fileThread_ { "SoundSpliceFileBrowser" };
     juce::DirectoryContentsList directoryList_;
     juce::FileTreeComponent     fileTree_;
     FileGrid                    fileGrid_;

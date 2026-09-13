@@ -24,8 +24,8 @@ CPMAddPackage(
   URL_HASH       SHA256=ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
   DOWNLOAD_ONLY  YES)
 
-set(LOOPER_LAME_PACKAGE "lame")
-set(LOOPER_LAME_VERSION "3.100")
+set(SOUNDSPLICE_LAME_PACKAGE "lame")
+set(SOUNDSPLICE_LAME_VERSION "3.100")
 
 set(lame_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/lame-generated")
 configure_file("${CMAKE_CURRENT_LIST_DIR}/lame-config.h.in"

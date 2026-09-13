@@ -1,7 +1,7 @@
 # Unit tests. The real-time primitives have no JUCE dependency, so this target
-# builds and runs fast — configure with -DLOOPER_BUILD_APP=OFF for a quick
+# builds and runs fast — configure with -DSOUNDSPLICE_BUILD_APP=OFF for a quick
 # test-only loop that doesn't pull JUCE.
-add_executable(looper_tests
+add_executable(soundsplice_tests
   rt/SpscRingBufferTests.cpp
   engine/TempoMapTests.cpp
   engine/TransportTests.cpp
@@ -51,26 +51,26 @@ add_executable(looper_tests
   app/DragCommitTests.cpp
   app/ClipLengthRepairTests.cpp)
 
-target_link_libraries(looper_tests
+target_link_libraries(soundsplice_tests
   PRIVATE
-    looper::rt
+    soundsplice::rt
     Catch2::Catch2WithMain)
 
-target_compile_features(looper_tests PRIVATE cxx_std_20)
+target_compile_features(soundsplice_tests PRIVATE cxx_std_20)
 
 # Register each Catch2 TEST_CASE with CTest.
 list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
 include(Catch)
-catch_discover_tests(looper_tests)
+catch_discover_tests(soundsplice_tests)
 
-# GUI smoke tests. Separate from looper_tests because these link JUCE's GUI
+# GUI smoke tests. Separate from soundsplice_tests because these link JUCE's GUI
 # module and construct real Components — the headless suite deliberately does
 # not, so nothing in it can see a Component at all. That gap is how a pedal
 # shipped whose controls were laid out and shown while never being parented,
 # passing every check. These cover the things that go wrong on the way to the
 # screen: parenting, bounds, visibility and hit-testing.
-if (LOOPER_BUILD_APP)
-  add_executable(looper_gui_tests
+if (SOUNDSPLICE_BUILD_APP)
+  add_executable(soundsplice_gui_tests
     gui/ArrangementViewTests.cpp
     gui/ArticulationTests.cpp
     gui/AudioExportTests.cpp
@@ -87,9 +87,9 @@ if (LOOPER_BUILD_APP)
     gui/PaneWiringTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
-  target_include_directories(looper_gui_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+  target_include_directories(soundsplice_gui_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
-  target_compile_definitions(looper_gui_tests PRIVATE
+  target_compile_definitions(soundsplice_gui_tests PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_STANDALONE_APPLICATION=1
@@ -97,20 +97,20 @@ if (LOOPER_BUILD_APP)
     # loop, which JUCE gates behind this. Fine in a test binary.
     JUCE_MODAL_LOOPS_PERMITTED=1)
 
-  # See src/app/CMakeLists.txt for why looper_no_float_equal_warning exists:
+  # See src/app/CMakeLists.txt for why soundsplice_no_float_equal_warning exists:
   # this codebase's exact-float-equality checks (undo/history dedup, a couple
   # of DSP fast paths) aren't the fuzzy-comparison bug -Wfloat-equal exists
   # to catch, and this target links the same model/engine code that trips it.
-  target_link_libraries(looper_gui_tests
+  target_link_libraries(soundsplice_gui_tests
     PRIVATE
-      looper::rt
+      soundsplice::rt
       lame::mp3
       juce::juce_audio_utils
       Catch2::Catch2WithMain
       juce::juce_recommended_config_flags
       juce::juce_recommended_warning_flags
-      looper_no_float_equal_warning)
+      soundsplice_no_float_equal_warning)
 
-  target_compile_features(looper_gui_tests PRIVATE cxx_std_20)
-  catch_discover_tests(looper_gui_tests)
+  target_compile_features(soundsplice_gui_tests PRIVATE cxx_std_20)
+  catch_discover_tests(soundsplice_gui_tests)
 endif()
