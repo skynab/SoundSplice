@@ -114,6 +114,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(! timeSelection_.isEmpty());
             break;
 
+        case commands::findZeroCrossings:
+            info.setActive(timeSelection_.hasTracks());
+            break;
+
         // The last track isn't deletable: a song with none has no pane that
         // can do anything, and no obvious way back.
         case commands::deleteTrack:
@@ -262,6 +266,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::joinClips:       joinArrangementClips(); break;
         case commands::duplicateSelection: duplicateTimeSelection(); break;
         case commands::detachAtSilences: showDetachAtSilencesDialog(); break;
+        case commands::findZeroCrossings: snapTimeSelectionToZeroCrossings(); break;
 
         case commands::deleteClip:
         case commands::deleteSelectedClip:
@@ -438,6 +443,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::joinClips);
         add(commands::duplicateSelection);
         add(commands::detachAtSilences);
+        add(commands::findZeroCrossings);
         menu.addSeparator();
         add(commands::copyTrack);
         add(commands::pasteTrack);

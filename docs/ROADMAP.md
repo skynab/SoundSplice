@@ -82,14 +82,15 @@ all three.
   and import as Audacity label text (Markers menu; `src/model/Markers.h`); clip edges and time
   selections snap to them; click a range to select it on every track, double-click a lane to select
   between the markers either side; drag one along the ruler to move it
-- 🟡 **Snap options**: grid ✅, markers and the playhead ✅, clip edges ✅ (View menu; magnets win over the
+- ✅ **Snap options**: grid, markers and the playhead, clip edges (View menu; magnets win over the
   grid within a few pixels, and a moved clip snaps by whichever end is nearer; `src/app/SnapTargets.h`),
-  and zero crossings ⬜ (surfacing `nearestZeroCrossing`)
+  and zero crossings (Edit > Find Zero Crossings, Z, moves the time selection's edges onto them)
 - 🟡 Edits on the arrangement itself, not just in the editor pane: split at the playhead ✅ (Ctrl+I),
   **join clips** ✅ (Ctrl+J; clips that carry straight on from each other, so a split can be undone
   on its own), ripple delete ✅ (Delete on a time selection), **duplicate selection** ✅
   (`src/model/ArrangementEdits.h`), **detach at silences** ✅ (Edit menu; threshold and minimum
-  length, within the time selection if any; `src/engine/SilenceDetection.h`), and **paste as new clip** ⬜
+  length, within the time selection if any; `src/engine/SilenceDetection.h`), and **paste as new clip** ✅
+  (a time selection's Paste always lands as clips of their own)
 - 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)
 - ⬜ **Envelope tool** (a volume curve drawn per clip) and **draw tool** (redraw samples when zoomed
   to sample level, to fix clicks by hand)

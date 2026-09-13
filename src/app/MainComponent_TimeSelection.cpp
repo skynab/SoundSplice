@@ -1,5 +1,6 @@
 #include "MainComponentInternal.h"
 
+#include "app/ClipTimeMapping.h"
 #include "engine/SilenceDetection.h"
 #include "model/ArrangementEdits.h"
 
@@ -203,6 +204,72 @@ void MainComponent::duplicateTimeSelection()
 
     setTimeSelection(copy);
     refreshAfterArrangementEdit();
+}
+
+/** Moves each edge of the time selection to the nearest zero crossing in the
+    audio under it, so a cut or split there doesn't click.
+
+    One track decides for all of them — the first selected audio track with a
+    clip under that edge — as Audacity's Find Zero Crossings does: moving each
+    track's edge to its own crossing would shear the tracks apart. Only a few
+    hundred samples around each edge are read. */
+void MainComponent::snapTimeSelectionToZeroCrossings()
+{
+    if (! timeSelection_.hasTracks())
+        return;
+
+    const auto& song = history_.current();
+
+    const auto snapEdge = [this, &song](double beat)
+    {
+        for (const auto& track : song.tracks)
+        {
+            if (! timeSelection_.includes(track.id) || ! model::rangeedit::appliesTo(track))
+                continue;
+
+            const auto* clip = app::audioClipAt(track, beat);
+            if (clip == nullptr)
+                continue;
+
+            const juce::File file(clip->audioFile);
+            const auto       sequence = engine::sequencefile::sequenceOf(file);
+            if (! sequence || sequence->sampleRate <= 0.0)
+                continue;
+
+            constexpr int radius = 512;
+            const double  rate   = sequence->sampleRate;
+            const auto    frame  = app::fileFrameAt(*clip, beat, rate, song.bpm);
+            const auto    from   = juce::jmax<std::int64_t>(0, frame - radius - 1);
+
+            juce::AudioBuffer<float> nearby;
+            if (! engine::sequencefile::readRange(file, from, 2 * radius + 2, nearby) || nearby.getNumSamples() == 0)
+                continue;
+
+            const std::vector<float> first(nearby.getReadPointer(0), nearby.getReadPointer(0) + nearby.getNumSamples());
+            const int  local   = engine::audioedits::nearestZeroCrossing(first, (int) (frame - from), radius);
+            const auto snapped = app::beatForFileFrame(*clip, from + local, rate, song.bpm);
+
+            // Kept on the clip it was measured in.
+            return juce::jlimit(clip->startBeats, clip->startBeats + clip->lengthBeats, snapped);
+        }
+
+        return beat; // no audio under this edge: nothing to snap to
+    };
+
+    auto snapped       = timeSelection_;
+    snapped.startBeats = snapEdge(timeSelection_.startBeats);
+    snapped.endBeats   = timeSelection_.isEmpty() ? snapped.startBeats : snapEdge(timeSelection_.endBeats);
+    if (snapped.endBeats < snapped.startBeats)
+        std::swap(snapped.startBeats, snapped.endBeats);
+
+    if (snapped == timeSelection_)
+    {
+        showStatus("The selection is already on zero crossings, or has no audio under it");
+        return;
+    }
+
+    setTimeSelection(snapped);
+    showStatus("Moved the selection to zero crossings");
 }
 
 /** Asks how quiet, and for how long, counts as silence. */

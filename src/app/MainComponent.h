@@ -278,6 +278,7 @@ private:
     void                   duplicateTimeSelection();
     void                   showDetachAtSilencesDialog();
     void                   detachAtSilences(float thresholdDb, double minSilenceSeconds);
+    void                   snapTimeSelectionToZeroCrossings();
 
     void                   cutAudioSelection();
     void                   copyAudioSelection();

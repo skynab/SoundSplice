@@ -79,6 +79,7 @@ inline const juce::KeyPress deleteClip = detail::with(juce::KeyPress::backspaceK
 // Audacity's keys for these, so hands that know it already know them.
 inline const juce::KeyPress splitAtPlayhead = detail::with('I', detail::cmd);
 inline const juce::KeyPress joinClips       = detail::with('J', detail::cmd);
+inline const juce::KeyPress findZeroCrossings = detail::with('Z', detail::noMods);
 
 // Track-level copy/paste sits on the alt variants: cmd+C/V are notes and
 // cmd+shift+C/V are clips, so tracks take the remaining pair rather than
@@ -147,6 +148,7 @@ inline std::vector<NamedShortcut> all()
         { "Delete Clip",     deleteClip },
         { "Split at Playhead", splitAtPlayhead },
         { "Join Clips",      joinClips },
+        { "Find Zero Crossings", findZeroCrossings },
 
         { "Copy Track",      copyTrack },
         { "Paste Track",     pasteTrack },

@@ -60,6 +60,7 @@ add_executable(soundsplice_tests
   app/AutomationGeometryTests.cpp
   app/DragCommitTests.cpp
   app/ClipWindowTests.cpp
+  app/ClipTimeMappingTests.cpp
   app/AutosaveTests.cpp
   app/TimeFormatTests.cpp
   app/SnapTargetsTests.cpp)
