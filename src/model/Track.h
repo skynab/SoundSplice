@@ -91,17 +91,6 @@ struct Track
     // model::deserialize), so they keep sounding the same.
     std::vector<EffectSlot> effectChain;
 
-    /** The first slot of @p kind, or nullptr. The engine still applies one
-        built-in of each kind (a variable-length chain is stage 2 of §20), so
-        this is how it finds them. */
-    const EffectSlot* firstEffect(EffectKind kind) const
-    {
-        for (const auto& slot : effectChain)
-            if (slot.kind == kind)
-                return &slot;
-        return nullptr;
-    }
-
     bool operator==(const Track&) const = default;
 
     /** The lane driving @p param, or nullptr if that parameter isn't

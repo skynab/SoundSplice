@@ -35,6 +35,7 @@ add_executable(soundsplice_tests
   model/HistoryTests.cpp
   model/SongTests.cpp
   model/SerializationTests.cpp
+  model/EffectParamsTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp

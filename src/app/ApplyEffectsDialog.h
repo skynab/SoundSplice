@@ -39,11 +39,7 @@ public:
 
         chainPanel_.onBuiltInAdded = [this](model::EffectKind kind)
         {
-            model::EffectSlot slot;
-            slot.kind    = kind;
-            slot.enabled = true;
-            setEnabledFlagForKind(slot);
-            chain_.push_back(slot);
+            chain_.push_back(model::makeEffectSlot(kind));
             refresh();
         };
 
@@ -121,28 +117,6 @@ public:
 private:
     static constexpr int kButtonRowHeight = 30;
     static constexpr int kHintHeight      = 18;
-
-    /** EffectChainPanel drives `slot.<kind>.enabled` from the per-kind
-        struct, not from `slot.enabled` — the two are set together everywhere
-        else in this app (see GenrePresets and the tone tables), and a slot
-        added with only the outer flag set would render silently as a no-op. */
-    static void setEnabledFlagForKind(model::EffectSlot& slot)
-    {
-        switch (slot.kind)
-        {
-            case model::EffectKind::Filter:     slot.filter.enabled = true; break;
-            case model::EffectKind::Delay:      slot.delay.enabled = true; break;
-            case model::EffectKind::Reverb:     slot.reverb.enabled = true; break;
-            case model::EffectKind::Drive:      slot.drive.enabled = true; break;
-            case model::EffectKind::Compressor: slot.compressor.enabled = true; break;
-            case model::EffectKind::Tremolo:    slot.tremolo.enabled = true; break;
-            case model::EffectKind::Chorus:     slot.chorus.enabled = true; break;
-            case model::EffectKind::Wobble:     slot.wobble.enabled = true; break;
-            case model::EffectKind::Gate:       slot.gate.enabled = true; break;
-            case model::EffectKind::Eq:         slot.eqPedal.enabled = true; break;
-            case model::EffectKind::Plugin:     break; // no flag of its own
-        }
-    }
 
     void refresh() { chainPanel_.setChain(chain_); }
 

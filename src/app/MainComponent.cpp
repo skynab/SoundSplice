@@ -1519,10 +1519,8 @@ void MainComponent::addEffectSlot(model::EffectKind kind, const model::PluginRef
     const int index = selectedTrackIndex_;
     history_.edit("Add effect", [index, kind, &plugin](model::Song& s)
     {
-        model::EffectSlot slot;
-        slot.kind    = kind;
-        slot.enabled = true; // added because you want to hear it
-        slot.plugin  = plugin;
+        auto slot   = model::makeEffectSlot(kind);
+        slot.plugin = plugin;
         s.tracks[(size_t) index].effectChain.push_back(std::move(slot));
     });
 
