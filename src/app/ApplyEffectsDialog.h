@@ -43,6 +43,31 @@ public:
         chainPanel_.setUserPresets(std::move(presets));
     }
 
+    /** Fired by a plugin slot's Open Plugin Editor, with the slot as it
+        stands. This chain isn't playing anywhere, so the owner opens an
+        editor on an instance of its own and hands the edited settings back
+        through setPluginState. */
+    std::function<void(int slotIndex, const model::EffectSlot& slot)> onPluginEditorRequested;
+
+    /** Fired just before a slot is removed or moved, while slot indexes still
+        mean what they did, so the owner can hand back any plugin editor's
+        settings and close it. */
+    std::function<void()> onChainAboutToChange;
+
+    /** Stores a plugin slot's edited state, as model::PluginRef::state. */
+    void setPluginState(int slotIndex, const std::string& state)
+    {
+        if (slotIndex >= 0 && slotIndex < (int) chain_.size()
+            && chain_[(size_t) slotIndex].kind == model::EffectKind::Plugin)
+            chain_[(size_t) slotIndex].plugin.state = state;
+    }
+
+    /** The scanned plugins its Add menu offers. */
+    void setAvailablePlugins(std::vector<engine::PluginEntry> plugins)
+    {
+        chainPanel_.setAvailablePlugins(std::move(plugins));
+    }
+
     /** Fired by Preview, with the chain to hear. The owner renders and plays
         it, or stops a preview already playing. */
     std::function<void(const std::vector<model::EffectSlot>&)> onPreview;
@@ -70,6 +95,9 @@ public:
 
         chainPanel_.onSlotRemoved = [this](int index)
         {
+            if (onChainAboutToChange)
+                onChainAboutToChange();
+
             if (index >= 0 && index < (int) chain_.size())
                 chain_.erase(chain_.begin() + index);
             refresh();
@@ -77,6 +105,9 @@ public:
 
         chainPanel_.onSlotMoved = [this](int index, int delta)
         {
+            if (onChainAboutToChange)
+                onChainAboutToChange();
+
             const int target = index + delta;
             if (index >= 0 && index < (int) chain_.size()
                 && target >= 0 && target < (int) chain_.size())
@@ -101,11 +132,25 @@ public:
         // control nobody listens to stays distinguishable from one nobody
         // remembered to wire (see tests/gui/PaneAudit.h).
         chainPanel_.onSlotSelected          = [](int) {};
-        chainPanel_.onPluginEditorRequested = [](int) {};
+        chainPanel_.onPluginEditorRequested = [this](int index)
+        {
+            if (index >= 0 && index < (int) chain_.size() && onPluginEditorRequested)
+                onPluginEditorRequested(index, chain_[(size_t) index]);
+        };
         chainPanel_.onScanRequested         = [] {};
         chainPanel_.onSlotParamsDragStart   = [](int) {};
         chainPanel_.onSlotParamsDragEnd     = [](int) {};
-        chainPanel_.onPluginAdded           = [](const engine::PluginEntry&) {};
+        chainPanel_.onPluginAdded = [this](const engine::PluginEntry& entry)
+        {
+            auto slot = model::makeEffectSlot(model::EffectKind::Plugin);
+            slot.plugin.format     = entry.format == "VST3"      ? model::PluginFormat::VST3
+                                   : entry.format == "AudioUnit" ? model::PluginFormat::AudioUnit
+                                                                 : model::PluginFormat::Unknown;
+            slot.plugin.identifier = entry.identifier;
+            slot.plugin.name       = entry.name;
+            chain_.push_back(slot);
+            refresh();
+        };
 
         chainPanel_.onPresetSaveRequested = [this](const model::EffectSlot& slot, int)
         {

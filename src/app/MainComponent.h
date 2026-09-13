@@ -269,6 +269,9 @@ private:
     void                   deleteUserEffectPreset(const std::string& effectId, const std::string& name);
     void                   storeUserEffectPresets();
     void                   previewEffectsOnSelection(const std::vector<model::EffectSlot>& chain);
+    void                   openScratchPluginEditor(int slotIndex, const model::EffectSlot& slot);
+    std::vector<model::EffectSlot> withScratchPluginStates(std::vector<model::EffectSlot> chain) const;
+    void                   closeScratchPluginEditors();
     void                   showSpeedPitchDialog();
     void                   analyseSelection();
     void                   applySpeedAndPitch(double speedFactor, double semitones);
@@ -607,6 +610,18 @@ private:
     // open, so a preset saved in it appears in it straight away.
     std::vector<model::UserEffectPreset>              userEffectPresets_;
     juce::Component::SafePointer<ApplyEffectsDialog> applyEffectsDialog_;
+
+    // Plugin editors opened from that dialog, each on an instance of its own
+    // (see openScratchPluginEditor). The window is declared after the
+    // instance, so it is destroyed first: an editor must never outlive the
+    // plugin it draws.
+    struct ScratchPluginEditor
+    {
+        int                                        slotIndex = -1;
+        std::unique_ptr<juce::AudioPluginInstance> instance;
+        std::unique_ptr<PluginEditorWindow>        window;
+    };
+    std::vector<std::unique_ptr<ScratchPluginEditor>> scratchPluginEditors_;
 
     CallbackComponent                  arrangeTab_;
     juce::Viewport                     arrangementViewport_;

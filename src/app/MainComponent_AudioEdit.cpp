@@ -547,6 +547,12 @@ void MainComponent::showApplyEffectsDialog()
     dialog->setSize(520, 460);
 
     dialog->setUserPresets(userEffectPresets_);
+    dialog->setAvailablePlugins(engine_.pluginHost().knownPlugins());
+    dialog->onPluginEditorRequested = [this](int slotIndex, const model::EffectSlot& slot)
+    {
+        openScratchPluginEditor(slotIndex, slot);
+    };
+    dialog->onChainAboutToChange = [this] { closeScratchPluginEditors(); };
     dialog->onPresetSaveRequested = [this](const model::EffectSlot& slot) { promptToSaveEffectPreset(slot); };
     dialog->onUserPresetDeleted   = [this](const std::string& effectId, const std::string& name)
     {
@@ -558,7 +564,10 @@ void MainComponent::showApplyEffectsDialog()
     dialog->onDismissed = [safe = juce::Component::SafePointer<MainComponent>(this)]
     {
         if (safe != nullptr)
+        {
             safe->engine_.stopAudition();
+            safe->closeScratchPluginEditors();
+        }
     };
 
     auto* raw = dialog.get();
@@ -597,10 +606,9 @@ void MainComponent::previewEffectsOnSelection(const std::vector<model::EffectSlo
         return;
     }
 
-    const auto [builtIns, plugins] = renderableEffectCounts(chain);
-    if (builtIns == 0)
+    if (enabledEffectCount(chain) == 0)
     {
-        showError(plugins > 0 ? "Plugins can't be previewed on a selection yet" : "Add an effect first");
+        showError("Add an effect first");
         return;
     }
 
@@ -621,7 +629,14 @@ void MainComponent::previewEffectsOnSelection(const std::vector<model::EffectSlo
         std::copy(channels[(size_t) ch].begin() + from, channels[(size_t) ch].begin() + from + count,
                   block.getWritePointer(ch));
 
-    renderEffectChain(chain, block, sampleRate, history_.current().bpm);
+    showBusy("Rendering preview...");
+    if (const auto result = renderEffectChain(withScratchPluginStates(chain), block, sampleRate,
+                                              history_.current().bpm, engine_.pluginHost());
+        ! result.ok)
+    {
+        showError(result.error);
+        return;
+    }
 
     // A few milliseconds of fade at each end, so a preview that starts or
     // ends mid-waveform doesn't click.
@@ -640,59 +655,64 @@ void MainComponent::previewEffectsOnSelection(const std::vector<model::EffectSlo
 
 /** Renders @p chain into the selected range.
 
-    The range is processed as its own buffer and written back over the
-    original, with a short crossfade at each boundary. Without the crossfade
-    an effect that changes level — any compressor, or a reverb's wet mix —
-    produces a step at the edges of the selection, heard as a click exactly
-    where the edit begins and ends. A few milliseconds of blend removes it
-    and is far too short to be heard as a fade.
+    Rendered first, over a copy of the selection, and only then written: a
+    plugin that won't load stops the whole apply before anything reaches
+    disk, rather than leaving an undo step that changed nothing.
 
-    Plugin slots are skipped: instantiating one needs the plugin host, which
-    lives in the engine, and a half-rendered chain would be worse than an
-    honest refusal. */
+    The result is blended back over the original with a short crossfade at
+    each boundary. Without it an effect that changes level — any compressor,
+    or a reverb's wet mix — produces a step at the edges of the selection,
+    heard as a click exactly where the edit begins and ends. A few
+    milliseconds of blend removes it and is far too short to be heard as a
+    fade. */
 void MainComponent::applyEffectsToSelection(const std::vector<model::EffectSlot>& chain)
 {
-    const auto range = audioEditor_.selection();
-    if (range.isEmpty())
+    if (audioEditor_.selection().isEmpty())
         return;
 
-    const auto [builtIns, plugins] = renderableEffectCounts(chain);
-
-    if (builtIns == 0)
+    if (enabledEffectCount(chain) == 0)
     {
-        showError(plugins > 0 ? "Plugins can't be rendered into a selection yet"
-                              : "Add an effect first");
+        showError("Add an effect first");
         return;
     }
 
-    const double bpm = history_.current().bpm;
+    int    from = 0, to = 0, length = 0;
+    double sampleRate = 0.0;
+    std::vector<std::vector<float>> channels;
+    if (! selectedSampleRange(from, to, length, sampleRate, channels, false) || to <= from)
+    {
+        showError("Select part of the clip first");
+        return;
+    }
+
+    const int numChannels = (int) channels.size();
+    juce::AudioBuffer<float> rendered(numChannels, to - from);
+    for (int ch = 0; ch < numChannels; ++ch)
+        std::copy(channels[(size_t) ch].begin() + from, channels[(size_t) ch].begin() + to,
+                  rendered.getWritePointer(ch));
+
+    showBusy("Applying effects...");
+    if (const auto result = renderEffectChain(withScratchPluginStates(chain), rendered, sampleRate,
+                                              history_.current().bpm, engine_.pluginHost());
+        ! result.ok)
+    {
+        showError(result.error);
+        return;
+    }
 
     const bool applied = applyDestructiveEditToAllChannels("Apply effects",
-        [&chain, range, bpm](std::vector<std::vector<float>>& channels, double sampleRate)
+        [&rendered, from](std::vector<std::vector<float>>& clipChannels, double clipSampleRate)
     {
-        const int total = (int) channels[0].size();
-        const int from  = juce::jlimit(0, total, (int) std::llround(range.startSeconds * sampleRate));
-        const int to    = juce::jlimit(from, total, (int) std::llround(range.endSeconds * sampleRate));
-        const int count = to - from;
+        const int count = juce::jmin(rendered.getNumSamples(), (int) clipChannels[0].size() - from);
         if (count <= 0)
             return;
 
-        const int numChannels = (int) channels.size();
-
-        juce::AudioBuffer<float> block(numChannels, count);
-        for (int ch = 0; ch < numChannels; ++ch)
-            std::copy(channels[(size_t) ch].begin() + from,
-                      channels[(size_t) ch].begin() + to,
-                      block.getWritePointer(ch));
-
-        renderEffectChain(chain, block, sampleRate, bpm);
-
         // Blend back over the original at both edges.
-        const int fade = juce::jmin(count / 2, (int) std::llround(sampleRate * kEffectEdgeFadeSeconds));
-        for (int ch = 0; ch < numChannels; ++ch)
+        const int fade = juce::jmin(count / 2, (int) std::llround(clipSampleRate * kEffectEdgeFadeSeconds));
+        for (int ch = 0; ch < (int) clipChannels.size(); ++ch)
         {
-            auto*       destination = channels[(size_t) ch].data() + from;
-            const auto* processed   = block.getReadPointer(ch);
+            auto*       destination = clipChannels[(size_t) ch].data() + from;
+            const auto* processed   = rendered.getReadPointer(juce::jmin(ch, rendered.getNumChannels() - 1));
 
             for (int i = 0; i < count; ++i)
             {
@@ -708,7 +728,83 @@ void MainComponent::applyEffectsToSelection(const std::vector<model::EffectSlot>
     });
 
     if (applied)
-        showStatus(plugins > 0 ? "Applied effects (plugins skipped)" : "Applied effects");
+        showStatus("Applied effects");
+}
+
+/** Opens an editor on a plugin slot of the Apply Effects dialog. That chain
+    isn't playing on any track, so the editor gets an instance of its own,
+    with the slot's state restored; its settings go back to the dialog when
+    the window closes, and are read from it directly before a preview or an
+    apply, so an editor left open still counts. */
+void MainComponent::openScratchPluginEditor(int slotIndex, const model::EffectSlot& slot)
+{
+    for (auto& editor : scratchPluginEditors_)
+    {
+        if (editor->slotIndex == slotIndex)
+        {
+            editor->window->toFront(true);
+            return;
+        }
+    }
+
+    std::string  error;
+    const double rate     = engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0;
+    auto         instance = engine_.pluginHost().createInstance(pluginFormatName(slot.plugin.format),
+                                                                slot.plugin.identifier, rate, 512, &error);
+    if (instance == nullptr)
+    {
+        showError("That plugin isn't loaded on this machine");
+        return;
+    }
+
+    juce::MemoryBlock state;
+    if (! slot.plugin.state.empty() && state.fromBase64Encoding(juce::String(slot.plugin.state)) && state.getSize() > 0)
+        instance->setStateInformation(state.getData(), (int) state.getSize());
+
+    auto editor       = std::make_unique<ScratchPluginEditor>();
+    editor->slotIndex = slotIndex;
+    editor->instance  = std::move(instance);
+    editor->window    = std::make_unique<PluginEditorWindow>(editor->instance->getName(), *editor->instance);
+    editor->window->onCloseRequested = [this](PluginEditorWindow* window)
+    {
+        for (auto it = scratchPluginEditors_.begin(); it != scratchPluginEditors_.end(); ++it)
+        {
+            if ((*it)->window.get() != window)
+                continue;
+
+            if (applyEffectsDialog_ != nullptr)
+                applyEffectsDialog_->setPluginState((*it)->slotIndex, pluginStateOf(*(*it)->instance));
+
+            scratchPluginEditors_.erase(it);
+            return;
+        }
+    };
+
+    scratchPluginEditors_.push_back(std::move(editor));
+}
+
+/** @p chain with the current settings of any plugin being edited from the
+    Apply Effects dialog. */
+std::vector<model::EffectSlot> MainComponent::withScratchPluginStates(std::vector<model::EffectSlot> chain) const
+{
+    for (const auto& editor : scratchPluginEditors_)
+        if (editor->slotIndex >= 0 && editor->slotIndex < (int) chain.size()
+            && chain[(size_t) editor->slotIndex].kind == model::EffectKind::Plugin)
+            chain[(size_t) editor->slotIndex].plugin.state = pluginStateOf(*editor->instance);
+
+    return chain;
+}
+
+/** Closes the dialog's plugin editors, handing their settings back first.
+    Called before its chain is reordered or shortened, while each editor's
+    slot index still names its slot, and when the dialog goes away. */
+void MainComponent::closeScratchPluginEditors()
+{
+    if (applyEffectsDialog_ != nullptr)
+        for (const auto& editor : scratchPluginEditors_)
+            applyEffectsDialog_->setPluginState(editor->slotIndex, pluginStateOf(*editor->instance));
+
+    scratchPluginEditors_.clear();
 }
 
 /** Measures the frequency content of the audio editor's selection.

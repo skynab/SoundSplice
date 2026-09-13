@@ -169,39 +169,108 @@ inline engine::TrackAutomation toTrackAutomation(const model::Track& track)
     return curves;
 }
 
-/** How many of @p chain's slots are enabled built-ins, and how many are
-    enabled plugins, which can't be rendered offline yet. */
-inline std::pair<int, int> renderableEffectCounts(const std::vector<model::EffectSlot>& chain)
+/** How many of @p chain's slots are enabled, built-ins and plugins alike:
+    the ones rendering it would run. */
+inline int enabledEffectCount(const std::vector<model::EffectSlot>& chain)
 {
-    int builtIns = 0, plugins = 0;
+    return (int) std::count_if(chain.begin(), chain.end(), [](const auto& slot) { return slot.enabled; });
+}
+
+/** A plugin instance's own state, base64'd the way model::PluginRef stores it. */
+inline std::string pluginStateOf(juce::AudioPluginInstance& instance)
+{
+    juce::MemoryBlock block;
+    instance.getStateInformation(block);
+    return block.toBase64Encoding().toStdString();
+}
+
+/** What rendering a chain came to. On failure nothing was rendered, and
+    @c error says which plugin wouldn't load. */
+struct EffectRenderResult
+{
+    bool         ok = true;
+    juce::String error;
+};
+
+/** Runs @p chain's enabled slots, built-ins and hosted plugins, over
+    @p block in place. Shared by Apply and Preview, so a preview is exactly
+    what Apply will write.
+
+    Each plugin slot gets its own instance, with the slot's saved state
+    restored, separate from any copy playing live on a track. The chain runs
+    in fixed-size blocks, because a plugin prepared for a block size can't be
+    handed a whole selection in one call. The chain's reported latency is
+    rendered past the end and read back into place, so a plugin that delays
+    its output doesn't shift the audio late.
+
+    All-or-nothing: if any plugin can't be loaded, nothing is rendered. Half a
+    chain applied to the audio would be worse than an honest refusal. */
+inline EffectRenderResult renderEffectChain(const std::vector<model::EffectSlot>& chain,
+                                            juce::AudioBuffer<float>& block, double sampleRate, double bpm,
+                                            engine::PluginHost& plugins)
+{
+    constexpr int kRenderBlockSize = 512;
+
+    engine::EffectChain built;
     for (const auto& slot : chain)
     {
         if (! slot.enabled)
             continue;
-        (slot.kind == model::EffectKind::Plugin ? plugins : builtIns) += 1;
-    }
-    return { builtIns, plugins };
-}
 
-/** Runs @p chain's enabled built-ins over @p block, in place. Shared by
-    Apply and Preview, so a preview is exactly what Apply will write. Plugin
-    slots are skipped — see applyEffectsToSelection. */
-inline void renderEffectChain(const std::vector<model::EffectSlot>& chain, juce::AudioBuffer<float>& block,
-                              double sampleRate, double bpm)
-{
-    engine::EffectChain built;
-    for (const auto& slot : chain)
-    {
-        if (! slot.enabled || slot.kind == model::EffectKind::Plugin)
+        if (slot.kind == model::EffectKind::Plugin)
+        {
+            std::string error;
+            auto instance = plugins.createInstance(pluginFormatName(slot.plugin.format), slot.plugin.identifier,
+                                                   sampleRate, kRenderBlockSize, &error);
+            if (instance == nullptr)
+            {
+                const juce::String name = slot.plugin.name.empty() ? juce::String("A plugin")
+                                                                   : "\"" + juce::String(slot.plugin.name) + "\"";
+                return { false, name + " couldn't be loaded"
+                                    + (error.empty() ? juce::String() : ": " + juce::String(error)) };
+            }
+
+            auto node = std::make_unique<engine::PluginNode>(std::move(instance));
+            node->restoreState(slot.plugin.state);
+            node->setEnabled(true);
+            built.add(std::move(node));
             continue;
+        }
 
         if (auto node = engine::makeConfiguredNode(slot))
             built.add(std::move(node));
     }
 
-    built.prepare(sampleRate, block.getNumSamples());
+    built.prepare(sampleRate, kRenderBlockSize);
     built.setBpm(bpm); // the wobble pedal is tempo-locked
-    built.process(block);
+
+    // Only known once prepared: a plugin may report a different latency for
+    // a different rate or block size.
+    int latency = 0;
+    for (size_t i = 0; i < built.size(); ++i)
+        if (auto* pluginNode = dynamic_cast<engine::PluginNode*>(built.nodeAt(i)))
+            if (auto* instance = pluginNode->instance())
+                latency += juce::jmax(0, instance->getLatencySamples());
+
+    const int numChannels = block.getNumChannels();
+    const int length      = block.getNumSamples();
+
+    juce::AudioBuffer<float> work(numChannels, length + latency);
+    work.clear();
+    for (int ch = 0; ch < numChannels; ++ch)
+        work.copyFrom(ch, 0, block, ch, 0, length);
+
+    for (int start = 0; start < work.getNumSamples(); start += kRenderBlockSize)
+    {
+        const int count = juce::jmin(kRenderBlockSize, work.getNumSamples() - start);
+        juce::AudioBuffer<float> view(work.getArrayOfWritePointers(), numChannels, start, count);
+        built.process(view);
+    }
+
+    for (int ch = 0; ch < numChannels; ++ch)
+        block.copyFrom(ch, 0, work, ch, latency, length);
+
+    return {};
 }
 
 /** How much of a selection Preview plays: enough to judge an effect by,
