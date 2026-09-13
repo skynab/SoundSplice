@@ -77,6 +77,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
         case commands::deleteAudio:
         case commands::silenceAudio:
+        case commands::applyEffects:
             info.setActive(hasSelection || ! timeSelection_.isEmpty());
             break;
 
@@ -259,6 +260,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::fadeIn:          fadeInAudioSelection(); break;
         case commands::fadeOut:         fadeOutAudioSelection(); break;
         case commands::reverseAudio:    reverseAudioSelection(); break;
+        case commands::applyEffects:    showApplyEffectsDialog(); break;
         case commands::copyClip:        copyClip(); break;
         case commands::pasteClip:       pasteClip(); break;
         case commands::duplicateClip:   duplicateClip(); break;
@@ -434,6 +436,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fadeIn);
         add(commands::fadeOut);
         add(commands::reverseAudio);
+        add(commands::applyEffects);
         menu.addSeparator();
         add(commands::copyClip);
         add(commands::pasteClip);

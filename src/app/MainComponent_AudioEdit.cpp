@@ -549,12 +549,14 @@ void MainComponent::splitClipAtSelection()
 /** Offers a scratch effect chain to render into the selection. */
 void MainComponent::showApplyEffectsDialog()
 {
-    if (selectedAudioClip() == nullptr)
-        return;
+    // A time selection in the arrangement first, as the edit commands do;
+    // otherwise the audio editor's selection.
+    const bool onTimeSelection = ! timeSelection_.isEmpty()
+                              && model::rangeedit::anyTrackApplies(history_.current(), timeSelection_);
 
-    if (audioEditor_.selection().isEmpty())
+    if (! onTimeSelection && (selectedAudioClip() == nullptr || audioEditor_.selection().isEmpty()))
     {
-        showError("Select part of the clip first");
+        showError("Select part of a clip in the audio editor, or time across audio tracks, first");
         return;
     }
 
@@ -575,7 +577,13 @@ void MainComponent::showApplyEffectsDialog()
     };
     applyEffectsDialog_ = dialog.get();
 
-    dialog->onPreview   = [this](const std::vector<model::EffectSlot>& chain) { previewEffectsOnSelection(chain); };
+    dialog->onPreview   = [this, onTimeSelection](const std::vector<model::EffectSlot>& chain)
+    {
+        if (onTimeSelection)
+            previewEffectsOnTimeSelection(chain);
+        else
+            previewEffectsOnSelection(chain);
+    };
     dialog->onDismissed = [safe = juce::Component::SafePointer<MainComponent>(this)]
     {
         if (safe != nullptr)
@@ -586,10 +594,13 @@ void MainComponent::showApplyEffectsDialog()
     };
 
     auto* raw = dialog.get();
-    raw->onApply = [this, raw](const std::vector<model::EffectSlot>& chain)
+    raw->onApply = [this, raw, onTimeSelection](const std::vector<model::EffectSlot>& chain)
     {
         engine_.stopAudition();
-        applyEffectsToSelection(chain);
+        if (onTimeSelection)
+            applyEffectsToTimeSelection(chain);
+        else
+            applyEffectsToSelection(chain);
         if (auto* window = raw->findParentComponentOfClass<juce::DialogWindow>())
             window->exitModalState(0);
     };
@@ -1145,6 +1156,60 @@ bool MainComponent::editWholeClip(
     return replaceClipAudio(label, audio, 0, audio.window.length(), channels);
 }
 
+/** Writes a new sequence file that plays @p sequence (the audio of
+    @p source) with frames [@p from, @p to) replaced by @p replacement, which
+    may be any length: new blocks for the replacement, and the rest shared
+    with what's already there. Returns the new file, or nothing, having said
+    why, if it couldn't be written. Nothing already on disk is touched.
+
+    Channels can differ in length only if a transform is inconsistent, which
+    is a bug — but reading past one would be a crash, so each is padded or cut
+    to the first channel's length. */
+std::optional<juce::File> MainComponent::writeEditedSequence(const juce::File& source,
+                                                             const engine::sequence::SampleSequence& sequence,
+                                                             std::int64_t from, std::int64_t to,
+                                                             const std::vector<std::vector<float>>& replacement)
+{
+    const int newFrames   = replacement.empty() ? 0 : (int) replacement[0].size();
+    const int numChannels = juce::jmax(1, sequence.numChannels);
+
+    juce::AudioBuffer<float> buffer(numChannels, newFrames);
+    buffer.clear();
+    for (int ch = 0; ch < numChannels && newFrames > 0; ++ch)
+    {
+        const auto& channel = replacement[(size_t) juce::jmin(ch, (int) replacement.size() - 1)];
+        std::copy_n(channel.data(), juce::jmin(newFrames, (int) channel.size()), buffer.getWritePointer(ch));
+    }
+
+    const auto folder = audioDirectoryFor(editsDirectory());
+    const auto stem   = source.getFileNameWithoutExtension();
+
+    std::vector<engine::sequence::Span> blocks;
+    if (newFrames > 0)
+    {
+        auto written = engine::sequencefile::writeBlocks(folder, stem, buffer, sequence.sampleRate);
+        if (! written)
+        {
+            showError("Could not write the edited audio into " + folder.getFullPathName());
+            return std::nullopt;
+        }
+        blocks = std::move(*written);
+    }
+
+    const auto edited      = engine::sequence::replaced(sequence, from, to, blocks);
+    const auto destination = folder.getNonexistentChildFile(stem, engine::sequencefile::kExtension);
+    if (! engine::sequencefile::save(destination, edited))
+    {
+        for (const auto& block : blocks)
+            engine::sequencefile::fileFromPath(block.file).deleteFile();
+
+        showError("Could not write " + destination.getFileName());
+        return std::nullopt;
+    }
+
+    return destination;
+}
+
 /** The one path every destructive edit takes.
 
     Nothing already on disk is rewritten. The replacement goes into new block
@@ -1176,44 +1241,12 @@ bool MainComponent::replaceClipAudio(const juce::String& label, const ClipAudio&
         return false;
     }
 
-    // Channels can differ in length only if a transform is inconsistent,
-    // which is a bug — but reading past one would be a crash, so each is
-    // padded or cut to the first channel's length.
-    const int numChannels = juce::jmax(1, audio.sequence.numChannels);
-    juce::AudioBuffer<float> buffer(numChannels, newFrames);
-    buffer.clear();
-    for (int ch = 0; ch < numChannels && newFrames > 0; ++ch)
-    {
-        const auto& source = replacement[(size_t) juce::jmin(ch, (int) replacement.size() - 1)];
-        std::copy_n(source.data(), juce::jmin(newFrames, (int) source.size()), buffer.getWritePointer(ch));
-    }
-
-    const auto folder = audioDirectoryFor(editsDirectory());
-    const auto stem   = audio.file.getFileNameWithoutExtension();
-
-    std::vector<engine::sequence::Span> blocks;
-    if (newFrames > 0)
-    {
-        auto written = engine::sequencefile::writeBlocks(folder, stem, buffer, sampleRate);
-        if (! written)
-        {
-            showError("Could not write the edited audio into " + folder.getFullPathName());
-            return false;
-        }
-        blocks = std::move(*written);
-    }
-
-    const auto edited      = engine::sequence::replaced(audio.sequence, (std::int64_t) audio.window.start + from,
-                                                        (std::int64_t) audio.window.start + to, blocks);
-    const auto destination = folder.getNonexistentChildFile(stem, engine::sequencefile::kExtension);
-    if (! engine::sequencefile::save(destination, edited))
-    {
-        for (const auto& block : blocks)
-            engine::sequencefile::fileFromPath(block.file).deleteFile();
-
-        showError("Could not write " + destination.getFileName());
+    const auto written = writeEditedSequence(audio.file, audio.sequence, (std::int64_t) audio.window.start + from,
+                                             (std::int64_t) audio.window.start + to, replacement);
+    if (! written)
         return false;
-    }
+
+    const auto destination = *written;
 
     // The clip's window takes the edited audio's new duration. Its offset
     // doesn't move, because nothing before the window changed.

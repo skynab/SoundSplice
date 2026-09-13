@@ -272,6 +272,251 @@ void MainComponent::snapTimeSelectionToZeroCrossings()
     showStatus("Moved the selection to zero crossings");
 }
 
+namespace
+{
+    /** One clip's share of a time selection: which frames of its audio the
+        selection covers. */
+    struct ClipRegion
+    {
+        int                              trackId = 0;
+        int                              clipId  = 0;
+        juce::File                       file;
+        engine::sequence::SampleSequence sequence;
+        std::int64_t                     from = 0; // frames of the clip's audio
+        std::int64_t                     to   = 0;
+    };
+
+    /** The audio under @p selection, clip by clip, on its audio tracks. */
+    std::vector<ClipRegion> clipRegionsIn(const model::Song& song, const model::TimeSelection& selection)
+    {
+        std::vector<ClipRegion> regions;
+        if (selection.isEmpty() || song.bpm <= 0.0)
+            return regions;
+
+        const double secondsPerBeat = 60.0 / song.bpm;
+
+        for (const auto& track : song.tracks)
+        {
+            if (! selection.includes(track.id) || ! model::rangeedit::appliesTo(track))
+                continue;
+
+            for (const auto& clip : track.clips)
+            {
+                if (clip.type != model::ClipType::Audio || clip.audioFile.empty()
+                    || clip.startBeats + clip.lengthBeats <= selection.startBeats
+                    || clip.startBeats >= selection.endBeats)
+                    continue;
+
+                const juce::File file(clip.audioFile);
+                auto             sequence = engine::sequencefile::sequenceOf(file);
+                if (! sequence || sequence->sampleRate <= 0.0)
+                    continue;
+
+                const double rate   = sequence->sampleRate;
+                const auto   window = clipSampleWindow(clip,
+                                                       (int) juce::jmin<std::int64_t>(sequence->length(),
+                                                                                      std::numeric_limits<int>::max()),
+                                                       rate, song.bpm);
+                if (window.isEmpty())
+                    continue;
+
+                const auto length = (std::int64_t) window.length();
+                const auto from   = juce::jlimit<std::int64_t>(0, length, std::llround(
+                    juce::jmax(0.0, selection.startBeats - clip.startBeats) * secondsPerBeat * rate));
+                const auto to     = juce::jlimit<std::int64_t>(from, length, std::llround(
+                    (selection.endBeats - clip.startBeats) * secondsPerBeat * rate));
+                if (to <= from)
+                    continue;
+
+                regions.push_back({ track.id, clip.id, file, std::move(*sequence),
+                                    (std::int64_t) window.start + from, (std::int64_t) window.start + to });
+            }
+        }
+
+        return regions;
+    }
+}
+
+/** Renders @p chain into the audio under the time selection, clip by clip,
+    as one undo step.
+
+    Each clip is rendered on its own, and blended back over the original at
+    both edges exactly as the audio editor's Apply Effects does, so an effect
+    that changes level doesn't click where the selection begins and ends. A
+    reverb's tail stops where each clip's share of the selection does. */
+void MainComponent::applyEffectsToTimeSelection(const std::vector<model::EffectSlot>& chain)
+{
+    if (enabledEffectCount(chain) == 0)
+    {
+        showError("Add an effect first");
+        return;
+    }
+
+    const auto& song    = history_.current();
+    const auto  regions = clipRegionsIn(song, timeSelection_);
+    if (regions.empty())
+    {
+        showError("The time selection covers no audio");
+        return;
+    }
+
+    showBusy("Applying effects...");
+
+    const auto effects = withScratchPluginStates(chain);
+
+    struct Applied
+    {
+        int         trackId = 0;
+        int         clipId  = 0;
+        std::string path;
+    };
+    std::vector<Applied> applied;
+
+    for (const auto& region : regions)
+    {
+        const double rate  = region.sequence.sampleRate;
+        const int    count = (int) juce::jmin<std::int64_t>(region.to - region.from, std::numeric_limits<int>::max());
+
+        juce::AudioBuffer<float> original;
+        if (! engine::sequencefile::readRange(region.file, region.from, count, original))
+        {
+            showError("Could not read " + region.file.getFileName());
+            return;
+        }
+
+        juce::AudioBuffer<float> processed;
+        processed.makeCopyOf(original);
+        if (const auto result = renderEffectChain(effects, processed, rate, song.bpm, engine_.pluginHost()); ! result.ok)
+        {
+            showError(result.error);
+            return;
+        }
+
+        // Blended back over the original at both edges.
+        const int rendered = juce::jmin(processed.getNumSamples(), count);
+        const int fade     = juce::jmin(rendered / 2, (int) std::llround(rate * kEffectEdgeFadeSeconds));
+
+        std::vector<std::vector<float>> channels((size_t) original.getNumChannels());
+        for (int ch = 0; ch < original.getNumChannels(); ++ch)
+        {
+            auto&       destination = channels[(size_t) ch];
+            const auto* dry         = original.getReadPointer(ch);
+            const auto* wet         = processed.getReadPointer(juce::jmin(ch, processed.getNumChannels() - 1));
+            destination.assign(dry, dry + count);
+
+            for (int i = 0; i < rendered; ++i)
+            {
+                float mix = 1.0f;
+                if (fade > 0)
+                {
+                    if (i < fade)                   mix = (float) i / (float) fade;
+                    else if (i >= rendered - fade)  mix = (float) (rendered - 1 - i) / (float) fade;
+                }
+                destination[(size_t) i] = dry[i] * (1.0f - mix) + wet[i] * mix;
+            }
+        }
+
+        const auto file = writeEditedSequence(region.file, region.sequence, region.from, region.to, channels);
+        if (! file)
+            return;
+
+        applied.push_back({ region.trackId, region.clipId, file->getFullPathName().toStdString() });
+    }
+
+    history_.edit("Apply effects", [applied](model::Song& s)
+    {
+        for (const auto& clip : applied)
+            if (auto* track = model::findTrack(s, clip.trackId))
+                for (auto& target : track->clips)
+                    if (target.id == clip.clipId)
+                        target.audioFile = clip.path;
+    });
+
+    // The peaks and any noise print described the old audio.
+    waveformPeaksKey_ = {};
+    noiseProfiles_.clear();
+    noiseProfileFile_ = juce::File{};
+
+    refreshAfterArrangementEdit();
+    const int clips = (int) applied.size();
+    showStatus("Applied effects to " + juce::String(clips) + (clips == 1 ? " clip" : " clips"));
+}
+
+/** Plays the start of the time selection's first stretch of audio through
+    @p chain, or stops a preview already playing. */
+void MainComponent::previewEffectsOnTimeSelection(const std::vector<model::EffectSlot>& chain)
+{
+    if (engine_.isAuditioning())
+    {
+        engine_.stopAudition();
+        showStatus("Preview stopped");
+        return;
+    }
+
+    if (enabledEffectCount(chain) == 0)
+    {
+        showError("Add an effect first");
+        return;
+    }
+
+    const auto& song    = history_.current();
+    const auto  regions = clipRegionsIn(song, timeSelection_);
+    if (regions.empty())
+    {
+        showError("The time selection covers no audio");
+        return;
+    }
+
+    // The earliest on the timeline, which is where listening would start.
+    const auto first = std::min_element(regions.begin(), regions.end(), [&song](const ClipRegion& a, const ClipRegion& b)
+    {
+        const auto* trackA = model::findTrack(song, a.trackId);
+        const auto* trackB = model::findTrack(song, b.trackId);
+        const auto  startOf = [](const model::Track* track, int clipId)
+        {
+            if (track != nullptr)
+                for (const auto& clip : track->clips)
+                    if (clip.id == clipId)
+                        return clip.startBeats;
+            return 0.0;
+        };
+        return startOf(trackA, a.clipId) < startOf(trackB, b.clipId);
+    });
+
+    const double rate  = first->sequence.sampleRate;
+    const int    count = (int) juce::jmin<std::int64_t>(first->to - first->from,
+                                                        std::llround(kEffectPreviewSeconds * rate));
+
+    juce::AudioBuffer<float> block;
+    if (! engine::sequencefile::readRange(first->file, first->from, count, block))
+    {
+        showError("Could not read " + first->file.getFileName());
+        return;
+    }
+
+    showBusy("Rendering preview...");
+    if (const auto result = renderEffectChain(withScratchPluginStates(chain), block, rate, song.bpm,
+                                              engine_.pluginHost());
+        ! result.ok)
+    {
+        showError(result.error);
+        return;
+    }
+
+    // A few milliseconds of fade at each end, so the preview doesn't click.
+    const int fade = juce::jmin(block.getNumSamples() / 2, (int) std::llround(rate * kEffectEdgeFadeSeconds));
+    if (fade > 0)
+    {
+        block.applyGainRamp(0, fade, 0.0f, 1.0f);
+        block.applyGainRamp(block.getNumSamples() - fade, fade, 1.0f, 0.0f);
+    }
+
+    post(Cmd::SetPlaying, 0.0);
+    engine_.startAudition(block, rate);
+    showStatus("Previewing " + juce::String((double) block.getNumSamples() / rate, 1)
+               + "s - press Preview again to stop");
+}
+
 /** Asks how quiet, and for how long, counts as silence. */
 void MainComponent::showDetachAtSilencesDialog()
 {

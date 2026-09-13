@@ -279,6 +279,8 @@ private:
     void                   showDetachAtSilencesDialog();
     void                   detachAtSilences(float thresholdDb, double minSilenceSeconds);
     void                   snapTimeSelectionToZeroCrossings();
+    void                   applyEffectsToTimeSelection(const std::vector<model::EffectSlot>& chain);
+    void                   previewEffectsOnTimeSelection(const std::vector<model::EffectSlot>& chain);
 
     void                   cutAudioSelection();
     void                   copyAudioSelection();
@@ -349,6 +351,14 @@ private:
         step. */
     bool                   replaceClipAudio(const juce::String& label, const ClipAudio& audio, int from, int to,
                                             const std::vector<std::vector<float>>& replacement);
+
+    /** The writing half of replaceClipAudio, for any clip's audio: a new
+        sequence file with frames [from, to) replaced. Nothing if it failed,
+        having said why. */
+    std::optional<juce::File> writeEditedSequence(const juce::File& source,
+                                                  const engine::sequence::SampleSequence& sequence,
+                                                  std::int64_t from, std::int64_t to,
+                                                  const std::vector<std::vector<float>>& replacement);
 
     /** Runs @p transform over every sample the selected clip plays, handed
         all channels at once and the sample rate, for the edits that change
