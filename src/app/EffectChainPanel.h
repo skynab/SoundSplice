@@ -9,6 +9,7 @@
 #include "LayoutHelpers.h"
 #include "engine/PluginHost.h"
 #include "model/EffectParams.h"
+#include "model/EffectPresets.h"
 #include "model/Effects.h"
 
 namespace soundsplice
@@ -53,6 +54,14 @@ public:
     std::function<void(int slotIndex)> onSlotParamsDragStart;
     std::function<void(int slotIndex)> onSlotParamsDragEnd;
 
+    /** Fired by "Save Current Settings as Preset...", with the selected
+        slot. The owner asks for a name and stores the preset: it owns the
+        preset library, and this panel only shows it (see setUserPresets). */
+    std::function<void(const model::EffectSlot& slot, int slotIndex)> onPresetSaveRequested;
+
+    /** Fired when one of the user's presets is picked from Delete Preset. */
+    std::function<void(const std::string& effectId, const std::string& name)> onUserPresetDeleted;
+
     EffectChainPanel()
     {
         placeholder_.setText("Select a track to edit its effects", juce::dontSendNotification);
@@ -88,11 +97,20 @@ public:
         };
         addChildComponent(editorButton_);
 
+        presetsButton_.setButtonText("Presets");
+        presetsButton_.setTooltip("Starting points for this effect, and settings you've saved");
+        presetsButton_.onClick = [this] { showPresetsMenu(); };
+        addChildComponent(presetsButton_);
+
         setContentVisible(false);
     }
 
     /** The scanned plugins offered by the Add menu. */
     void setAvailablePlugins(std::vector<engine::PluginEntry> plugins) { plugins_ = std::move(plugins); }
+
+    /** The user's saved presets, for every effect; the Presets menu shows the
+        ones for the selected slot's effect. */
+    void setUserPresets(std::vector<model::UserEffectPreset> presets) { userPresets_ = std::move(presets); }
 
     void setChain(const std::vector<model::EffectSlot>& chain)
     {
@@ -207,6 +225,9 @@ public:
             return;
         }
 
+        auto presetRow = area.removeFromTop(kRowHeight).reduced(2);
+        setBoundsOrHide(presetsButton_, presetRow.removeFromLeft(juce::jmin(kPresetsButtonWidth, presetRow.getWidth())));
+
         // A kind with many rows in a short pane runs the last of them off the
         // bottom. setBoundsOrHide hides those rather than leaving them
         // zero-high and clickable against nothing.
@@ -226,6 +247,7 @@ private:
     static constexpr int kToolbarHeight = 26;
     static constexpr int kBypassWidth   = 26;
     static constexpr int kLabelWidth    = 90;
+    static constexpr int kPresetsButtonWidth = 110;
 
     /** One parameter's row: a label and the control its descriptor asks for.
         Exactly one of slider, toggle and choice is set. A toggle carries its
@@ -360,11 +382,119 @@ private:
     static constexpr int kFirstBuiltInId = 100;
     static constexpr int kFirstPluginId  = 1000;
 
+    static constexpr int kSavePresetId         = 1;
+    static constexpr int kFirstFactoryPresetId = 100;
+    static constexpr int kFirstUserPresetId    = 1000;
+    static constexpr int kFirstDeletePresetId  = 5000;
+
+    /** Factory presets for the selected slot's effect, the user's own, and
+        saving and deleting them. */
+    void showPresetsMenu()
+    {
+        if (! isValidSlot(selected_))
+            return;
+
+        const auto* descriptor = model::descriptorFor(chain_[(size_t) selected_].kind);
+        if (descriptor == nullptr)
+            return;
+
+        const auto& factory = model::factoryPresets(descriptor->kind);
+
+        // Copied rather than pointed into: the library can change (a save
+        // from elsewhere) while the menu is open, and indices into a list
+        // that has since moved would pick the wrong preset.
+        std::vector<model::UserEffectPreset> mine;
+        for (const auto& user : userPresets_)
+            if (user.effectId == descriptor->id)
+                mine.push_back(user);
+        std::sort(mine.begin(), mine.end(),
+                  [](const auto& a, const auto& b) { return a.preset.name < b.preset.name; });
+
+        juce::PopupMenu menu;
+        menu.addSectionHeader("Factory");
+        for (int i = 0; i < (int) factory.size(); ++i)
+            menu.addItem(kFirstFactoryPresetId + i, factory[(size_t) i].name);
+
+        if (! mine.empty())
+        {
+            menu.addSectionHeader("Yours");
+            for (int i = 0; i < (int) mine.size(); ++i)
+                menu.addItem(kFirstUserPresetId + i, mine[(size_t) i].preset.name);
+        }
+
+        menu.addSeparator();
+        menu.addItem(kSavePresetId, "Save Current Settings as Preset...");
+
+        if (! mine.empty())
+        {
+            juce::PopupMenu deleteMenu;
+            for (int i = 0; i < (int) mine.size(); ++i)
+                deleteMenu.addItem(kFirstDeletePresetId + i, mine[(size_t) i].preset.name);
+            menu.addSubMenu("Delete Preset", deleteMenu);
+        }
+
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&presetsButton_),
+            [safe = juce::Component::SafePointer<EffectChainPanel>(this), kind = descriptor->kind,
+             mine = std::move(mine)](int result)
+            {
+                // The panel may be gone (its dialog closed), or showing a
+                // different effect, by the time the menu is dismissed.
+                if (safe == nullptr || result == 0 || ! safe->isValidSlot(safe->selected_)
+                    || safe->chain_[(size_t) safe->selected_].kind != kind)
+                    return;
+
+                const auto& presets = model::factoryPresets(kind);
+
+                if (result == kSavePresetId)
+                {
+                    if (safe->onPresetSaveRequested)
+                        safe->onPresetSaveRequested(safe->chain_[(size_t) safe->selected_], safe->selected_);
+                }
+                else if (result >= kFirstDeletePresetId)
+                {
+                    const size_t index = (size_t) (result - kFirstDeletePresetId);
+                    if (index < mine.size() && safe->onUserPresetDeleted)
+                        safe->onUserPresetDeleted(mine[index].effectId, mine[index].preset.name);
+                }
+                else if (result >= kFirstUserPresetId)
+                {
+                    const size_t index = (size_t) (result - kFirstUserPresetId);
+                    if (index < mine.size())
+                        safe->applyPresetToSelected(mine[index].preset);
+                }
+                else if (result >= kFirstFactoryPresetId)
+                {
+                    const size_t index = (size_t) (result - kFirstFactoryPresetId);
+                    if (index < presets.size())
+                        safe->applyPresetToSelected(presets[index]);
+                }
+            });
+    }
+
+    /** Applies @p preset to the selected slot as one undo step, through the
+        same start/change/end bracket a slider drag reports. */
+    void applyPresetToSelected(const model::EffectPreset& preset)
+    {
+        if (! isValidSlot(selected_))
+            return;
+
+        auto slot = chain_[(size_t) selected_];
+        if (! model::applyPreset(slot, preset))
+            return;
+
+        if (onSlotParamsDragStart) onSlotParamsDragStart(selected_);
+        chain_[(size_t) selected_] = slot;
+        if (onSlotParamsChanged) onSlotParamsChanged(slot, selected_);
+        if (onSlotParamsDragEnd) onSlotParamsDragEnd(selected_);
+
+        refreshParamControls();
+    }
+
     /** Every parameter control currently built, plus the plugin editor
         button: what setContentVisible hides. */
     std::vector<juce::Component*> paramControls()
     {
-        std::vector<juce::Component*> controls { &editorButton_ };
+        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_ };
         for (auto& row : rows_)
         {
             if (row.label != nullptr)
@@ -467,6 +597,7 @@ private:
     void refreshParamControls()
     {
         editorButton_.setVisible(false);
+        presetsButton_.setVisible(false);
 
         const auto* descriptor = isValidSlot(selected_) ? model::descriptorFor(chain_[(size_t) selected_].kind)
                                                         : nullptr;
@@ -484,6 +615,8 @@ private:
 
         if (descriptor != rowsFor_)
             buildRows(*descriptor);
+
+        presetsButton_.setVisible(true);
 
         const auto& slot = chain_[(size_t) selected_];
         updating_ = true;
@@ -566,7 +699,9 @@ private:
     bool                             updating_       = false;
 
     juce::Label      placeholder_;
-    juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_;
+    juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_, presetsButton_;
+
+    std::vector<model::UserEffectPreset> userPresets_;
 
     // Declared after the fixed controls, so the rows are destroyed first,
     // while this component is still a whole parent to remove them from.

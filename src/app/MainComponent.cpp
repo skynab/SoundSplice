@@ -864,6 +864,16 @@ MainComponent::MainComponent()
     effectChain_.setAvailablePlugins(engine_.pluginHost().knownPlugins());
     effectChain_.onPluginEditorRequested = [this](int slot) { openPluginEditor(slot); };
 
+    // The user's saved effect presets. App settings rather than the project:
+    // a sound someone has dialled in is reached for across projects.
+    userEffectPresets_ = model::deserializeUserPresets(settings_.getValue("effectPresets").toStdString());
+    effectChain_.setUserPresets(userEffectPresets_);
+    effectChain_.onPresetSaveRequested = [this](const model::EffectSlot& slot, int) { promptToSaveEffectPreset(slot); };
+    effectChain_.onUserPresetDeleted   = [this](const std::string& effectId, const std::string& name)
+    {
+        deleteUserEffectPreset(effectId, name);
+    };
+
 
     workspace_.registerPanel("Files", fileBrowser_);
     workspace_.registerPanel("Transport", leftPane_);
@@ -3306,6 +3316,14 @@ void MainComponent::showApplyEffectsDialog()
     auto dialog = std::make_unique<ApplyEffectsDialog>();
     dialog->setSize(520, 460);
 
+    dialog->setUserPresets(userEffectPresets_);
+    dialog->onPresetSaveRequested = [this](const model::EffectSlot& slot) { promptToSaveEffectPreset(slot); };
+    dialog->onUserPresetDeleted   = [this](const std::string& effectId, const std::string& name)
+    {
+        deleteUserEffectPreset(effectId, name);
+    };
+    applyEffectsDialog_ = dialog.get();
+
     auto* raw = dialog.get();
     raw->onApply = [this, raw](const std::vector<model::EffectSlot>& chain)
     {
@@ -3327,6 +3345,68 @@ void MainComponent::showApplyEffectsDialog()
     options.useNativeTitleBar            = true;
     options.resizable                    = true;
     options.launchAsync();
+}
+
+/** Asks for a name and saves @p slot's settings as a user preset. Saving
+    under a name already used for that effect replaces it, which is what
+    "save" means everywhere else. */
+void MainComponent::promptToSaveEffectPreset(const model::EffectSlot& slot)
+{
+    const auto* descriptor = model::descriptorFor(slot.kind);
+    if (descriptor == nullptr)
+        return;
+
+    const juce::String effectName(descriptor->name);
+    auto* window = new juce::AlertWindow("Save Preset",
+                                         "Save these " + effectName + " settings as a preset you can use on any track.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("name", "My " + effectName, "Name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, slot](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const auto name = window->getTextEditorContents("name").trim();
+            if (name.isEmpty())
+            {
+                self->showError("A preset needs a name");
+                return;
+            }
+
+            const auto* effect = model::descriptorFor(slot.kind);
+            if (effect == nullptr)
+                return;
+
+            self->userEffectPresets_ = model::withUserPreset(self->userEffectPresets_, effect->id,
+                                                             model::capturePreset(slot, *effect, name.toStdString()));
+            self->storeUserEffectPresets();
+            self->showStatus("Saved preset \"" + name + "\"");
+        }));
+}
+
+void MainComponent::deleteUserEffectPreset(const std::string& effectId, const std::string& name)
+{
+    userEffectPresets_ = model::withoutUserPreset(userEffectPresets_, effectId, name);
+    storeUserEffectPresets();
+    showStatus("Deleted preset \"" + juce::String(name) + "\"");
+}
+
+/** Writes the preset library to the app settings and hands it to everything
+    that shows it, so a preset saved from the Apply Effects dialog is in the
+    Track FX panel's menu too, and the reverse. */
+void MainComponent::storeUserEffectPresets()
+{
+    settings_.setValue("effectPresets", juce::String(model::serializeUserPresets(userEffectPresets_)));
+    settings_.saveIfNeeded();
+
+    effectChain_.setUserPresets(userEffectPresets_);
+    if (applyEffectsDialog_ != nullptr)
+        applyEffectsDialog_->setUserPresets(userEffectPresets_);
 }
 
 /** Renders @p chain into the selected range.

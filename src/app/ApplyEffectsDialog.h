@@ -33,6 +33,16 @@ public:
     std::function<void(const std::vector<model::EffectSlot>&)> onApply;
     std::function<void()>                                      onCancel;
 
+    /** Preset saving and deleting, passed through from the chain panel: the
+        owner holds the preset library (see EffectChainPanel). */
+    std::function<void(const model::EffectSlot& slot)>                        onPresetSaveRequested;
+    std::function<void(const std::string& effectId, const std::string& name)> onUserPresetDeleted;
+
+    void setUserPresets(std::vector<model::UserEffectPreset> presets)
+    {
+        chainPanel_.setUserPresets(std::move(presets));
+    }
+
     ApplyEffectsDialog()
     {
         addAndMakeVisible(chainPanel_);
@@ -81,6 +91,17 @@ public:
         chainPanel_.onSlotParamsDragStart   = [](int) {};
         chainPanel_.onSlotParamsDragEnd     = [](int) {};
         chainPanel_.onPluginAdded           = [](const engine::PluginEntry&) {};
+
+        chainPanel_.onPresetSaveRequested = [this](const model::EffectSlot& slot, int)
+        {
+            if (onPresetSaveRequested)
+                onPresetSaveRequested(slot);
+        };
+        chainPanel_.onUserPresetDeleted = [this](const std::string& effectId, const std::string& name)
+        {
+            if (onUserPresetDeleted)
+                onUserPresetDeleted(effectId, name);
+        };
 
         applyButton_.setButtonText("Apply to Selection");
         applyButton_.onClick = [this] { if (onApply) onApply(chain_); };

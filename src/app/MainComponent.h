@@ -38,6 +38,7 @@
 #include "MixerStrip.h"
 #include "PianoRoll.h"
 #include "PluginEditorWindow.h"
+#include "ApplyEffectsDialog.h"
 #include "ClipWindow.h"
 #include "DragCommit.h"
 #include "TrackSelection.h"
@@ -244,6 +245,9 @@ private:
     void                   reverseAudioSelection();
 
     void                   showApplyEffectsDialog();
+    void                   promptToSaveEffectPreset(const model::EffectSlot& slot);
+    void                   deleteUserEffectPreset(const std::string& effectId, const std::string& name);
+    void                   storeUserEffectPresets();
     void                   showSpeedPitchDialog();
     void                   analyseSelection();
     void                   applySpeedAndPitch(double speedFactor, double semitones);
@@ -559,6 +563,12 @@ private:
     WaveformPeaks                      waveformPeaks_;
     juce::String                       waveformPeaksKey_;
     double                             waveformPeaksSampleRate_ = 0.0;
+
+    // The user's saved effect presets (kept in the app settings, see
+    // storeUserEffectPresets), and the Apply Effects dialog while one is
+    // open, so a preset saved in it appears in it straight away.
+    std::vector<model::UserEffectPreset>              userEffectPresets_;
+    juce::Component::SafePointer<ApplyEffectsDialog> applyEffectsDialog_;
 
     CallbackComponent                  arrangeTab_;
     juce::Viewport                     arrangementViewport_;
