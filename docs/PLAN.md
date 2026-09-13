@@ -1,3 +1,9 @@
+> **Historical document.** This is the build plan of Looper-Audio, the loop-centric DAW that
+> SoundSplice was forked from. It is kept because code comments cite its sections. Much of it
+> describes features SoundSplice has since removed (drums, guitar, piano, generative loops,
+> group buses, the send bus, sidechain ducking, tempo changes and clip warping) and a
+> `.looper` project format SoundSplice no longer reads. See the README for what SoundSplice is.
+
 # Looper-Audio — Build Plan
 
 A cross-platform **Digital Audio Workstation (DAW)** in C++ for arranging and generating

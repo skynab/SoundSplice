@@ -148,7 +148,7 @@ enum class EffectKind
     Delay  = 1,
     Reverb = 2,
     Plugin = 3,
-    Drive      = 4, // the guitar pedals — see engine::DriveEffect and PedalEffects.h
+    Drive      = 4, // see engine::DriveEffect and PedalEffects.h
     Compressor = 5,
     Tremolo    = 6,
     Chorus     = 7,
