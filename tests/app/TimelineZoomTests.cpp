@@ -21,6 +21,21 @@ TEST_CASE("Fitting a span makes it, with its margins, fill the width", "[app][ti
     REQUIRE(app::zoomToFit(10.0, 0.0f, 24.0f, 0.25f, 4.0f) == 1.0f);
 }
 
+TEST_CASE("Fitting tracks vertically shares the height between the lanes", "[app][timelinezoom]")
+{
+    // 400 px under a 22 px ruler is 378 px; six tracks get 63 px each.
+    REQUIRE(app::laneHeightToFit(6, 400.0f, 22.0f, 24.0f, 160.0f) == 63.0f);
+
+    // Too many tracks to fit still get a usable lane, and scroll.
+    REQUIRE(app::laneHeightToFit(100, 400.0f, 22.0f, 24.0f, 160.0f) == 24.0f);
+
+    // One track doesn't grow to fill the screen.
+    REQUIRE(app::laneHeightToFit(1, 1000.0f, 22.0f, 24.0f, 160.0f) == 160.0f);
+
+    REQUIRE(app::laneHeightToFit(0, 400.0f, 22.0f, 24.0f, 160.0f) == 24.0f);
+    REQUIRE(app::laneHeightToFit(4, 10.0f, 22.0f, 24.0f, 160.0f) == 24.0f);
+}
+
 TEST_CASE("Scrolling to a span puts its start, less the margin, at the left", "[app][timelinezoom]")
 {
     TimelineGeometry geometry;

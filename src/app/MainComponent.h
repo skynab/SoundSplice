@@ -321,6 +321,7 @@ private:
     void                   zoomTimelineToSpan(double startBeats, double lengthBeats);
     void                   zoomToTimeSelection();
     void                   fitProjectInView();
+    void                   fitTracksVertically();
     void                   deleteAllMarkers();
     void                   showMarkerMenu(int markerId);
     void                   exportMarkersDialog();

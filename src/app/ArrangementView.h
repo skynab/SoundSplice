@@ -176,6 +176,25 @@ public:
     /** Where the last clip ends, in beats: what Fit Project fits. */
     double arrangedEndBeats() const { return contentEndBeats(); }
 
+    /** The range a lane's height can be set to: tall enough for the gutter's
+        buttons, and not so tall that one track is a whole screen. */
+    static constexpr float kMinLaneHeight = 28.0f;
+    static constexpr float kMaxLaneHeight = 160.0f;
+
+    /** How tall each track's lane is (Fit Vertically sets it). */
+    void setLaneHeight(float height)
+    {
+        const float clamped = juce::jlimit(kMinLaneHeight, kMaxLaneHeight, height);
+        if (std::abs(clamped - geometry_.laneHeight) < 0.01f)
+            return;
+
+        geometry_.laneHeight = clamped;
+        updateContentSize();
+        repaint();
+    }
+
+    float laneHeight() const noexcept { return geometry_.laneHeight; }
+
     /** Which beat sits under a given x. Exposed for the GUI tests, which is
         the only way to assert that zooming actually changed the mapping
         rather than merely storing a number. */

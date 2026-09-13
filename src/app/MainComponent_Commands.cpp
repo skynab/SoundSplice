@@ -358,6 +358,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::zoomOut: setTimelineZoom(arrangementView_.zoom() / 1.25f); break;
         case commands::zoomToSelection: zoomToTimeSelection(); break;
         case commands::fitProject:      fitProjectInView(); break;
+        case commands::fitVertically:   fitTracksVertically(); break;
 
         case commands::snapToGrid:
         {
@@ -521,6 +522,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::zoomOut);
         add(commands::zoomToSelection);
         add(commands::fitProject);
+        add(commands::fitVertically);
         add(commands::snapToGrid);
         add(commands::snapToMarkers);
         add(commands::snapToClipEdges);

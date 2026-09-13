@@ -39,4 +39,16 @@ inline int scrollToShow(double beat, double lengthBeats, const TimelineGeometry&
     return std::max(0, (int) std::floor(from * (double) geometry.pixelsPerBeat()));
 }
 
+/** The lane height at which @p numTracks lanes, under a ruler @p rulerHeight
+    tall, fill @p visibleHeight pixels, kept within [@p minLane, @p maxLane]:
+    too many tracks still scroll, and a single track doesn't grow to fill a
+    whole screen. */
+inline float laneHeightToFit(int numTracks, float visibleHeight, float rulerHeight, float minLane, float maxLane)
+{
+    if (numTracks <= 0 || ! (visibleHeight > rulerHeight))
+        return minLane;
+
+    return std::clamp((visibleHeight - rulerHeight) / (float) numTracks, minLane, maxLane);
+}
+
 } // namespace soundsplice::app

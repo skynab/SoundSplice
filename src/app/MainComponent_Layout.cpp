@@ -353,6 +353,17 @@ void MainComponent::fitProjectInView()
     zoomTimelineToSpan(0.0, arrangementView_.arrangedEndBeats());
 }
 
+/** Sizes the lanes so every track fits the view's height, as far as the
+    lanes' own limits allow, and scrolls back to the first track. */
+void MainComponent::fitTracksVertically()
+{
+    const float height = app::laneHeightToFit(trackCount(), (float) arrangementViewport_.getMaximumVisibleHeight(),
+                                              arrangementView_.geometry().rulerHeight,
+                                              ArrangementView::kMinLaneHeight, ArrangementView::kMaxLaneHeight);
+    arrangementView_.setLaneHeight(height);
+    arrangementViewport_.setViewPosition(arrangementViewport_.getViewPositionX(), 0);
+}
+
 /** Mirrors the current zoom into both controls without either of them
     reporting it straight back as a user edit — they set each other, and the
     keyboard shortcuts set both. */
