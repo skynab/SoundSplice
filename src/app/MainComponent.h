@@ -463,9 +463,10 @@ private:
     double             lastAutosaveMs_   = 0.0;
     bool               recoveryPending_  = false;
 
-    // Whether time is counted in bars and beats or minutes and seconds: an
-    // app preference, not project data (see the View menu).
-    app::TimeFormat    timeFormat_ = app::TimeFormat::BarsBeats;
+    // How time is counted (bars and beats, a clock, samples or timecode) and
+    // the timecode frame rate: app preferences, not project data (see the
+    // View menu). Its sample rate follows the audio device.
+    app::TimeDisplay   timeDisplay_;
 
     // Where a fader was grabbed, so the whole drag can be committed as one
     // undo step when it is released rather than one step per pixel.

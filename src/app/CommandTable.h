@@ -99,6 +99,11 @@ enum Id : int
     // View
     timeFormatBarsBeats,
     timeFormatMinutesSeconds,
+    timeFormatSamples,
+    timeFormatTimecode,
+    timecode24,
+    timecode25,
+    timecode30,
     zoomIn,
     zoomOut,
     snapToGrid,
@@ -173,6 +178,11 @@ inline const std::vector<Definition>& all()
 
         { timeFormatBarsBeats,      "Bars and Beats",      "View", "Count the ruler, grid and position in bars and beats.", {} },
         { timeFormatMinutesSeconds, "Minutes and Seconds", "View", "Count the ruler, grid and position in minutes and seconds.", {} },
+        { timeFormatSamples,        "Samples",             "View", "Count the ruler, grid and position in samples at the device's rate.", {} },
+        { timeFormatTimecode,       "Timecode",            "View", "Count the ruler, grid and position in hours, minutes, seconds and frames.", {} },
+        { timecode24,               "24 fps",              "View", "Count timecode at 24 frames per second, as film does.", {} },
+        { timecode25,               "25 fps",              "View", "Count timecode at 25 frames per second, as PAL video does.", {} },
+        { timecode30,               "30 fps",              "View", "Count timecode at 30 frames per second (non-drop).", {} },
         { zoomIn,           "Zoom In",              "View", "Zoom the timeline in.", { keys::zoomIn } },
         { zoomOut,          "Zoom Out",             "View", "Zoom the timeline out.", { keys::zoomOut } },
         { snapToGrid,       "Snap Clips to Grid   (hold Alt to invert)", "View", "Snap dragged clips to whole beats.", {} },

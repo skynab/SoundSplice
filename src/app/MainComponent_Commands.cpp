@@ -104,11 +104,31 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
 
         case commands::timeFormatBarsBeats:
-            info.setTicked(timeFormat_ == app::TimeFormat::BarsBeats);
+            info.setTicked(timeDisplay_.format == app::TimeFormat::BarsBeats);
             break;
 
         case commands::timeFormatMinutesSeconds:
-            info.setTicked(timeFormat_ == app::TimeFormat::MinutesSeconds);
+            info.setTicked(timeDisplay_.format == app::TimeFormat::MinutesSeconds);
+            break;
+
+        case commands::timeFormatSamples:
+            info.setTicked(timeDisplay_.format == app::TimeFormat::Samples);
+            break;
+
+        case commands::timeFormatTimecode:
+            info.setTicked(timeDisplay_.format == app::TimeFormat::Timecode);
+            break;
+
+        case commands::timecode24:
+            info.setTicked(timeDisplay_.fps == 24);
+            break;
+
+        case commands::timecode25:
+            info.setTicked(timeDisplay_.fps == 25);
+            break;
+
+        case commands::timecode30:
+            info.setTicked(timeDisplay_.fps == 30);
             break;
 
         case commands::zoomIn:
@@ -226,11 +246,28 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         // the song, so it's saved with the app settings and isn't undoable.
         case commands::timeFormatBarsBeats:
         case commands::timeFormatMinutesSeconds:
-            timeFormat_ = invocation.commandID == commands::timeFormatMinutesSeconds
-                              ? app::TimeFormat::MinutesSeconds
-                              : app::TimeFormat::BarsBeats;
-            arrangementView_.setTimeFormat(timeFormat_);
-            settings_.setValue("timeFormat", (int) timeFormat_);
+        case commands::timeFormatSamples:
+        case commands::timeFormatTimecode:
+        {
+            const auto id = invocation.commandID;
+            timeDisplay_.format = id == commands::timeFormatMinutesSeconds ? app::TimeFormat::MinutesSeconds
+                                : id == commands::timeFormatSamples        ? app::TimeFormat::Samples
+                                : id == commands::timeFormatTimecode       ? app::TimeFormat::Timecode
+                                                                           : app::TimeFormat::BarsBeats;
+            arrangementView_.setTimeDisplay(timeDisplay_);
+            settings_.setValue("timeFormat", (int) timeDisplay_.format);
+            settings_.saveIfNeeded();
+            break;
+        }
+
+        case commands::timecode24:
+        case commands::timecode25:
+        case commands::timecode30:
+            timeDisplay_.fps = invocation.commandID == commands::timecode24 ? 24
+                             : invocation.commandID == commands::timecode25 ? 25
+                                                                             : 30;
+            arrangementView_.setTimeDisplay(timeDisplay_);
+            settings_.setValue("timecodeFps", timeDisplay_.fps);
             settings_.saveIfNeeded();
             break;
 
@@ -356,8 +393,14 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         }
         menu.addSubMenu("Layout", layoutMenu);
 
-        add(commands::timeFormatBarsBeats);
-        add(commands::timeFormatMinutesSeconds);
+        juce::PopupMenu timeMenu;
+        for (auto id : { commands::timeFormatBarsBeats, commands::timeFormatMinutesSeconds,
+                         commands::timeFormatSamples, commands::timeFormatTimecode })
+            timeMenu.addCommandItem(&commandManager_, id);
+        timeMenu.addSeparator();
+        for (auto id : { commands::timecode24, commands::timecode25, commands::timecode30 })
+            timeMenu.addCommandItem(&commandManager_, id);
+        menu.addSubMenu("Time Format", timeMenu);
         menu.addSeparator();
         add(commands::zoomIn);
         add(commands::zoomOut);

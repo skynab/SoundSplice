@@ -165,10 +165,18 @@ public:
     void setSnapToGrid(bool shouldSnap) { snapToGrid_ = shouldSnap; }
     bool snapsToGrid() const            { return snapToGrid_; }
 
-    /** Whether the ruler and grid count bars and beats or minutes and
-        seconds, which is also what clips snap to. */
-    void setTimeFormat(app::TimeFormat format) { timeFormat_ = format; repaint(); }
-    app::TimeFormat timeFormat() const          { return timeFormat_; }
+    /** How the ruler and grid count time (bars and beats, or a clock, sample
+        or timecode grid), which is also what clips snap to. */
+    void setTimeDisplay(const app::TimeDisplay& display)
+    {
+        if (display == timeDisplay_)
+            return;
+
+        timeDisplay_ = display;
+        repaint();
+    }
+
+    const app::TimeDisplay& timeDisplay() const { return timeDisplay_; }
 
     void setSelectedClip(int trackIndex, int clipIndex)
     {
@@ -195,7 +203,7 @@ public:
         g.setColour(juce::Colours::white.withAlpha(0.06f));
         g.fillRect(0.0f, 0.0f, width, geometry_.rulerHeight);
         g.setFont(juce::FontOptions(12.0f));
-        if (timeFormat_ == app::TimeFormat::MinutesSeconds)
+        if (timeDisplay_.format != app::TimeFormat::BarsBeats)
         {
             paintSecondsGrid(g, height);
         }
@@ -1199,20 +1207,22 @@ private:
         return false;
     }
 
-    /** The Minutes:Seconds grid's labelled (major) and unlabelled (minor)
-        steps in seconds, chosen from the zoom and tempo so labels never
-        collide and lines never smear together. The minor step divides the
-        major one, and is what clips snap to. */
+    /** The time grid's labelled (major) and unlabelled (minor) steps in
+        seconds, from the format's own steps (clock, samples or frames),
+        chosen from the zoom and tempo so labels never collide and lines
+        never smear together. The minor step divides the major one, and is
+        what clips snap to. */
     std::pair<double, double> secondsGridSteps() const
     {
         const double secondsPerBeat  = 60.0 / juce::jmax(1.0, song_.bpm);
         const double pixelsPerSecond = (double) geometry_.pixelsPerBeat() / secondsPerBeat;
-        const double major           = app::secondsGridStep(pixelsPerSecond, kMinRulerLabelSpacing);
-        return { major, app::secondsMinorStep(major, pixelsPerSecond, kMinSnapSpacing) };
+        const auto   steps           = app::gridStepsFor(timeDisplay_);
+        const double major = app::gridStep(steps, pixelsPerSecond, app::minLabelSpacing(timeDisplay_.format));
+        return { major, app::minorStep(steps, major, pixelsPerSecond, kMinSnapSpacing) };
     }
 
-    /** The ruler and grid in minutes and seconds: a labelled line every
-        major step and a light one every minor step. */
+    /** The ruler and grid when counting time rather than bars: a labelled
+        line every major step and a light one every minor step. */
     void paintSecondsGrid(juce::Graphics& g, float height)
     {
         const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
@@ -1225,7 +1235,6 @@ private:
             g.fillRect(geometry_.xForBeat((double) i * minor / secondsPerBeat), geometry_.rulerHeight,
                        1.0f, height - geometry_.rulerHeight);
 
-        const int decimals   = app::clockDecimalsForStep(major);
         const int majorLines = (int) std::ceil(totalSeconds / major);
         for (int i = 0; i <= majorLines; ++i)
         {
@@ -1235,8 +1244,8 @@ private:
             g.setColour(juce::Colours::white.withAlpha(0.16f));
             g.fillRect(x, 0.0f, 1.0f, height);
             g.setColour(juce::Colours::white.withAlpha(0.5f));
-            g.drawText(juce::String(app::formatClockTime(seconds, decimals)), (int) x + 4, 2,
-                       (int) kMinRulerLabelSpacing - 6, (int) geometry_.rulerHeight - 4,
+            g.drawText(juce::String(app::gridLabel(timeDisplay_, seconds, major)), (int) x + 4, 2,
+                       (int) app::minLabelSpacing(timeDisplay_.format) - 6, (int) geometry_.rulerHeight - 4,
                        juce::Justification::centredLeft);
         }
     }
@@ -1246,7 +1255,7 @@ private:
         minutes and seconds. */
     double snapUnitBeats() const
     {
-        if (timeFormat_ != app::TimeFormat::MinutesSeconds)
+        if (timeDisplay_.format == app::TimeFormat::BarsBeats)
             return 1.0;
 
         const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
@@ -1333,9 +1342,8 @@ private:
     // and the grid stops being information.
     static constexpr float  kMinGridSpacing   = 6.0f;
 
-    // The Minutes:Seconds grid: labels need this much room, and unlabelled
-    // lines (and snap points) this much.
-    static constexpr float  kMinRulerLabelSpacing = 64.0f;
+    // The time grids: unlabelled lines, and so snap points, need this much
+    // room. Labels need app::minLabelSpacing, which depends on the format.
     static constexpr float  kMinSnapSpacing       = 12.0f;
 
     /** Rounds to the grid (see snapUnitBeats) when snapping is on, with a
@@ -1392,7 +1400,7 @@ private:
     int selectedClipForEdit_  = -1;
 
     bool   snapToGrid_      = true;
-    app::TimeFormat timeFormat_ = app::TimeFormat::BarsBeats;
+    app::TimeDisplay timeDisplay_;
     bool   fileDragActive_  = false;
     double dropPreviewBeat_ = 0.0;
 };

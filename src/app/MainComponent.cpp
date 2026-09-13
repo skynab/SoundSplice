@@ -129,10 +129,19 @@ MainComponent::MainComponent()
     // down to, rather than resizing the region from under them.
     followSystemOutput_ = settings_.getValue("followSystemOutput", "1") != "0";
     arrangementView_.setSnapToGrid(settings_.getValue("snapClipsToGrid", "1") != "0");
-    timeFormat_ = settings_.getValue("timeFormat", "0").getIntValue() == (int) app::TimeFormat::MinutesSeconds
-                      ? app::TimeFormat::MinutesSeconds
-                      : app::TimeFormat::BarsBeats;
-    arrangementView_.setTimeFormat(timeFormat_);
+    {
+        // Anything unrecognised (a hand-edited file, a format from a later
+        // build) falls back to bars and beats and 30 fps.
+        const int format = settings_.getValue("timeFormat", "0").getIntValue();
+        timeDisplay_.format = format >= (int) app::TimeFormat::BarsBeats && format <= (int) app::TimeFormat::Timecode
+                                  ? (app::TimeFormat) format
+                                  : app::TimeFormat::BarsBeats;
+
+        const int fps = settings_.getValue("timecodeFps", "30").getIntValue();
+        timeDisplay_.fps = (fps == 24 || fps == 25) ? fps : 30;
+
+        arrangementView_.setTimeDisplay(timeDisplay_);
+    }
     transportCollapsed_ = settings_.getValue("transportCollapsed", "0") != "0";
     collapseTransportButton_.onClick = [this]
     {
@@ -1116,13 +1125,21 @@ void MainComponent::timerCallback()
     // menu), so the glyph follows the engine rather than the last click.
     playPauseButton.setToggleState(engine_.isPlaying(), juce::dontSendNotification);
 
-    // The format chosen in the View menu leads, and the other follows: an
-    // editor wants the time and a musician wants the bar, and both fit.
-    const juce::String clock   (app::formatClockTime(seconds, 3));
-    const juce::String barBeat = juce::String::formatted("Bar %d  Beat %d", bb.bar, bb.beat);
-    const bool         byClock = timeFormat_ == app::TimeFormat::MinutesSeconds;
+    // A sample grid counts at the device's rate, which can change under it.
+    if (sampleRate > 0.0 && std::abs(timeDisplay_.sampleRate - sampleRate) > 1.0e-6)
+    {
+        timeDisplay_.sampleRate = sampleRate;
+        arrangementView_.setTimeDisplay(timeDisplay_);
+    }
 
-    positionLabel.setText((byClock ? clock : barBeat) + "   |   " + (byClock ? barBeat : clock)
+    // The format chosen in the View menu leads and bars and beats follow (or
+    // the clock does, when bars and beats are the choice): an editor wants the
+    // time and a musician the bar, and both fit.
+    const juce::String barBeat = juce::String::formatted("Bar %d  Beat %d", bb.bar, bb.beat);
+    const juce::String time (app::formatPosition(timeDisplay_, seconds));
+    const bool         byBar = timeDisplay_.format == app::TimeFormat::BarsBeats;
+
+    positionLabel.setText((byBar ? barBeat : time) + "   |   " + (byBar ? time : barBeat)
                               + "   |   " + transportState,
                           juce::dontSendNotification);
 
