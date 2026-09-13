@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <sstream>
@@ -130,6 +131,18 @@ inline std::string serialize(const Song& song)
     out << "AUTO " << song.masterGainDb.points().size() << "\n";
     for (const auto& p : song.masterGainDb.points())
         out << "APT " << detail::num(p.beat) << " " << detail::num((double) p.value) << "\n";
+    out << "MARKERS " << song.markers.size() << "\n";
+    for (const auto& marker : song.markers)
+    {
+        // The name is the rest of its line, so a line break in it becomes a space.
+        auto name = marker.name;
+        std::replace(name.begin(), name.end(), '\n', ' ');
+        std::replace(name.begin(), name.end(), '\r', ' ');
+
+        out << "MARKER " << marker.id << " " << detail::num(marker.startBeats) << " "
+            << detail::num(marker.lengthBeats) << " " << name << "\n";
+    }
+
     out << "SCENES " << song.scenes.size() << "\n";
     for (const auto& scene : song.scenes)
         out << "SCENE " << scene.name << "\n"; // name is rest-of-line, so it may contain spaces
@@ -511,6 +524,25 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             double beat = 0.0, value = 0.0;
             ps >> beat >> value;
             song.masterGainDb.addPoint(beat, (float) value);
+        }
+    }
+
+    if (readTagged("MARKERS", rest))
+    {
+        const int markerCount = std::atoi(rest.c_str());
+        for (int i = 0; i < markerCount; ++i)
+        {
+            if (! readTagged("MARKER", rest)) return fail("truncated marker list");
+
+            std::istringstream fields(rest);
+            Marker marker;
+            fields >> marker.id >> marker.startBeats >> marker.lengthBeats;
+
+            std::string name;
+            std::getline(fields, name);
+            marker.name = detail::trimLeadingSpace(std::move(name));
+
+            song.markers.push_back(std::move(marker));
         }
     }
 

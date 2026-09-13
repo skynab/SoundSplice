@@ -100,6 +100,13 @@ inline const juce::KeyPress onOneBar   = detail::with(juce::KeyPress::rightKey, 
 inline const juce::KeyPress record     = detail::with('R', detail::cmd);
 inline const juce::KeyPress loop       = detail::with('L', detail::cmd);
 
+// Markers. M is unmodified, as it is in most editors, so a focused text field
+// still takes the letter first; jumping sits on alt+arrows, beside the
+// cmd+arrow bar steps.
+inline const juce::KeyPress addMarker      = detail::with('M', detail::noMods);
+inline const juce::KeyPress previousMarker = detail::with(juce::KeyPress::leftKey, detail::alt);
+inline const juce::KeyPress nextMarker     = detail::with(juce::KeyPress::rightKey, detail::alt);
+
 inline const juce::KeyPress zoomIn  = detail::with('=', detail::cmd);
 inline const juce::KeyPress zoomOut = detail::with('-', detail::cmd);
 
@@ -148,6 +155,10 @@ inline std::vector<NamedShortcut> all()
         { "On One Bar",      onOneBar },
         { "Record",          record },
         { "Loop",            loop },
+
+        { "Add Marker",      addMarker },
+        { "Previous Marker", previousMarker },
+        { "Next Marker",     nextMarker },
 
         { "Zoom In",         zoomIn },
         { "Zoom Out",        zoomOut },

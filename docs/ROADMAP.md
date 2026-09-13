@@ -75,8 +75,10 @@ all three.
 
 - ⬜ **Time selection across tracks**, including the empty space between clips; every edit and
   effect applies to the selection on all selected tracks
-- ⬜ **Label tracks** (Audacity) / **markers and ranges** (Audition, REAPER): add at the playhead or
-  during playback and recording, rename, snap to them, select between them, export and import as text
+- 🟡 **Label tracks** (Audacity) / **markers and ranges** (Audition, REAPER): add at the playhead
+  (any time, playing or not) or from the audio selection ✅, rename and delete ✅, jump between ✅,
+  export and import as Audacity label text ✅ (Markers menu; `src/model/Markers.h`); snap to them ⬜,
+  select between them ⬜, drag to move ⬜
 - ⬜ **Snap options**: grid, labels, clip edges, and zero crossings (surfacing `nearestZeroCrossing`)
 - ⬜ Edits on the arrangement itself, not just in the editor pane: split at the playhead, **join
   clips**, **detach at silences**, ripple delete, **duplicate selection**, and **paste as new clip**

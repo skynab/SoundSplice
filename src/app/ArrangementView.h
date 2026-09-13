@@ -13,6 +13,7 @@
 #include "Icons.h"
 #include "ClipWindow.h"
 #include "TimeFormat.h"
+#include "model/Markers.h"
 #include "WaveformCache.h"
 #include "TrackColours.h"
 #include "TimelineGeometry.h"
@@ -89,6 +90,11 @@ public:
     /** Fired on a right-click on a clip, after onClipSelected. The owner
         shows the menu: it knows what the options do, and the view doesn't. */
     std::function<void(int trackIndex, int clipIndex)> onClipMenuRequested;
+
+    /** Fired on a right-click on a marker in the ruler, and on a double-click
+        on one. The owner shows the menu or asks for the new name. */
+    std::function<void(int markerId)> onMarkerMenuRequested;
+    std::function<void(int markerId)> onMarkerRenameRequested;
 
     /** Fired instead of onClipMoved when a move-drag ends on a *different*
         track than it started on (see typesAreCompatibleForClipMove — the
@@ -240,6 +246,9 @@ public:
             }
         }
 
+
+        // Under the lanes, so a range's shading never covers a clip.
+        paintMarkers(g, height);
 
         // Track lanes + clips.
         for (int i = 0; i < (int) song_.tracks.size(); ++i)
@@ -784,6 +793,13 @@ private:
         // clip anyway — and checking first keeps the two from ever competing.
         if (isOnRuler(e.position))
         {
+            if (e.mods.isPopupMenu())
+            {
+                if (const int marker = markerAt(e.position); marker >= 0 && onMarkerMenuRequested)
+                    onMarkerMenuRequested(marker);
+                return;
+            }
+
             scrubbing_ = true;
             scrubTo(e.position.x);
             return;
@@ -1006,6 +1022,12 @@ private:
         repaint();
     }
 
+    void mouseDoubleClick(const juce::MouseEvent& e) override
+    {
+        if (const int marker = markerAt(e.position); marker >= 0 && onMarkerRenameRequested)
+            onMarkerRenameRequested(marker);
+    }
+
     void mouseMove(const juce::MouseEvent& e) override
     {
         updateMuteHover(muteButtonAt(e.position));
@@ -1056,6 +1078,11 @@ private:
         if (findClipAt(pos, trackIndex, clipIndex)
             && fadeHandleAt(song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex], trackIndex, pos) != 0)
             return "Drag to fade - right-click the clip for fade shapes";
+
+        if (const int markerId = markerAt(pos); markerId >= 0)
+            if (const auto* marker = model::findMarker(song_, markerId))
+                return juce::String::fromUTF8(marker->name.c_str())
+                       + " - double-click to rename, right-click for more";
         return {};
     }
 
@@ -1207,6 +1234,67 @@ private:
         return false;
     }
 
+    /** Markers: a flag on the ruler at each one's start with its name beside
+        it and a line down through the lanes; a range also gets a band across
+        the ruler, a closing line, and a light shade over what it spans. */
+    void paintMarkers(juce::Graphics& g, float height)
+    {
+        if (song_.markers.empty())
+            return;
+
+        const auto colour = juce::Colour(0xffffc233);
+        g.setFont(juce::FontOptions(11.0f));
+
+        for (const auto& marker : song_.markers)
+        {
+            const float x = geometry_.xForBeat(marker.startBeats);
+
+            if (marker.lengthBeats > 0.0)
+            {
+                const float right = geometry_.xForBeat(marker.startBeats + marker.lengthBeats);
+                g.setColour(colour.withAlpha(0.18f));
+                g.fillRect(x, 0.0f, right - x, geometry_.rulerHeight);
+                g.setColour(colour.withAlpha(0.05f));
+                g.fillRect(x, geometry_.rulerHeight, right - x, height - geometry_.rulerHeight);
+                g.setColour(colour.withAlpha(0.6f));
+                g.fillRect(right - 1.0f, 0.0f, 1.0f, height);
+            }
+
+            g.setColour(colour.withAlpha(0.8f));
+            g.fillRect(x, 0.0f, 1.0f, height);
+
+            juce::Path flag;
+            flag.addTriangle(x, 0.0f, x + kMarkerFlagSize, 0.0f, x, kMarkerFlagSize);
+            g.setColour(colour);
+            g.fillPath(flag);
+
+            if (! marker.name.empty())
+                g.drawText(juce::String::fromUTF8(marker.name.c_str()), (int) x + 4,
+                           (int) (geometry_.rulerHeight * 0.45f), kMarkerLabelWidth,
+                           (int) (geometry_.rulerHeight * 0.55f), juce::Justification::centredLeft, true);
+        }
+    }
+
+    /** The id of the marker under @p point on the ruler, or -1: a point
+        marker's flag, or anywhere across a range's band. The last one drawn
+        wins, since it's the one on top. */
+    int markerAt(juce::Point<float> point) const
+    {
+        if (! isOnRuler(point))
+            return -1;
+
+        for (auto it = song_.markers.rbegin(); it != song_.markers.rend(); ++it)
+        {
+            const float left  = geometry_.xForBeat(it->startBeats);
+            const float right = std::max(geometry_.xForBeat(it->startBeats + it->lengthBeats),
+                                         left + kMarkerFlagSize);
+            if (point.x >= left - kMarkerHitSlop && point.x <= right + kMarkerHitSlop)
+                return it->id;
+        }
+
+        return -1;
+    }
+
     /** The time grid's labelled (major) and unlabelled (minor) steps in
         seconds, from the format's own steps (clock, samples or frames),
         chosen from the zoom and tempo so labels never collide and lines
@@ -1331,6 +1419,12 @@ private:
     static constexpr double kMinClipBeats     = 1.0;  // a clip shorter than a beat isn't useful
     static constexpr float  kResizeEdgePixels = 6.0f;
     static constexpr float  kFadeHandleSize   = 8.0f;
+
+    // A marker's flag on the ruler, the room its name gets, and how far
+    // outside the flag a click still lands on it.
+    static constexpr float  kMarkerFlagSize   = 8.0f;
+    static constexpr int    kMarkerLabelWidth = 120;
+    static constexpr float  kMarkerHitSlop    = 3.0f;
     static constexpr float  kMuteSize         = 22.0f;
 
     // How large each glyph is *drawn*; both clickable areas stay kMuteSize.

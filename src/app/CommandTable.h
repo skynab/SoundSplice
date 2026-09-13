@@ -96,6 +96,15 @@ enum Id : int
     record,
     loop,
 
+    // Markers
+    addMarker,
+    addMarkerFromSelection,
+    previousMarker,
+    nextMarker,
+    importMarkers,
+    exportMarkers,
+    deleteAllMarkers,
+
     // View
     timeFormatBarsBeats,
     timeFormatMinutesSeconds,
@@ -115,7 +124,7 @@ struct Definition
 {
     Id                          id;
     const char*                 name;        // as the menu shows it
-    const char*                 category;    // File, Edit, Transport or View
+    const char*                 category;    // File, Edit, Transport, Markers or View
     const char*                 description; // one sentence saying what it does
     std::vector<juce::KeyPress> keys;        // default shortcuts, all from Shortcuts.h
 };
@@ -175,6 +184,14 @@ inline const std::vector<Definition>& all()
         { forwardOneBar,    "Forward One Bar",      "Transport", "Move the playhead forward a bar.", { keys::onOneBar } },
         { record,           "Record",               "Transport", "Start or stop recording onto the selected track.", { keys::record } },
         { loop,             "Loop",                 "Transport", "Loop playback over what's arranged.", { keys::loop } },
+
+        { addMarker,              "Add Marker",                  "Markers", "Put a marker at the playhead.", { keys::addMarker } },
+        { addMarkerFromSelection, "Add Marker from Selection",   "Markers", "Mark the audio editor's selection as a range.", {} },
+        { previousMarker,         "Previous Marker",             "Markers", "Move the playhead back to the previous marker.", { keys::previousMarker } },
+        { nextMarker,             "Next Marker",                 "Markers", "Move the playhead on to the next marker.", { keys::nextMarker } },
+        { importMarkers,          "Import Markers...",           "Markers", "Add markers from an Audacity label file.", {} },
+        { exportMarkers,          "Export Markers...",           "Markers", "Write the markers to an Audacity label file.", {} },
+        { deleteAllMarkers,       "Delete All Markers",          "Markers", "Remove every marker.", {} },
 
         { timeFormatBarsBeats,      "Bars and Beats",      "View", "Count the ruler, grid and position in bars and beats.", {} },
         { timeFormatMinutesSeconds, "Minutes and Seconds", "View", "Count the ruler, grid and position in minutes and seconds.", {} },

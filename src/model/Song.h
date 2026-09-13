@@ -24,6 +24,19 @@ struct Scene
     bool operator==(const Scene&) const = default;
 };
 
+/** A named point or range on the timeline: what Audacity calls a label and
+    Audition a marker. A point marker has no length. See model/Markers.h for
+    what can be done with them. */
+struct Marker
+{
+    int         id          = 0;
+    double      startBeats  = 0.0;
+    double      lengthBeats = 0.0; // 0 for a point
+    std::string name;
+
+    bool operator==(const Marker&) const = default;
+};
+
 struct Song
 {
     /** The project tempo. One tempo for the whole song. */
@@ -40,6 +53,7 @@ struct Song
     EqSettings         eq;
     MasteringSettings  mastering;
     AutomationLane     masterGainDb; // master gain automation (dB over beats)
+    std::vector<Marker> markers;     // in timeline order; see model/Markers.h
 
     // Project-specific data, not an app preference — round-trips with the
     // project so it's the same on every machine that opens it. Empty =

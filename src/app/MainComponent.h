@@ -272,6 +272,17 @@ private:
     void                   openScratchPluginEditor(int slotIndex, const model::EffectSlot& slot);
     std::vector<model::EffectSlot> withScratchPluginStates(std::vector<model::EffectSlot> chain) const;
     void                   closeScratchPluginEditors();
+
+    // Markers — see MainComponent_Markers.cpp and model/Markers.h.
+    void                   addMarkerAtPlayhead();
+    void                   addMarkerFromAudioSelection();
+    void                   jumpToMarker(bool forward);
+    void                   renameMarkerPrompt(int markerId);
+    void                   deleteMarker(int markerId);
+    void                   deleteAllMarkers();
+    void                   showMarkerMenu(int markerId);
+    void                   exportMarkersDialog();
+    void                   importMarkersDialog();
     void                   showSpeedPitchDialog();
     void                   analyseSelection();
     void                   applySpeedAndPitch(double speedFactor, double semitones);

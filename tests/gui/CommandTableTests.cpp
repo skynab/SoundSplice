@@ -41,7 +41,7 @@ TEST_CASE("Every command has a unique id, a name, a category and a description",
 {
     JuceFixture fixture;
 
-    const std::set<std::string> categories { "File", "Edit", "Transport", "View" };
+    const std::set<std::string> categories { "File", "Edit", "Transport", "Markers", "View" };
     std::set<int>               ids;
 
     for (const auto& command : commands::all())

@@ -38,6 +38,7 @@ add_executable(soundsplice_tests
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp
   model/TimebaseTests.cpp
+  model/MarkersTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp

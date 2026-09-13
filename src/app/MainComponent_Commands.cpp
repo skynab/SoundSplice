@@ -1,6 +1,7 @@
 #include "MainComponentInternal.h"
 
 #include "CommandTable.h"
+#include "model/Markers.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // Commands: what each one does and when it's available, and the menu bar built
@@ -101,6 +102,23 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         // can do anything, and no obvious way back.
         case commands::deleteTrack:
             info.setActive(trackCount() > 1);
+            break;
+
+        case commands::addMarkerFromSelection:
+            info.setActive(hasSelection);
+            break;
+
+        case commands::previousMarker:
+            info.setActive(model::previousMarkerStart(history_.current(), playheadBeat()).has_value());
+            break;
+
+        case commands::nextMarker:
+            info.setActive(model::nextMarkerStart(history_.current(), playheadBeat()).has_value());
+            break;
+
+        case commands::exportMarkers:
+        case commands::deleteAllMarkers:
+            info.setActive(! history_.current().markers.empty());
             break;
 
         case commands::timeFormatBarsBeats:
@@ -242,6 +260,14 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::record:        recordButton.triggerClick(); break;
         case commands::loop:          loopButton.triggerClick(); break;
 
+        case commands::addMarker:              addMarkerAtPlayhead(); break;
+        case commands::addMarkerFromSelection: addMarkerFromAudioSelection(); break;
+        case commands::previousMarker:         jumpToMarker(false); break;
+        case commands::nextMarker:             jumpToMarker(true); break;
+        case commands::importMarkers:          importMarkersDialog(); break;
+        case commands::exportMarkers:          exportMarkersDialog(); break;
+        case commands::deleteAllMarkers:       deleteAllMarkers(); break;
+
         // A preference, not an edit: it changes what time is counted in, not
         // the song, so it's saved with the app settings and isn't undoable.
         case commands::timeFormatBarsBeats:
@@ -300,7 +326,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View" };
+    return { "File", "Edit", "View", "Markers" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String&)
@@ -406,6 +432,19 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::zoomOut);
         add(commands::snapToGrid);
         add(commands::resetLayout);
+    }
+    else if (topLevelMenuIndex == 3) // Markers
+    {
+        add(commands::addMarker);
+        add(commands::addMarkerFromSelection);
+        menu.addSeparator();
+        add(commands::previousMarker);
+        add(commands::nextMarker);
+        menu.addSeparator();
+        add(commands::importMarkers);
+        add(commands::exportMarkers);
+        menu.addSeparator();
+        add(commands::deleteAllMarkers);
     }
 
     return menu;

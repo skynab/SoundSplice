@@ -874,6 +874,9 @@ MainComponent::MainComponent()
         showClipMenu(trackIndex, clipIndex);
     };
 
+    arrangementView_.onMarkerMenuRequested   = [this](int markerId) { showMarkerMenu(markerId); };
+    arrangementView_.onMarkerRenameRequested = [this](int markerId) { renameMarkerPrompt(markerId); };
+
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)
     {
         importAudioFileAtBeat(file, dropBeat, trackIndex);

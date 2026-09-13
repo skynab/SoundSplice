@@ -43,6 +43,14 @@ inline void retimeAudioForTempoChange(Song& song, double oldBpm, double newBpm)
         for (auto& entry : track.automation)
             entry.second.scaleBeats(factor);
     }
+
+    // Markers usually mark a place in recorded audio ("cough here"), so they
+    // keep their time along with it.
+    for (auto& marker : song.markers)
+    {
+        marker.startBeats  *= factor;
+        marker.lengthBeats *= factor;
+    }
 }
 
 } // namespace soundsplice::model
