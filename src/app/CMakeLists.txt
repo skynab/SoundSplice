@@ -62,8 +62,11 @@ target_compile_definitions(LooperAudio PRIVATE
 # juce_recommended_warning_flags' "-Wfloat-equal" later on the same command
 # line. Linking one more tiny interface library, after that one, works
 # because linked libraries' flags are concatenated in link order.
+# MSVC has no float-equal warning (and cl rejects the flag outright), so the
+# suppression only applies to GCC/Clang.
 add_library(looper_no_float_equal_warning INTERFACE)
-target_compile_options(looper_no_float_equal_warning INTERFACE -Wno-float-equal)
+target_compile_options(looper_no_float_equal_warning INTERFACE
+  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-float-equal>)
 
 target_link_libraries(LooperAudio
   PRIVATE
