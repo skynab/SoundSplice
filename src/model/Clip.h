@@ -30,6 +30,13 @@ struct Clip
         already expressible per note via velocity. */
     float gainDb = 0.0f;
 
+    /** Where in audioFile this clip starts playing, in seconds. Trimming a
+        clip's start or splitting it moves this rather than rewriting the
+        file, so the audio before it is still there to bring back. Seconds
+        rather than beats because it measures real time in a recording. Audio
+        clips only; app/ClipWindow.h holds the arithmetic built on it. */
+    double sourceOffsetSeconds = 0.0;
+
     bool operator==(const Clip&) const = default;
 };
 

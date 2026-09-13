@@ -242,17 +242,26 @@ public:
         setContentVisible(false);
     }
 
-    /** Shows @p file for editing. @p gainDb is the clip's current trim. */
-    void setClip(const juce::File& file, double fileLengthSeconds, float gainDb,
-                 const juce::String& trackName, juce::uint32 trackColour)
+    /** Shows a clip for editing: @p lengthSeconds of @p file, starting
+        @p windowStartSeconds into it. Every position this pane reports is in
+        seconds from that start, not from the start of the file. @p gainDb is
+        the clip's current trim. */
+    void setClip(const juce::File& file, double lengthSeconds, float gainDb,
+                 const juce::String& trackName, juce::uint32 trackColour,
+                 double windowStartSeconds = 0.0)
     {
-        const bool differentFile = file != file_;
+        // A trimmed or split clip can be a different stretch of the same
+        // file, which moves every position in it just as a new file would.
+        const bool differentFile = file != file_
+                                || std::abs(windowStartSeconds - windowStartSeconds_) > 1.0e-9
+                                || std::abs(lengthSeconds - geometry_.fileLengthSeconds) > 1.0e-9;
 
-        file_        = file;
+        file_               = file;
+        windowStartSeconds_ = windowStartSeconds;
         trackName_   = trackName;
         trackColour_ = trackColour;
 
-        geometry_.fileLengthSeconds = juce::jmax(0.0, fileLengthSeconds);
+        geometry_.fileLengthSeconds = juce::jmax(0.0, lengthSeconds);
 
         // Room past the last sample to put the cursor in, so audio can be
         // pasted after the end of the recording rather than only inside it.
@@ -873,6 +882,7 @@ private:
     AudioRange     selection_;
 
     juce::File   file_;
+    double       windowStartSeconds_ = 0.0;
     juce::String trackName_;
     juce::uint32 trackColour_    = 0;
     bool         contentVisible_ = false;

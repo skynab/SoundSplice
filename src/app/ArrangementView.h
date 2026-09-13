@@ -11,6 +11,7 @@
 #include "AudioFileTypes.h"
 #include "ClipPreview.h"
 #include "Icons.h"
+#include "ClipWindow.h"
 #include "WaveformCache.h"
 #include "TrackColours.h"
 #include "TimelineGeometry.h"
@@ -74,6 +75,11 @@ public:
     std::function<void(double)> onSeek; // beat position clicked
     std::function<void(int trackIndex, int clipIndex, double newStartBeats)> onClipMoved;
     std::function<void(int trackIndex, int clipIndex, double newLengthBeats)> onClipResized;
+
+    /** Fired when an audio clip's left edge is dragged: the clip should start
+        at @p newStartBeats with its audio left where it was (see
+        trimClipStart, which the drag preview already clamps through). */
+    std::function<void(int trackIndex, int clipIndex, double newStartBeats)> onClipStartTrimmed;
 
     /** Fired instead of onClipMoved when a move-drag ends on a *different*
         track than it started on (see typesAreCompatibleForClipMove — the
@@ -332,6 +338,12 @@ public:
                     g.setColour(juce::Colours::white.withAlpha(0.18f));
                     g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + 2.0f,
                                kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
+
+                    // Audio clips can be trimmed from the left as well — see
+                    // isOnClipLeftEdge.
+                    if (clip.type == model::ClipType::Audio)
+                        g.fillRect(r.getX() + 1.0f, r.getY() + 2.0f,
+                                   kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
                 }
 
                 g.setColour(isEditSelected ? juce::Colours::cyan.withAlpha(0.9f) : juce::Colours::black.withAlpha(0.3f));
@@ -361,7 +373,7 @@ public:
         // "this already belongs to that track."
         if (dragging_ && dragTrackIndex_ >= 0 && dragTrackIndex_ < (int) song_.tracks.size())
         {
-            const int ghostRow = resizing_ ? dragTrackIndex_ : dragPreviewTrackIndex_;
+            const int ghostRow = (resizing_ || trimmingStart_) ? dragTrackIndex_ : dragPreviewTrackIndex_;
             if (ghostRow >= 0 && ghostRow < (int) song_.tracks.size())
             {
                 const float ghostY = geometry_.rulerHeight + (float) ghostRow * geometry_.laneHeight;
@@ -374,7 +386,14 @@ public:
                 g.fillRoundedRectangle(r, 3.0f);
 
                 if (dragClipIndex_ >= 0 && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
-                    paintClipContents(g, song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_], r);
+                {
+                    // Drawn as it will be once dropped: a left-edge trim moves
+                    // where in the file the waveform starts, not just the box.
+                    auto ghostClip = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
+                    if (trimmingStart_)
+                        ghostClip = trimClipStart(ghostClip, dragPreviewStart_, song_.bpm, kMinClipBeats);
+                    paintClipContents(g, ghostClip, r);
+                }
 
                 if (r.getWidth() > 3.0f * kResizeEdgePixels)
                 {
@@ -449,11 +468,12 @@ private:
         if (thumbnail == nullptr || thumbnail->getTotalLength() <= 0.0)
             return;
 
+        // What's left of the file from the clip's offset on: a trimmed or
+        // split clip starts partway into its recording.
+        const double fileSeconds    = thumbnail->getTotalLength() - clip.sourceOffsetSeconds;
         const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
-        const double fraction       = audioClipDrawnFraction(thumbnail->getTotalLength(),
-                                                             clip.lengthBeats, secondsPerBeat);
-        const double seconds        = audioClipAudibleSeconds(thumbnail->getTotalLength(),
-                                                              clip.lengthBeats, secondsPerBeat);
+        const double fraction       = audioClipDrawnFraction(fileSeconds, clip.lengthBeats, secondsPerBeat);
+        const double seconds        = audioClipAudibleSeconds(fileSeconds, clip.lengthBeats, secondsPerBeat);
         if (fraction <= 0.0 || seconds <= 0.0)
             return;
 
@@ -468,7 +488,8 @@ private:
         // is worse than showing it nowhere: two views of the same clip
         // disagreeing reads as one of them being wrong.
         g.setColour(juce::Colours::white.withAlpha(0.55f));
-        thumbnail->drawChannels(g, area.toNearestInt(), 0.0, seconds,
+        thumbnail->drawChannels(g, area.toNearestInt(),
+                                clip.sourceOffsetSeconds, clip.sourceOffsetSeconds + seconds,
                                 juce::Decibels::decibelsToGain(clip.gainDb));
     }
 
@@ -617,6 +638,7 @@ private:
 
             dragging_           = true;
             resizing_           = isOnClipRightEdge(clip, e.position.x);
+            trimmingStart_      = ! resizing_ && isOnClipLeftEdge(clip, e.position.x);
             dragTrackIndex_     = trackIndex;
             dragClipIndex_      = clipIndex;
             dragGrabBeat_       = geometry_.beatForX(e.position.x);
@@ -687,7 +709,22 @@ private:
         // is easier to remember than one that only works in one direction.
         const bool snap = snapToGrid_ != e.mods.isAltDown();
 
-        if (resizing_)
+        if (trimmingStart_)
+        {
+            // Through the same function the edit itself uses, so the ghost
+            // stops exactly where the drop will: at the file's first sample,
+            // or a minimum length short of the clip's end.
+            if (dragTrackIndex_ < (int) song_.tracks.size()
+                && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
+            {
+                const auto& clip    = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
+                const auto  trimmed = trimClipStart(clip, maybeSnap(currentBeat, snap, 0.0), song_.bpm,
+                                                    kMinClipBeats);
+                dragPreviewStart_  = trimmed.startBeats;
+                dragPreviewLength_ = trimmed.lengthBeats;
+            }
+        }
+        else if (resizing_)
         {
             dragPreviewLength_ = std::max(kMinClipBeats,
                                           maybeSnap(currentBeat - dragPreviewStart_, snap, kMinClipBeats));
@@ -735,13 +772,20 @@ private:
         if (! dragging_)
             return;
 
-        const bool wasResizing = resizing_;
-        dragging_ = false;
-        resizing_ = false;
+        const bool wasResizing      = resizing_;
+        const bool wasTrimmingStart = trimmingStart_;
+        dragging_      = false;
+        resizing_      = false;
+        trimmingStart_ = false;
 
         // Only fire for an actual change — a plain click-to-select (no drag)
         // would otherwise create a harmless but noisy no-op undo step.
-        if (wasResizing)
+        if (wasTrimmingStart)
+        {
+            if (onClipStartTrimmed && std::abs(dragPreviewStart_ - dragOriginalStart_) > 1.0e-9)
+                onClipStartTrimmed(dragTrackIndex_, dragClipIndex_, dragPreviewStart_);
+        }
+        else if (wasResizing)
         {
             if (onClipResized && std::abs(dragPreviewLength_ - dragOriginalLength_) > 1.0e-9)
                 onClipResized(dragTrackIndex_, dragClipIndex_, dragPreviewLength_);
@@ -775,9 +819,12 @@ private:
 
         // The resize cursor is the only hint the clip's edge is grabbable.
         int trackIndex = -1, clipIndex = -1;
-        const bool onEdge = findClipAt(e.position, trackIndex, clipIndex)
-                         && isOnClipRightEdge(song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex],
-                                              e.position.x);
+        bool onEdge = false;
+        if (findClipAt(e.position, trackIndex, clipIndex))
+        {
+            const auto& clip = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+            onEdge = isOnClipRightEdge(clip, e.position.x) || isOnClipLeftEdge(clip, e.position.x);
+        }
         setMouseCursor(onEdge ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
     }
 
@@ -1042,6 +1089,18 @@ private:
         return x >= right - kResizeEdgePixels && x <= right;
     }
 
+    /** Only audio clips have a grabbable left edge: trimming one moves where
+        its file starts playing (see trimClipStart), which a MIDI pattern has
+        no equivalent of. */
+    bool isOnClipLeftEdge(const model::Clip& clip, float x) const
+    {
+        if (clip.type != model::ClipType::Audio)
+            return false;
+
+        const float left = geometry_.xForBeat(clip.startBeats);
+        return x >= left && x <= left + kResizeEdgePixels;
+    }
+
     /** Whether a clip can be dragged from a track of type @p from onto a
         track of type @p to. Same type only, and never Audio: audio clips
         are file-backed, not a Pattern, so they don't belong here at all. */
@@ -1052,6 +1111,7 @@ private:
 
     bool   dragging_          = false;
     bool   resizing_          = false;
+    bool   trimmingStart_     = false; // dragging an audio clip's left edge
     int    dragTrackIndex_    = -1;
     int    dragClipIndex_     = -1;
     double dragGrabBeat_       = 0.0; // beat under the mouse at grab

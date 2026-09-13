@@ -1,0 +1,280 @@
+# SoundSplice — Feature Roadmap
+
+How SoundSplice gets from where it is today to feature parity with **Audacity**, **Adobe
+Audition** and **REAPER**, and past them. `PLAN.md` is Looper-Audio's historical plan; this file
+is the current one.
+
+Sources surveyed (September 2026): the Audacity features page and its manual's index of effects,
+generators and analyzers; Adobe Audition's feature summary on GetApp and its user guide (Essential
+Sound, diagnostics, restoration); and REAPER's home and `about.php` pages.
+
+Legend: ✅ have · 🟡 partial · ⬜ missing · 🔁 removed on purpose (decide before re-adding)
+
+---
+
+## 1. Where SoundSplice stands
+
+What already exists, so the plan doesn't rebuild it:
+
+| Area | Today |
+| --- | --- |
+| Editing | Waveform editor for **one clip at a time**: cut, copy, paste, delete, trim, split, silence, fade in/out, reverse, clip gain, normalize (by peak, as clip gain), speed/pitch, zero-crossing search (`audioedits::nearestZeroCrossing`, not yet a UI option) |
+| Repair | Spectral noise reduction with a noise print |
+| Effects (real-time) | Filter (LP/HP/BP), 3-band EQ, delay, reverb, drive, compressor, gate, tremolo, chorus, wobble; VST3/AU hosting |
+| Mastering | EQ, exciter, widener, reverb, maximizer, with presets |
+| Analysis | Spectrum of a selection |
+| Mix | Gain/pan/mute/solo, meters, gain/pan automation, master automation |
+| Record | Audio input with count-in, metronome and monitoring; MIDI recording |
+| I/O | Import WAV/AIFF/FLAC/Ogg/MP3; export the same five, mix or stems, with dither |
+| Workspace | Dockable panes, layouts, snapshot undo/redo |
+| 🔁 Removed | Buses, sends, sidechain, tempo changes, warp, drums/guitar/piano, generative loops |
+
+### Architectural limits that block parity
+
+These come up again and again below, so they go first (Phase 0):
+
+1. **Time is measured in beats.** `Clip::startBeats` and `lengthBeats` are musical time. An audio
+   editor works in seconds and samples; beats should be a display and snap option, not the storage
+   unit.
+2. **Clips have no source offset.** A clip plays its file from sample 0, so a trim, split or slip
+   has to write a new file. Audacity, Audition and REAPER all trim clips without touching the file.
+   Split halves, crossfades, takes and comping all depend on an offset.
+3. **Edits load and rewrite whole files.** `editSelection` reads every channel into
+   `std::vector<float>` and writes a new file into *SoundSplice Edits*. That is fine for a
+   three-minute song, but it's slow and memory-hungry for a two-hour podcast. Nothing ever cleans
+   the folder up, and projects aren't self-contained.
+4. **Built-in effects are real-time chain slots only.** Offline operations (normalize, noise
+   reduction, speed/pitch) are each wired up by hand in `MainComponent.cpp`, which is 6.3k lines.
+   Every new Audacity-style effect would add another bespoke dialog.
+5. **The effect chain is fixed to one of each kind** (see the comment on `Track::firstEffect`).
+6. **Selection is per clip.** There's no time selection across tracks, and no labels or markers
+   to select *by*.
+
+---
+
+## 2. Phases
+
+Each phase ships on its own and leaves the app better than it found it. Phases 0–3 are **Audacity
+parity**, 4–6 add **Audition parity**, 7–8 cover what's relevant from **REAPER**, and 9 goes past
+all three.
+
+### Phase 0 — Foundations (unblocks everything)
+
+| # | Work | Why |
+| --- | --- | --- |
+| 0.1 | **Time base in seconds/samples** for audio clips, keeping beats for MIDI and the Session view. Ruler toggles between h:m:s, samples, frames, and bars/beats. | Sample-accurate editing, and podcast/voice workflows where tempo means nothing |
+| 0.2 | 🟡 **`Clip::sourceOffsetSeconds`** ✅ (non-destructive trim, split and left-edge drag; see `src/app/ClipWindow.h`) plus per-clip fade-in/out lengths and shapes ⬜, all non-destructive | Trim/split/slip without writing files; the basis for crossfades and takes |
+| 0.3 | **Block-based audio store**: the project owns its audio as chunked sample blocks in a project folder, copy-on-write per block, so an edit rewrites only the blocks it touches | Handles long files, keeps projects self-contained, and makes edit files collectable |
+| 0.4 | **Unified `Processor` interface**: one effect definition with parameter descriptors that runs real-time in the chain, offline on a selection, and as a live preview. Built-ins and plugins both implement it. | Every Phase 2 effect then costs about one DSP file, with no new dialog or wiring |
+| 0.5 | **Auto-generated effect UI** from those descriptors, plus **user presets** and factory presets per effect | Audacity, Audition and REAPER all have presets on every effect |
+| 0.6 | **Variable-length effect chain** (several of the same kind, reorderable) | Needed by 0.4 and by mastering chains |
+| 0.7 | **Split `MainComponent.cpp`** into command modules (edit, transport, record, export, effects) behind a command registry | Keeps the file from doubling; the registry also drives macros (7.1) and the command palette (7.3) |
+| 0.8 | **Auto-save and crash recovery** | Table stakes in all three apps, and more urgent once edits stop writing whole new files |
+
+### Phase 1 — Editing parity (Audacity core)
+
+- ⬜ **Time selection across tracks**, including the empty space between clips; every edit and
+  effect applies to the selection on all selected tracks
+- ⬜ **Label tracks** (Audacity) / **markers and ranges** (Audition, REAPER): add at the playhead or
+  during playback and recording, rename, snap to them, select between them, export and import as text
+- ⬜ **Snap options**: grid, labels, clip edges, and zero crossings (surfacing `nearestZeroCrossing`)
+- ⬜ Edits on the arrangement itself, not just in the editor pane: split at the playhead, **join
+  clips**, **detach at silences**, ripple delete, **duplicate selection**, and **paste as new clip**
+- 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)
+- ⬜ **Envelope tool** (a volume curve drawn per clip) and **draw tool** (redraw samples when zoomed
+  to sample level, to fix clicks by hand)
+- ⬜ **Scrub and seek** playback, **play-at-speed** (transport varispeed), and **loop the selection**
+- ⬜ Zoom: to selection, fit project, fit vertically, sample-level zoom, a vertical dB/linear scale,
+  and waveform vs. **RMS overlay** display
+- ⬜ Track channel ops: **split stereo to mono**, **make stereo from two monos**, **mix and render to a
+  new track**, swap channels, and per-track **resample**
+- ⬜ **Multiple open files** in the editor, as tabs (REAPER project tabs, Audition's file list)
+- ⬜ Import: **Opus, WavPack, M4A/AAC, CAF, RF64/W64, raw PCM**, and audio pulled from video
+  (optional FFmpeg module, as Audacity does)
+
+### Phase 2 — Effects, generators and analyzers parity
+
+Built on 0.4, so each line is mostly DSP plus tests. Anything marked ✅ as real-time also needs
+offline apply and preview.
+
+**Volume and dynamics**
+✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · 🟡 Limiter (inside Maximizer; expose it as an
+effect) · ⬜ Amplify · ⬜ **Loudness normalization (LUFS/LU, EBU R128)** · ⬜ **Auto Duck** · ⬜ Expander ·
+⬜ **Multiband compressor** (REAPER ReaXComp, Audition) · ⬜ **De-esser** · ⬜ Dynamics processor with a
+drawable transfer curve (Audition)
+
+**Fades**
+✅ Fade in/out (linear) · ⬜ Adjustable fade curves (exponential, log, S-curve) · ⬜ **Studio fade out** ·
+⬜ **Crossfade clips** · ⬜ Crossfade tracks · ⬜ Automatic crossfades on overlap (REAPER)
+
+**Pitch and time**
+✅ Change speed · ✅ Change pitch · ⬜ **Change tempo** (`timeStretch` exists; expose it) ·
+⬜ Paulstretch · ⬜ Sliding stretch (pitch or tempo varying over the selection) · ⬜ **Formant-preserving
+pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercial) and Signalsmith Stretch
+(MIT) against the current phase vocoder · ⬜ Pitch correction / tuner (REAPER ReaTune)
+
+**EQ and filters**
+✅ LP/HP/BP · ✅ 3-band EQ · ⬜ Bass and treble · ⬜ **Graphic EQ** (10/31 band) · ⬜ **Parametric EQ with
+unlimited bands** and a drawable curve (Audacity Filter Curve, REAPER ReaEQ) · ⬜ Notch · ⬜ Shelf
+(`ShelfPeakFilter` exists) · ⬜ **Match EQ** (fit one clip's spectrum to another's)
+
+**Noise removal and repair** (Audacity *and* Audition)
+✅ Noise reduction · ⬜ **Click/pop removal** · ⬜ **Clip fix / DeClipper** · ⬜ Repair (interpolate a short
+region) · ⬜ **DeHummer** (50/60 Hz and harmonics) · ⬜ **Adaptive noise reduction** (no noise print
+needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ⬜ DC offset removal
+
+**Delay, reverb and modulation**
+✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ⬜ Echo (multitap) ·
+⬜ **Convolution reverb** with impulse-response loading (`CabinetIr` is a starting point) · ⬜ Phaser ·
+⬜ Flanger · ⬜ Wah-wah · ⬜ Vocoder · ⬜ Ring modulator
+
+**Stereo and special**
+🟡 Widener (mastering only) · ⬜ Invert · ⬜ Repeat · ⬜ **Truncate silence** · ⬜ **Channel mixer / mid-side**
+· ⬜ Center channel extractor / vocal reduction (Audition) · ⬜ Stereo-to-mono downmix
+
+**Generators**
+⬜ Tone (sine/square/saw) · ⬜ Chirp · ⬜ **Noise** (white/pink/brown) · ⬜ Silence · ⬜ DTMF · ⬜ Rhythm track
+/ click track (the metronome can render it) · ⬜ Pluck · ⬜ **Room tone fill** (synthesize or loop
+captured room tone into gaps)
+
+**Analyzers**
+✅ Plot spectrum · ⬜ **Find clipping** (labels each run) · ⬜ **Measure RMS / amplitude statistics**
+(Audition: peak, RMS, DC offset, dynamic range) · ⬜ **Contrast** (WCAG foreground/background) ·
+⬜ **Label sounds / silence finder** · ⬜ **Beat finder** · ⬜ **Loudness meter** (momentary, short-term,
+integrated LUFS, true peak, LRA) · ⬜ **Phase correlation meter / vectorscope** · ⬜ Oscilloscope
+
+### Phase 3 — Spectral editing
+
+- ⬜ **Spectrogram track view**: linear, log or mel scale, a configurable window, and a split
+  waveform/spectrogram view (Audacity, Audition, REAPER)
+- ⬜ **Spectral selection** (time × frequency box, lasso, and a harmonic brush as in Audition)
+- ⬜ Spectral delete · spectral parametric EQ · spectral shelves (Audacity)
+- ⬜ **Spot healing brush**: paint over a cough, click or phone ring and have it inpainted from the
+  surrounding time and frequency content (Audition)
+- ⬜ Non-destructive spectral edits stored on the clip (REAPER)
+
+### Phase 4 — Recording parity
+
+- ✅ Count-in, metronome, monitoring · ⬜ **Punch in/out** with pre-roll and crossfade ·
+  ⬜ **Loop recording into takes** · ⬜ **Record several inputs at once to several tracks** ·
+  ⬜ **Append record** (continue at the end of the track, as Audacity does)
+- ⬜ **Sound-activated recording** and **timer record** (Audacity)
+- ⬜ Record formats: 24-bit and 32-bit float WAV/RF64, mono vs. stereo per track, input-channel mapping
+- ⬜ **Latency compensation** for recordings (measured round-trip, applied as an offset)
+- ⬜ Input level meter with a peak hold and a clip indicator on every armed track
+- ⬜ Arm and disarm tracks while playing (REAPER)
+- ⬜ **Retroactive recording**: always keep the last N minutes of input in a buffer, so a take you
+  forgot to record can be saved afterward (REAPER does this for MIDI; nobody does it well for audio)
+
+### Phase 5 — Multitrack and mixing parity (Audition, REAPER)
+
+- ⬜ **Take lanes and swipe comping** with A/B comparison (REAPER, Audition)
+- ⬜ **Razor/range edits** across tracks (REAPER)
+- ⬜ **Track edit groups** and **folder tracks** (folders as organization only; see the 🔁 note below)
+- ⬜ **Automation for any effect or plugin parameter**, with curve shapes and automation modes
+  (read, touch, latch, write)
+- ⬜ **Plugin delay compensation**
+- ⬜ Clip-level effects (an effect chain on one clip rather than the whole track)
+- ⬜ **Hosting LV2 and CLAP** (CLAP needs `clap-juce-extensions` or a newer JUCE; research first),
+  plus a plugin manager with enable/disable, a blocklist and crash-safe scanning
+- 🔁 **Buses, sends, sidechain, tempo changes, warp** exist in REAPER and Audition but were cut from
+  SoundSplice on purpose. Parity would mean re-adding them, so decide per feature before Phase 5
+  starts. Auto Duck (Phase 2) covers the most common sidechain use without them.
+
+### Phase 6 — Audition's "finishing" workflows
+
+- ⬜ **Essential Sound panel**: tag a clip as Dialogue, Music, SFX or Ambience to get a simple task
+  panel (loudness match, repair, clarity, ducking) that drives the real effects underneath
+- ⬜ **Match loudness across clips** (non-destructive clip gain to a LUFS target)
+- ⬜ **Auto-ducking** of music under dialogue, generating editable automation rather than baking it in
+- ⬜ **Diagnostics panel**: scan a file and list clicks, clipping, silence and DC offset, each with a
+  fix and a select button (Audition's DeClicker/DeClipper diagnostics)
+- ⬜ **Batch process**: run an effect chain or preset over a folder of files
+- ⬜ Media browser with **preview** (✅ file browser and preview exist; add metadata columns and
+  favorites)
+- ⬜ **Favorites**: one-click saved actions or effect settings (Audition)
+
+### Phase 7 — Workflow, customization and accessibility (Audacity, REAPER)
+
+- ⬜ **Macros**: record or build a list of commands and effects with settings, then run it on the
+  selection or a batch of files (Audacity Macros, REAPER Actions)
+- ⬜ **Customizable keyboard shortcuts**, with importable and exportable sets
+- ⬜ **Command palette** (search every command by name)
+- ⬜ **Scripting**: embedded Lua with the command registry exposed (REAPER ReaScript, Audacity mod-script-pipe)
+- ⬜ **Accessibility**: full keyboard operation of tracks, clips and selections; screen-reader
+  announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit)
+- ⬜ Themes and custom colors; saved screensets (✅ layouts exist)
+- ⬜ Preferences dialog (devices, formats, editing defaults, paths, cache)
+- ⬜ **Project templates** (podcast, audiobook, music, voice-over)
+- ⬜ Headless CLI: extend `soundsplice_bounce` into `soundsplice-cli` for convert, render, apply macro
+  and analyze
+
+### Phase 8 — Render and export parity (REAPER, Audition)
+
+- ✅ WAV/AIFF/FLAC/Ogg/MP3, mix or stems, dither · ⬜ **Opus, WavPack, M4A/AAC, RF64/BW64**
+- ⬜ **Export multiple**: one file per label, region or track, with **filename wildcards**
+- ⬜ **Metadata**: ID3, Vorbis comments, BWF/iXML, cover art
+- ⬜ **Loudness-normalize on export** and a true-peak limiter
+- ⬜ **Render queue** and saved render presets
+- ⬜ **Render statistics report**: peak, LUFS over time, and a clip list, as HTML (REAPER)
+- ⬜ High-quality sample-rate conversion (r8brain-free is MIT) · noise-shaped dither
+- ⬜ Export selection only · ⬜ CD image (CUE/BIN) from labels
+- ⬜ Chapter markers for podcast files (MP3 CHAP, M4A chapters)
+
+### Phase 9 — Beyond the three (differentiators)
+
+Things none of the three apps do well, or that would make SoundSplice the obvious choice for
+voice, podcast and restoration work:
+
+1. **Local speech transcription** (whisper.cpp): word-timed transcript as a label track (Audacity 3.4+
+   does this through OpenVINO; bundling it makes it one click)
+2. **Edit audio by editing text**: delete words in the transcript to cut the audio, with automatic
+   micro-crossfades and room-tone fill. Descript does this; no open desktop editor does.
+3. **Filler-word and long-pause removal** ("um", "uh", gaps over N ms), reviewable before it's applied
+4. **Stem separation** (vocals/drums/bass/other) via a local ONNX model (Demucs-class)
+5. **AI speech enhancement / noise suppression** (DeepFilterNet or RNNoise-class) alongside the
+   classic noise print
+6. **Delivery-spec checker**: pick ACX/Audible, Spotify, Apple Podcasts, YouTube or EBU R128
+   broadcast; get pass/fail on loudness, true peak, noise floor and head/tail silence, plus a
+   one-click "make it pass" chain
+7. **Loudness-matched A/B against a reference track**, so louder never passes for better
+8. **Preview-before-apply everywhere**, with a bypass toggle and a difference ("what was removed")
+   solo for every offline effect, not just some
+9. **Visual history panel**: jump to any undo step, compare it with the current state, and branch
+   from it instead of losing redo
+10. **Multichannel/ambisonic import and export** (REAPER-grade channel counts) for game and
+    immersive audio
+11. **Video track for sync**, showing a reference video for dubbing and podcast video (REAPER,
+    Audition). Late and optional, since it's a big dependency.
+12. **Keep the Session view** as a sketchpad for musicians, which none of the three editors has
+
+---
+
+## 3. Suggested order and first slices
+
+```
+Phase 0 ──► Phase 1 ──► Phase 2 (in parallel slices) ──► Phase 3
+                 │                                       │
+                 └──► Phase 4 (recording)                └──► Phase 6
+Phase 7 items can land at any point once 0.7 (command registry) exists.
+Phase 8 export items are mostly independent: pick them up whenever.
+Phase 9 needs 1 (labels) and 0.4 (Processor); transcription first, text editing second.
+```
+
+The first five pull requests:
+
+1. ✅ `Clip::sourceOffsetSeconds` plus non-destructive trim and split (0.2), with serialization and tests
+2. The `Processor` interface and generated UI, porting Normalize and Reverse onto it (0.4, 0.5)
+3. Seconds time base and ruler formats (0.1)
+4. Label tracks, with selection by label (Phase 1)
+5. Loudness meter plus loudness normalization, sharing one EBU R128 implementation (Phase 2)
+
+Each effect in Phase 2 follows one checklist: DSP header in `src/engine/` → a Catch2 test pinning
+its response → `Processor` descriptor → presets → an entry in the effect menu. Most need no UI code.
+
+## 4. Licensing notes
+
+The code is MIT. Watch for: **Rubber Band** (GPL, or a commercial license), **FFmpeg** (LGPL if
+dynamically linked and built without GPL parts), **LAME** (LGPL, already used), and **Élastique**
+(commercial). MIT/BSD options: Signalsmith Stretch, r8brain-free, whisper.cpp, ONNX Runtime,
+libebur128, and the Opus codec.

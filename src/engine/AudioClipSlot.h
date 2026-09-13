@@ -32,6 +32,11 @@ struct AudioClipSlot
     /** Linear, already converted from model::Clip::gainDb by the caller —
         the audio thread shouldn't be doing decibel conversions per block. */
     float  gain        = 1.0f;
+
+    /** How far into the file the clip starts playing, in seconds — see
+        model::Clip::sourceOffsetSeconds. Last, so aggregate initialisers
+        written before it existed still mean what they did. */
+    double sourceOffsetSeconds = 0.0;
 };
 
 } // namespace soundsplice::engine

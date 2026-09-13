@@ -417,6 +417,31 @@ TEST_CASE("Clip gain survives an audio path containing spaces", "[model][io]")
     REQUIRE(restored.tracks[0].clips[0].gainDb == 3.0f);
 }
 
+TEST_CASE("A clip's source offset round-trips, and defaults to the file's start", "[model][io]")
+{
+    Song original = makeSampleSong();
+    original.tracks[0].clips[0].type                = ClipType::Audio;
+    original.tracks[0].clips[0].audioFile           = "/Users/me/My Recordings/take one.wav";
+    original.tracks[0].clips[0].sourceOffsetSeconds = 12.345678901234567;
+
+    Song        restored;
+    std::string error;
+    REQUIRE(deserialize(serialize(original), restored, &error));
+    REQUIRE(restored.tracks[0].clips[0].sourceOffsetSeconds
+            == original.tracks[0].clips[0].sourceOffsetSeconds);
+    REQUIRE(restored == original);
+
+    // CLIPSRC is optional: a file without it plays every clip from the start
+    // of its file, which is what a clip meant before offsets existed.
+    auto text = serialize(original);
+    for (auto at = text.find("CLIPSRC "); at != std::string::npos; at = text.find("CLIPSRC "))
+        text.erase(at, text.find('\n', at) - at + 1);
+
+    Song withoutOffsets;
+    REQUIRE(deserialize(text, withoutOffsets, &error));
+    REQUIRE(withoutOffsets.tracks[0].clips[0].sourceOffsetSeconds == 0.0);
+}
+
 TEST_CASE("Sustain-pedal movements round-trip", "[model][io]")
 {
     Song s;

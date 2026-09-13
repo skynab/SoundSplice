@@ -933,6 +933,11 @@ MainComponent::MainComponent()
         setClipLength(trackIndex, clipIndex, newLengthBeats);
     };
 
+    arrangementView_.onClipStartTrimmed = [this](int trackIndex, int clipIndex, double newStartBeats)
+    {
+        trimClipStartTo(trackIndex, clipIndex, newStartBeats);
+    };
+
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)
     {
         importAudioFileAtBeat(file, dropBeat, trackIndex);
@@ -1023,7 +1028,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         addItem(menu, 5, "Export Audio...", keys::exportAudio);
         menu.addSeparator();
         menu.addItem(13, "Set Project Root Folder...");
-        menu.addItem(31, "Repair Recorded Clip Lengths...");
         menu.addSeparator();
         menu.addItem(6, "Audio Settings...");
         // Right next to Audio Settings, which is where anyone whose sound is
@@ -1140,7 +1144,6 @@ void MainComponent::menuItemSelected(int menuItemID, int)
         case 28: copyTrack(); break;
         case 29: pasteTrack(); break;
         case 30: duplicateTrackAt(selectedTrackIndex_); break;
-        case 31: repairRecordedClipLengths(); break;
         case 4:  chooseFile(); break; // preview only - see chooseFile
         case 5:  exportAudioDialog(); break;
         case 6:  showAudioSettings(); break;
@@ -2258,6 +2261,32 @@ void MainComponent::setClipLength(int trackIndex, int clipIndex, double newLengt
     updateEditingLabel();
 }
 
+/** Moves an audio clip's left edge (from the arrangement's left resize
+    handle) without moving its audio — see trimClipStart. The file is never
+    touched, so dragging the edge back out brings the audio back. */
+void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newStartBeats)
+{
+    const double bpm = history_.current().bpm;
+
+    history_.edit("Trim clip start", [trackIndex, clipIndex, newStartBeats, bpm](model::Song& s)
+    {
+        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
+            return;
+        auto& clips = s.tracks[(size_t) trackIndex].clips;
+        if (clipIndex < 0 || clipIndex >= (int) clips.size())
+            return;
+
+        auto& clip = clips[(size_t) clipIndex];
+        if (clip.type == model::ClipType::Audio)
+            clip = trimClipStart(clip, newStartBeats, bpm, kMinTrimmedClipBeats);
+    });
+
+    syncEngineTracks();
+    refreshAudioEditorForSelected();
+    arrangementView_.setSong(history_.current());
+    updateEditingLabel();
+}
+
 /** Sets how many bars the open clip's pattern loops over. Growing the pattern
     also grows the clip's window if the window would otherwise be too short to
     contain it — keeping a clip able to hold its own content isn't the same as
@@ -2396,6 +2425,7 @@ void MainComponent::syncEngineTracks()
             spec.startBeats  = clip.startBeats;
             spec.lengthBeats = clip.lengthBeats;
             spec.gainDb      = clip.gainDb;
+            spec.sourceOffsetSeconds = clip.sourceOffsetSeconds;
             audioSpecs.push_back(spec);
         }
         // Submitted even when empty, which the guard here used to skip: the
@@ -2608,26 +2638,37 @@ void MainComponent::refreshAudioEditorForSelected()
     const juce::File file(clip->audioFile);
     const auto&      track = history_.current().tracks[(size_t) selectedTrackIndex_];
 
-    // The file's own duration, not the clip's window: the editor edits the
-    // recording, and a clip shortened on the timeline still has all of its
-    // audio behind it.
-    audioEditor_.setClip(file, engine_.probeDurationSeconds(file), clip->gainDb,
-                         track.name, track.colour);
+    // The clip's audible window rather than the whole file: a split or
+    // trimmed clip shares its file with audio it doesn't play, and editing
+    // "this clip" has to mean the part that's heard. Positions in the editor
+    // are seconds from the clip's start — readClipWindow maps them back.
+    const double clipSeconds = clipAudibleSeconds(*clip, engine_.probeDurationSeconds(file),
+                                                  history_.current().bpm);
+    audioEditor_.setClip(file, clipSeconds, clip->gainDb, track.name, track.colour,
+                         clip->sourceOffsetSeconds);
     audioEditor_.setNoisePrintCaptured(! noiseProfiles_.empty() && noiseProfileFile_ == file);
 
-    // Read once per file, not once per refresh. Denoise writes a new file
-    // and repoints the clip, so a changed path is exactly the signal that
-    // the audio itself changed and the peaks are stale.
-    if (file != waveformPeaksFile_)
+    // Read once per window, not once per refresh. A destructive edit writes a
+    // new file and a trim moves the window, so a changed key is exactly the
+    // signal that the peaks are stale.
+    const auto peaksKey = file.getFullPathName() + "|" + juce::String(clip->sourceOffsetSeconds, 9)
+                        + "|" + juce::String(clipSeconds, 9);
+    if (peaksKey != waveformPeaksKey_)
     {
-        double     sampleRate = 0.0;
-        const auto channels   = readAudioFileChannels(file, sampleRate);
+        double                          sampleRate = 0.0;
+        std::vector<std::vector<float>> fileChannels;
+        SampleWindow                    window;
 
         waveformPeaks_.clear();
-        if (! channels.empty() && sampleRate > 0.0)
+        if (readClipWindow(*clip, fileChannels, sampleRate, window))
+        {
+            std::vector<std::vector<float>> channels;
+            for (const auto& channel : fileChannels)
+                channels.push_back(windowSamples(channel, window));
             waveformPeaks_.build(channels);
+        }
 
-        waveformPeaksFile_       = file;
+        waveformPeaksKey_        = peaksKey;
         waveformPeaksSampleRate_ = sampleRate;
     }
 
@@ -2677,9 +2718,19 @@ void MainComponent::normaliseSelectedClip()
     // Both extremes per channel, then the largest magnitude across them: a
     // waveform is rarely symmetric, so taking only the maximum would
     // under-read a signal whose biggest excursion is negative.
+    //
+    // Only over the samples the clip plays: a trimmed clip's hidden audio may
+    // be louder than anything heard, and normalising to it would leave the
+    // clip quieter than it should be.
+    const auto window = clipSampleWindow(*clip,
+                                         (int) juce::jmin<juce::int64>(reader->lengthInSamples,
+                                                                       std::numeric_limits<int>::max()),
+                                         reader->sampleRate, history_.current().bpm);
+
     const int numChannels = juce::jmax(1, (int) reader->numChannels);
     std::vector<juce::Range<float>> levels((size_t) numChannels);
-    reader->readMaxLevels(0, reader->lengthInSamples, levels.data(), numChannels);
+    if (! window.isEmpty())
+        reader->readMaxLevels(window.start, window.length(), levels.data(), numChannels);
 
     float peak = 0.0f;
     for (const auto& range : levels)
@@ -2794,6 +2845,45 @@ std::vector<std::vector<float>> MainComponent::readAudioFileChannels(const juce:
         channels[(size_t) ch].assign(buffer.getReadPointer(ch), buffer.getReadPointer(ch) + length);
 
     return channels;
+}
+
+/** Reads @p clip's file whole and works out which of its samples the clip
+    plays. False if the file can't be read or the clip's window holds no
+    audio. */
+bool MainComponent::readClipWindow(const model::Clip& clip, std::vector<std::vector<float>>& channelsOut,
+                                   double& sampleRateOut, SampleWindow& windowOut) const
+{
+    channelsOut = readAudioFileChannels(juce::File(clip.audioFile), sampleRateOut);
+    windowOut   = {};
+    if (channelsOut.empty() || sampleRateOut <= 0.0)
+        return false;
+
+    windowOut = clipSampleWindow(clip, (int) channelsOut[0].size(), sampleRateOut, history_.current().bpm);
+    return ! windowOut.isEmpty();
+}
+
+/** Moves each of @p clipSeconds (seconds from the clip's start) to the
+    nearest zero crossing in the clip's audio, so a clip edge placed there
+    doesn't click. Left as given if the clip can't be read. */
+std::vector<double> MainComponent::zeroCrossingsNear(const model::Clip& clip,
+                                                     std::vector<double> clipSeconds) const
+{
+    double                          sampleRate = 0.0;
+    std::vector<std::vector<float>> channels;
+    SampleWindow                    window;
+    if (! readClipWindow(clip, channels, sampleRate, window))
+        return clipSeconds;
+
+    // Decided from the first channel and applied to all: snapping each
+    // channel to its own crossing would shear a stereo file apart.
+    const auto first = windowSamples(channels[0], window);
+    for (auto& seconds : clipSeconds)
+    {
+        const int at = juce::jlimit(0, window.length(), (int) std::llround(seconds * sampleRate));
+        seconds = (double) engine::audioedits::nearestZeroCrossing(first, at) / sampleRate;
+    }
+
+    return clipSeconds;
 }
 
 /** Copies the selection into the audio clipboard. Non-destructive, so it
@@ -2954,17 +3044,52 @@ void MainComponent::pasteAudioAtSelection()
         showStatus("Pasted");
 }
 
+/** Trims the clip to the selection without touching its file: the clip's
+    window moves onto the selection, so the audio either side is still there
+    to drag back out from the timeline. The kept audio stays where it was on
+    the timeline rather than jumping back to the clip's old start. */
 void MainComponent::trimToAudioSelection()
 {
-    const auto range = audioEditor_.selection();
+    const auto* clip = selectedAudioClip();
+    if (clip == nullptr)
+        return;
 
-    if (editSelection("Trim audio", true, [](std::vector<std::vector<float>>& channels,
-                                             int from, int to, double)
-        {
-            for (auto& channel : channels)
-                channel = engine::audioedits::keepRange(channel, from, to);
-        }))
-        showStatus("Trimmed to " + juce::String(range.lengthSeconds(), 2) + "s");
+    const auto range = audioEditor_.selection();
+    if (range.isEmpty())
+    {
+        showError("Select part of the clip first");
+        return;
+    }
+
+    // Snapped, as the destructive trim was: a clip edge that lands mid-cycle
+    // clicks.
+    auto edges = zeroCrossingsNear(*clip, { range.startSeconds, range.endSeconds });
+    if (edges[1] < edges[0])
+        std::swap(edges[0], edges[1]);
+
+    const double from = edges[0];
+    const double to   = edges[1];
+    if (to - from <= 0.0)
+    {
+        showError("That would leave the clip empty");
+        return;
+    }
+
+    const int    trackIndex = selectedTrackIndex_;
+    const int    clipIndex  = selectedClipIndex_;
+    const double bpm        = history_.current().bpm;
+
+    history_.edit("Trim audio", [trackIndex, clipIndex, from, to, bpm](model::Song& s)
+    {
+        auto& target = s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+        target = trimClipToRange(target, from, to, bpm);
+    });
+
+    syncEngineTracks();
+    refreshAudioEditorForSelected();
+    refreshAutomationPaneForSelected();
+    arrangementView_.setSong(history_.current());
+    showStatus("Trimmed to " + juce::String(to - from, 2) + "s");
 }
 
 void MainComponent::silenceAudioSelection()
@@ -3012,6 +3137,10 @@ void MainComponent::reverseAudioSelection()
         showStatus("Reversed");
 }
 
+/** Splits the clip in two at the selection's start without touching its
+    file: both halves play the same recording, the second from further in.
+    It used to write each half out as a file of its own, which doubled the
+    disk use of every split and made rejoining them impossible. */
 void MainComponent::splitClipAtSelection()
 {
     const auto* clip = selectedAudioClip();
@@ -3025,83 +3154,34 @@ void MainComponent::splitClipAtSelection()
         return;
     }
 
-    const juce::File source(clip->audioFile);
-    double           sampleRate = 0.0;
-    const auto       channels   = readAudioFileChannels(source, sampleRate);
-    if (channels.empty() || sampleRate <= 0.0)
-    {
-        showError("Could not read " + source.getFileName());
-        return;
-    }
+    const double bpm         = history_.current().bpm;
+    const double clipSeconds = clipAudibleSeconds(*clip, engine_.probeDurationSeconds(juce::File(clip->audioFile)),
+                                                  bpm);
+    const double at          = zeroCrossingsNear(*clip, { range.startSeconds })[0];
 
-    const int length = (int) channels[0].size();
-    int       at     = juce::jlimit(0, length, (int) std::llround(range.startSeconds * sampleRate));
-    at = engine::audioedits::nearestZeroCrossing(channels[0], at);
-
-    if (at <= 0 || at >= length)
+    if (at <= 0.0 || at >= clipSeconds)
     {
         showError("That split point is at the very edge of the clip");
         return;
     }
 
-    // Both halves written before the document is touched, so a failure to
-    // write leaves the project exactly as it was.
-    auto writeHalf = [&](int from, int to) -> juce::File
+    const int trackIndex = selectedTrackIndex_;
+    const int clipIndex  = selectedClipIndex_;
+
+    history_.edit("Split audio", [trackIndex, clipIndex, at, bpm](model::Song& s)
     {
-        juce::AudioBuffer<float> buffer((int) channels.size(), to - from);
-        for (int ch = 0; ch < (int) channels.size(); ++ch)
-        {
-            const auto part = engine::audioedits::keepRange(channels[(size_t) ch], from, to);
-            std::copy(part.begin(), part.end(), buffer.getWritePointer(ch));
-        }
+        auto&      track  = s.tracks[(size_t) trackIndex];
+        const auto halves = splitClipAt(track.clips[(size_t) clipIndex], at, bpm);
 
-        const auto file = editsDirectory()
-                              .getNonexistentChildFile(source.getFileNameWithoutExtension(), ".wav");
-        return engine::OfflineRenderer::writeWav(file, buffer, sampleRate) ? file : juce::File{};
-    };
-
-    const auto firstFile  = writeHalf(0, at);
-    const auto secondFile = writeHalf(at, length);
-    if (firstFile == juce::File{} || secondFile == juce::File{})
-    {
-        showError("Could not write the split halves");
-        return;
-    }
-
-    const int    trackIndex   = selectedTrackIndex_;
-    const int    clipIndex    = selectedClipIndex_;
-    const double bpm          = history_.current().bpm;
-    const double firstBeats   = engine::beatsForSeconds((double) at / sampleRate, bpm);
-    const double secondBeats  = engine::beatsForSeconds((double) (length - at) / sampleRate, bpm);
-    const auto   firstPath    = firstFile.getFullPathName().toStdString();
-    const auto   secondPath   = secondFile.getFullPathName().toStdString();
-
-    history_.edit("Split audio", [=](model::Song& s)
-    {
-        auto& track = s.tracks[(size_t) trackIndex];
-        auto& first = track.clips[(size_t) clipIndex];
-
-        const double startBeats = first.startBeats;
-        first.audioFile   = firstPath;
-        first.lengthBeats = juce::jmax(0.25, firstBeats);
-
-        model::Clip second = first;
-        second.audioFile   = secondPath;
-        second.lengthBeats = juce::jmax(0.25, secondBeats);
-        second.startBeats  = startBeats + first.lengthBeats;
-
-        model::addClip(s, track.id, second); // reissues the id
+        track.clips[(size_t) clipIndex] = halves.first;
+        model::addClip(s, track.id, halves.second); // reissues the id
     });
-
-    noiseProfiles_.clear();
-    noiseProfileFile_  = juce::File{};
-    waveformPeaksFile_ = juce::File{};
 
     syncEngineTracks();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
     arrangementView_.setSong(history_.current());
-    showStatus("Split at " + juce::String((double) at / sampleRate, 2) + "s");
+    showStatus("Split at " + juce::String(at, 2) + "s");
 }
 
 /** Offers a scratch effect chain to render into the selection. */
@@ -3247,16 +3327,18 @@ void MainComponent::analyseSelection()
         return;
     }
 
-    double     sampleRate = 0.0;
-    const auto channels   = readAudioFileChannels(juce::File(clip->audioFile), sampleRate);
-    if (channels.empty() || sampleRate <= 0.0)
+    double                          sampleRate = 0.0;
+    std::vector<std::vector<float>> file;
+    SampleWindow                    window;
+    if (! readClipWindow(*clip, file, sampleRate, window))
     {
         showError("Could not read that clip");
         return;
     }
 
-    const auto range  = audioEditor_.selection();
-    const int  length = (int) channels[0].size();
+    const auto channel = windowSamples(file[0], window);
+    const auto range   = audioEditor_.selection();
+    const int  length  = (int) channel.size();
     const int  from   = range.isEmpty() ? 0
                           : juce::jlimit(0, length, (int) std::llround(range.startSeconds * sampleRate));
     const int  to     = range.isEmpty() ? length
@@ -3265,7 +3347,7 @@ void MainComponent::analyseSelection()
     // Channel 0 rather than a sum: summing a stereo pair cancels whatever is
     // out of phase between them, which would hide exactly the kind of problem
     // someone opens an analyser to find.
-    const std::vector<float> passage(channels[0].begin() + from, channels[0].begin() + to);
+    const std::vector<float> passage(channel.begin() + from, channel.begin() + to);
 
     const auto measured = engine::spectrum::analyse(passage, sampleRate);
     if (measured.isEmpty())
@@ -3406,15 +3488,20 @@ void MainComponent::captureNoisePrint()
         return;
     }
 
-    const juce::File file(clip->audioFile);
-    double           sampleRate = 0.0;
-    const auto       channels   = readAudioFileChannels(file, sampleRate);
+    const juce::File                file(clip->audioFile);
+    double                          sampleRate = 0.0;
+    std::vector<std::vector<float>> fileChannels;
+    SampleWindow                    window;
 
-    if (channels.empty() || sampleRate <= 0.0)
+    if (! readClipWindow(*clip, fileChannels, sampleRate, window))
     {
         showError("Could not read " + file.getFileName());
         return;
     }
+
+    std::vector<std::vector<float>> channels;
+    for (const auto& channel : fileChannels)
+        channels.push_back(windowSamples(channel, window));
 
     const int total = (int) channels[0].size();
     const int from  = juce::jlimit(0, total, (int) std::llround(range.startSeconds * sampleRate));
@@ -3515,9 +3602,14 @@ bool MainComponent::selectedSampleRange(int& fromOut, int& toOut, int& lengthOut
     if (range.isEmpty())
         return false;
 
-    channelsOut = readAudioFileChannels(juce::File(clip->audioFile), sampleRateOut);
-    if (channelsOut.empty() || sampleRateOut <= 0.0)
+    std::vector<std::vector<float>> file;
+    SampleWindow                    window;
+    if (! readClipWindow(*clip, file, sampleRateOut, window))
         return false;
+
+    channelsOut.clear();
+    for (const auto& channel : file)
+        channelsOut.push_back(windowSamples(channel, window));
 
     lengthOut = (int) channelsOut[0].size();
     fromOut   = juce::jlimit(0, lengthOut, (int) std::llround(range.startSeconds * sampleRateOut));
@@ -3540,9 +3632,9 @@ bool MainComponent::selectedSampleRange(int& fromOut, int& toOut, int& lengthOut
 /** The one path every destructive edit takes.
 
     Centralised because each step is easy to forget individually and each
-    failure is quiet: a clip whose lengthBeats no longer matches its file is
-    silently "repaired" by ClipLengthRepair (undoing the edit), and a stale
-    waveform-peaks cache draws the old audio over the new. */
+    failure is quiet: a clip whose lengthBeats isn't updated plays the old
+    duration, and a stale waveform-peaks cache draws the old audio over the
+    new. */
 bool MainComponent::applyDestructiveEdit(
     const juce::String& label,
     const std::function<std::vector<float>(const std::vector<float>&, int channel)>& transform)
@@ -3563,14 +3655,21 @@ bool MainComponent::applyDestructiveEditToAllChannels(
     if (clip == nullptr)
         return false;
 
-    const juce::File source(clip->audioFile);
-    double           sampleRate = 0.0;
-    auto             channels   = readAudioFileChannels(source, sampleRate);
-    if (channels.empty() || sampleRate <= 0.0)
+    const juce::File                source(clip->audioFile);
+    double                          sampleRate = 0.0;
+    std::vector<std::vector<float>> file;
+    SampleWindow                    window;
+    if (! readClipWindow(*clip, file, sampleRate, window))
     {
         showError("Could not read " + source.getFileName());
         return false;
     }
+
+    // The transform sees only the samples the clip plays, indexed from the
+    // clip's own start — the same coordinates the editor's selection is in.
+    std::vector<std::vector<float>> channels;
+    for (const auto& channel : file)
+        channels.push_back(windowSamples(channel, window));
 
     transform(channels, sampleRate);
 
@@ -3583,17 +3682,24 @@ bool MainComponent::applyDestructiveEditToAllChannels(
         return false;
     }
 
-    juce::AudioBuffer<float> buffer((int) channels.size(), newLength);
+    // Spliced back between the audio either side of the window, so a trimmed
+    // or split clip keeps the audio it hides and its offset still points at
+    // the same place: only the window's length changes.
+    std::vector<std::vector<float>> spliced;
     for (int ch = 0; ch < (int) channels.size(); ++ch)
     {
         // Channels can differ in length only if a transform is inconsistent,
         // which is a bug — but writing past the buffer would be a crash, so
-        // it is clamped rather than trusted.
-        const int count = juce::jmin(newLength, (int) channels[(size_t) ch].size());
-        buffer.clear(ch, 0, newLength);
-        std::copy(channels[(size_t) ch].begin(), channels[(size_t) ch].begin() + count,
-                  buffer.getWritePointer(ch));
+        // each is padded or cut to the first channel's length.
+        auto part = channels[(size_t) ch];
+        part.resize((size_t) newLength, 0.0f);
+        spliced.push_back(spliceWindow(file[(size_t) juce::jmin(ch, (int) file.size() - 1)], window, part));
     }
+
+    const int totalLength = (int) spliced[0].size();
+    juce::AudioBuffer<float> buffer((int) spliced.size(), totalLength);
+    for (int ch = 0; ch < (int) spliced.size(); ++ch)
+        std::copy(spliced[(size_t) ch].begin(), spliced[(size_t) ch].end(), buffer.getWritePointer(ch));
 
     const auto destination = editsDirectory()
                                  .getNonexistentChildFile(source.getFileNameWithoutExtension(), ".wav");
@@ -3603,9 +3709,8 @@ bool MainComponent::applyDestructiveEditToAllChannels(
         return false;
     }
 
-    // lengthBeats is derived from the file's duration, not chosen — see
-    // ClipLengthRepair, which will "correct" any clip that disagrees. An
-    // edit that changed the duration without this would be silently undone.
+    // The clip's window takes the edited audio's new duration. Its offset
+    // doesn't move, because nothing before the window changed.
     const double newSeconds     = (double) newLength / sampleRate;
     const int    trackIndex     = selectedTrackIndex_;
     const int    clipIndex      = selectedClipIndex_;
@@ -3623,7 +3728,7 @@ bool MainComponent::applyDestructiveEditToAllChannels(
     // path — without clearing it the editor keeps drawing the old audio.
     noiseProfiles_.clear();
     noiseProfileFile_  = juce::File{};
-    waveformPeaksFile_ = juce::File{};
+    waveformPeaksKey_  = {};
 
     syncEngineTracks();
     refreshAudioEditorForSelected();
@@ -4324,40 +4429,6 @@ void MainComponent::setProjectRootFolderDialog()
         fileBrowser_.setProjectRootFolder(dir);
         showStatus("Project root folder set to: " + dir.getFullPathName());
     });
-}
-
-/** One-time fix-up for projects saved while recorded takes were always given
-    a flat four beats regardless of how long the take actually ran (see
-    finishRecordingIfReady). Re-measures every audio clip against its file and
-    corrects any that disagree — see ClipLengthRepair.h for why "disagrees
-    with its file" rather than "is exactly four beats" is the right test. */
-void MainComponent::repairRecordedClipLengths()
-{
-    auto probe = [this](const std::string& path) -> double
-    {
-        const juce::File file(path);
-        return file.existsAsFile() ? engine_.probeDurationSeconds(file) : 0.0;
-    };
-
-    // A dry run on a copy first, so nothing is added to the undo stack when
-    // there is nothing to fix.
-    auto        dryRun = history_.current();
-    const auto  fixes  = repairAudioClipLengths(dryRun, probe);
-
-    if (fixes.empty())
-    {
-        showStatus("No recorded clips needed a length fix");
-        return;
-    }
-
-    history_.edit("Repair recorded clip lengths", [probe](model::Song& s)
-    {
-        repairAudioClipLengths(s, probe);
-    });
-
-    refreshFromModel();
-    showStatus(juce::String((int) fixes.size())
-               + (fixes.size() == 1 ? " clip length was fixed" : " clip lengths were fixed"));
 }
 
 /** Imports an audio file onto a brand-new Audio track (as its one clip, at

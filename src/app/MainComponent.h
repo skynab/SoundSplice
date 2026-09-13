@@ -38,7 +38,7 @@
 #include "MixerStrip.h"
 #include "PianoRoll.h"
 #include "PluginEditorWindow.h"
-#include "ClipLengthRepair.h"
+#include "ClipWindow.h"
 #include "DragCommit.h"
 #include "TrackSelection.h"
 #include "SessionView.h"
@@ -157,7 +157,6 @@ private:
     void                   importMidiFileDialog();
     void                   exportMidiFileDialog();
     void                   setProjectRootFolderDialog();
-    void                   repairRecordedClipLengths();
 
     void                   refreshAutomationPaneForSelected();
     /** Commits an edited lane for the selected track as one undo step. */
@@ -250,8 +249,8 @@ private:
     void                   applySpeedAndPitch(double speedFactor, double semitones);
     void                   applyEffectsToSelection(const std::vector<model::EffectSlot>& chain);
 
-    /** Converts between the audio editor's file-seconds and song beats —
-        the one place that mapping lives. */
+    /** Converts between the audio editor's seconds (from the selected clip's
+        start) and song beats — the one place that mapping lives. */
     double                 songBeatForClipSeconds(double secondsIntoFile) const;
     double                 clipSecondsForSongBeat(double beat) const;
 
@@ -291,6 +290,12 @@ private:
         editor's offline operations. */
     std::vector<std::vector<float>> readAudioFileChannels(const juce::File& file,
                                                           double& sampleRateOut) const;
+    /** Reads @p clip's whole file and the window of it the clip plays. */
+    bool                   readClipWindow(const model::Clip& clip,
+                                          std::vector<std::vector<float>>& channelsOut,
+                                          double& sampleRateOut, SampleWindow& windowOut) const;
+    /** @p clipSeconds, each moved to the nearest zero crossing in the clip. */
+    std::vector<double>    zeroCrossingsNear(const model::Clip& clip, std::vector<double> clipSeconds) const;
     void                   refreshEffectChainForSelected();
     void                   addEffectSlot(model::EffectKind kind, const model::PluginRef& plugin);
     void                   removeEffectSlot(int slotIndex);
@@ -322,6 +327,7 @@ private:
     void                   selectTrackAndClip(int trackIndex, int clipIndex);
     void                   addClipToSelectedTrack();
     void                   setClipLength(int trackIndex, int clipIndex, double newLengthBeats);
+    void                   trimClipStartTo(int trackIndex, int clipIndex, double newStartBeats);
     void                   copyNotes();
     void                   pasteNotes();
     void                   copyClip();
@@ -543,12 +549,12 @@ private:
     std::vector<engine::NoiseProfile>  noiseProfiles_;
     juce::File                         noiseProfileFile_;
 
-    // The peaks the audio editor draws, and the file they came from.
+    // The peaks the audio editor draws, and the clip window they came from.
     // refreshAudioEditorForSelected() runs on ~26 unrelated edits, so this
-    // is cached by path — rebuilding would re-read the file every time
-    // anything in the app changed.
+    // is cached by file path, offset and length — rebuilding would re-read
+    // the file every time anything in the app changed.
     WaveformPeaks                      waveformPeaks_;
-    juce::File                         waveformPeaksFile_;
+    juce::String                       waveformPeaksKey_;
     double                             waveformPeaksSampleRate_ = 0.0;
 
     CallbackComponent                  arrangeTab_;
