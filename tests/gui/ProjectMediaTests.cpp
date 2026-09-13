@@ -9,6 +9,7 @@
 #include <model/Serialization.h>
 
 using namespace soundsplice;
+namespace media = soundsplice::app::media;
 
 namespace
 {
