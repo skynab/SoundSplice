@@ -42,6 +42,7 @@
 #include "Autosave.h"
 #include "TimeFormat.h"
 #include "ClipWindow.h"
+#include "ProjectMedia.h"
 #include "DragCommit.h"
 #include "TrackSelection.h"
 #include "SessionView.h"
@@ -220,6 +221,11 @@ private:
         be read (and reasoned about) apart from the take's lifecycle. */
     void                   commitMidiTake(int targetTrack, int64_t startSample, int64_t endSample);
     juce::File             recordingsDirectory() const;
+    /** Where a new recording or edit should be written: the saved project's
+        audio folder, or @p scratchDirectory for a project not saved yet. */
+    juce::File             audioDirectoryFor(const juce::File& scratchDirectory) const;
+    void                   collectProjectAudio(const juce::File& projectFile);
+    void                   cleanUpProjectAudio();
     static model::Song     makeEmptySong();
     void                   selectTrackAndRefreshAll(int newTrackIndex);
     void                   addTrack();

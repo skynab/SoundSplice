@@ -89,6 +89,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/WaveformCacheTests.cpp
     gui/RowWrapLayoutTests.cpp
     gui/StemNamingTests.cpp
+    gui/ProjectMediaTests.cpp
     gui/PaneLayoutTests.cpp
     gui/PaneWiringTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)

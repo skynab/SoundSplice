@@ -199,7 +199,9 @@ void MainComponent::toggleRecording()
 
     if (! awaitingRecordedTake_)
     {
-        const auto file = recordingsDirectory().getNonexistentChildFile("Recording", ".wav");
+        // Into the saved project's audio folder, or the scratch folder until
+        // there is one (see app/ProjectMedia.h).
+        const auto file = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
 
         if (! engine_.beginRecording(file))
         {

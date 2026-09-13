@@ -1099,7 +1099,7 @@ bool MainComponent::applyDestructiveEditToAllChannels(
     for (int ch = 0; ch < (int) spliced.size(); ++ch)
         std::copy(spliced[(size_t) ch].begin(), spliced[(size_t) ch].end(), buffer.getWritePointer(ch));
 
-    const auto destination = editsDirectory()
+    const auto destination = audioDirectoryFor(editsDirectory())
                                  .getNonexistentChildFile(source.getFileNameWithoutExtension(), ".wav");
     if (! engine::OfflineRenderer::writeWav(destination, buffer, sampleRate))
     {

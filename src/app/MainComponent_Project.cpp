@@ -1,5 +1,7 @@
 #include "MainComponentInternal.h"
 
+#include <map>
+
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // The document on disk: new, open, save, the discard prompt, and autosave
 // with crash recovery.
@@ -95,11 +97,16 @@ void MainComponent::updateWindowTitle()
 
 /** The actual write, shared by Save and Save As. Marks the document clean
     against the state that was written — not whatever it becomes later — so an
-    edit made while the file chooser was up still counts as unsaved. */
+    edit made while the file chooser was up still counts as unsaved.
+
+    The project's audio travels with it: see app/ProjectMedia.h. */
 bool MainComponent::writeProjectTo(const juce::File& file)
 {
-    const auto stateWritten = history_.stateId();
-    const std::string text  = model::serialize(history_.current());
+    collectProjectAudio(file);
+
+    // Taken after collecting, which repoints paths and so moves the state id.
+    const auto        stateWritten = history_.stateId();
+    const std::string text = model::serialize(app::media::withStoredPaths(history_.current(), file));
 
     if (! file.replaceWithText(juce::String::fromUTF8(text.c_str())))
     {
@@ -110,8 +117,114 @@ bool MainComponent::writeProjectTo(const juce::File& file)
     projectFile_   = file;
     savedStateId_  = stateWritten;
     discardAutosave(); // on disk for real now; an edit made during the save gets autosaved afresh
+    cleanUpProjectAudio();
     updateWindowTitle();
     return true;
+}
+
+juce::File MainComponent::audioDirectoryFor(const juce::File& scratchDirectory) const
+{
+    if (projectFile_ == juce::File{})
+        return scratchDirectory;
+
+    const auto folder = app::media::audioFolderFor(projectFile_);
+    return folder.createDirectory().wasOk() ? folder : scratchDirectory;
+}
+
+/** Copies the audio the app made for this project (recordings and edits still
+    in the scratch folders, or in the previous project's audio folder after
+    Save As) into @p projectFile's audio folder, and repoints the document at
+    the copies.
+
+    Done in place rather than as an undoable edit, because where a file lives
+    isn't an edit anyone made. The originals stay where they were, so an undo
+    that brings back an older path still finds its audio. */
+void MainComponent::collectProjectAudio(const juce::File& projectFile)
+{
+    const auto folder = app::media::audioFolderFor(projectFile);
+
+    std::vector<juce::File> owned { recordingsDirectory(), editsDirectory() };
+    if (projectFile_ != juce::File{} && projectFile_ != projectFile)
+        owned.push_back(app::media::audioFolderFor(projectFile_));
+
+    // Checked before touching the document, so a project whose audio is all
+    // in place isn't marked as changed by saving it.
+    bool anyToCollect = false;
+    app::media::forEachAudioPath(history_.current(), [&](const std::string& path)
+    {
+        anyToCollect = anyToCollect || app::media::shouldCollect(app::media::fileFromPath(path), folder, owned);
+    });
+
+    if (! anyToCollect)
+        return;
+
+    std::map<juce::String, juce::File> copies; // original path -> its copy, so shared files copy once
+    int failed = 0;
+
+    app::media::forEachAudioPath(history_.mutableCurrent(), [&](std::string& path)
+    {
+        const auto audio = app::media::fileFromPath(path);
+        if (! app::media::shouldCollect(audio, folder, owned))
+            return;
+
+        auto copy = copies.find(audio.getFullPathName());
+        if (copy == copies.end())
+        {
+            const auto collected = app::media::collectInto(audio, folder);
+            copy = copies.emplace(audio.getFullPathName(), collected).first;
+            if (collected == audio)
+                ++failed;
+        }
+
+        path = app::media::pathOf(copy->second);
+    });
+
+    if (failed > 0)
+        showError(juce::String(failed) + (failed == 1 ? " audio file" : " audio files")
+                  + " couldn't be copied into \"" + folder.getFileName()
+                  + "\" - the project still plays them from where they are");
+
+    // Same audio at new paths: the engine and the panes follow the document.
+    syncEngineTracks();
+    arrangementView_.setSong(history_.current());
+    refreshAudioEditorForSelected();
+}
+
+/** Moves audio files in the project's audio folder that nothing uses any more
+    (superseded edits, deleted takes) to the trash.
+
+    "Nothing" includes the undo history: a file an undo could bring back is
+    kept for as long as that history exists. Only the project's own folder is
+    touched, only audio files directly in it, and to the trash rather than
+    deleted, so anything removed by mistake can be got back. */
+void MainComponent::cleanUpProjectAudio()
+{
+    if (projectFile_ == juce::File{})
+        return;
+
+    juce::Array<juce::File> referenced;
+
+    // A take being recorded right now isn't in the document until it stops,
+    // but it is very much in use.
+    if (awaitingRecordedTake_ && recordingFile_ != juce::File{})
+        referenced.add(recordingFile_);
+
+    history_.forEachState([&referenced](const model::Song& song)
+    {
+        app::media::forEachAudioPath(song, [&referenced](const std::string& path)
+        {
+            referenced.addIfNotAlreadyThere(app::media::fileFromPath(path));
+        });
+    });
+
+    int moved = 0;
+    for (const auto& file : app::media::unusedAudioFiles(app::media::audioFolderFor(projectFile_), referenced))
+        if (file.moveToTrash())
+            ++moved;
+
+    if (moved > 0)
+        showStatus("Moved " + juce::String(moved) + (moved == 1 ? " unused audio file" : " unused audio files")
+                   + " to the trash");
 }
 
 /** Saves over the project's own file, falling back to Save As the first time.
@@ -230,7 +343,9 @@ void MainComponent::chooseProjectToOpen()
             return;
         }
 
-        loadSongIntoEditor(song);
+        // Paths inside the project's folder are stored relative to it, so the
+        // project finds its audio wherever the folder has been moved.
+        loadSongIntoEditor(app::media::withResolvedPaths(song, file));
 
         projectFile_  = file;
         savedStateId_ = history_.stateId(); // what's on screen is what's on disk

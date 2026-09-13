@@ -69,6 +69,20 @@ public:
         apply(std::move(next), std::move(label));
     }
 
+    /** Calls @p fn with every state the history holds: the present one, then
+        each undo and redo snapshot. For finding what any state the user can
+        still get back to refers to, such as an audio file an undo would
+        restore. */
+    template <typename Fn>
+    void forEachState(Fn&& fn) const
+    {
+        fn(present_);
+        for (const auto& entry : undo_)
+            fn(entry.state);
+        for (const auto& entry : redo_)
+            fn(entry.state);
+    }
+
     bool canUndo() const noexcept { return ! undo_.empty(); }
     bool canRedo() const noexcept { return ! redo_.empty(); }
 
