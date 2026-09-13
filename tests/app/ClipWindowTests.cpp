@@ -75,6 +75,20 @@ TEST_CASE("Splitting leaves two clips that play the same audio back to back", "[
     REQUIRE(second.audioFile == first.audioFile);
 }
 
+TEST_CASE("Splitting keeps the outer fades and adds none at the cut", "[app][clipwindow]")
+{
+    auto clip = audioClip(0.0, 8.0);
+    clip.fades.inSeconds  = 0.5;
+    clip.fades.outSeconds = 1.0;
+
+    const auto [first, second] = splitClipAt(clip, 2.0, kBpm);
+
+    REQUIRE(first.fades.inSeconds == 0.5);
+    REQUIRE(first.fades.outSeconds == 0.0);
+    REQUIRE(second.fades.inSeconds == 0.0);
+    REQUIRE(second.fades.outSeconds == 1.0);
+}
+
 TEST_CASE("Trimming to a range keeps the kept audio where it was", "[app][clipwindow]")
 {
     const auto trimmed = trimClipToRange(audioClip(4.0, 8.0), 1.0, 2.5, kBpm);

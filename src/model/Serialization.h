@@ -42,6 +42,19 @@ namespace detail
         return buffer;
     }
 
+    /** A stored fade shape, or Linear for a value this build doesn't know —
+        a shape added later should play as a plain fade here, not refuse the
+        whole file. */
+    inline engine::FadeShape fadeShapeFrom(int value)
+    {
+        switch (value)
+        {
+            case (int) engine::FadeShape::EqualPower: return engine::FadeShape::EqualPower;
+            case (int) engine::FadeShape::SCurve:     return engine::FadeShape::SCurve;
+            default:                                  return engine::FadeShape::Linear;
+        }
+    }
+
     /** One clip record: its header plus its note list. Shared by the
         arrangement's clips and the session grid's, so the two can't drift. */
     inline void writeClip(std::ostringstream& out, const Clip& clip)
@@ -55,6 +68,8 @@ namespace detail
         // follow it on that line.
         out << "CLIPGAIN " << num((double) clip.gainDb) << "\n";
         out << "CLIPSRC " << num(clip.sourceOffsetSeconds) << "\n";
+        out << "CLIPFADE " << num(clip.fades.inSeconds) << " " << (int) clip.fades.inShape << " "
+            << num(clip.fades.outSeconds) << " " << (int) clip.fades.outShape << "\n";
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
             out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
@@ -318,6 +333,15 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
         if (readTagged("CLIPSRC", rest))
             clip.sourceOffsetSeconds = std::strtod(rest.c_str(), nullptr);
+
+        if (readTagged("CLIPFADE", rest))
+        {
+            std::istringstream fs(rest);
+            int inShape = 0, outShape = 0;
+            fs >> clip.fades.inSeconds >> inShape >> clip.fades.outSeconds >> outShape;
+            clip.fades.inShape  = detail::fadeShapeFrom(inShape);
+            clip.fades.outShape = detail::fadeShapeFrom(outShape);
+        }
 
         if (readTagged("PEDALS", rest))
         {

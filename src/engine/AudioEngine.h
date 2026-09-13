@@ -46,6 +46,7 @@ struct AudioClipSpec
     double     lengthBeats = 0.0;
     float      gainDb      = 0.0f;
     double     sourceOffsetSeconds = 0.0; // see model::Clip::sourceOffsetSeconds
+    ClipFades  fades;                     // see model::Clip::fades
 };
 
 /**

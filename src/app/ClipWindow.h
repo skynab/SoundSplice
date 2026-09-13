@@ -116,18 +116,23 @@ inline model::Clip trimClipToRange(const model::Clip& clip, double fromSeconds, 
 
 /** @p clip split at @p atSeconds from its start into two clips that play the
     same file back to back. The second keeps the first's id; the caller gives
-    it a new one when adding it. Callers refuse a split at either edge. */
+    it a new one when adding it. Callers refuse a split at either edge.
+
+    The clip's fade-in stays on the first half and its fade-out on the second.
+    Neither half fades at the cut, where the two still join seamlessly. */
 inline std::pair<model::Clip, model::Clip> splitClipAt(const model::Clip& clip, double atSeconds, double bpm)
 {
     const double atBeats = bpm > 0.0 ? engine::beatsForSeconds(atSeconds, bpm) : 0.0;
 
-    model::Clip first = clip;
-    first.lengthBeats = atBeats;
+    model::Clip first      = clip;
+    first.lengthBeats      = atBeats;
+    first.fades.outSeconds = 0.0;
 
     model::Clip second         = clip;
     second.startBeats          = clip.startBeats + atBeats;
     second.lengthBeats         = clip.lengthBeats - atBeats;
     second.sourceOffsetSeconds = clip.sourceOffsetSeconds + atSeconds;
+    second.fades.inSeconds     = 0.0;
 
     return { first, second };
 }

@@ -220,7 +220,8 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
             continue; // skip this clip; the others still load
         }
         slots->push_back({ decoded, spec.startBeats, spec.lengthBeats,
-                           juce::Decibels::decibelsToGain(spec.gainDb), spec.sourceOffsetSeconds });
+                           juce::Decibels::decibelsToGain(spec.gainDb), spec.sourceOffsetSeconds,
+                           spec.fades });
     }
 
     auto& track = tracks_[(size_t) index];

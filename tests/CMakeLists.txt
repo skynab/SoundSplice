@@ -6,6 +6,7 @@ add_executable(soundsplice_tests
   engine/TempoMapTests.cpp
   engine/TransportTests.cpp
   engine/InterpolationTests.cpp
+  engine/ClipFadeTests.cpp
   engine/MidiNoteTests.cpp
   engine/SequencerMathTests.cpp
   engine/MetronomeMathTests.cpp

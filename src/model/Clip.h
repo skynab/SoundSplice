@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "engine/ClipFade.h"
 #include "engine/Pattern.h"
 
 namespace soundsplice::model
@@ -36,6 +37,12 @@ struct Clip
         rather than beats because it measures real time in a recording. Audio
         clips only; app/ClipWindow.h holds the arithmetic built on it. */
     double sourceOffsetSeconds = 0.0;
+
+    /** A fade-in and a fade-out applied over the clip's audible length as it
+        plays. Non-destructive like gainDb: the file is untouched, so a fade
+        can be redrawn or removed freely. Audio clips only; the curves and the
+        rule for fades longer than the clip are in engine/ClipFade.h. */
+    engine::ClipFades fades;
 
     bool operator==(const Clip&) const = default;
 };

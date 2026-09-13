@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "engine/ClipData.h"
+#include "engine/ClipFade.h"
 
 namespace soundsplice::engine
 {
@@ -37,6 +38,10 @@ struct AudioClipSlot
         model::Clip::sourceOffsetSeconds. Last, so aggregate initialisers
         written before it existed still mean what they did. */
     double sourceOffsetSeconds = 0.0;
+
+    /** The clip's fades — see model::Clip::fades. Applied over the clip's
+        audible length, which the player works out per block. */
+    ClipFades fades;
 };
 
 } // namespace soundsplice::engine

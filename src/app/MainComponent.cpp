@@ -938,6 +938,16 @@ MainComponent::MainComponent()
         trimClipStartTo(trackIndex, clipIndex, newStartBeats);
     };
 
+    arrangementView_.onClipFadesChanged = [this](int trackIndex, int clipIndex, const engine::ClipFades& fades)
+    {
+        setClipFades(trackIndex, clipIndex, fades, "Set clip fade");
+    };
+
+    arrangementView_.onClipMenuRequested = [this](int trackIndex, int clipIndex)
+    {
+        showClipMenu(trackIndex, clipIndex);
+    };
+
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)
     {
         importAudioFileAtBeat(file, dropBeat, trackIndex);
@@ -2287,6 +2297,104 @@ void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newSta
     updateEditingLabel();
 }
 
+/** Replaces an audio clip's fades as one undo step, from dragging a fade
+    handle or picking a shape. The file is never touched: fades are applied
+    as the clip plays. */
+void MainComponent::setClipFades(int trackIndex, int clipIndex, const engine::ClipFades& fades,
+                                 const juce::String& label)
+{
+    history_.edit(label.toStdString(), [trackIndex, clipIndex, fades](model::Song& s)
+    {
+        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
+            return;
+        auto& clips = s.tracks[(size_t) trackIndex].clips;
+        if (clipIndex < 0 || clipIndex >= (int) clips.size())
+            return;
+
+        auto& clip = clips[(size_t) clipIndex];
+        if (clip.type != model::ClipType::Audio)
+            return;
+
+        clip.fades            = fades;
+        clip.fades.inSeconds  = juce::jmax(0.0, fades.inSeconds);
+        clip.fades.outSeconds = juce::jmax(0.0, fades.outSeconds);
+    });
+
+    syncEngineTracks();
+    arrangementView_.setSong(history_.current());
+}
+
+/** The right-click menu on an audio clip: a shape for each fade, and a way
+    to remove both. The two ends get separate shapes because they are used
+    differently: an equal-power fade suits a crossfade, while an S-curve
+    suits a clean start or finish. */
+void MainComponent::showClipMenu(int trackIndex, int clipIndex)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const auto& clips = song.tracks[(size_t) trackIndex].clips;
+    if (clipIndex < 0 || clipIndex >= (int) clips.size()
+        || clips[(size_t) clipIndex].type != model::ClipType::Audio)
+        return;
+
+    const auto fades = clips[(size_t) clipIndex].fades;
+
+    static constexpr std::pair<engine::FadeShape, const char*> kShapes[] {
+        { engine::FadeShape::Linear,     "Linear" },
+        { engine::FadeShape::EqualPower, "Equal Power" },
+        { engine::FadeShape::SCurve,     "S-Curve" }
+    };
+    static constexpr int kFadeInBase  = 100;
+    static constexpr int kFadeOutBase = 200;
+    static constexpr int kRemoveFades = 1;
+
+    juce::PopupMenu fadeInMenu, fadeOutMenu;
+    for (int i = 0; i < (int) std::size(kShapes); ++i)
+    {
+        fadeInMenu.addItem(kFadeInBase + i, kShapes[i].second, true, fades.inShape == kShapes[i].first);
+        fadeOutMenu.addItem(kFadeOutBase + i, kShapes[i].second, true, fades.outShape == kShapes[i].first);
+    }
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Drag a clip's top corners to fade it");
+    menu.addSubMenu("Fade In Shape", fadeInMenu);
+    menu.addSubMenu("Fade Out Shape", fadeOutMenu);
+    menu.addItem(kRemoveFades, "Remove Fades", ! fades.isNone());
+
+    menu.showMenuAsync(juce::PopupMenu::Options(),
+        [self = juce::Component::SafePointer<MainComponent>(this), trackIndex, clipIndex, fades](int result)
+        {
+            if (self == nullptr || result == 0)
+                return;
+
+            auto         updated = fades;
+            juce::String label;
+
+            if (result == kRemoveFades)
+            {
+                updated.inSeconds  = 0.0;
+                updated.outSeconds = 0.0;
+                label = "Remove clip fades";
+            }
+            else if (result >= kFadeOutBase)
+            {
+                updated.outShape = kShapes[(size_t) juce::jlimit(0, (int) std::size(kShapes) - 1,
+                                                                 result - kFadeOutBase)].first;
+                label = "Set fade-out shape";
+            }
+            else
+            {
+                updated.inShape = kShapes[(size_t) juce::jlimit(0, (int) std::size(kShapes) - 1,
+                                                                result - kFadeInBase)].first;
+                label = "Set fade-in shape";
+            }
+
+            self->setClipFades(trackIndex, clipIndex, updated, label);
+        });
+}
+
 /** Sets how many bars the open clip's pattern loops over. Growing the pattern
     also grows the clip's window if the window would otherwise be too short to
     contain it — keeping a clip able to hold its own content isn't the same as
@@ -2426,6 +2534,7 @@ void MainComponent::syncEngineTracks()
             spec.lengthBeats = clip.lengthBeats;
             spec.gainDb      = clip.gainDb;
             spec.sourceOffsetSeconds = clip.sourceOffsetSeconds;
+            spec.fades               = clip.fades;
             audioSpecs.push_back(spec);
         }
         // Submitted even when empty, which the guard here used to skip: the

@@ -63,7 +63,7 @@ all three.
 | # | Work | Why |
 | --- | --- | --- |
 | 0.1 | **Time base in seconds/samples** for audio clips, keeping beats for MIDI and the Session view. Ruler toggles between h:m:s, samples, frames, and bars/beats. | Sample-accurate editing, and podcast/voice workflows where tempo means nothing |
-| 0.2 | 🟡 **`Clip::sourceOffsetSeconds`** ✅ (non-destructive trim, split and left-edge drag; see `src/app/ClipWindow.h`) plus per-clip fade-in/out lengths and shapes ⬜, all non-destructive | Trim/split/slip without writing files; the basis for crossfades and takes |
+| 0.2 | ✅ **`Clip::sourceOffsetSeconds`** (non-destructive trim, split and left-edge drag; see `src/app/ClipWindow.h`) plus per-clip fade-in/out lengths and shapes (`src/engine/ClipFade.h`; drag a clip's top corners, right-click for shapes), all non-destructive | Trim/split/slip without writing files; the basis for crossfades and takes |
 | 0.3 | **Block-based audio store**: the project owns its audio as chunked sample blocks in a project folder, copy-on-write per block, so an edit rewrites only the blocks it touches | Handles long files, keeps projects self-contained, and makes edit files collectable |
 | 0.4 | **Unified `Processor` interface**: one effect definition with parameter descriptors that runs real-time in the chain, offline on a selection, and as a live preview. Built-ins and plugins both implement it. | Every Phase 2 effect then costs about one DSP file, with no new dialog or wiring |
 | 0.5 | **Auto-generated effect UI** from those descriptors, plus **user presets** and factory presets per effect | Audacity, Audition and REAPER all have presets on every effect |
@@ -104,7 +104,7 @@ effect) · ⬜ Amplify · ⬜ **Loudness normalization (LUFS/LU, EBU R128)** · 
 drawable transfer curve (Audition)
 
 **Fades**
-✅ Fade in/out (linear) · ⬜ Adjustable fade curves (exponential, log, S-curve) · ⬜ **Studio fade out** ·
+✅ Fade in/out (linear) · 🟡 Adjustable fade curves (clip fades have linear, equal power and S-curve; exponential and log to come) · ⬜ **Studio fade out** ·
 ⬜ **Crossfade clips** · ⬜ Crossfade tracks · ⬜ Automatic crossfades on overlap (REAPER)
 
 **Pitch and time**

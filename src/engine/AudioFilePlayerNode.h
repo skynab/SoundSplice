@@ -149,19 +149,36 @@ public:
         // this block starts.
         double position = (activeSlot.sourceOffsetSeconds * deviceSampleRate_ + localStart) * ratio;
 
+        // Clip fades, as a gain envelope over the clip's audible length: its
+        // window, cut short where the file runs out — a fade-out has to end
+        // where the audio does to be heard at all. Worked out from this
+        // block's own tempo, the same way the window itself is tested above.
+        const double sourceRate       = deviceSampleRate_ * ratio;
+        const double windowSeconds    = activeSlot.lengthBeats * samplesPerBeat / deviceSampleRate_;
+        const double fileSeconds      = (double) length / sourceRate - activeSlot.sourceOffsetSeconds;
+        const double clipSeconds      = juce::jmax(0.0, juce::jmin(windowSeconds, fileSeconds));
+        const auto   fades            = fittedFades(activeSlot.fades, clipSeconds);
+        const bool   fading           = ! fades.isNone();
+        const double secondsPerSample = 1.0 / deviceSampleRate_;
+        double       secondsIntoClip  = localStart * secondsPerSample;
+
         for (int i = 0; i < numSamples; ++i)
         {
             if (position >= 0.0 && position < (double) length)
             {
+                const float gain = fading ? clipGain * clipFadeGain(fades, secondsIntoClip, clipSeconds)
+                                          : clipGain;
+
                 for (int ch = 0; ch < outChans; ++ch)
                 {
                     const int    srcCh  = juce::jmin(ch, fileChans - 1);
                     const float* srcPtr = clip->audio.getReadPointer(srcCh);
-                    buffer.getWritePointer(ch)[i] += clipGain * sampleLinear(srcPtr, length, position);
+                    buffer.getWritePointer(ch)[i] += gain * sampleLinear(srcPtr, length, position);
                 }
             }
 
-            position += ratio;
+            position        += ratio;
+            secondsIntoClip += secondsPerSample;
         }
     }
 

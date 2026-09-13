@@ -442,6 +442,39 @@ TEST_CASE("A clip's source offset round-trips, and defaults to the file's start"
     REQUIRE(withoutOffsets.tracks[0].clips[0].sourceOffsetSeconds == 0.0);
 }
 
+TEST_CASE("Clip fades round-trip, and an unknown shape reads as linear", "[model][io]")
+{
+    using soundsplice::engine::FadeShape;
+
+    Song original = makeSampleSong();
+    auto& clip = original.tracks[0].clips[0];
+    clip.type             = ClipType::Audio;
+    clip.audioFile        = "/Users/me/My Recordings/take one.wav";
+    clip.fades.inSeconds  = 0.25;
+    clip.fades.inShape    = FadeShape::EqualPower;
+    clip.fades.outSeconds = 1.5;
+    clip.fades.outShape   = FadeShape::SCurve;
+
+    Song        restored;
+    std::string error;
+    REQUIRE(deserialize(serialize(original), restored, &error));
+    REQUIRE(restored.tracks[0].clips[0].fades == original.tracks[0].clips[0].fades);
+    REQUIRE(restored == original);
+
+    // A shape from a newer build plays as a straight fade here rather than
+    // making the whole project unreadable.
+    auto text = serialize(original);
+    const auto at = text.find("CLIPFADE 0.25 1 1.5 2");
+    REQUIRE(at != std::string::npos);
+    text.replace(at, text.find('\n', at) - at, "CLIPFADE 0.25 99 1.5 2");
+
+    Song unknownShape;
+    REQUIRE(deserialize(text, unknownShape, &error));
+    REQUIRE(unknownShape.tracks[0].clips[0].fades.inShape == FadeShape::Linear);
+    REQUIRE(unknownShape.tracks[0].clips[0].fades.inSeconds == 0.25);
+    REQUIRE(unknownShape.tracks[0].clips[0].fades.outShape == FadeShape::SCurve);
+}
+
 TEST_CASE("Sustain-pedal movements round-trip", "[model][io]")
 {
     Song s;

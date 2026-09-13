@@ -328,6 +328,9 @@ private:
     void                   addClipToSelectedTrack();
     void                   setClipLength(int trackIndex, int clipIndex, double newLengthBeats);
     void                   trimClipStartTo(int trackIndex, int clipIndex, double newStartBeats);
+    void                   setClipFades(int trackIndex, int clipIndex, const engine::ClipFades& fades,
+                                        const juce::String& label);
+    void                   showClipMenu(int trackIndex, int clipIndex);
     void                   copyNotes();
     void                   pasteNotes();
     void                   copyClip();

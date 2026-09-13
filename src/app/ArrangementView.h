@@ -81,6 +81,14 @@ public:
         trimClipStart, which the drag preview already clamps through). */
     std::function<void(int trackIndex, int clipIndex, double newStartBeats)> onClipStartTrimmed;
 
+    /** Fired when a fade handle on an audio clip is dragged and released,
+        with the clip's fades as they should now be. */
+    std::function<void(int trackIndex, int clipIndex, const engine::ClipFades& fades)> onClipFadesChanged;
+
+    /** Fired on a right-click on a clip, after onClipSelected. The owner
+        shows the menu: it knows what the options do, and the view doesn't. */
+    std::function<void(int trackIndex, int clipIndex)> onClipMenuRequested;
+
     /** Fired instead of onClipMoved when a move-drag ends on a *different*
         track than it started on (see typesAreCompatibleForClipMove — the
         drag preview never lands on an incompatible track in the first
@@ -373,7 +381,8 @@ public:
         // "this already belongs to that track."
         if (dragging_ && dragTrackIndex_ >= 0 && dragTrackIndex_ < (int) song_.tracks.size())
         {
-            const int ghostRow = (resizing_ || trimmingStart_) ? dragTrackIndex_ : dragPreviewTrackIndex_;
+            const int ghostRow = (resizing_ || trimmingStart_ || fadeDrag_ != 0) ? dragTrackIndex_
+                                                                                  : dragPreviewTrackIndex_;
             if (ghostRow >= 0 && ghostRow < (int) song_.tracks.size())
             {
                 const float ghostY = geometry_.rulerHeight + (float) ghostRow * geometry_.laneHeight;
@@ -392,6 +401,8 @@ public:
                     auto ghostClip = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
                     if (trimmingStart_)
                         ghostClip = trimClipStart(ghostClip, dragPreviewStart_, song_.bpm, kMinClipBeats);
+                    if (fadeDrag_ != 0)
+                        ghostClip.fades = dragPreviewFades_;
                     paintClipContents(g, ghostClip, r);
                 }
 
@@ -493,6 +504,131 @@ private:
                                 juce::Decibels::decibelsToGain(clip.gainDb));
     }
 
+    /** Pixels per second of audio at the current zoom and tempo. */
+    float pixelsPerSecond() const
+    {
+        return geometry_.pixelsPerBeat() * (float) (juce::jmax(1.0, song_.bpm) / 60.0);
+    }
+
+    /** How long an audio clip is heard for, in seconds: its window, cut short
+        where its file runs out. Falls back to the window while the file is
+        still being scanned. */
+    double audibleSecondsFor(const model::Clip& clip) const
+    {
+        const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
+
+        if (auto* thumbnail = waveforms_.find(juce::File(clip.audioFile));
+            thumbnail != nullptr && thumbnail->getTotalLength() > 0.0)
+            return audioClipAudibleSeconds(thumbnail->getTotalLength() - clip.sourceOffsetSeconds,
+                                           clip.lengthBeats, secondsPerBeat);
+
+        return clip.lengthBeats * secondsPerBeat;
+    }
+
+    /** Where an audio clip's two fade handles sit: the x of the end of the
+        fade-in and of the start of the fade-out. A fade of zero puts its
+        handle in the corner, which is where you reach to start one. */
+    std::pair<float, float> fadeHandleXs(const model::Clip& clip) const
+    {
+        const float  left    = geometry_.xForBeat(clip.startBeats);
+        const float  pps     = pixelsPerSecond();
+        const double audible = audibleSecondsFor(clip);
+        const auto   fitted  = engine::fittedFades(clip.fades, audible);
+
+        return { left + (float) (fitted.inSeconds * pps),
+                 left + (float) ((audible - fitted.outSeconds) * pps) };
+    }
+
+    /** Which fade handle of the clip on @p trackIndex's lane @p point is on:
+        +1 for the fade-in, -1 for the fade-out, 0 for neither. Handles live
+        along the clip's top edge, so the lower part of each edge is still the
+        trim and resize grip. */
+    int fadeHandleAt(const model::Clip& clip, int trackIndex, juce::Point<float> point) const
+    {
+        if (clip.type != model::ClipType::Audio)
+            return 0;
+
+        const float top = geometry_.rulerHeight + (float) trackIndex * geometry_.laneHeight + 3.0f;
+        if (point.y < top || point.y > top + kFadeHandleSize + 2.0f)
+            return 0;
+
+        const auto [inX, outX] = fadeHandleXs(clip);
+
+        // The fade-in wins a tie: on a clip too narrow for both handles,
+        // one of them has to be reachable.
+        if (point.x >= inX - kFadeHandleSize && point.x <= inX + kFadeHandleSize)
+            return +1;
+        if (point.x >= outX - kFadeHandleSize && point.x <= outX + kFadeHandleSize)
+            return -1;
+        return 0;
+    }
+
+    /** Shades what an audio clip's fades take away, draws each curve, and
+        marks the handles. Drawn with engine::fittedFades and
+        engine::fadeCurve, the same functions playback uses, so the picture
+        is the sound. */
+    void paintClipFades(juce::Graphics& g, const model::Clip& clip, juce::Rectangle<float> bounds)
+    {
+        if (bounds.getWidth() < 3.0f * kFadeHandleSize || bounds.getHeight() < 2.0f * kFadeHandleSize)
+            return;
+
+        const float  pps     = pixelsPerSecond();
+        const double audible = audibleSecondsFor(clip);
+        const auto   fitted  = engine::fittedFades(clip.fades, audible);
+        const float  left    = bounds.getX();
+        const float  top     = bounds.getY();
+        const float  bottom  = bounds.getBottom();
+
+        auto paintFade = [&](double seconds, engine::FadeShape shape, bool isFadeIn)
+        {
+            if (seconds <= 0.0)
+                return;
+
+            const float startX = isFadeIn ? left : left + (float) ((audible - seconds) * pps);
+            const float width  = (float) (seconds * pps);
+
+            // The shaded region runs along the top edge and back under the
+            // curve: everything above the curve is level the fade removes.
+            juce::Path shaded, curve;
+            shaded.startNewSubPath(startX, top);
+
+            constexpr int kSteps = 24;
+            for (int i = 0; i <= kSteps; ++i)
+            {
+                const double t    = (double) i / kSteps;
+                const float  gain = engine::fadeCurve(shape, isFadeIn ? t : 1.0 - t);
+                const float  x    = startX + (float) t * width;
+                const float  y    = bottom - gain * (bottom - top);
+
+                shaded.lineTo(x, y);
+                if (i == 0)
+                    curve.startNewSubPath(x, y);
+                else
+                    curve.lineTo(x, y);
+            }
+
+            shaded.lineTo(startX + width, top);
+            shaded.closeSubPath();
+
+            g.setColour(juce::Colours::black.withAlpha(0.35f));
+            g.fillPath(shaded);
+            g.setColour(juce::Colours::white.withAlpha(0.7f));
+            g.strokePath(curve, juce::PathStrokeType(1.0f));
+        };
+
+        paintFade(fitted.inSeconds, fitted.inShape, true);
+        paintFade(fitted.outSeconds, fitted.outShape, false);
+
+        // Always drawn, even with no fade: a handle you can't see is a
+        // feature nobody finds.
+        const auto [inX, outX] = fadeHandleXs(clip);
+        const float maxX       = bounds.getRight() - kFadeHandleSize;
+
+        g.setColour(juce::Colours::white.withAlpha(0.8f));
+        g.fillRect(juce::jlimit(left, maxX, inX), top, kFadeHandleSize, kFadeHandleSize);
+        g.fillRect(juce::jlimit(left, maxX, outX - kFadeHandleSize), top, kFadeHandleSize, kFadeHandleSize);
+    }
+
     /** Where a track's mute button sits, in this component's coordinates.
 
         One definition used by both the painting and the click handling. Worked
@@ -564,6 +700,7 @@ private:
         if (clip.type == model::ClipType::Audio)
         {
             paintAudioClipContents(g, clip, bounds);
+            paintClipFades(g, clip, bounds);
             return;
         }
 
@@ -634,11 +771,25 @@ private:
         int trackIndex = -1, clipIndex = -1;
         if (findClipAt(e.position, trackIndex, clipIndex))
         {
+            if (e.mods.isPopupMenu())
+            {
+                if (onClipSelected)
+                    onClipSelected(trackIndex, clipIndex);
+                if (onClipMenuRequested)
+                    onClipMenuRequested(trackIndex, clipIndex);
+                return;
+            }
+
             const auto& clip = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
 
+            // A fade handle sits in a clip's top corner, on top of the edge
+            // grips, so it is checked first.
             dragging_           = true;
-            resizing_           = isOnClipRightEdge(clip, e.position.x);
-            trimmingStart_      = ! resizing_ && isOnClipLeftEdge(clip, e.position.x);
+            fadeDrag_           = fadeHandleAt(clip, trackIndex, e.position);
+            resizing_           = fadeDrag_ == 0 && isOnClipRightEdge(clip, e.position.x);
+            trimmingStart_      = fadeDrag_ == 0 && ! resizing_ && isOnClipLeftEdge(clip, e.position.x);
+            dragOriginalFades_  = clip.fades;
+            dragPreviewFades_   = clip.fades;
             dragTrackIndex_     = trackIndex;
             dragClipIndex_      = clipIndex;
             dragGrabBeat_       = geometry_.beatForX(e.position.x);
@@ -709,7 +860,29 @@ private:
         // is easier to remember than one that only works in one direction.
         const bool snap = snapToGrid_ != e.mods.isAltDown();
 
-        if (trimmingStart_)
+        if (fadeDrag_ != 0)
+        {
+            // Measured in seconds from the clip's edge, and kept from running
+            // into the other fade. Not snapped: a fade's length is about how
+            // it sounds, not about the beat grid.
+            if (dragTrackIndex_ < (int) song_.tracks.size()
+                && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
+            {
+                const auto&  clip    = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
+                const float  left    = geometry_.xForBeat(clip.startBeats);
+                const double pps     = juce::jmax(1.0e-3, (double) pixelsPerSecond());
+                const double audible = audibleSecondsFor(clip);
+                const double atX     = (double) (e.position.x - left) / pps;
+
+                if (fadeDrag_ > 0)
+                    dragPreviewFades_.inSeconds =
+                        juce::jlimit(0.0, juce::jmax(0.0, audible - dragPreviewFades_.outSeconds), atX);
+                else
+                    dragPreviewFades_.outSeconds =
+                        juce::jlimit(0.0, juce::jmax(0.0, audible - dragPreviewFades_.inSeconds), audible - atX);
+            }
+        }
+        else if (trimmingStart_)
         {
             // Through the same function the edit itself uses, so the ghost
             // stops exactly where the drop will: at the file's first sample,
@@ -774,13 +947,20 @@ private:
 
         const bool wasResizing      = resizing_;
         const bool wasTrimmingStart = trimmingStart_;
+        const int  wasFadeDrag      = fadeDrag_;
         dragging_      = false;
         resizing_      = false;
         trimmingStart_ = false;
+        fadeDrag_      = 0;
 
         // Only fire for an actual change — a plain click-to-select (no drag)
         // would otherwise create a harmless but noisy no-op undo step.
-        if (wasTrimmingStart)
+        if (wasFadeDrag != 0)
+        {
+            if (onClipFadesChanged && dragPreviewFades_ != dragOriginalFades_)
+                onClipFadesChanged(dragTrackIndex_, dragClipIndex_, dragPreviewFades_);
+        }
+        else if (wasTrimmingStart)
         {
             if (onClipStartTrimmed && std::abs(dragPreviewStart_ - dragOriginalStart_) > 1.0e-9)
                 onClipStartTrimmed(dragTrackIndex_, dragClipIndex_, dragPreviewStart_);
@@ -823,6 +1003,11 @@ private:
         if (findClipAt(e.position, trackIndex, clipIndex))
         {
             const auto& clip = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+            if (fadeHandleAt(clip, trackIndex, e.position) != 0)
+            {
+                setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+                return;
+            }
             onEdge = isOnClipRightEdge(clip, e.position.x) || isOnClipLeftEdge(clip, e.position.x);
         }
         setMouseCursor(onEdge ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
@@ -845,6 +1030,11 @@ private:
             return "Track settings - rename, recolor, duplicate, delete";
         if (muteButtonAt(pos) >= 0)
             return "Mute this track";
+
+        int trackIndex = -1, clipIndex = -1;
+        if (findClipAt(pos, trackIndex, clipIndex)
+            && fadeHandleAt(song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex], trackIndex, pos) != 0)
+            return "Drag to fade - right-click the clip for fade shapes";
         return {};
     }
 
@@ -1064,6 +1254,7 @@ private:
 
     static constexpr double kMinClipBeats     = 1.0;  // a clip shorter than a beat isn't useful
     static constexpr float  kResizeEdgePixels = 6.0f;
+    static constexpr float  kFadeHandleSize   = 8.0f;
     static constexpr float  kMuteSize         = 22.0f;
 
     // How large each glyph is *drawn*; both clickable areas stay kMuteSize.
@@ -1112,6 +1303,9 @@ private:
     bool   dragging_          = false;
     bool   resizing_          = false;
     bool   trimmingStart_     = false; // dragging an audio clip's left edge
+    int    fadeDrag_          = 0;     // +1 dragging a fade-in handle, -1 a fade-out, 0 neither
+    engine::ClipFades dragOriginalFades_; // the clip's fades at grab
+    engine::ClipFades dragPreviewFades_;  // live preview while dragging a fade handle
     int    dragTrackIndex_    = -1;
     int    dragClipIndex_     = -1;
     double dragGrabBeat_       = 0.0; // beat under the mouse at grab

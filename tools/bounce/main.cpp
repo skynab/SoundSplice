@@ -486,6 +486,26 @@ int main(int argc, char** argv)
     const float rmsOffsetFinished = offsetAudioClip.getRMSLevel(0, 3 * halfSec, 1 * halfSec); // 1.5-2s
     const bool  sourceOffsetPlays = rmsOffsetPlaying > 0.01f && rmsOffsetFinished < 1.0e-5f;
 
+    // Clip-fade check: the same tone with half-second linear fades at both
+    // ends. The first and last eighth of a second sit deep in the fades (a
+    // quarter of full level at most), while the middle is untouched. A fade
+    // that was never applied, or that ran from the wrong end, fails one side.
+    AudioClipSlot audioClipFaded;
+    audioClipFaded.clipData         = std::make_shared<ClipData>(sineClip);
+    audioClipFaded.startBeats       = 0.0;
+    audioClipFaded.lengthBeats      = 4.0;
+    audioClipFaded.fades.inSeconds  = 0.5;
+    audioClipFaded.fades.outSeconds = 0.5;
+
+    const auto  fadedAudioClip = OfflineRenderer::renderAudioClips({ audioClipFaded },
+                                                                   0.0f, bpm, sampleRate, 2.0);
+    const float rmsFadeHead    = fadedAudioClip.getRMSLevel(0, 0, halfSec / 4);                          // 0-0.125s
+    const float rmsFadeBody    = fadedAudioClip.getRMSLevel(0, 2 * halfSec - halfSec / 2, halfSec);      // 0.75-1.25s
+    const float rmsFadeTail    = fadedAudioClip.getRMSLevel(0, 4 * halfSec - halfSec / 4, halfSec / 4);  // 1.875-2s
+    const bool  clipFadesShape = rmsFadeBody > 0.3f
+                              && rmsFadeHead < 0.25f * rmsFadeBody
+                              && rmsFadeTail < 0.25f * rmsFadeBody;
+
     // MIDI import/export round-trip check: build a Song with three notes on
     // one track, export it to a temp .mid, re-import it into a fresh Song,
     // and confirm every note (and the tempo) survived — beat/pitch/velocity
@@ -2055,6 +2075,7 @@ int main(int argc, char** argv)
               << "  audioTrackWorks=" << (audioTrackWorks ? 1 : 0)
               << "  multiClipAudioGates=" << (multiClipAudioGates ? 1 : 0)
               << "  sourceOffsetPlays=" << (sourceOffsetPlays ? 1 : 0)
+              << "  clipFadesShape=" << (clipFadesShape ? 1 : 0)
               << "  midiRoundTripWorks=" << (midiRoundTripWorks ? 1 : 0)
               << "  midiRecordingWorks=" << (midiRecordingWorks ? 1 : 0)
               << "  pluginsScanned=" << pluginsScanned
@@ -2103,7 +2124,7 @@ int main(int argc, char** argv)
                  && delayChanged && filterAttenuates && reverbChanged && automationFades
                  && perTrackAutomationWorks
                  && soloMatchesArpOnly && stemsSumToMix && clipStartGates && multiClipGates
-                 && audioTrackWorks && multiClipAudioGates && sourceOffsetPlays && midiRoundTripWorks
+                 && audioTrackWorks && multiClipAudioGates && sourceOffsetPlays && clipFadesShape && midiRoundTripWorks
                  && midiRecordingWorks
                  && cascadedStagesEnrich
                  && pluginHostWorks
