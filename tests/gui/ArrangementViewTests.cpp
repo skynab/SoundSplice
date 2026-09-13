@@ -483,6 +483,54 @@ TEST_CASE("Dragging a clip onto a compatible track fires onClipMovedToTrack, not
     REQUIRE(destTrack == 1);
 }
 
+TEST_CASE("Dragging across empty lanes selects time on every lane it crosses", "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = viewWith(4); // each track's one clip covers beats 0-4
+    view->setZoom(1.0f);
+
+    int                  changes = 0;
+    bool                 seeked  = false;
+    model::TimeSelection latest;
+    view->onTimeSelectionChanged = [&](const model::TimeSelection& s) { latest = s; ++changes; };
+    view->onSeek                 = [&](double) { seeked = true; };
+
+    const float lane0Y = view->rulerHeightForTesting() + view->laneHeightForTesting() * 0.5f;
+    const float lane2Y = view->rulerHeightForTesting() + view->laneHeightForTesting() * 2.5f;
+
+    // Well right of the clips, so both ends are in empty space.
+    const juce::Point<float> press { 700.0f, lane2Y };
+    sendMouseDown(*view, dragEventAt(*view, press, press));
+
+    // A press alone is a cursor on its lane, and still moves the playhead.
+    REQUIRE(seeked);
+    REQUIRE(latest.hasTracks());
+    REQUIRE(latest.isEmpty());
+    REQUIRE(latest.trackIds.size() == 1);
+
+    sendMouseDrag(*view, dragEventAt(*view, { 500.0f, lane0Y }, press));
+    sendMouseUp(*view, dragEventAt(*view, { 500.0f, lane0Y }, press));
+
+    const auto& selection = view->timeSelection();
+    REQUIRE(selection == latest);
+    REQUIRE(selection.trackIds.size() == 3); // lanes 2, 1 and 0
+    REQUIRE(selection.startBeats < selection.endBeats);
+    REQUIRE(selection.startBeats > 4.0);
+
+    // Snapped to whole beats, as a clip edge would be.
+    REQUIRE(selection.startBeats == std::round(selection.startBeats));
+    REQUIRE(selection.endBeats == std::round(selection.endBeats));
+
+    // Picking up a clip clears it.
+    const int before = changes;
+    const juce::Point<float> onClip { view->gutterWidthForTesting() + 20.0f, lane0Y };
+    sendMouseDown(*view, dragEventAt(*view, onClip, onClip));
+    sendMouseUp(*view, dragEventAt(*view, onClip, onClip));
+
+    REQUIRE(changes == before + 1);
+    REQUIRE_FALSE(view->timeSelection().hasTracks());
+}
+
 TEST_CASE("Dragging a clip onto an incompatible track is refused", "[gui][arrangement]")
 {
     // Track 2 is Audio; tracks 0/1 are Instrument. The ghost never follows

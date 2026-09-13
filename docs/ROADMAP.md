@@ -73,8 +73,10 @@ all three.
 
 ### Phase 1 — Editing parity (Audacity core)
 
-- ⬜ **Time selection across tracks**, including the empty space between clips; every edit and
-  effect applies to the selection on all selected tracks
+- 🟡 **Time selection across tracks**, including the empty space between clips ✅ (drag across empty
+  lanes, or Shift-drag over clips; snaps like a clip edge); Cut, Copy, Paste, Delete and Silence apply to
+  the audio clips on every selected track, trimming and splitting without rewriting audio ✅
+  (`src/model/TimeSelection.h`); effects on a time selection ⬜; instrument clips ⬜
 - 🟡 **Label tracks** (Audacity) / **markers and ranges** (Audition, REAPER): add at the playhead
   (any time, playing or not) or from the audio selection ✅, rename and delete ✅, jump between ✅,
   export and import as Audacity label text ✅ (Markers menu; `src/model/Markers.h`); snap to them ⬜,

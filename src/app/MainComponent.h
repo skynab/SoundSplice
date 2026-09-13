@@ -21,6 +21,7 @@
 #include "engine/TempoMap.h"
 #include "model/History.h"
 #include "model/Song.h"
+#include "model/TimeSelection.h"
 
 #include "OfflineRenderJob.h"
 
@@ -254,6 +255,20 @@ private:
                                const juce::String& label, bool snapToZeroCrossings,
                                const std::function<void(std::vector<std::vector<float>>& selection,
                                                         double sampleRate)>& transform);
+
+    // The arrangement's time selection across tracks — see
+    // MainComponent_TimeSelection.cpp and model/TimeSelection.h. The edit
+    // commands act on it while it has length (or, for Paste, while it has
+    // tracks and something was cut or copied from one); otherwise on the
+    // audio editor's selection as before.
+    model::TimeSelection   timeSelection_;
+    model::RangeClipboard  rangeClipboard_;
+    void                   setTimeSelection(const model::TimeSelection& selection);
+    /** Copies and/or removes the time selection (see the .cpp). False when
+        there's no time selection to act on. */
+    bool                   editTimeSelection(const juce::String& label, bool copy, bool remove, bool closeGap);
+    bool                   pasteAtTimeSelection();
+    void                   refreshAfterArrangementEdit();
 
     void                   cutAudioSelection();
     void                   copyAudioSelection();

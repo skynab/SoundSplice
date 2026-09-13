@@ -63,19 +63,25 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(history_.canRedo());
             break;
 
+        // A time selection in the arrangement counts too: these act on it
+        // first (see perform).
         case commands::cutAudio:
         case commands::copyAudio:
-            info.setActive(audioInFront && hasSelection);
+            info.setActive((audioInFront && hasSelection) || ! timeSelection_.isEmpty());
             break;
 
         case commands::pasteAudio:
-            info.setActive(audioInFront && ! audioClipboard_.empty());
+            info.setActive((audioInFront && ! audioClipboard_.empty())
+                           || (timeSelection_.hasTracks() && ! rangeClipboard_.isEmpty()));
             break;
 
         case commands::deleteAudio:
+        case commands::silenceAudio:
+            info.setActive(hasSelection || ! timeSelection_.isEmpty());
+            break;
+
         case commands::trimToSelection:
         case commands::splitAtCursor:
-        case commands::silenceAudio:
         case commands::fadeIn:
         case commands::fadeOut:
         case commands::reverseAudio:
@@ -225,15 +231,17 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         }
 
         case commands::clearNotes:      pianoRoll_.clear(); break;
-        case commands::cutAudio:        cutAudioSelection(); break;
-        case commands::copyAudio:       copyAudioSelection(); break;
-        case commands::pasteAudio:      pasteAudioAtSelection(); break;
+        // A time selection in the arrangement, when there is one, before the
+        // audio editor's own selection.
+        case commands::cutAudio:        if (! editTimeSelection("Cut", true, true, true)) cutAudioSelection(); break;
+        case commands::copyAudio:       if (! editTimeSelection("Copy", true, false, false)) copyAudioSelection(); break;
+        case commands::pasteAudio:      if (! pasteAtTimeSelection()) pasteAudioAtSelection(); break;
         case commands::copyNotes:       copyNotes(); break;
         case commands::pasteNotes:      pasteNotes(); break;
-        case commands::deleteAudio:     deleteAudioSelection(); break;
+        case commands::deleteAudio:     if (! editTimeSelection("Delete", false, true, true)) deleteAudioSelection(); break;
         case commands::trimToSelection: trimToAudioSelection(); break;
         case commands::splitAtCursor:   splitClipAtSelection(); break;
-        case commands::silenceAudio:    silenceAudioSelection(); break;
+        case commands::silenceAudio:    if (! editTimeSelection("Silence", false, true, false)) silenceAudioSelection(); break;
         case commands::fadeIn:          fadeInAudioSelection(); break;
         case commands::fadeOut:         fadeOutAudioSelection(); break;
         case commands::reverseAudio:    reverseAudioSelection(); break;

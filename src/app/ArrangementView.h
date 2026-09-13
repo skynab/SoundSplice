@@ -15,6 +15,7 @@
 #include "SnapTargets.h"
 #include "TimeFormat.h"
 #include "model/Markers.h"
+#include "model/TimeSelection.h"
 #include "WaveformCache.h"
 #include "TrackColours.h"
 #include "TimelineGeometry.h"
@@ -118,6 +119,12 @@ public:
     std::function<void(int trackIndex)> onTrackDuplicateRequested;
     std::function<void(const juce::File& file, double dropBeat, int trackIndex)> onFileDropped;
 
+    /** Fired as a time selection is dragged out across the lanes (or Shift-
+        dragged, which starts one over clips too), and when a click on a clip
+        clears it. A click on an empty lane is a selection with no length: a
+        cursor on that track. */
+    std::function<void(const model::TimeSelection&)> onTimeSelectionChanged;
+
     void setSong(const model::Song& song)
     {
         song_ = song;
@@ -202,6 +209,18 @@ public:
             repaint();
         }
     }
+
+    /** Shows @p selection, as set by the owner (after an edit moves it, say). */
+    void setTimeSelection(const model::TimeSelection& selection)
+    {
+        if (selection == timeSelection_)
+            return;
+
+        timeSelection_ = selection;
+        repaint();
+    }
+
+    const model::TimeSelection& timeSelection() const { return timeSelection_; }
 
     void paint(juce::Graphics& g) override
     {
@@ -410,6 +429,8 @@ public:
                            juce::Justification::centredLeft);
             }
         }
+
+        paintTimeSelection(g);
 
         // The dragged clip's ghost, drawn once here rather than inline in
         // the loop above: a resize always stays on dragTrackIndex_'s lane, a
@@ -814,6 +835,15 @@ private:
             return;
         }
 
+        // Shift-drag selects time anywhere on the lanes, over clips as well as
+        // between them: without it a selection could only start in a gap.
+        if (e.mods.isShiftDown() && ! e.mods.isPopupMenu() && e.position.x >= geometry_.gutterWidth
+            && trackAtY(e.position.y) >= 0)
+        {
+            beginTimeSelection(e);
+            return;
+        }
+
         int trackIndex = -1, clipIndex = -1;
         if (findClipAt(e.position, trackIndex, clipIndex))
         {
@@ -825,6 +855,10 @@ private:
                     onClipMenuRequested(trackIndex, clipIndex);
                 return;
             }
+
+            // Picking up a clip is working on that clip, so the edit commands
+            // go back to it rather than to a time selection made earlier.
+            changeTimeSelection({});
 
             const auto& clip = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
 
@@ -868,12 +902,27 @@ private:
             return; // otherwise the gutter is not the timeline
         }
 
+        // An empty lane: the playhead goes there, and a drag from here selects.
+        if (trackAtY(e.position.y) >= 0)
+            beginTimeSelection(e);
+
         if (onSeek)
             onSeek(geometry_.beatForX(e.position.x));
     }
 
     void mouseDrag(const juce::MouseEvent& e) override
     {
+        if (selectingTime_)
+        {
+            const int last  = (int) song_.tracks.size() - 1;
+            const int track = e.position.y < geometry_.rulerHeight ? 0
+                                : juce::jlimit(0, juce::jmax(0, last), trackAtYUnclamped(e.position.y));
+            changeTimeSelection(model::selectionFromDrag(song_, timeAnchorBeat_,
+                                                         snappedBeatAt(e.position.x, e.mods.isAltDown()),
+                                                         timeAnchorTrack_, track));
+            return;
+        }
+
         if (duplicateDragTrack_ >= 0)
         {
             if (! duplicateDragMoved_ && e.getDistanceFromDragStart() >= kDuplicateDragPixels)
@@ -991,6 +1040,12 @@ private:
         if (scrubbing_)
         {
             scrubbing_ = false;
+            return;
+        }
+
+        if (selectingTime_)
+        {
+            selectingTime_ = false;
             return;
         }
 
@@ -1539,6 +1594,85 @@ private:
 
     int selectedTrackForEdit_ = -1;
     int selectedClipForEdit_  = -1;
+
+    // The time selection, and the drag making one: where it started, in
+    // beats (snapped) and by lane.
+    model::TimeSelection timeSelection_;
+    bool   selectingTime_   = false;
+    double timeAnchorBeat_  = 0.0;
+    int    timeAnchorTrack_ = 0;
+
+    /** The beat under @p x, snapped the way a clip edge would be: to markers,
+        the playhead and clip edges, then the grid, with @p invert (Alt)
+        flipping the grid setting and dropping the rest for one drag. */
+    double snappedBeatAt(float x, bool invert) const
+    {
+        const bool   gridOn    = snapToGrid_ != invert;
+        const auto   magnets   = invert ? std::vector<double> {} : magnetsExcluding(-1, -1);
+        const double tolerance = kSnapMagnetPixels / std::max(1.0e-3, (double) geometry_.pixelsPerBeat());
+        return std::max(0.0, app::snapPosition(geometry_.beatForX(x), magnets, tolerance, gridOn, snapUnitBeats()));
+    }
+
+    /** The lane index for @p y, running past the last lane rather than
+        stopping, so a drag below the tracks keeps the bottom one selected. */
+    int trackAtYUnclamped(float y) const
+    {
+        return (int) std::floor((y - geometry_.rulerHeight) / geometry_.laneHeight);
+    }
+
+    void beginTimeSelection(const juce::MouseEvent& e)
+    {
+        selectingTime_   = true;
+        timeAnchorBeat_  = snappedBeatAt(e.position.x, e.mods.isAltDown());
+        timeAnchorTrack_ = trackAtY(e.position.y);
+        changeTimeSelection(model::selectionFromDrag(song_, timeAnchorBeat_, timeAnchorBeat_,
+                                                     timeAnchorTrack_, timeAnchorTrack_));
+    }
+
+    void changeTimeSelection(const model::TimeSelection& selection)
+    {
+        if (selection == timeSelection_)
+            return;
+
+        timeSelection_ = selection;
+        repaint();
+
+        if (onTimeSelectionChanged)
+            onTimeSelectionChanged(timeSelection_);
+    }
+
+    /** Shaded across each selected lane, or a line on each while it's only a
+        cursor. Over the clips, since what's selected is what's in them. */
+    void paintTimeSelection(juce::Graphics& g)
+    {
+        if (! timeSelection_.hasTracks())
+            return;
+
+        const float left  = geometry_.xForBeat(timeSelection_.startBeats);
+        const float right = geometry_.xForBeat(timeSelection_.endBeats);
+
+        for (int i = 0; i < (int) song_.tracks.size(); ++i)
+        {
+            if (! timeSelection_.includes(song_.tracks[(size_t) i].id))
+                continue;
+
+            const float y = geometry_.rulerHeight + (float) i * geometry_.laneHeight;
+
+            if (right - left >= 1.0f)
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.18f));
+                g.fillRect(left, y, right - left, geometry_.laneHeight);
+                g.setColour(juce::Colours::white.withAlpha(0.55f));
+                g.fillRect(left, y, 1.0f, geometry_.laneHeight);
+                g.fillRect(right - 1.0f, y, 1.0f, geometry_.laneHeight);
+            }
+            else
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.8f));
+                g.fillRect(left, y, 1.0f, geometry_.laneHeight);
+            }
+        }
+    }
 
     bool   snapToGrid_      = true;
     bool   snapToMarkers_   = true;

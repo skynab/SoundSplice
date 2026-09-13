@@ -645,6 +645,11 @@ MainComponent::MainComponent()
         selectTrackAndClip(trackIndex, clipIndex);
     };
 
+    arrangementView_.onTimeSelectionChanged = [this](const model::TimeSelection& selection)
+    {
+        setTimeSelection(selection);
+    };
+
     arrangementView_.onClipMoved = [this](int trackIndex, int clipIndex, double newStartBeats)
     {
         history_.edit("Move clip", [trackIndex, clipIndex, newStartBeats](model::Song& s)
