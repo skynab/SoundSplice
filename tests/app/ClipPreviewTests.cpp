@@ -93,7 +93,7 @@ TEST_CASE("A part-repeat is cut where the clip ends", "[app][preview]")
 TEST_CASE("A single-pitch clip still draws", "[app][preview]")
 {
     // Scaling pitch to the notes present divides by their span, which is zero
-    // here — a drum part on one pad is the obvious real case.
+    // here — a part repeating one note is the obvious real case.
     const std::vector<engine::Note> notes { note(0.0, 0.5, 36), note(1.0, 0.5, 36) };
     const auto blocks = clipPreviewBlocks(notes, 4.0, 4.0);
 

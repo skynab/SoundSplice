@@ -137,10 +137,10 @@ TEST_CASE("The best-matching group wins, not merely a matching one", "[app][dock
     // inherited most of them, since that's the region its old one became.
     const std::vector<DockLeafSummary> leaves {
         { { "Mixer", "Session" }, 10000 },
-        { { "Keys", "Drums", "Guitar" }, 10000 },
+        { { "Keys", "Automation", "Analyser" }, 10000 },
     };
 
-    REQUIRE(chooseReopenLeaf(leaves, { "Keys", "Drums", "Guitar", "Mixer" }) == 1);
+    REQUIRE(chooseReopenLeaf(leaves, { "Keys", "Automation", "Analyser", "Mixer" }) == 1);
 }
 
 TEST_CASE("With no neighbours left open, the largest group takes it", "[app][dock]")

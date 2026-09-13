@@ -385,32 +385,6 @@ TEST_CASE("The mastering rack round-trips", "[model][io]")
     REQUIRE(restored == original);
 }
 
-TEST_CASE("Note articulation round-trips", "[model][io]")
-{
-    Song original = makeSampleSong();
-    REQUIRE_FALSE(original.tracks.empty());
-
-    auto& notes = original.tracks.front().clips.front().pattern.notes;
-    REQUIRE(notes.size() >= 2);
-
-    notes[0].articulation = soundsplice::engine::Articulation::PalmMute;
-    notes[1].articulation = soundsplice::engine::Articulation::Normal;
-
-    Song        restored;
-    std::string error;
-    REQUIRE(deserialize(serialize(original), restored, &error));
-
-    const auto& back = restored.tracks.front().clips.front().pattern.notes;
-    REQUIRE(back.size() == notes.size());
-    CHECK(back[0].articulation == soundsplice::engine::Articulation::PalmMute);
-    CHECK(back[1].articulation == soundsplice::engine::Articulation::Normal);
-
-    // And the whole song still compares equal, which is what history dedup
-    // relies on — a field that round-trips but breaks operator== would make
-    // every save look like an edit.
-    CHECK(restored == original);
-}
-
 TEST_CASE("Per-clip gain round-trips", "[model][io]")
 {
     Song original = makeSampleSong();

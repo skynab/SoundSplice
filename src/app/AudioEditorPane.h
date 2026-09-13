@@ -46,7 +46,7 @@ public:
 
     /** Apply @p gainDb to the clip. Fired live while the slider moves; the
         drag-start/end pair around it is what makes the whole drag one undo
-        step, exactly as SynthEditor and FretboardPane do. */
+        step, exactly as the mixer faders do. */
     std::function<void(float gainDb)> onGainChanged;
     std::function<void()>             onGainDragStart;
     std::function<void()>             onGainDragEnd;
@@ -234,7 +234,7 @@ public:
             notifySelection();
         };
 
-        // Same guarantee as FretboardPane and SynthEditor: a control that was
+        // Every managed control is parented up front: a control that was
         // never parented lays out and hides perfectly while drawing nothing.
         for (auto* control : managedControls())
             addChildComponent(control);
@@ -551,8 +551,7 @@ public:
         // buttons take the row. A Label at zero width is invisible but
         // harmless, where a *button* at zero width is present, hit-tests
         // against nothing, and is indistinguishable from one that doesn't
-        // work — the failure FretboardPane's proportional row exists to
-        // prevent, and which fixed widths here reproduced exactly.
+        // work — which is what fixed widths here once produced.
         const int labelWidth = toolRow.getWidth() > kLabelNeedsWidth ? kSelectionLabelWidth : 0;
         selectionLabel_.setBounds(toolRow.removeFromRight(labelWidth).reduced(4, 0));
 
@@ -840,9 +839,8 @@ private:
         repaint();
     }
 
-    /** Every control this pane shows and hides, in one place — see the same
-        list in FretboardPane and SynthEditor, and the bug that made it worth
-        having. */
+    /** Every control this pane shows and hides, in one place, so none can be
+        missed when they are parented or their visibility is toggled. */
     std::vector<juce::Component*> managedControls()
     {
         return { &playButton_,

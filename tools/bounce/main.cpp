@@ -356,8 +356,8 @@ int main(int argc, char** argv)
     // device; OfflineRenderer takes the same per-track solo flags, so the
     // isolation mechanism being tested is the same one.
     //
-    // Note this deliberately compares against the render *without* a send bus
-    // or master bus, matching what a stem export writes — the master chain is
+    // Note this deliberately compares against the render *without* the master
+    // bus, matching what a stem export writes — the master chain is
     // excluded from stems precisely so this sum holds.
     const auto stemArp  = OfflineRenderer::render({ arp, bass }, { 0.0f, 0.0f }, { true, false },
                                                   bpm, sampleRate, seconds);
@@ -2072,18 +2072,14 @@ int main(int argc, char** argv)
     // signal, a low-pass that attenuates, a reverb that changes the signal, a
     // gain ramp that fades in, a sample-accurate per-track automation curve
     // that fades one track while leaving an unautomated sibling stable, solo
-    // correctly silencing the other track, a clip start that gates playback, a
-    // send bus that changes the output whether it's reverb or delay, two
+    // correctly silencing the other track, a clip start that gates playback, two
     // MIDI clips on one track each sounding only in their own window, a
     // decoded audio clip playing back through a track, two AUDIO clips on one
     // track likewise each sounding only in their own window, a MIDI file
-    // export/import round trip that preserves tempo and every note, a drum
-    // kit playing the right pad's one-shot sample at the right times while
-    // an unassigned pad stays silent, per-pad gain/pan/mute and transposition
-    // each doing what they say against that same kit, and the recorder's capture/handoff
-    // logic (fed synthetic input, since there's no live mic here) together
-    // confirm
-    // the full render/gain/fx/automation/solo/clip/send-bus/audio/midi/drum/record path.
+    // export/import round trip that preserves tempo and every note, and the
+    // recorder's capture/handoff logic (fed synthetic input, since there's no
+    // live mic here) together confirm the full
+    // render/gain/fx/automation/solo/clip/audio/midi/record path.
     const bool ok = rmsDry > 0.0f && std::isfinite(rmsDry)
                  && gainRatio > 0.47f && gainRatio < 0.53f
                  && delayChanged && filterAttenuates && reverbChanged && automationFades

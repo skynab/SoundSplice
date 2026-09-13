@@ -62,8 +62,7 @@ namespace detail
 
         for (const auto& note : clip.pattern.notes)
             out << "NOTE " << num(note.startBeats) << " " << num(note.lengthBeats)
-                << " " << note.noteNumber << " " << num((double) note.velocity)
-                << " " << (int) note.articulation << "\n";
+                << " " << note.noteNumber << " " << num((double) note.velocity) << "\n";
     }
 
     inline std::string trimLeadingSpace(std::string s)
@@ -344,18 +343,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             std::istringstream ns(rest);
             engine::Note note;
             double velocity = 0.0;
-            int articulation = (int) engine::Articulation::Normal;
-
-            ns >> note.startBeats >> note.lengthBeats >> note.noteNumber >> velocity
-               >> articulation;
-
+            ns >> note.startBeats >> note.lengthBeats >> note.noteNumber >> velocity;
             note.velocity = (float) velocity;
-
-            // Clamped rather than cast blindly, so an unknown value plays as
-            // an ordinary note instead of whatever that integer aliases to.
-            note.articulation = articulation == (int) engine::Articulation::PalmMute
-                                    ? engine::Articulation::PalmMute
-                                    : engine::Articulation::Normal;
 
             clip.pattern.notes.push_back(note);
         }

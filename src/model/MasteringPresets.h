@@ -6,8 +6,8 @@
 namespace soundsplice::model
 {
 /**
-    A mastering rack setting for @p preset, built the same in-memory,
-    literal-struct-per-field way presetForGuitarTone/presetForSynthTone are.
+    A mastering rack setting for @p preset, built in memory as a literal
+    struct, one field at a time.
 
     Every preset except Flat turns the rack on, because picking one is an
     explicit request to hear it — a preset that applied its values while

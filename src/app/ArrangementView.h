@@ -226,8 +226,8 @@ public:
             g.fillRect(0.0f, y, 4.0f, geometry_.laneHeight);
 
             // The type tag. Track names double as the type indicator until
-            // someone renames one — call a guitar track "Verse" and nothing
-            // would say it was a guitar any more. This is what makes renaming
+            // someone renames one — call an audio track "Verse" and nothing
+            // would say it was audio any more. This is what makes renaming
             // free.
             const auto tagArea = juce::Rectangle<float>(10.0f, y + geometry_.laneHeight * 0.5f - 8.0f,
                                                         32.0f, 16.0f);

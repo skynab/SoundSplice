@@ -337,7 +337,7 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
 
     Built and prepared on the message thread — where allocating a delay line
     is fine — then handed to the audio thread whole, the same pointer-swap the
-    rest of the engine uses (Sequencer::ClipList, DrumPadMap, TrackAutomation).
+    rest of the engine uses (Sequencer::ClipList, TrackAutomation).
     A swap can't be observed half-applied, which matters more here than
     usual: half a chain is a very different sound from all of it.
 

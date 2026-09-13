@@ -12,9 +12,7 @@
 namespace soundsplice::model
 {
 /** The numeric values are written to the project file, so they are part of
-    the format. 2, 3 and 4 were the Drum, Guitar and Bus types, which have
-    been removed: the deserializer reads Drum and Guitar tracks as Instrument
-    and drops Bus tracks, so those values must never be reused. */
+    the format: append, never renumber. */
 enum class TrackType
 {
     Instrument = 0, // MIDI clips driving a synth
@@ -33,7 +31,6 @@ enum class TrackParam
 {
     Gain      = 0, // dB
     Pan       = 1  // -1..+1
-    // 2 was SendLevel (the removed send bus); older lanes for it are dropped on load.
 };
 
 /** One cell of the session grid: a clip, or nothing. A vector of these on a

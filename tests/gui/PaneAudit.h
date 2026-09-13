@@ -135,8 +135,8 @@ inline void requireUsable(juce::Component& pane, const juce::String& paneName)
     a whole commit while being unreachable.
 
     A deliberately empty handler counts as wired. Several controls here are read
-    on demand rather than reacted to — the strum spread is read when a chord is
-    stamped, not when it moves — and those are given an empty lambda on
+    on demand rather than reacted to — an effect panel's selected slot is read
+    when it is needed, not when it changes — and those are given an empty lambda on
     purpose. The shape being caught is "nobody ever assigned anything", not
     "the handler does little".
 

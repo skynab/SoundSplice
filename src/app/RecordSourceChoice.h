@@ -60,9 +60,8 @@ struct RecordSourceDecision
 };
 
 /**
-    @param trackHoldsMidi  the armed track is anything but an Audio track —
-                           Instrument, Drum and Guitar are all driven by MIDI
-                           clips, so all three can hold a recorded pattern.
+    @param trackHoldsMidi  the armed track is an Instrument track, whose MIDI
+                           clips can hold a recorded pattern.
     @param haveMidi        at least one MIDI input device is connected.
     @param haveAudio       the open audio device actually has input channels.
     @param audioOpenFailed the device manager reported an error opening the

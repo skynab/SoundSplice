@@ -17,8 +17,7 @@ namespace soundsplice::engine::timestretch
     is the usual source of confusion:
 
       - **changeSpeed** is varispeed — playing the audio faster or slower, so
-        pitch moves with it. That's what a tape machine does, and what the
-        drum sampler already does per pad (see DrumKitNode's pitchRatio).
+        pitch moves with it. That's what a tape machine does.
         It's a resample and nothing more.
 
       - **pitchShift** moves pitch while *keeping the length*, which no amount

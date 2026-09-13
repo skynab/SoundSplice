@@ -2,8 +2,7 @@
 
 namespace soundsplice::engine
 {
-/** A small, fixed set of starting points for the mastering rack — the master
-    bus's counterpart to GuitarTone, SynthTone and DrumKitStyle. */
+/** A small, fixed set of starting points for the mastering rack. */
 enum class MasteringPreset
 {
     Flat,        // every stage a no-op: the "undo all of this" button

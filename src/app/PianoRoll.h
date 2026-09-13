@@ -195,8 +195,7 @@ public:
         edit — the caller falls back to a shared empty Pattern in that case
         (see MainComponent::currentPattern), which this can't tell apart from
         a real clip that's genuinely empty without being told directly. An
-        empty grid with nothing to explain it reads as broken, the same
-        reasoning as SynthEditor's and FretboardPane's placeholders. */
+        empty grid with nothing to explain it reads as broken. */
     void setNoClipSelected(bool none)
     {
         if (noClipSelected_ == none)
@@ -617,24 +616,9 @@ public:
             const juce::Rectangle<float> block(geometry_.xForStep(step, w) + 1.0f,
                                                geometry_.yForRow(row, h) + 1.0f,
                                                (float) spanOf(n) * cw - 2.0f, ch - 2.0f);
-            const bool palmMuted = n.articulation == engine::Articulation::PalmMute;
-
-            // A muted note is a different *colour*, not a dimmer green: green's
-            // brightness already carries velocity, so shading it would make a
-            // quiet open note and a loud chug look the same. Orange reads as a
-            // different kind of note at a glance, which is the whole reason
-            // this is a visible flag rather than a velocity trick.
-            g.setColour((palmMuted ? juce::Colours::orange : juce::Colours::limegreen)
+            g.setColour(juce::Colours::limegreen
                             .withAlpha(0.4f + 0.6f * juce::jlimit(0.0f, 1.0f, n.velocity)));
             g.fillRect(block);
-
-            if (palmMuted)
-            {
-                // A bar across the note, so the two are still distinguishable
-                // without relying on colour alone.
-                g.setColour(juce::Colours::black.withAlpha(0.55f));
-                g.fillRect(block.withSizeKeepingCentre(block.getWidth() * 0.7f, 2.0f));
-            }
 
             if (isSelected((int) i))
             {

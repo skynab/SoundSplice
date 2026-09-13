@@ -66,7 +66,7 @@ public:
 
         exciter_.prepare(sampleRate_);
         reverb_.prepare(sampleRate_, blockSize);
-        reverb_.setEnabled(true); // gated by reverbAmount, like the send bus
+        reverb_.setEnabled(true); // gated by reverbAmount rather than by an enable flag
         maximizer_.prepare(sampleRate_, 2);
     }
 

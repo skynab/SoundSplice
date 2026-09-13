@@ -394,8 +394,7 @@ private:
 
         // Grouped separately from Filter/Delay/Reverb because these read as
         // stompbox-style effects rather than studio processing — not because
-        // they're guitar-only. Wobble is the clearest case: it's a bass/synth
-        // effect that's essentially never used on a guitar. Presentation
+        // they suit one kind of track. Presentation
         // only — they all run in the same chain, in whatever order they are
         // put in, on whatever track type.
         juce::PopupMenu pedals;

@@ -50,7 +50,7 @@ inline juce::Colour trackColour(juce::uint32 stored)
 /** A short tag naming what kind of track this is.
 
     Track names double as the type indicator until someone renames one — call
-    a guitar track "Verse" and nothing on screen says it is a guitar any more.
+    an audio track "Verse" and nothing on screen says it is audio any more.
     This is what keeps that readable, so renaming costs nothing.
 */
 inline const char* trackTypeTag(model::TrackType type)
@@ -73,9 +73,8 @@ inline constexpr int kTrackHeaderHeight = 20;
     reused here so a pane reached through a dock tab (whose title doesn't
     change per track) can say which track is actually open.
 
-    Switching tracks while parked on a tab titled "Keys"/"Synth"/"Drums"/
-    "Guitar" gave no on-screen confirmation of which track's notes, patch,
-    kit, or fretboard was showing — this is the fix, applied the same way in
+    Switching tracks while parked on a tab titled "Keys" or "Automation" gave
+    no on-screen confirmation of which track's notes or lanes were showing — this is the fix, applied the same way in
     every pane that needed it rather than once per file.
 
     A free function rather than a Component: every pane that needs this

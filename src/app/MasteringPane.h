@@ -434,7 +434,7 @@ private:
 
     /** For a discrete control: a click has no "during" to bracket, so both
         ends fire back to back around the one edit it makes — same reasoning
-        as SynthEditor::reportInstantEdit. */
+        as EffectChainPanel::reportInstantEdit. */
     void reportInstantEdit(std::function<void()> apply)
     {
         if (updating_)

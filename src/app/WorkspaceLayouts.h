@@ -27,7 +27,7 @@ namespace soundsplice::layouts
 */
 enum class Workspace
 {
-    MusicCreation, // synths, drums, guitar, the piano roll — composing
+    MusicCreation, // the piano roll, session grid and mixer — composing
     AudioEditing   // the waveform editor and the mastering rack
 };
 

@@ -72,7 +72,6 @@ catch_discover_tests(soundsplice_tests)
 if (SOUNDSPLICE_BUILD_APP)
   add_executable(soundsplice_gui_tests
     gui/ArrangementViewTests.cpp
-    gui/ArticulationTests.cpp
     gui/AudioExportTests.cpp
   gui/AudioEditorPaneTests.cpp
   gui/AudioFileTypesTests.cpp

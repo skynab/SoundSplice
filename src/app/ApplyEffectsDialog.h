@@ -78,7 +78,7 @@ public:
 
         // Read on demand rather than reacted to — stated explicitly so a
         // control nobody listens to stays distinguishable from one nobody
-        // remembered to wire (see FretboardPane's identical note).
+        // remembered to wire (see tests/gui/PaneAudit.h).
         chainPanel_.onSlotSelected          = [](int) {};
         chainPanel_.onPluginEditorRequested = [](int) {};
         chainPanel_.onScanRequested         = [] {};
