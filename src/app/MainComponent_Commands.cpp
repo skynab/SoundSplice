@@ -119,6 +119,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(timeSelection_.hasTracks());
             break;
 
+        case commands::mixAndRender:
+            info.setActive(renderJob_ == nullptr && ! arrangementEditTracks().empty());
+            break;
+
         case commands::splitStereoToMono:
         case commands::swapChannels:
         {
@@ -289,6 +293,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::duplicateTrack:  duplicateTrackAt(selectedTrackIndex_); break;
         case commands::splitStereoToMono: splitSelectedTrackToMono(); break;
         case commands::swapChannels:    swapSelectedTrackChannels(); break;
+        case commands::mixAndRender:    mixAndRenderToNewTrack(); break;
         case commands::renameTrack:     renameSelectedTrack(); break;
         case commands::deleteTrack:     deleteSelectedTrack(); break;
         case commands::quantize:        quantizeNotes(0.0); break;
@@ -464,6 +469,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::duplicateTrack);
         add(commands::splitStereoToMono);
         add(commands::swapChannels);
+        add(commands::mixAndRender);
         add(commands::deleteClip);
         menu.addSeparator();
         add(commands::renameTrack);

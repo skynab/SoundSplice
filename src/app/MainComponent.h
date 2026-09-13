@@ -313,6 +313,9 @@ private:
     // Track channel operations — see model/TrackChannels.h.
     void                   splitSelectedTrackToMono();
     void                   swapSelectedTrackChannels();
+    /** Renders the edit's tracks (see arrangementEditTracks) over the time
+        selection, or everything arranged, onto a new audio track. */
+    void                   mixAndRenderToNewTrack();
     void                   deleteAllMarkers();
     void                   showMarkerMenu(int markerId);
     void                   exportMarkersDialog();

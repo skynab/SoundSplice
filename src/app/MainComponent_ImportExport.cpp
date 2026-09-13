@@ -491,4 +491,151 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
                                                std::move(onFinished));
 }
 
+/** Mix and Render to New Track: the time selection's tracks (or the selected
+    track) rendered over the time selection (or everything arranged) into one
+    audio file, on a new track where the render started. The tracks rendered
+    are left as they are.
+
+    Rendered as stems are — each track on its own, through its own effects,
+    gain and pan but before the master bus — then summed, so the result is
+    what those tracks contribute to the mix. Tracks that don't sound in the
+    mix (muted, or silenced by a solo) are left out, by the same rule. On the
+    render thread behind a progress window, like an export. */
+void MainComponent::mixAndRenderToNewTrack()
+{
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+
+    const auto& song     = history_.current();
+    const auto  trackIds = arrangementEditTracks();
+
+    std::vector<int> indices;
+    const int count = juce::jmin((int) song.tracks.size(), engine_.maxTracks());
+    for (int i = 0; i < count; ++i)
+        if (std::find(trackIds.begin(), trackIds.end(), song.tracks[(size_t) i].id) != trackIds.end()
+            && engine_.trackContributesToMix(i))
+            indices.push_back(i);
+
+    if (indices.empty())
+    {
+        showError("Nothing to render - the tracks are muted, or silenced by a solo");
+        return;
+    }
+
+    if (trackCount() >= engine_.maxTracks())
+    {
+        showError("Track limit reached");
+        return;
+    }
+
+    const double rate = engine_.sampleRate();
+    if (rate <= 0.0)
+    {
+        showError("Rendering needs an audio device - choose one in Audio Settings");
+        return;
+    }
+
+    const double startBeats  = timeSelection_.isEmpty() ? 0.0 : timeSelection_.startBeats;
+    const double lengthBeats = timeSelection_.isEmpty() ? songEndBeats() : timeSelection_.lengthBeats();
+    if (lengthBeats <= 0.0)
+    {
+        showError("Nothing arranged to render");
+        return;
+    }
+
+    const auto file    = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Mix", ".wav");
+    auto       written = std::make_shared<bool>(false);
+
+    // The engine belongs to the render thread for the duration, as for an export.
+    offlineRenderInProgress_ = true;
+
+    auto work = [this, indices, startBeats, lengthBeats, rate, file, written](app::OfflineRenderJob& job)
+    {
+        juce::AudioBuffer<float> mix;
+        const int                total = (int) indices.size();
+
+        for (int n = 0; n < total; ++n)
+        {
+            if (job.shouldAbort())
+                return;
+
+            engine::AudioEngine::OfflineRenderOptions options;
+            options.startBeats     = startBeats;
+            options.lengthBeats    = lengthBeats;
+            options.soloTrack      = indices[(size_t) n];
+            options.applyMasterBus = false;
+            options.onProgress     = [&job, n, total](double fraction)
+            {
+                job.report(app::overallProgress(n, total, fraction),
+                           "Rendering track " + juce::String(n + 1) + " of " + juce::String(total));
+                return ! job.shouldAbort();
+            };
+
+            const auto buffer = engine_.renderOffline(options);
+            if (buffer.getNumSamples() == 0)
+                return; // cancelled
+
+            if (mix.getNumSamples() == 0)
+            {
+                mix.makeCopyOf(buffer);
+                continue;
+            }
+
+            const int samples = juce::jmin(mix.getNumSamples(), buffer.getNumSamples());
+            for (int ch = 0; ch < juce::jmin(mix.getNumChannels(), buffer.getNumChannels()); ++ch)
+                mix.addFrom(ch, 0, buffer, ch, 0, samples);
+        }
+
+        *written = mix.getNumSamples() > 0 && engine::OfflineRenderer::writeWav(file, mix, rate);
+    };
+
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), written, file, startBeats,
+                       lengthBeats, rendered = (int) indices.size()](bool cancelled)
+    {
+        if (self == nullptr)
+            return;
+
+        self->offlineRenderInProgress_ = false;
+        self->renderJob_.reset();
+        self->followSystemOutputIfEnabled();
+
+        if (cancelled || ! *written)
+        {
+            file.deleteFile();
+            if (cancelled)
+                self->showStatus("Mix and render cancelled");
+            else
+                self->showError("Could not write " + file.getFileName());
+            return;
+        }
+
+        const auto path          = file.getFullPathName().toStdString();
+        int        newTrackIndex = -1;
+
+        self->history_.edit("Mix and render to new track", [&path, startBeats, lengthBeats, &newTrackIndex](model::Song& s)
+        {
+            model::addTrack(s, model::TrackType::Audio, "Mix");
+
+            model::Clip clip;
+            clip.id          = model::allocateId(s);
+            clip.type        = model::ClipType::Audio;
+            clip.startBeats  = startBeats;
+            clip.lengthBeats = lengthBeats;
+            clip.audioFile   = path;
+            s.tracks.back().clips.push_back(clip);
+
+            newTrackIndex = (int) s.tracks.size() - 1;
+        });
+
+        self->selectTrackAndRefreshAll(newTrackIndex);
+        self->showStatus("Rendered " + juce::String(rendered) + (rendered == 1 ? " track" : " tracks")
+                         + " to a new track");
+    };
+
+    renderJob_ = app::OfflineRenderJob::launch("Mix and Render", std::move(work), std::move(onFinished));
+}
+
 } // namespace soundsplice
