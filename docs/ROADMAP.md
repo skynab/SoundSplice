@@ -99,8 +99,9 @@ all three.
   (Loop plays the time selection when there is one)
 - ⬜ Zoom: to selection, fit project, fit vertically, sample-level zoom, a vertical dB/linear scale,
   and waveform vs. **RMS overlay** display
-- ⬜ Track channel ops: **split stereo to mono**, **make stereo from two monos**, **mix and render to a
-  new track**, swap channels, and per-track **resample**
+- 🟡 Track channel ops: **split stereo to mono** ✅ and swap channels ✅ (Edit menu; each clip plays
+  a chosen channel, so nothing is rendered; `src/model/TrackChannels.h`), **make stereo from two monos** ⬜,
+  **mix and render to a new track** ⬜, and per-track **resample** ⬜
 - ⬜ **Multiple open files** in the editor, as tabs (REAPER project tabs, Audition's file list)
 - ⬜ Import: **Opus, WavPack, M4A/AAC, CAF, RF64/W64, raw PCM**, and audio pulled from video
   (optional FFmpeg module, as Audacity does)

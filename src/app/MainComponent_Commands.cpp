@@ -119,6 +119,15 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(timeSelection_.hasTracks());
             break;
 
+        case commands::splitStereoToMono:
+        case commands::swapChannels:
+        {
+            const auto& tracks = history_.current().tracks;
+            info.setActive(selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) tracks.size()
+                           && tracks[(size_t) selectedTrackIndex_].type == model::TrackType::Audio);
+            break;
+        }
+
         // The last track isn't deletable: a song with none has no pane that
         // can do anything, and no obvious way back.
         case commands::deleteTrack:
@@ -278,6 +287,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::copyTrack:       copyTrack(); break;
         case commands::pasteTrack:      pasteTrack(); break;
         case commands::duplicateTrack:  duplicateTrackAt(selectedTrackIndex_); break;
+        case commands::splitStereoToMono: splitSelectedTrackToMono(); break;
+        case commands::swapChannels:    swapSelectedTrackChannels(); break;
         case commands::renameTrack:     renameSelectedTrack(); break;
         case commands::deleteTrack:     deleteSelectedTrack(); break;
         case commands::quantize:        quantizeNotes(0.0); break;
@@ -451,6 +462,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::copyTrack);
         add(commands::pasteTrack);
         add(commands::duplicateTrack);
+        add(commands::splitStereoToMono);
+        add(commands::swapChannels);
         add(commands::deleteClip);
         menu.addSeparator();
         add(commands::renameTrack);

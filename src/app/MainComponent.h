@@ -309,6 +309,10 @@ private:
     void                   renameMarkerPrompt(int markerId);
     void                   deleteMarker(int markerId);
     void                   moveMarkerTo(int markerId, double startBeats);
+
+    // Track channel operations — see model/TrackChannels.h.
+    void                   splitSelectedTrackToMono();
+    void                   swapSelectedTrackChannels();
     void                   deleteAllMarkers();
     void                   showMarkerMenu(int markerId);
     void                   exportMarkersDialog();

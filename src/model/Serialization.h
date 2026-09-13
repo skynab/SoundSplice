@@ -71,6 +71,7 @@ namespace detail
         out << "CLIPSRC " << num(clip.sourceOffsetSeconds) << "\n";
         out << "CLIPFADE " << num(clip.fades.inSeconds) << " " << (int) clip.fades.inShape << " "
             << num(clip.fades.outSeconds) << " " << (int) clip.fades.outShape << "\n";
+        out << "CLIPCHANS " << (int) clip.channels << "\n";
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
             out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
@@ -355,6 +356,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             clip.fades.inShape  = detail::fadeShapeFrom(inShape);
             clip.fades.outShape = detail::fadeShapeFrom(outShape);
         }
+
+        if (readTagged("CLIPCHANS", rest))
+            clip.channels = engine::clipChannelsFrom(std::atoi(rest.c_str()));
 
         if (readTagged("PEDALS", rest))
         {

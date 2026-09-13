@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "engine/ClipChannels.h"
 #include "engine/ClipData.h"
 #include "engine/ClipFade.h"
 
@@ -42,6 +43,10 @@ struct AudioClipSlot
     /** The clip's fades — see model::Clip::fades. Applied over the clip's
         audible length, which the player works out per block. */
     ClipFades fades;
+
+    /** Which of the file's channels plays on each output — see
+        model::Clip::channels. */
+    ClipChannels channels = ClipChannels::Both;
 };
 
 } // namespace soundsplice::engine

@@ -7,6 +7,7 @@ add_executable(soundsplice_tests
   engine/TransportTests.cpp
   engine/InterpolationTests.cpp
   engine/ClipFadeTests.cpp
+  engine/ClipChannelsTests.cpp
   engine/MidiNoteTests.cpp
   engine/SequencerMathTests.cpp
   engine/MetronomeMathTests.cpp
@@ -44,6 +45,7 @@ add_executable(soundsplice_tests
   model/MarkerEditsTests.cpp
   model/TimeSelectionTests.cpp
   model/ArrangementEditsTests.cpp
+  model/TrackChannelsTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp

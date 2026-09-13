@@ -280,7 +280,7 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
         }
         slots->push_back({ decoded, spec.startBeats, spec.lengthBeats,
                            juce::Decibels::decibelsToGain(spec.gainDb), spec.sourceOffsetSeconds,
-                           spec.fades });
+                           spec.fades, spec.channels });
     }
 
     auto& track = tracks_[(size_t) index];

@@ -455,6 +455,53 @@ void MainComponent::duplicateTrackAt(int trackIndex)
     showStatus("Duplicated " + (sourceName.isEmpty() ? juce::String("track") : "\"" + sourceName + "\""));
 }
 
+/** Makes the selected audio track a left track and a right track, without
+    writing any audio: each only changes which channel its clips play. */
+void MainComponent::splitSelectedTrackToMono()
+{
+    const int   index  = selectedTrackIndex_;
+    const auto& tracks = history_.current().tracks;
+    if (index < 0 || index >= (int) tracks.size() || tracks[(size_t) index].type != model::TrackType::Audio)
+    {
+        showError("Select an audio track first");
+        return;
+    }
+
+    if (trackCount() >= engine_.maxTracks())
+    {
+        showError("Track limit reached");
+        return;
+    }
+
+    history_.edit("Split stereo to mono", [index](model::Song& s)
+    {
+        model::channelops::splitStereoToMono(s, index);
+    });
+
+    selectTrackAndRefreshAll(index);
+    showStatus("Split into a left track and a right track");
+}
+
+void MainComponent::swapSelectedTrackChannels()
+{
+    const int   index  = selectedTrackIndex_;
+    const auto& tracks = history_.current().tracks;
+    if (index < 0 || index >= (int) tracks.size() || tracks[(size_t) index].type != model::TrackType::Audio)
+    {
+        showError("Select an audio track first");
+        return;
+    }
+
+    history_.edit("Swap channels", [index](model::Song& s)
+    {
+        model::channelops::swapChannels(s, index);
+    });
+
+    syncEngineTracks();
+    arrangementView_.setSong(history_.current());
+    showStatus("Swapped left and right");
+}
+
 /** Copies the selected track for later pasting. Deliberately its own
     clipboard rather than sharing the clip one: pasting a track when a clip
     was copied, or the reverse, is the kind of guess that loses work. */
@@ -1023,6 +1070,7 @@ void MainComponent::syncEngineTracks()
             spec.gainDb      = clip.gainDb;
             spec.sourceOffsetSeconds = clip.sourceOffsetSeconds;
             spec.fades               = clip.fades;
+            spec.channels            = clip.channels;
             audioSpecs.push_back(spec);
         }
         // Submitted even when empty, which the guard here used to skip: the

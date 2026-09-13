@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "engine/ClipChannels.h"
 #include "engine/ClipFade.h"
 #include "engine/Pattern.h"
 
@@ -43,6 +44,11 @@ struct Clip
         can be redrawn or removed freely. Audio clips only; the curves and the
         rule for fades longer than the clip are in engine/ClipFade.h. */
     engine::ClipFades fades;
+
+    /** Which of the file's channels the clip plays: both, one of them on
+        every output, or the two swapped. Non-destructive like the fades; see
+        engine/ClipChannels.h and model/TrackChannels.h. Audio clips only. */
+    engine::ClipChannels channels = engine::ClipChannels::Both;
 
     bool operator==(const Clip&) const = default;
 };

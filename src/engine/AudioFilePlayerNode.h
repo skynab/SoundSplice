@@ -184,8 +184,8 @@ public:
                                               : clipGain;
 
                     for (int ch = 0; ch < outChans; ++ch)
-                        buffer.getWritePointer(ch)[i] += gain * cursor.sampleLinear(juce::jmin(ch, fileChans - 1),
-                                                                                     position, length);
+                        buffer.getWritePointer(ch)[i] += gain * cursor.sampleLinear(
+                            sourceChannelFor(activeSlot.channels, ch, fileChans), position, length);
                 }
 
                 position        += ratio;
@@ -203,7 +203,7 @@ public:
 
                 for (int ch = 0; ch < outChans; ++ch)
                 {
-                    const int    srcCh  = juce::jmin(ch, fileChans - 1);
+                    const int    srcCh  = sourceChannelFor(activeSlot.channels, ch, fileChans);
                     const float* srcPtr = clip->audio.getReadPointer(srcCh);
                     buffer.getWritePointer(ch)[i] += gain * sampleLinear(srcPtr, length, position);
                 }
