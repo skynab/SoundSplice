@@ -99,7 +99,11 @@ namespace looper::model
           files, which is the filter-chain cabinet they already had.
       41  + PEDALS/PEDAL after a clip's notes: sustain-pedal movements, the
           first performance data here that is not a note. Absent in older
-          files, which had no way to express one. */
+          files, which had no way to express one.
+
+    SoundSplice removed the Drum and Guitar track types without a version
+    bump: DRUMKIT/DPAD and GUITAR are no longer written, are skipped when an
+    older file carries them, and a TRACK of either type loads as Instrument. */
 inline constexpr int kFormatVersion = 41;
 namespace detail
 {
@@ -235,19 +239,6 @@ inline std::string serialize(const Song& song)
             for (const auto& pt : lane.points())
                 out << "TAPT " << detail::num(pt.beat) << " " << detail::num((double) pt.value) << "\n";
         }
-        out << "DRUMKIT " << track.drumKit.pads.size() << "\n";
-        for (const auto& pad : track.drumKit.pads)
-            // label is a space-free token (no pad-rename UI exists yet, so
-            // this always holds); samplePath is the rest of the line, like
-            // clip.audioFile/track.name, since a real file path can have
-            // spaces — so every fixed-width field has to precede it.
-            out << "DPAD " << pad.noteNumber << " " << pad.label << " "
-                << detail::num((double) pad.gainDb) << " "
-                << detail::num((double) pad.pan) << " "
-                << detail::num((double) pad.pitchSemitones) << " "
-                << (pad.muted ? 1 : 0) << " " << (pad.solo ? 1 : 0) << " "
-                << pad.samplePath << "\n";
-
         const auto& synth = track.synthSettings;
         out << "SYNTH " << synth.waveform << " "
             << detail::num((double) synth.attackMs) << " " << detail::num((double) synth.decayMs) << " "
@@ -264,27 +255,6 @@ inline std::string serialize(const Song& song)
             << detail::num((double) synth.subOscLevel) << " "
             << synth.unisonVoices << " "
             << detail::num((double) synth.unisonDetuneCents) << "\n";
-
-        const auto& guitar = track.guitarSettings;
-        out << "GUITAR";
-        for (int note : guitar.tuning)
-            out << " " << note;
-        out << " " << detail::num((double) guitar.decaySeconds)
-            << " " << detail::num((double) guitar.brightness)
-            << " " << detail::num((double) guitar.pickPosition)
-            << " " << detail::num((double) guitar.pickHardness)
-            << " " << detail::num((double) guitar.muteOnNoteOff)
-            << " " << detail::num((double) guitar.pickupResonanceHz)
-            << " " << detail::num((double) guitar.pickupQ)
-            << " " << detail::num((double) guitar.palmMuteDecaySeconds)
-            << " " << detail::num((double) guitar.palmMuteBrightness)
-            // Appended for the reason v30's fields were: the line is
-            // positional, so anything inserted mid-line would make every older
-            // file read its values into the wrong slots.
-            << " " << detail::num((double) guitar.velocitySensitivity)
-            << " " << detail::num((double) guitar.stringCoupling)
-            << " " << detail::num((double) guitar.stereoWidth)
-            << " " << detail::num((double) guitar.stiffness) << "\n";
 
         // The effect chain, in order. A slot carries every built-in's settings
         // regardless of its kind, so switching kind doesn't lose the others.
@@ -701,7 +671,10 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             int typeInt = 0, muteInt = 0, soloInt = 0;
             double gain = 0.0, sendLevel = 0.0;
             ts >> track.id >> typeInt >> gain >> muteInt >> soloInt >> sendLevel;
-            track.type      = (TrackType) typeInt;
+            // 2 and 3 were Drum and Guitar. Their clips hold ordinary note
+            // patterns, so they come back as synth tracks rather than failing.
+            track.type      = (typeInt == 2 || typeInt == 3) ? TrackType::Instrument
+                                                             : (TrackType) typeInt;
             track.gainDb    = (float) gain;
             track.muted     = muteInt != 0;
             track.solo      = soloInt != 0;
@@ -774,38 +747,13 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             }
         }
 
+        // Drum kits were removed. Older files still carry one per track, so
+        // the records are consumed and discarded to keep the cursor aligned.
         if (readTagged("DRUMKIT", rest))
         {
             const int padCount = std::atoi(rest.c_str());
             for (int p = 0; p < padCount; ++p)
-            {
                 if (! readTagged("DPAD", rest)) return fail("truncated drum kit");
-                std::istringstream ps(rest);
-                DrumPad pad;
-                ps >> pad.noteNumber >> pad.label;
-
-                // The one record whose *shape* changed rather than being
-                // added wholesale: before v13 a pad was just note/label/path,
-                // and the mix fields didn't exist. They can't be detected by
-                // token count because the path is rest-of-line and may
-                // contain spaces, so the version decides.
-                if (version >= 13)
-                {
-                    double gainDb = 0.0, pan = 0.0, pitchSemitones = 0.0;
-                    int    muted = 0, solo = 0;
-                    ps >> gainDb >> pan >> pitchSemitones >> muted >> solo;
-                    pad.gainDb         = (float) gainDb;
-                    pad.pan            = (float) pan;
-                    pad.pitchSemitones = (float) pitchSemitones;
-                    pad.muted          = muted != 0;
-                    pad.solo           = solo != 0;
-                }
-
-                std::string samplePath;
-                std::getline(ps, samplePath);
-                pad.samplePath = detail::trimLeadingSpace(std::move(samplePath));
-                track.drumKit.pads.push_back(pad);
-            }
         }
 
         if (readTagged("SYNTH", rest)) // added in v12; older files keep the defaults
@@ -849,52 +797,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             track.synthSettings.unisonDetuneCents  = (float) unisonDetuneCents;
         }
 
-        if (readTagged("GUITAR", rest)) // added in v19; older files keep the defaults
-        {
-            std::istringstream gs(rest);
-            for (int s = 0; s < kNumGuitarStrings; ++s)
-                gs >> track.guitarSettings.tuning[(size_t) s];
-
-            double decay = 0.0, brightness = 0.0, position = 0.0, hardness = 0.0, mute = 0.0;
-
-            // Seeded with the defaults rather than 0, so a v29-or-older GUITAR
-            // line - which ends after `mute` - leaves a sensible pickup rather
-            // than a 0Hz one. Added in v30.
-            const GuitarSettings fallback;
-            double resonanceHz = (double) fallback.pickupResonanceHz;
-            double pickupQ     = (double) fallback.pickupQ;
-            double palmDecay   = (double) fallback.palmMuteDecaySeconds;
-            double palmBright  = (double) fallback.palmMuteBrightness;
-
-            // Seeded from the defaults for the same reason, and this time it
-            // decides something audible: a v36-or-older GUITAR line ends after
-            // palmBright, and reading 0 into these would give an older project
-            // the *old* instrument - identical notes, no sympathetic ringing,
-            // dead centre - rather than the improved one. Added in v37.
-            double velocitySense = (double) fallback.velocitySensitivity;
-            double coupling      = (double) fallback.stringCoupling;
-            double width         = (double) fallback.stereoWidth;
-            double stiffness     = (double) fallback.stiffness;
-
-            gs >> decay >> brightness >> position >> hardness >> mute
-               >> resonanceHz >> pickupQ >> palmDecay >> palmBright
-               >> velocitySense >> coupling >> width >> stiffness;
-
-            track.guitarSettings.stiffness = (float) stiffness;
-
-            track.guitarSettings.velocitySensitivity = (float) velocitySense;
-            track.guitarSettings.stringCoupling      = (float) coupling;
-            track.guitarSettings.stereoWidth         = (float) width;
-            track.guitarSettings.decaySeconds      = (float) decay;
-            track.guitarSettings.brightness        = (float) brightness;
-            track.guitarSettings.pickPosition      = (float) position;
-            track.guitarSettings.pickHardness      = (float) hardness;
-            track.guitarSettings.muteOnNoteOff     = (float) mute;
-            track.guitarSettings.pickupResonanceHz = (float) resonanceHz;
-            track.guitarSettings.pickupQ           = (float) pickupQ;
-            track.guitarSettings.palmMuteDecaySeconds = (float) palmDecay;
-            track.guitarSettings.palmMuteBrightness   = (float) palmBright;
-        }
+        // Guitar settings were removed; an older file's single GUITAR line is
+        // consumed and discarded.
+        readTagged("GUITAR", rest);
 
         // v14..v17 stored a fixed filter/delay/reverb trio. Migrate it into
         // three chain slots in that same order, so an old project comes back

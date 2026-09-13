@@ -4,7 +4,6 @@
 #include <app/ApplyEffectsDialog.h>
 #include <app/AudioEditorPane.h>
 #include <app/MasteringPane.h>
-#include <app/DrumsPane.h>
 #include <app/EffectChainPanel.h>
 #include <app/FileBrowserPanel.h>
 #include <app/MixerStrip.h>
@@ -34,15 +33,15 @@ namespace
     {
         model::Song song;
         const int synth  = model::addTrack(song, model::TrackType::Instrument, "Synth").id;
-        const int drums  = model::addTrack(song, model::TrackType::Drum, "Drums").id;
-        model::addTrack(song, model::TrackType::Guitar, "Guitar");
+        const int bass   = model::addTrack(song, model::TrackType::Instrument, "Bass").id;
+        model::addTrack(song, model::TrackType::Audio, "Vox");
 
         model::Clip clip;
         clip.type                = model::ClipType::Instrument;
         clip.lengthBeats         = 4.0;
         clip.pattern.lengthBeats = 4.0;
         model::addClip(song, synth, clip);
-        model::addClip(song, drums, clip);
+        model::addClip(song, bass, clip);
 
         model::addScene(song, "Intro");
         model::addScene(song, "Chorus");
@@ -64,26 +63,6 @@ namespace
             chain.push_back(slot);
         }
         return chain;
-    }
-}
-
-TEST_CASE("The drums pane lays out usably at every size", "[gui][panes]")
-{
-    JuceFixture fixture;
-
-    for (const auto& size : kSizes)
-    {
-        DrumsPane pane;
-        pane.setVisible(true);
-        pane.setBounds(size);
-        pane.connectCallbacks();
-
-        engine::Pattern pattern;
-        pattern.lengthBeats = 4.0;
-        pane.setKit(model::makeDefaultDrumKit().pads, pattern);
-        pane.resized();
-
-        paneaudit::requireUsable(pane, "DrumsPane at " + size.toString());
     }
 }
 
@@ -160,21 +139,6 @@ TEST_CASE("The audio editor is usable with no clip selected", "[gui][panes]")
     pane.resized();
 
     paneaudit::requireUsable(pane, "AudioEditorPane with no clip");
-}
-
-TEST_CASE("The drums pane is usable with no track selected too", "[gui][panes]")
-{
-    // The placeholder state. A control left visible but unpositioned here
-    // would be invisible in the app and impossible to notice.
-    JuceFixture fixture;
-
-    DrumsPane pane;
-    pane.setVisible(true);
-    pane.setBounds(0, 0, 700, 400);
-    pane.setNoDrumTrackSelected();
-    pane.resized();
-
-    paneaudit::requireUsable(pane, "DrumsPane with no track");
 }
 
 TEST_CASE("The session view lays out usably at every size", "[gui][panes]")

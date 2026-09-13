@@ -7,9 +7,7 @@
 
 #include "engine/AudioFilePlayerNode.h"
 #include "engine/AutomationCurve.h"
-#include "engine/DrumKitNode.h"
 #include "engine/EffectChain.h"
-#include "engine/GuitarNode.h"
 #include "engine/ProcessContext.h"
 #include "engine/Sequencer.h"
 #include "engine/SessionPlayer.h"
@@ -18,19 +16,13 @@
 namespace looper::engine
 {
 /**
-    One mixer channel: a synth, drum kit or guitar (see `instrument`) driven by its
-    own sequencer, *and* an audio-clip player, both summed into the same
-    per-track gain, mute, solo, pre-fader send, and post-gain peak metering.
-    A track only uses whichever of these it's been given content for — an
-    Instrument-type track gets a pattern for the synth, an Audio-type track
-    gets a decoded clip via audioPlayer, a Drum-type track gets a pattern for
-    the drum kit instead of the synth — but every node always exists on every
-    pool slot, so there's no track-type branching in most of the engine.
-
-    `instrument` is the one exception: unlike audioPlayer (which naturally
-    stays silent with no clip submitted), every note-driven instrument produces
-    *some* sound for any note it receives, so which one gets the track's notes
-    has to be stated rather than left for content-gating to sort out.
+    One mixer channel: a synth driven by its own sequencer, *and* an audio-clip
+    player, both summed into the same per-track gain, mute, solo, pre-fader
+    send, and post-gain peak metering. A track only uses whichever of these
+    it's been given content for — an Instrument-type track gets a pattern for
+    the synth, an Audio-type track gets a decoded clip via audioPlayer — but
+    both nodes always exist on every pool slot, so there's no track-type
+    branching in most of the engine.
 
     Tracks live in a fixed, pre-allocated pool inside the engine, so
     activating/deactivating a track is just an atomic flag — there is no real-time
@@ -52,8 +44,6 @@ namespace looper::engine
 struct InstrumentTrack
 {
     SynthInstrumentNode      synth;
-    DrumKitNode              drumKit;
-    GuitarNode               guitar;
     Sequencer                sequencer;
     SessionPlayer            session;
     AudioFilePlayerNode      audioPlayer;
@@ -74,7 +64,6 @@ struct InstrumentTrack
         given. See AudioEngine::processBlock, which does the clearing at the
         top of the block instead. */
     std::atomic<bool>        isBus       { false };
-    std::atomic<TrackInstrument> instrument { TrackInstrument::Synth }; // which node gets the notes
     std::atomic<float>       gainDb      { 0.0f };
     std::atomic<float>       pan         { 0.0f }; // -1 = hard left, 0 = centre, +1 = hard right
     std::atomic<float>       sendLevel   { 0.0f }; // 0..1, pre-fader
@@ -142,8 +131,6 @@ struct InstrumentTrack
     void prepare(double sampleRate, int blockSize)
     {
         synth.prepare(sampleRate, blockSize);
-        drumKit.prepare(sampleRate, blockSize);
-        guitar.prepare(sampleRate, blockSize);
         audioPlayer.prepare(sampleRate, blockSize);
         trackMidi.ensureSize(2048);
         scratch.setSize(2, juce::jmax(1, blockSize));
@@ -281,12 +268,7 @@ public:
             // No reallocation: scratch was prepared to the maximum block size.
             scratch.setSize(2, juce::jmax(1, numSamples), false, false, true);
             scratch.clear();
-            switch (instrument.load(std::memory_order_relaxed))
-            {
-                case TrackInstrument::Drum:   drumKit.process(scratch, trackMidi, context); break;
-                case TrackInstrument::Guitar: guitar.process(scratch, trackMidi, context);  break;
-                case TrackInstrument::Synth:  synth.process(scratch, trackMidi, context);   break;
-            }
+            synth.process(scratch, trackMidi, context);
             audioPlayer.process(scratch, trackMidi, context); // adds in; midi is ignored
         }
         // A bus's scratch already holds everything routed into it, summed

@@ -9,8 +9,6 @@
 #include <string>
 
 #include "engine/AudioEngine.h"
-#include "engine/DrumKitStyle.h"
-#include "engine/GuitarTone.h"
 #include "engine/MasteringPreset.h"
 #include "engine/MidiCapture.h"
 #include "app/RecordSourceChoice.h"
@@ -19,17 +17,14 @@
 #include "engine/AudioExport.h"
 #include "engine/TimeStretch.h"
 #include "engine/NoiseReduction.h"
-#include "engine/SynthTone.h"
 #include "engine/TempoMap.h"
 #include "model/History.h"
-#include "model/PresetSerialization.h"
 #include "model/Song.h"
 
 #include "OfflineRenderJob.h"
 
 #include "ArrangementView.h"
 #include "DockWorkspace.h"
-#include "DrumsPane.h"
 #include "EffectChainPanel.h"
 #include "EqCurveView.h"
 #include "AnalyserPane.h"
@@ -38,20 +33,17 @@
 #include "AudioEditorPane.h"
 #include "MasteringPane.h"
 #include "WorkspaceLayouts.h"
-#include "FretboardPane.h"
 #include "FileBrowserPanel.h"
 #include "LevelMeter.h"
 #include "MixerStrip.h"
 #include "PianoRoll.h"
 #include "PluginEditorWindow.h"
-#include "ChordStamp.h"
 #include "ClipLengthRepair.h"
 #include "DragCommit.h"
 #include "TrackSelection.h"
 #include "SessionView.h"
 #include "TrackColours.h"
 #include "StatusBanner.h"
-#include "SynthEditor.h"
 
 namespace looper
 {
@@ -239,39 +231,12 @@ private:
         be read (and reasoned about) apart from the take's lifecycle. */
     void                   commitMidiTake(int targetTrack, int64_t startSample, int64_t endSample);
     juce::File             recordingsDirectory() const;
-    juce::File             presetsDirectory() const;
-    void                   refreshPresetList();
-    void                   savePresetDialog();
-    void                   applyPreset(int index);
-    void                   deletePresetAt(int index);
-    void                   seedFactoryPresets();
-    juce::File             factoryDrumKitDirectory() const;
-    void                   seedFactoryDrumKit();
-    model::DrumKit         defaultDrumKitWithFactorySamples() const;
-    model::Song            makeStarterSong() const;
+    static model::Song     makeEmptySong();
     void                   selectTrackAndRefreshAll(int newTrackIndex);
     void                   addTrack();
-    void                   addDrumTrack();
-    void                   addGuitarTrack();
-    void                   refreshFretboardForSelected();
-    void                   setTrackGuitarSettings(const model::GuitarSettings& settings);
-    void                   stampChord(const engine::ChordShape& shape, int fretOffset,
-                                      const engine::StrumSettings& strum);
-    void                   playChordAtFret(engine::MovableShape shape, int rootString, int fret,
-                                           const engine::StrumSettings& strum, bool writeToClip);
-    const model::Track*    guitarTrackForChords();
     double                 beatsPerBar() const;
-    bool                   commitStampedNotes(const std::vector<engine::Note>& notes,
-                                              const juce::String& what, double atBeats);
-    void                   assignDrumSample(int padIndex, const juce::File& file);
-    void                   setDrumPadMix(int padIndex, const model::DrumPad& pad);
-    void                   addDrumPad();
-    void                   removeDrumPad(int padIndex);
-    int                    selectedDrumTrackIndex() const;
     void                   syncEngineTracks();
     void                   refreshPianoRollForSelected();
-    void                   refreshSynthEditorForSelected();
-    void                   refreshDrumsPaneForSelected();
     void                   refreshAudioEditorForSelected();
     void                   updateMasteringControls();
     void                   setMasteringSettings(const model::MasteringSettings& settings);
@@ -364,9 +329,7 @@ private:
     void                   addSessionScene();
     void                   deleteSessionScene(int sceneIndex);
     void                   captureClipIntoSession(int trackIndex, int sceneIndex);
-    void                   setTrackSynthSettings(const model::SynthSettings& settings);
     void                   previewNote(int noteNumber);
-    void                   previewChord(const std::vector<engine::Note>& notes);
     void                   updateDelayControls();
     void                   updateFilterControls();
     void                   updateReverbControls();
@@ -378,10 +341,6 @@ private:
     void                   endFaderDrag(int trackIndex, MixerStrip::Fader fader);
     void                   beginEffectSlotParamsDrag(int slotIndex);
     void                   endEffectSlotParamsDrag(int slotIndex);
-    void                   beginSynthSettingsDrag();
-    void                   endSynthSettingsDrag();
-    void                   beginGuitarSettingsDrag();
-    void                   endGuitarSettingsDrag();
     void                   setTrackGain(int index, float gainDb);
     void                   setTrackMuted(int index, bool muted);
     void                   setTrackSolo(int index, bool solo);
@@ -390,7 +349,6 @@ private:
     void                   selectTrack(int index);
     void                   selectTrackAndClip(int trackIndex, int clipIndex);
     void                   addClipToSelectedTrack();
-    void                   showGenerateLoopDialog();
     void                   setClipLength(int trackIndex, int clipIndex, double newLengthBeats);
     void                   copyNotes();
     void                   pasteNotes();
@@ -408,12 +366,7 @@ private:
     void                   renameTrackAt(int trackIndex);
     void                   showTrackSettingsMenu(int trackIndex);
     void                   setTrackColour(int trackIndex, unsigned int argb);
-    void                   setTrackType(int trackIndex, model::TrackType newType);
     void                   moveClipToTrack(int srcTrackIndex, int clipIndex, int destTrackIndex, double newStartBeats);
-    void                   applyGuitarTone(engine::GuitarTone tone);
-    void                   applySynthTone(engine::SynthTone tone);
-    void                   applyDrumKitStyle(engine::DrumKitStyle style);
-    model::DrumKit         kitForDrumKitStyle(engine::DrumKitStyle style) const;
     void                   quantizeNotes(double swingAmount);
     void                   setPatternBars(int bars);
     void                   setTimeSignature(int numerator, int denominator);
@@ -518,23 +471,6 @@ private:
     int               effectSlotDragIndex_ = -1;
     model::EffectSlot effectSlotDragFrom_;
 
-    // Same technique again, for the Synth pane's settings — see
-    // beginSynthSettingsDrag/endSynthSettingsDrag.
-    bool                  synthSettingsDragging_ = false;
-    int                   synthSettingsDragTrack_ = -1;
-    model::SynthSettings  synthSettingsDragFrom_;
-
-    // Same technique again, for the fretboard's settings — see
-    // beginGuitarSettingsDrag/endGuitarSettingsDrag.
-    bool                   guitarSettingsDragging_ = false;
-    int                    guitarSettingsDragTrack_ = -1;
-    model::GuitarSettings  guitarSettingsDragFrom_;
-
-    // The preset list SynthEditor is currently showing, in the same order —
-    // presetBox_'s indices are indices into this. Reloaded from disk by
-    // refreshPresetList() whenever a preset is saved or deleted.
-    std::vector<juce::File> presetFiles_;
-
     juce::MenuBarComponent          menuBar_;
 
     // Every tooltip in the app was dead text until this existed: JUCE only
@@ -563,8 +499,6 @@ private:
     juce::DrawableButton lastFrameButton     { "Last",     juce::DrawableButton::ImageFitted };
     juce::DrawableButton recordButton { "Record", juce::DrawableButton::ImageFitted };
     juce::TextButton   addTrackButton { "Add Track" };
-    juce::TextButton   addDrumTrackButton_ { "Add Drum" };
-    juce::TextButton   addGuitarTrackButton_ { "Add Guitar" };
     juce::TextButton   addBusTrackButton_ { "Add Bus" };
     juce::ToggleButton loopButton      { "Loop" };
     // Collapses the transport pane to its first row, so the pane can be
@@ -609,13 +543,10 @@ private:
     juce::ComboBox                     barsBox_; // pattern length of the open clip
     PianoRoll                          pianoRoll_;
 
-    SynthEditor                        synthEditor_; // its own dock panel — see refreshSynthEditorForSelected
-    DrumsPane                          drumsPane_;   // ditto — see refreshDrumsPaneForSelected
     EffectChainPanel                   effectChain_;
     juce::OwnedArray<PluginEditorWindow> pluginWindows_;
     SessionView                        sessionView_;
-    FretboardPane                      fretboard_; // ditto — see refreshTrackEffectsForSelected
-    AudioEditorPane                    audioEditor_; // ditto — see refreshAudioEditorForSelected
+    AudioEditorPane                    audioEditor_; // its own dock panel — see refreshAudioEditorForSelected
     MasteringPane                      masteringPane_; // ditto — see updateMasteringControls
     AnalyserPane                       analyserPane_;
     AutomationPane                     automationPane_;
@@ -676,7 +607,6 @@ private:
     juce::Viewport                     keysViewport_;
     juce::ToggleButton                 keysFollowButton_;
     juce::TextButton                   addClipButton_       { "Add Clip" };
-    juce::TextButton                   generateLoopButton_  { "Generate Loop..." };
 
     CallbackComponent                  mixerView_;
     CallbackComponent                  masterPanel_; // own top-level dock tab; see layoutMasterPanel()
@@ -684,11 +614,6 @@ private:
     std::unique_ptr<juce::FileChooser> chooser_;
 
     engine::TempoMap uiTempoMap_;
-
-    // Advanced per stamp so two identical chords humanise differently —
-    // a repeated strum that lands identically is the thing humanising is
-    // meant to avoid.
-    unsigned int chordStampSeed_ = 1;
 
     // An app-level clipboard holding model values, deliberately not the system
     // clipboard: pasting between two running copies of the app isn't worth a

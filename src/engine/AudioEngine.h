@@ -14,7 +14,6 @@
 
 #include "engine/AudioClipSlot.h"
 #include "engine/AudioFilePlayerNode.h"
-#include "engine/DrumKitNode.h"
 #include "engine/AudioRecorder.h"
 #include "engine/MidiRecorder.h"
 #include "engine/TempoDetect.h"
@@ -35,7 +34,6 @@
 #include "engine/Transport.h"
 
 #include "model/Effects.h"
-#include "model/GuitarSettings.h"
 
 namespace looper::engine
 {
@@ -66,25 +64,6 @@ struct AudioClipSpec
         pre-rendering means it never has to be one.
     */
     double stretchFactor = 1.0;
-};
-
-/** One drum pad to load onto a track: a note number, the file to play when
-    it's triggered (File{} = no sample assigned, pad stays silent), and that
-    pad's mix settings. `muted` is the *effective* mute — the caller resolves
-    the kit's solo state into it (see MainComponent::syncEngineTracks), the
-    same "solo overrides, mute always wins" rule tracks use, so the audio
-    thread never has to scan the other pads. Defaults are a no-op, so a spec
-    built without touching them behaves as it did before these existed. See
-    AudioEngine::setTrackDrumKit. */
-struct DrumPadSpec
-{
-    int        noteNumber = -1;
-    juce::File file;
-
-    float gainDb         = 0.0f;
-    float pan            = 0.0f;
-    float pitchSemitones = 0.0f;
-    bool  muted          = false;
 };
 
 /**
@@ -155,35 +134,6 @@ public:
     /** Routes @p index's output into the bus track at @p busTrackIndex, or -1
         for straight to the master. Message thread. */
     void setTrackOutputBus(int index, int busTrackIndex);
-
-    /** Chooses which instrument a track's notes drive. Explicit rather than
-        inferred: unlike audio clips, every note-driven instrument produces
-        sound for any note it receives, so the routing has to be stated.
-        Message thread. */
-    void setTrackInstrument(int index, TrackInstrument instrument);
-
-    /** Per-track guitar settings (see model::GuitarSettings / GuitarNode).
-        Takes the settings struct rather than a positional float list: with the
-        pickup added there are seven scalars, most in similar ranges, and a
-        transposed pair would be silent at the call site.
-        Message thread. */
-    void setTrackGuitarSettings(int index, const model::GuitarSettings& settings);
-    void setTrackGuitarTuning(int index, const std::array<int, kNumGuitarStrings>& tuning);
-
-    /** Which note a guitar track is currently sounding on a given string, or
-        -1. Lock-free readout for the fretboard. */
-    int guitarNoteOnString(int index, int stringIndex) const noexcept
-    {
-        return (index >= 0 && index < kMaxTracks)
-                   ? tracks_[(size_t) index].guitar.noteOnString(stringIndex) : -1;
-    }
-
-    /** Replaces a track's whole drum-kit pad→sample mapping, decoding any
-        file not already cached (see decodeOrGetCached — same cache
-        setTrackAudioClips uses, so a sample shared across pads or tracks is
-        never decoded twice). A pad with no file (or one that fails to
-        decode) stays silent. Message thread. */
-    void setTrackDrumKit(int index, const std::vector<DrumPadSpec>& pads);
 
     // Metronome (thread-safe atomics). Summed in after the master chain, so
     // it never passes through the master effects or reaches the meter — and
@@ -385,9 +335,7 @@ public:
     void setTrackAutomation(int index, const TrackAutomation& curves);
     void setArmedTrack(int index);
 
-    // Per-track synth timbre (see model::SynthSettings / SynthInstrumentNode)
-    // — meaningless for a Drum track, but harmless to set regardless since
-    // it's simply not read while `instrument` routes notes elsewhere.
+    // Per-track synth timbre (see model::SynthSettings / SynthInstrumentNode).
     void setTrackSynthWaveform(int index, int waveform);
     void setTrackSynthAttackMs(int index, float ms);
     void setTrackSynthDecayMs(int index, float ms);

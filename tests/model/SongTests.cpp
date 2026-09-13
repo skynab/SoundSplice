@@ -169,14 +169,14 @@ TEST_CASE("A track can be renamed", "[model][song]")
 TEST_CASE("A duplicated track is a separate track", "[model][song]")
 {
     Song song;
-    const int original = addTrack(song, TrackType::Guitar, "Riff").id;
+    const int original = addTrack(song, TrackType::Audio, "Riff").id;
     addClip(song, original, Clip {});
 
     Track* copy = duplicateTrack(song, 0);
     REQUIRE(copy != nullptr);
     REQUIRE(song.tracks.size() == 2);
     REQUIRE(copy->id != original);
-    REQUIRE(copy->type == TrackType::Guitar); // it's still a guitar track
+    REQUIRE(copy->type == TrackType::Audio); // it's still an audio track
 }
 
 TEST_CASE("A duplicated track's clips get their own ids", "[model][song]")
@@ -297,7 +297,7 @@ TEST_CASE("An appended copy keeps its music and its name", "[model][song]")
     // Unlike duplicating, pasting doesn't rename: the buffer already carries
     // whatever the user called it.
     Song song;
-    const int id = addTrack(song, TrackType::Guitar, "Riff").id;
+    const int id = addTrack(song, TrackType::Instrument, "Riff").id;
     Clip clip;
     clip.pattern.notes.push_back({ 0.0, 1.0, 55, 0.8f });
     addClip(song, id, clip);
@@ -306,7 +306,7 @@ TEST_CASE("An appended copy keeps its music and its name", "[model][song]")
     Track& pasted = appendTrackCopy(song, buffer);
 
     REQUIRE(pasted.name == "Riff");
-    REQUIRE(pasted.type == TrackType::Guitar);
+    REQUIRE(pasted.type == TrackType::Instrument);
     REQUIRE(pasted.clips.size() == 1);
     REQUIRE(pasted.clips[0].pattern.notes[0].noteNumber == 55);
 }

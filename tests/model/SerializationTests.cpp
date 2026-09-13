@@ -58,15 +58,15 @@ static Song makeSampleSong()
     audioClip.audioFile  = "takes/vocal 01.wav";
     addClip(s, voxId, audioClip);
 
-    const int drumId = addTrack(s, TrackType::Drum, "Drums").id; // auto-populates the default pads
-    Clip drumClip;
-    drumClip.type             = ClipType::Instrument;
-    drumClip.startBeats       = 16.0;
-    drumClip.lengthBeats      = 4.0;
-    drumClip.pattern.lengthBeats = 4.0;
-    drumClip.pattern.notes.push_back({ 0.0, 0.25, 36, 1.0f }); // kick on beat 1
-    drumClip.pattern.notes.push_back({ 1.0, 0.25, 38, 0.9f }); // snare on beat 2
-    addClip(s, drumId, drumClip);
+    const int bassId = addTrack(s, TrackType::Instrument, "Bass").id;
+    Clip bassClip;
+    bassClip.type             = ClipType::Instrument;
+    bassClip.startBeats       = 16.0;
+    bassClip.lengthBeats      = 4.0;
+    bassClip.pattern.lengthBeats = 4.0;
+    bassClip.pattern.notes.push_back({ 0.0, 0.25, 36, 1.0f });
+    bassClip.pattern.notes.push_back({ 1.0, 0.25, 38, 0.9f });
+    addClip(s, bassId, bassClip);
 
     // Set solo/mute by index (not the returned reference — a later addTrack can
     // reallocate the vector and invalidate it).
@@ -84,12 +84,6 @@ static Song makeSampleSong()
     s.tracks[0].laneFor(TrackParam::Pan).addPoint(0.0, -1.0f);
     s.tracks[0].laneFor(TrackParam::Pan).addPoint(8.0, 1.0f);
     s.tracks[1].laneFor(TrackParam::SendLevel).addPoint(2.0, 0.25f);
-    s.tracks[2].drumKit.pads[0].samplePath = "samples/Kick 808.wav"; // with a space, deliberately
-    s.tracks[2].drumKit.pads[0].gainDb         = -2.5f;
-    s.tracks[2].drumKit.pads[0].pitchSemitones = -3.0f;
-    s.tracks[2].drumKit.pads[0].solo           = true;
-    s.tracks[2].drumKit.pads[1].pan            = 0.4f;
-    s.tracks[2].drumKit.pads[1].muted          = true;
 
     s.tracks[0].synthSettings.waveform        = 2; // square
     s.tracks[0].synthSettings.attackMs        = 12.0f;
@@ -209,28 +203,7 @@ static Song makeSampleSong()
     sessionClipB.type                = ClipType::Instrument;
     sessionClipB.lengthBeats         = 8.0;
     sessionClipB.pattern.lengthBeats = 8.0;
-    setSessionClip(s, 2, 1, sessionClipB); // drum track, second scene
-
-    // A guitar track in drop-D with non-default tone, so the round trip has to
-    // carry both the tuning array and the scalars.
-    const int guitarId = addTrack(s, TrackType::Guitar, "Gtr").id;
-    Clip guitarClip;
-    guitarClip.type                = ClipType::Instrument;
-    guitarClip.startBeats          = 12.0;
-    guitarClip.lengthBeats         = 4.0;
-    guitarClip.pattern.lengthBeats = 4.0;
-    guitarClip.pattern.notes.push_back({ 0.0, 1.0, 40, 0.9f });
-    addClip(s, guitarId, guitarClip);
-
-    auto& guitar = s.tracks[3].guitarSettings;
-    guitar.tuning        = { 38, 45, 50, 55, 59, 64 }; // drop D
-    guitar.decaySeconds  = 4.5f;
-    guitar.brightness    = 0.35f;
-    guitar.pickPosition  = 0.11f;
-    guitar.pickHardness  = 0.9f;
-    guitar.muteOnNoteOff = 0.25f;
-    guitar.pickupResonanceHz = 4200.0f;
-    guitar.pickupQ           = 2.25f;
+    setSessionClip(s, 2, 1, sessionClipB); // bass track, second scene
 
     return s;
 }
@@ -282,23 +255,43 @@ TEST_CASE("A file from a newer build is refused, not part-parsed", "[model][io]"
     REQUIRE(error.find("newer") != std::string::npos);
 }
 
-TEST_CASE("Guitar settings round-trip, tuning included", "[model][io]")
+TEST_CASE("Drum and Guitar tracks from older files load as synth tracks", "[model][io]")
 {
-    const Song original = makeSampleSong();
+    // Track types 2 and 3 were Drum and Guitar. Their clips are ordinary note
+    // patterns, so the notes survive and the track plays through the synth.
+    const std::string v41 =
+        "LOOPER 41\n"
+        "BPM 120\n"
+        "TSNUM 4\n"
+        "TSDEN 4\n"
+        "NEXTID 9\n"
+        "TRACKS 2\n"
+        "TRACK 1 2 0 0 0 0 0 0 Drums\n"
+        "TAUTOS 0\n"
+        "DRUMKIT 2\n"
+        "DPAD 36 Kick 0 0 0 0 0 samples/Kick 808.wav\n"
+        "DPAD 38 Snare 0 0 0 0 0 \n"
+        "CLIPS 1\n"
+        "CLIP 2 0 0 4 4 \n"
+        "NOTES 1\n"
+        "NOTE 0 0.25 36 1 0\n"
+        "TRACK 3 3 0 0 0 0 0 0 Gtr\n"
+        "TAUTOS 0\n"
+        "GUITAR 38 45 50 55 59 64 4.5 0.35 0.11 0.9 0.25 4200 2.25 0.3 0.4 1 0.1 0.5 0.2\n"
+        "CLIPS 0\n";
 
-    Song restored;
-    REQUIRE(deserialize(serialize(original), restored));
+    Song        restored;
+    std::string error;
+    REQUIRE(deserialize(v41, restored, &error));
+    REQUIRE(restored.tracks.size() == 2);
 
-    REQUIRE(restored.tracks[3].type == TrackType::Guitar);
+    REQUIRE(restored.tracks[0].type == TrackType::Instrument);
+    REQUIRE(restored.tracks[0].name == "Drums");
+    REQUIRE(restored.tracks[0].clips.size() == 1);
+    REQUIRE(restored.tracks[0].clips[0].pattern.notes.size() == 1);
 
-    const auto& guitar = restored.tracks[3].guitarSettings;
-    REQUIRE(guitar.tuning[0] == 38); // drop D survives
-    REQUIRE(guitar.tuning[5] == 64);
-    REQUIRE(guitar.decaySeconds == 4.5f);
-    REQUIRE(guitar.pickPosition == 0.11f);
-    REQUIRE(guitar.muteOnNoteOff == 0.25f);
-    REQUIRE(guitar.pickupResonanceHz == 4200.0f);
-    REQUIRE(guitar.pickupQ == 2.25f);
+    REQUIRE(restored.tracks[1].type == TrackType::Instrument);
+    REQUIRE(restored.tracks[1].name == "Gtr");
 }
 
 TEST_CASE("An effect chain round-trips with its order and mixed kinds", "[model][io]")
@@ -424,7 +417,9 @@ TEST_CASE("A project from before per-track synths still opens", "[model][io]")
 {
     // A v11 file: no SYNTH record, and DPAD in its old note/label/path shape.
     // This is exactly what was on disk before those two format bumps, and it
-    // must still load — with the new fields at their defaults.
+    // must still load — with the new fields at their defaults. Its track was
+    // a Drum track, which no longer exists: it loads as a synth track, and
+    // the kit records are skipped.
     const std::string v11 =
         "LOOPER 11\n"
         "BPM 100\n"
@@ -457,17 +452,9 @@ TEST_CASE("A project from before per-track synths still opens", "[model][io]")
     REQUIRE(restored.tracks.size() == 1);
 
     const auto& track = restored.tracks[0];
-    REQUIRE(track.type == TrackType::Drum);
+    REQUIRE(track.type == TrackType::Instrument);
     REQUIRE(track.clips.size() == 1);
     REQUIRE(track.clips[0].pattern.notes.size() == 1);
-
-    // The pad's path survives (spaces and all) and the v13 mix fields default
-    // to a no-op, so the kit sounds as it did before they existed.
-    REQUIRE(track.drumKit.pads.size() == 1);
-    REQUIRE(track.drumKit.pads[0].samplePath == "samples/Kick 808.wav");
-    REQUIRE(track.drumKit.pads[0].gainDb == 0.0f);
-    REQUIRE(track.drumKit.pads[0].pan == 0.0f);
-    REQUIRE_FALSE(track.drumKit.pads[0].muted);
 
     // And the synth settings this file predates are the defaults.
     REQUIRE(track.synthSettings == SynthSettings{});
@@ -476,10 +463,6 @@ TEST_CASE("A project from before per-track synths still opens", "[model][io]")
     // from before they existed sounds exactly as it did.
     // v11 predates inserts entirely, so there's no chain at all.
     REQUIRE(track.effectChain.empty());
-
-    // Guitar settings arrived in v19; a file this old gets the defaults, which
-    // are standard tuning.
-    REQUIRE(track.guitarSettings == GuitarSettings {});
 
     // The master EQ arrived in v25; a file this old has no EQ line, so it
     // reads as flat/disabled rather than failing to parse.
@@ -578,12 +561,11 @@ TEST_CASE("A project from before the mastering rack opens neutral", "[model][io]
     REQUIRE(song.mastering.lowShelfHz > 0.0f);
 }
 
-TEST_CASE("A v29 guitar track opens with a real pickup, not a 0Hz one", "[model][io]")
+TEST_CASE("An older file's GUITAR record is skipped, not misread", "[model][io]")
 {
-    // v29's GUITAR line ends after muteOnNoteOff. The two pickup fields are
-    // read from the same istringstream, so they must be seeded with the
-    // defaults before the extraction - left at 0 they would give a 0Hz, 0-Q
-    // resonance, i.e. a broken filter on every project made before v30.
+    // Guitar settings were removed, but files written before that carry a
+    // GUITAR line per track. It has to be consumed so the records after it
+    // (the effect chain, session and clips) still line up.
     const std::string v29 =
         "LOOPER 29\n"
         "BPM 120\n"
@@ -615,10 +597,8 @@ TEST_CASE("A v29 guitar track opens with a real pickup, not a 0Hz one", "[model]
     REQUIRE(deserialize(v29, song, &error));
     REQUIRE(song.tracks.size() == 1);
 
-    const auto& guitar = song.tracks.front().guitarSettings;
-    REQUIRE(guitar.muteOnNoteOff == 0.25f); // the last field the old line had
-    REQUIRE(guitar.pickupResonanceHz == GuitarSettings {}.pickupResonanceHz);
-    REQUIRE(guitar.pickupQ == GuitarSettings {}.pickupQ);
+    REQUIRE(song.tracks.front().clips.size() == 1);
+    REQUIRE(song.tracks.front().effectChain.empty());
 }
 
 TEST_CASE("Note articulation round-trips", "[model][io]")
@@ -1013,7 +993,7 @@ TEST_CASE("A file written before warping existed reads as unwarped", "[model][io
 TEST_CASE("A compressor's sidechain routing round-trips", "[model][io]")
 {
     Song s;
-    const int kickId = addTrack(s, TrackType::Drum, "Kick").id;
+    const int kickId = addTrack(s, TrackType::Instrument, "Kick").id;
     const int bassId = addTrack(s, TrackType::Instrument, "Bass").id;
 
     EffectSlot ducker;
@@ -1097,7 +1077,7 @@ TEST_CASE("Group bus routing round-trips", "[model][io]")
 {
     Song s;
     const int busId  = addTrack(s, TrackType::Bus, "Drum Bus").id;
-    const int kickId = addTrack(s, TrackType::Drum, "Kick").id;
+    const int kickId = addTrack(s, TrackType::Instrument, "Kick").id;
     findTrack(s, kickId)->outputBusId = busId;
 
     Song restored;

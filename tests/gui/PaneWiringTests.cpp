@@ -4,13 +4,10 @@
 #include <app/ApplyEffectsDialog.h>
 #include <app/AudioEditorPane.h>
 #include <app/MasteringPane.h>
-#include <app/DrumsPane.h>
 #include <app/EffectChainPanel.h>
 #include <app/FileBrowserPanel.h>
-#include <app/FretboardPane.h>
 #include <app/MixerStrip.h>
 #include <app/SessionView.h>
-#include <app/SynthEditor.h>
 
 using namespace looper;
 
@@ -41,10 +38,6 @@ TEST_CASE("Every pane's controls have something listening to them", "[gui][wirin
     // wired this".
     JuceFixture fixture;
 
-    DrumsPane drums;
-    drums.connectCallbacks();
-    paneaudit::requireWired(drums, "DrumsPane");
-
     SessionView session;
     paneaudit::requireWired(session, "SessionView");
 
@@ -56,12 +49,6 @@ TEST_CASE("Every pane's controls have something listening to them", "[gui][wirin
 
     FileBrowserPanel files;
     paneaudit::requireWired(files, "FileBrowserPanel");
-
-    FretboardPane fret;
-    paneaudit::requireWired(fret, "FretboardPane");
-
-    SynthEditor synth;
-    paneaudit::requireWired(synth, "SynthEditor");
 
     AudioEditorPane audio;
     // Shown against a file that doesn't exist: the pane must still parent and
@@ -289,174 +276,3 @@ TEST_CASE("The effect panel brackets every slider drag, for every kind", "[gui][
     }
 }
 
-TEST_CASE("The synth editor reports its parameter changes", "[gui][wiring]")
-{
-    JuceFixture fixture;
-
-    SynthEditor editor;
-    editor.setVisible(true);
-    editor.setBounds(0, 0, 700, 420);
-
-    // setSettings is what reveals the controls — without it the editor shows
-    // its placeholder and the sweep below finds nothing to check. The
-    // checked > 0 assertion is there so that state fails loudly rather than
-    // passing vacuously, which is what it did on the first run of this test.
-    editor.setSettings(model::SynthSettings {});
-    editor.resized();
-
-    int reports = 0;
-    editor.onSettingsChanged = [&reports](const model::SynthSettings&) { ++reports; };
-
-    std::vector<juce::Component*> controls;
-    paneaudit::collectControls(editor, controls);
-
-    // Per control, for the same reason as the effect panel: any-of-them is
-    // satisfied by a single wired slider among a dozen dead ones.
-    int checked = 0;
-    for (auto* control : controls)
-    {
-        auto* slider = dynamic_cast<juce::Slider*>(control);
-        if (slider == nullptr || ! paneaudit::effectivelyVisible(editor, control))
-            continue;
-
-        const int before = reports;
-        slider->setValue(slider->getMinimum()
-                         + (slider->getMaximum() - slider->getMinimum()) * 0.6);
-        pump();
-
-        INFO("synth slider " << (slider->getName().isEmpty() ? juce::String("(unnamed)")
-                                                             : slider->getName())
-             << " reported " << (reports - before) << " change(s)");
-        REQUIRE(reports > before);
-        ++checked;
-    }
-
-    REQUIRE(checked > 0);
-}
-
-TEST_CASE("The synth editor brackets every slider drag", "[gui][wiring]")
-{
-    // Same gap as the effect panel's equivalent test: onSettingsChanged
-    // firing (checked above) doesn't prove onSettingsDragStart/End also
-    // fire, and those are what make a drag undoable rather than merely live.
-    JuceFixture fixture;
-
-    SynthEditor editor;
-    editor.setVisible(true);
-    editor.setBounds(0, 0, 700, 420);
-    editor.setSettings(model::SynthSettings {});
-    editor.resized();
-
-    int starts = 0, ends = 0;
-    editor.onSettingsDragStart = [&] { ++starts; };
-    editor.onSettingsDragEnd   = [&] { ++ends; };
-
-    std::vector<juce::Component*> controls;
-    paneaudit::collectControls(editor, controls);
-
-    int checked = 0;
-    for (auto* control : controls)
-    {
-        auto* slider = dynamic_cast<juce::Slider*>(control);
-        if (slider == nullptr || ! paneaudit::effectivelyVisible(editor, control))
-            continue;
-
-        REQUIRE(slider->onDragStart);
-        REQUIRE(slider->onDragEnd);
-
-        const int startsBefore = starts, endsBefore = ends;
-        slider->onDragStart();
-        slider->onDragEnd();
-
-        INFO("synth slider " << (slider->getName().isEmpty() ? juce::String("(unnamed)")
-                                                             : slider->getName()));
-        REQUIRE(starts == startsBefore + 1);
-        REQUIRE(ends == endsBefore + 1);
-        ++checked;
-    }
-
-    REQUIRE(checked > 0);
-}
-
-TEST_CASE("The fretboard brackets every slider drag", "[gui][wiring]")
-{
-    // Same gap as the synth editor's and effect panel's equivalent tests:
-    // onSettingsChanged firing doesn't prove onSettingsDragStart/End also
-    // fire, and those are what make a drag undoable rather than merely live.
-    JuceFixture fixture;
-
-    FretboardPane pane;
-    pane.setVisible(true);
-    pane.setBounds(0, 0, 900, 600);
-    pane.setSettings(model::GuitarSettings {});
-    pane.resized();
-
-    int starts = 0, ends = 0;
-    pane.onSettingsDragStart = [&] { ++starts; };
-    pane.onSettingsDragEnd   = [&] { ++ends; };
-
-    std::vector<juce::Component*> controls;
-    paneaudit::collectControls(pane, controls);
-
-    int checked = 0;
-    for (auto* control : controls)
-    {
-        auto* slider = dynamic_cast<juce::Slider*>(control);
-        if (slider == nullptr || ! paneaudit::effectivelyVisible(pane, control))
-            continue;
-
-        REQUIRE(slider->onDragStart);
-        REQUIRE(slider->onDragEnd);
-
-        const int startsBefore = starts, endsBefore = ends;
-        slider->onDragStart();
-        slider->onDragEnd();
-
-        INFO("fretboard slider " << (slider->getName().isEmpty() ? juce::String("(unnamed)")
-                                                                  : slider->getName()));
-        REQUIRE(starts == startsBefore + 1);
-        REQUIRE(ends == endsBefore + 1);
-        ++checked;
-    }
-
-    REQUIRE(checked > 0);
-}
-
-TEST_CASE("The drums pane reports adding and removing a pad", "[gui][wiring]")
-{
-    // connectCallbacks() wires the two halves through to the pane's own
-    // outputs. If it missed one, the button would work internally and the app
-    // would never hear about it.
-    JuceFixture fixture;
-
-    DrumsPane pane;
-    pane.setVisible(true);
-    pane.setBounds(0, 0, 900, 500);
-    pane.connectCallbacks();
-
-    engine::Pattern pattern;
-    pattern.lengthBeats = 4.0;
-    pane.setKit(model::makeDefaultDrumKit().pads, pattern);
-    pane.resized();
-
-    int added = 0, removed = 0;
-    pane.onPadAdded   = [&added] { ++added; };
-    pane.onPadRemoved = [&removed](int) { ++removed; };
-
-    std::vector<juce::Component*> controls;
-    paneaudit::collectControls(pane, controls);
-
-    for (auto* control : controls)
-    {
-        const auto name = control->getName();
-        if (name == "Add Pad" || name == "Remove Pad")
-            if (auto* button = dynamic_cast<juce::Button*>(control))
-                button->triggerClick();
-    }
-
-    pump();
-
-    INFO("added " << added << " removed " << removed);
-    REQUIRE(added > 0);
-    REQUIRE(removed > 0);
-}

@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <app/PianoRoll.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <engine/PatternPlayback.h>
 
 using namespace looper;
@@ -77,79 +77,3 @@ TEST_CASE("An open note still goes out on channel 1", "[engine][articulation]")
     CHECK(ons[0].first == 1);
 }
 
-TEST_CASE("M toggles palm muting on the selected notes", "[gui][articulation]")
-{
-    JuceFixture fixture;
-
-    PianoRoll roll;
-    roll.setBounds(0, 0, 800, 500);
-
-    engine::Pattern pattern;
-    pattern.lengthBeats = 4.0;
-    pattern.notes.push_back({ 0.0, 1.0, 40, 0.9f });
-    pattern.notes.push_back({ 1.0, 1.0, 42, 0.9f });
-    pattern.notes.push_back({ 2.0, 1.0, 44, 0.9f });
-    roll.setPattern(pattern);
-
-    int reported = 0;
-    roll.onChange = [&](const engine::Pattern&) { ++reported; };
-
-    roll.selectForTesting({ 0, 2 });
-
-    REQUIRE(roll.togglePalmMuteOnSelection());
-    CHECK(reported == 1);
-
-    CHECK(roll.pattern().notes[0].articulation == engine::Articulation::PalmMute);
-    CHECK(roll.pattern().notes[1].articulation == engine::Articulation::Normal); // untouched
-    CHECK(roll.pattern().notes[2].articulation == engine::Articulation::PalmMute);
-
-    // Again opens them back up: a mixed selection becomes all-muted, an
-    // all-muted one becomes open. Toggling each note independently would make
-    // a mixed selection scramble rather than change.
-    REQUIRE(roll.togglePalmMuteOnSelection());
-    CHECK(reported == 2);
-    CHECK(roll.pattern().notes[0].articulation == engine::Articulation::Normal);
-    CHECK(roll.pattern().notes[2].articulation == engine::Articulation::Normal);
-}
-
-TEST_CASE("A mixed selection becomes all muted, not scrambled", "[gui][articulation]")
-{
-    JuceFixture fixture;
-
-    PianoRoll roll;
-    roll.setBounds(0, 0, 800, 500);
-
-    engine::Pattern pattern;
-    pattern.lengthBeats = 4.0;
-    pattern.notes.push_back({ 0.0, 1.0, 40, 0.9f, engine::Articulation::PalmMute });
-    pattern.notes.push_back({ 1.0, 1.0, 42, 0.9f, engine::Articulation::Normal });
-    roll.setPattern(pattern);
-
-    roll.selectForTesting({ 0, 1 });
-    REQUIRE(roll.togglePalmMuteOnSelection());
-
-    for (const auto& note : roll.pattern().notes)
-        CHECK(note.articulation == engine::Articulation::PalmMute);
-}
-
-TEST_CASE("M with nothing selected changes nothing", "[gui][articulation]")
-{
-    // And is left unconsumed, so the keystroke can mean something else to the
-    // owner rather than silently doing nothing to everything.
-    JuceFixture fixture;
-
-    PianoRoll roll;
-    roll.setBounds(0, 0, 800, 500);
-
-    engine::Pattern pattern;
-    pattern.lengthBeats = 4.0;
-    pattern.notes.push_back({ 0.0, 1.0, 40, 0.9f });
-    roll.setPattern(pattern);
-
-    int reported = 0;
-    roll.onChange = [&](const engine::Pattern&) { ++reported; };
-
-    CHECK_FALSE(roll.togglePalmMuteOnSelection());
-    CHECK(reported == 0);
-    CHECK(roll.pattern().notes[0].articulation == engine::Articulation::Normal);
-}

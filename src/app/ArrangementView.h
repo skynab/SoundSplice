@@ -1210,14 +1210,8 @@ private:
     }
 
     /** Whether a clip can be dragged from a track of type @p from onto a
-        track of type @p to. Same type only, and never Audio: Instrument/
-        Drum/Guitar tracks all store the same Clip/Pattern data (the same
-        boundary MainComponent::setTrackType already draws), but a drag is a
-        fast, low-friction gesture — unlike setTrackType, a deliberate
-        whole-track decision — so it doesn't also take on "maybe reinterpret
-        this clip's note numbers as a different instrument," which cross-type
-        would mean. Audio clips are file-backed, not a Pattern, so they don't
-        belong here at all. */
+        track of type @p to. Same type only, and never Audio: audio clips
+        are file-backed, not a Pattern, so they don't belong here at all. */
     static bool typesAreCompatibleForClipMove(model::TrackType from, model::TrackType to) noexcept
     {
         return from == to && from != model::TrackType::Audio;

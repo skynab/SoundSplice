@@ -18,7 +18,7 @@ namespace
         headless tests can't include — and the point of the test is exactly
         that the two agree. */
     const std::set<std::string> kRegisteredPanels {
-        "Files", "Transport", "Tracks", "Keys", "Synth", "Drums", "Guitar",
+        "Files", "Transport", "Tracks", "Keys",
         "Audio", "Mastering", "Analyser", "Session", "Track FX", "Mixer", "Master", "Keyboard"
     };
 }
@@ -107,7 +107,7 @@ TEST_CASE("Each layout opens the panes its job needs", "[app][layouts]")
         return std::find(panels.begin(), panels.end(), name) != panels.end();
     };
 
-    for (const char* instrument : { "Synth", "Drums", "Guitar", "Keys" })
+    for (const char* instrument : { "Keys", "Session" })
     {
         INFO(instrument);
         REQUIRE(has(music, instrument));

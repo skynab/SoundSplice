@@ -8,12 +8,6 @@ add_executable(looper_tests
   engine/InterpolationTests.cpp
   engine/MidiNoteTests.cpp
   engine/SequencerMathTests.cpp
-  engine/DefaultContentTests.cpp
-  engine/DrumSynthTests.cpp
-  engine/DrumKitStyleTests.cpp
-  engine/ScaleTests.cpp
-  engine/GenerativeLoopTests.cpp
-  engine/GenreTests.cpp
   engine/MetronomeMathTests.cpp
   engine/MidiCaptureTests.cpp
   engine/MidiRecorderTests.cpp
@@ -21,8 +15,6 @@ add_executable(looper_tests
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp
   engine/SessionMathTests.cpp
-  engine/GuitarStringTests.cpp
-  engine/GuitarChordsTests.cpp
   engine/WaveshaperTests.cpp
   engine/PedalDspTests.cpp
   engine/MasteringDspTests.cpp
@@ -32,12 +24,10 @@ add_executable(looper_tests
   engine/SpectrumTests.cpp
   engine/TempoDetectTests.cpp
   engine/CabinetIrTests.cpp
-  engine/PianoNoteTests.cpp
   engine/DelayLineTests.cpp
   engine/DitherTests.cpp
   engine/EqPedalTests.cpp
   engine/OversamplerTests.cpp
-  engine/PickupTests.cpp
   engine/StateVariableFilterTests.cpp
   engine/ShelfPeakFilterTests.cpp
   engine/EqCurveTests.cpp
@@ -45,10 +35,6 @@ add_executable(looper_tests
   model/HistoryTests.cpp
   model/SongTests.cpp
   model/SerializationTests.cpp
-  model/PresetSerializationTests.cpp
-  model/GenrePresetsTests.cpp
-  model/SynthTonePresetsTests.cpp
-  model/GuitarTonePresetsTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp
@@ -60,7 +46,6 @@ add_executable(looper_tests
   app/WaveformPeaksTests.cpp
   app/RenderProgressTests.cpp
   app/ScrollFollowTests.cpp
-  app/ChordStampTests.cpp
   app/TrackSelectionTests.cpp
   app/RecordSourceChoiceTests.cpp
   app/AutomationGeometryTests.cpp
@@ -87,7 +72,6 @@ catch_discover_tests(looper_tests)
 # screen: parenting, bounds, visibility and hit-testing.
 if (LOOPER_BUILD_APP)
   add_executable(looper_gui_tests
-    gui/FretboardPaneTests.cpp
     gui/ArrangementViewTests.cpp
     gui/ArticulationTests.cpp
     gui/AudioExportTests.cpp

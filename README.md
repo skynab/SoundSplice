@@ -3,10 +3,18 @@
 A cross-platform **audio editor** written in C++, in the spirit of Audacity.
 
 > **Fork notice.** SoundSplice is forked from Looper-Audio, a loop-centric DAW, and is being
-> renamed and stripped down to a focused waveform editor. The rename has started with the
-> user-facing name only: the `looper::` namespace, `looper_*` build targets, `LOOPER_*` CMake
-> options and the `.looper` / `.looperpreset` file formats still carry the old name. The status
-> notes below describe the inherited Looper-Audio feature set, much of which is slated for removal.
+> renamed and stripped down to a focused waveform editor.
+>
+> - **Removed:** drum tracks and the Drums pane, guitar tracks and the Guitar (fretboard) pane,
+>   the piano instrument, generative loops, and the synth editor with its tone/preset library.
+>   Older `.looper` projects still open: Drum and Guitar tracks load as synth tracks with their
+>   notes intact, and their kit/guitar settings are dropped.
+> - **Kept for review:** the Session view, plus the minimum it needs to play — MIDI clips, one
+>   basic synth (default settings, no editor) and the piano roll for writing clips.
+> - **Not yet renamed:** the `looper::` namespace, `looper_*` build targets, `LOOPER_*` CMake
+>   options and the `.looper` file format.
+>
+> The status notes below describe the inherited Looper-Audio feature set and predate the removals.
 
 > **Status: Phase 4 (mixer + effects) + app shell.** On top of Phases 1–3 (multi-track sequenced
 > synth + audio playback, transport/loop, a project document with undo/redo and `.looper` save/load,

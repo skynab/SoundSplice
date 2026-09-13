@@ -217,7 +217,7 @@ TEST_CASE("Every track type has a tag, and they are distinct", "[gui][arrangemen
     // Renaming a track is only free if something else still says what kind it
     // is. Two types sharing a tag would defeat that for one of them.
     const model::TrackType types[] = { model::TrackType::Instrument, model::TrackType::Audio,
-                                       model::TrackType::Drum, model::TrackType::Guitar };
+                                       model::TrackType::Bus };
 
     std::vector<std::string> tags;
     for (auto type : types)
@@ -392,19 +392,11 @@ TEST_CASE("The ruler and the space past the last lane are not tracks", "[gui][ar
 
 TEST_CASE("A clip can only be dragged onto a track of the same type", "[gui][arrangement]")
 {
-    // Instrument/Drum/Guitar all store the same Clip/Pattern data (see
-    // MainComponent::setTrackType), but a drag doesn't get to silently
-    // reinterpret a melodic part's note numbers as drum-pad triggers the
-    // way an explicit, one-at-a-time type change is allowed to.
+    // Only tracks that hold note patterns can trade clips by dragging.
     using Type = model::TrackType;
 
     REQUIRE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Instrument, Type::Instrument));
-    REQUIRE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Drum, Type::Drum));
-    REQUIRE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Guitar, Type::Guitar));
-
-    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Instrument, Type::Drum));
-    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Drum, Type::Guitar));
-    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Guitar, Type::Instrument));
+    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Instrument, Type::Bus));
 
     // Audio never qualifies, not even against itself: a file-backed clip
     // has no Pattern to move onto another track's timeline the same way.
@@ -417,13 +409,13 @@ namespace
     /** A song with @p count tracks of mixed types, one clip each, for
         exercising cross-track drag compatibility end to end. Track 0 and 1
         are both Instrument (compatible with each other); track 2, if
-        present, is Drum (incompatible with the other two). */
+        present, is Audio (incompatible with the other two). */
     model::Song mixedTypeSongWithTracks(int count)
     {
         model::Song song;
         for (int i = 0; i < count; ++i)
         {
-            const auto type = i == 2 ? model::TrackType::Drum : model::TrackType::Instrument;
+            const auto type = i == 2 ? model::TrackType::Audio : model::TrackType::Instrument;
             const int  id   = model::addTrack(song, type, "Track " + std::to_string(i + 1)).id;
             model::Clip clip;
             clip.type                = model::ClipType::Instrument;
@@ -470,7 +462,7 @@ TEST_CASE("Dragging a clip onto a compatible track fires onClipMovedToTrack, not
     auto view = std::make_unique<ArrangementView>();
     view->setVisible(true);
     view->setSize(900, 500);
-    view->setSong(mixedTypeSongWithTracks(3)); // 0: Instrument, 1: Instrument, 2: Drum
+    view->setSong(mixedTypeSongWithTracks(3)); // 0: Instrument, 1: Instrument, 2: Audio
     view->setZoom(1.0f);
 
     bool movedSameTrack = false;
@@ -495,14 +487,14 @@ TEST_CASE("Dragging a clip onto a compatible track fires onClipMovedToTrack, not
 
 TEST_CASE("Dragging a clip onto an incompatible track is refused", "[gui][arrangement]")
 {
-    // Track 2 is Drum; tracks 0/1 are Instrument. The ghost never follows
+    // Track 2 is Audio; tracks 0/1 are Instrument. The ghost never follows
     // into track 2's lane (see mouseDrag's compatibility gate), so a
     // mouse-up there must still read as "stayed on its own track."
     JuceFixture fixture;
     auto view = std::make_unique<ArrangementView>();
     view->setVisible(true);
     view->setSize(900, 500);
-    view->setSong(mixedTypeSongWithTracks(3)); // 0: Instrument, 1: Instrument, 2: Drum
+    view->setSong(mixedTypeSongWithTracks(3)); // 0: Instrument, 1: Instrument, 2: Audio
     view->setZoom(1.0f);
 
     bool movedToTrack = false;

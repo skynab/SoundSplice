@@ -6,19 +6,18 @@
 
 #include "model/AutomationLane.h"
 #include "model/Clip.h"
-#include "model/DrumKit.h"
-#include "model/GuitarSettings.h"
 #include "model/Effects.h"
 #include "model/SynthSettings.h"
 
 namespace looper::model
 {
+/** The numeric values are written to the project file, so they are part of
+    the format. 2 and 3 were the Drum and Guitar types, which have been
+    removed; the deserializer reads them as Instrument, so the gap must stay. */
 enum class TrackType
 {
-    Instrument, // MIDI clips driving a synth
-    Audio,      // audio-file clips
-    Drum,       // MIDI clips driving a per-pad drum kit (see DrumKit)
-    Guitar,     // MIDI clips driving six plucked strings (see engine::GuitarNode)
+    Instrument = 0, // MIDI clips driving a synth
+    Audio      = 1, // audio-file clips
 
     /**
         A group bus: a track that *receives* other tracks' output instead of
@@ -32,7 +31,7 @@ enum class TrackType
         bus different is only where its audio comes from, and that is one field
         (Track::outputBusId on its members) rather than a parallel hierarchy.
     */
-    Bus
+    Bus = 4
 };
 
 /** Which of a track's parameters an automation lane drives (see
@@ -102,9 +101,7 @@ struct Track
     // empty one) simply uses its static value, which is why an unautomated
     // track carries no lanes at all rather than a set of empty ones.
     std::map<int, AutomationLane> automation;
-    DrumKit           drumKit; // only meaningful when type == Drum; empty pads otherwise
     SynthSettings     synthSettings; // only meaningful when type == Instrument
-    GuitarSettings    guitarSettings; // only meaningful when type == Guitar
 
     // This track's insert effects, in order, applied to its output before the
     // fader (and so before its send too). A slot is a built-in or a hosted

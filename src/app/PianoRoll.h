@@ -8,7 +8,6 @@
 
 #include "engine/MidiNote.h"
 #include "engine/Pattern.h"
-#include "model/DrumKit.h"
 
 #include "PianoRollGeometry.h"
 #include "TrackColours.h"
@@ -17,10 +16,8 @@
 namespace looper
 {
 /**
-    A step grid of rows x time steps, with a left-hand gutter naming each row —
-    a pitch (e.g. "C4") in the usual melodic mode, or a pad name ("Kick",
-    "Snare", ...) in drum mode (see setDrumPads) — the same way ArrangementView
-    names each of its lanes.
+    A step grid of rows x time steps, with a left-hand gutter naming each row's
+    pitch (e.g. "C4") — the same way ArrangementView names each of its lanes.
 
     Clicking an empty cell adds a note and clicking an existing one removes it:
     the original one-click-per-step behaviour, kept because it's the fastest way
@@ -56,8 +53,8 @@ public:
 
     /** Replace the displayed pattern without firing onChange (used for undo/redo).
         The column count follows the pattern's own length, so a longer clip is
-        actually editable rather than showing only its first bar — same rule
-        DrumStepGrid uses, capped so a very long pattern can't produce
+        actually editable rather than showing only its first bar, capped so a
+        very long pattern can't produce
         hairline columns. */
     /** Where the transport is inside this pattern, in beats from its start,
         and whether to show it at all.
@@ -289,30 +286,6 @@ public:
         repaint();
     }
 
-    /** Switches into drum mode: one row per pad, labelled and pitched by
-        @p pads instead of the usual contiguous pitch range — no
-        black/white shading or octave lines (neither means anything for
-        pads), and no pitch scrolling since the rows *are* the kit. */
-    void setDrumPads(const std::vector<model::DrumPad>& pads)
-    {
-        drumPads_             = pads;
-        drumMode_             = true;
-        geometry_.numRows     = juce::jmax(1, (int) pads.size());
-        hoverRow_             = -1;
-        repaint();
-    }
-
-    /** Switches back to the usual contiguous-pitch melodic mode. */
-    void setMelodicMode()
-    {
-        if (! drumMode_)
-            return;
-        drumMode_ = false;
-        geometry_.setPitchRange(kDefaultLowPitch, kDefaultNumRows);
-        hoverRow_ = -1;
-        repaint();
-    }
-
     void clear()
     {
         pattern_.notes.clear();
@@ -371,7 +344,7 @@ public:
 
         const int noteNumber = pitchForRow(row);
         if (noteNumber < 0)
-            return; // a drum-mode row past the end of the pad list (shouldn't happen; defensive)
+            return; // defensive: a row with no pitch
 
         const int existing = noteIndexAtCell(row, step);
         if (existing >= 0)
@@ -502,10 +475,6 @@ public:
         in a note editor must not sometimes mean "delete everything". */
     bool keyPressed(const juce::KeyPress& key) override
     {
-        // M toggles palm muting on the selection - see togglePalmMuteOnSelection.
-        if (key.getModifiers().getRawFlags() == 0 && key.getTextCharacter() == 'm')
-            return togglePalmMuteOnSelection();
-
         if (! key.isKeyCode(juce::KeyPress::deleteKey)
             && ! key.isKeyCode(juce::KeyPress::backspaceKey))
             return false;
@@ -516,57 +485,6 @@ public:
         const int removed = deleteSelectedNotes();
         if (onNotesDeleted)
             onNotesDeleted(removed);
-
-        return true;
-    }
-
-    /**
-        Flips the selected notes between open and palm-muted.
-
-        All-or-nothing rather than per note: if any selected note is open they
-        all become muted, otherwise they all open up. Toggling each
-        independently would make a mixed selection scramble rather than change,
-        and "make these chug" is what the keystroke means.
-
-        Reported through onChange like every other edit, so it lands in undo as
-        one step. Returns false with nothing selected, which leaves the key
-        unconsumed rather than silently doing nothing to everything.
-    */
-    bool togglePalmMuteOnSelection()
-    {
-        if (selection_.empty())
-            return false;
-
-        bool anyOpen = false;
-        for (int index : selection_)
-            if (juce::isPositiveAndBelow(index, (int) pattern_.notes.size())
-                && pattern_.notes[(size_t) index].articulation
-                                          == engine::Articulation::Normal)
-                anyOpen = true;
-
-        const auto wanted = anyOpen ? engine::Articulation::PalmMute
-                                    : engine::Articulation::Normal;
-
-        bool changed = false;
-        for (int index : selection_)
-        {
-            if (! juce::isPositiveAndBelow(index, (int) pattern_.notes.size()))
-                continue;
-
-            auto& note = pattern_.notes[(size_t) index];
-            if (note.articulation != wanted)
-            {
-                note.articulation = wanted;
-                changed = true;
-            }
-        }
-
-        if (changed)
-        {
-            repaint();
-            if (onChange)
-                onChange(pattern_);
-        }
 
         return true;
     }
@@ -582,20 +500,12 @@ public:
 
         const bool up = wheel.deltaY > 0.0f;
 
-        // Shift-scroll zooms time, matching cmd-scroll for pitch. Checked
-        // before the drum-mode guard below, because time zoom means the same
-        // thing for a kit pattern as for a melodic one — it's only the
-        // *pitch* axis that a kit doesn't have.
+        // Shift-scroll zooms time, matching cmd-scroll for pitch.
         if (e.mods.isShiftDown())
         {
             setTimeZoom(timeZoom_ * (up ? 1.25f : 0.8f));
             return;
         }
-
-        // Drum mode's rows are the kit's pads, not a pitch range, so there is
-        // nothing to scroll or zoom vertically.
-        if (drumMode_)
-            return;
 
         const bool zooming = e.mods.isCommandDown() || e.mods.isCtrlDown();
         if (zooming)
@@ -626,7 +536,7 @@ public:
         }
 
         paintTrackHeader(g, getLocalBounds().removeFromTop(kTrackHeaderHeight),
-                         trackName_, trackColour_, drumMode_ ? model::TrackType::Drum : model::TrackType::Instrument);
+                         trackName_, trackColour_, model::TrackType::Instrument);
 
         // Everything below is drawn as though the grid started at (0,0), the
         // way it always has — a transform, not a rewrite of every y in this
@@ -647,11 +557,11 @@ public:
         g.setFont(juce::FontOptions(11.0f));
         for (int r = 0; r < geometry_.numRows; ++r)
         {
-            const bool  black    = ! drumMode_ && engine::isBlackKey(pitchForRow(r));
+            const bool  black    = engine::isBlackKey(pitchForRow(r));
             const float y        = geometry_.yForRow(r, h);
             const bool  hovered  = (r == hoverRow_);
 
-            // Gutter cell: the row's pitch (melodic) or pad (drum) name.
+            // Gutter cell: the row's pitch name.
             g.setColour(black ? juce::Colour(0xff222226) : juce::Colour(0xff35353a));
             g.fillRect(juce::Rectangle<float>(0.0f, y, gx, ch));
             g.setColour(juce::Colours::white.withAlpha(black ? 0.55f : 0.85f));
@@ -681,12 +591,10 @@ public:
             g.fillRect(geometry_.xForStep(s, w), 0.0f, bar ? 2.0f : 1.0f, h);
         }
 
-        // Row separators — melodic mode gets a heavier line at each octave
-        // boundary (every 12 rows); drum mode has no such concept, just
-        // plain separators between the handful of pads.
+        // Row separators, with a heavier line at each octave boundary.
         for (int r = 0; r <= geometry_.numRows; ++r)
         {
-            const bool heavy = ! drumMode_ && (pitchForRow(std::min(r, geometry_.numRows - 1)) % 12) == 0;
+            const bool heavy = (pitchForRow(std::min(r, geometry_.numRows - 1)) % 12) == 0;
             g.setColour(juce::Colours::white.withAlpha(heavy ? 0.18f : 0.06f));
             g.fillRect(0.0f, geometry_.yForRow(r, h), w, heavy ? 2.0f : 1.0f);
         }
@@ -966,30 +874,18 @@ private:
 
     int pitchForRow(int row) const
     {
-        if (! drumMode_)
-            return geometry_.pitchForRow(row);
-        return (row >= 0 && row < (int) drumPads_.size()) ? drumPads_[(size_t) row].noteNumber : -1;
+        return geometry_.pitchForRow(row);
     }
 
     int rowForPitch(int pitch) const
     {
-        if (! drumMode_)
-        {
-            const int row = geometry_.rowForPitch(pitch);
-            return (row >= 0 && row < geometry_.numRows) ? row : -1; // outside the visible window
-        }
-        for (size_t i = 0; i < drumPads_.size(); ++i)
-            if (drumPads_[i].noteNumber == pitch)
-                return (int) i;
-        return -1;
+        const int row = geometry_.rowForPitch(pitch);
+        return (row >= 0 && row < geometry_.numRows) ? row : -1; // outside the visible window
     }
 
     juce::String labelForRow(int row) const
     {
-        if (! drumMode_)
-            return engine::midiNoteName(pitchForRow(row));
-        return (row >= 0 && row < (int) drumPads_.size()) ? juce::String(drumPads_[(size_t) row].label)
-                                                          : juce::String();
+        return engine::midiNoteName(pitchForRow(row));
     }
 
     void seedDemo()
@@ -1014,8 +910,6 @@ private:
     float  timeZoom_        = 1.0f;
     engine::Pattern             pattern_;
     int                         hoverRow_ = -1;
-    bool                        drumMode_ = false;
-    std::vector<model::DrumPad> drumPads_;
 
     std::vector<int>   selection_;     // indices into pattern_.notes
     bool               rubberBanding_ = false;

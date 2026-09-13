@@ -68,8 +68,6 @@ inline Track& addTrack(Song& song, TrackType type, std::string name)
     track.id   = allocateId(song);
     track.type = type;
     track.name = std::move(name);
-    if (type == TrackType::Drum)
-        track.drumKit = makeDefaultDrumKit();
     // A new track joins the existing scenes with every slot empty, so the grid
     // stays rectangular without anyone having to remember to resize it.
     track.sessionSlots.resize(song.scenes.size());

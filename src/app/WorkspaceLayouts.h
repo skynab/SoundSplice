@@ -116,7 +116,7 @@ inline std::unique_ptr<DockLayoutNode> buildWorkspaceLayout(Workspace workspace)
                                leaf({ "Tracks" }),
                                beside(0.62,
                                       above(0.68,
-                                            leaf({ "Keys", "Synth", "Drums", "Session", "Guitar" },
+                                            leaf({ "Keys", "Session" },
                                                  "Keys"),
                                             leaf({ "Transport", "Keyboard" }, "Transport")),
                                       leaf({ "Track FX" }))),

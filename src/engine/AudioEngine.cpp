@@ -353,71 +353,6 @@ void AudioEngine::setTrackOutputBus(int index, int busTrackIndex)
     outputBus_[(size_t) index].store(valid ? busTrackIndex : -1, std::memory_order_relaxed);
 }
 
-void AudioEngine::setTrackInstrument(int index, TrackInstrument instrument)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].instrument.store(instrument, std::memory_order_relaxed);
-}
-
-void AudioEngine::setTrackGuitarSettings(int index, const model::GuitarSettings& settings)
-{
-    if (index < 0 || index >= kMaxTracks)
-        return;
-
-    auto& guitar = tracks_[(size_t) index].guitar;
-    guitar.setDecaySeconds(settings.decaySeconds);
-    guitar.setBrightness(settings.brightness);
-    guitar.setPickPosition(settings.pickPosition);
-    guitar.setPickHardness(settings.pickHardness);
-    guitar.setMuteOnNoteOff(settings.muteOnNoteOff);
-    guitar.setVelocitySensitivity(settings.velocitySensitivity);
-    guitar.setCoupling(settings.stringCoupling);
-    guitar.setStiffness(settings.stiffness);
-    guitar.setWidth(settings.stereoWidth);
-    guitar.setPickupResonanceHz(settings.pickupResonanceHz);
-    guitar.setPickupQ(settings.pickupQ);
-    guitar.setPalmMuteDecaySeconds(settings.palmMuteDecaySeconds);
-    guitar.setPalmMuteBrightness(settings.palmMuteBrightness);
-}
-
-void AudioEngine::setTrackGuitarTuning(int index, const std::array<int, kNumGuitarStrings>& tuning)
-{
-    if (index < 0 || index >= kMaxTracks)
-        return;
-
-    for (int s = 0; s < kNumGuitarStrings; ++s)
-        tracks_[(size_t) index].guitar.setOpenNote(s, tuning[(size_t) s]);
-}
-
-void AudioEngine::setTrackDrumKit(int index, const std::vector<DrumPadSpec>& pads)
-{
-    if (index < 0 || index >= kMaxTracks)
-        return;
-
-    auto* map = new DrumPadMap();
-    map->reserve(pads.size());
-
-    for (const auto& pad : pads)
-    {
-        std::shared_ptr<ClipData> clip;
-        if (pad.file != juce::File{})
-            clip = decodeOrGetCached(pad.file); // nullptr on failure — the pad just stays silent
-
-        DrumPadAssignment assignment;
-        assignment.noteNumber = pad.noteNumber;
-        assignment.clipData   = std::move(clip);
-        assignment.gain       = juce::Decibels::decibelsToGain(pad.gainDb);
-        assignment.pan        = juce::jlimit(-1.0f, 1.0f, pad.pan);
-        assignment.pitchRatio = std::pow(2.0f, pad.pitchSemitones / 12.0f);
-        assignment.muted      = pad.muted;
-        map->push_back(std::move(assignment));
-    }
-
-    auto& track = tracks_[(size_t) index];
-    track.drumKit.collectRetired();
-    track.drumKit.setPadMap(map);
-}
-
 int64_t AudioEngine::countInLeadInSamples() const
 {
     // The count-in is expressed in samples here, on the message thread, from
@@ -798,7 +733,6 @@ void AudioEngine::pump() noexcept
     {
         track.sequencer.collectRetired();
         track.audioPlayer.collectRetiredClips();
-        track.drumKit.collectRetired();
         track.collectRetiredAutomation();
         track.session.collectRetired();
         track.collectRetiredEffectChain();

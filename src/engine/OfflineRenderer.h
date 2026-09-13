@@ -10,7 +10,6 @@
 
 #include "engine/AudioClipSlot.h"
 #include "engine/AudioExport.h"
-#include "engine/DrumKitNode.h"
 #include "engine/ClipData.h"
 #include "engine/ClipSlot.h"
 #include "engine/DelayEffect.h"
@@ -357,60 +356,6 @@ public:
         track.prepare(sampleRate, blockSize);
         track.gainDb.store(gainDb);
         track.audioPlayer.submitClips(new std::vector<AudioClipSlot>(clips));
-
-        juce::AudioBuffer<float> block(2, blockSize);
-        juce::AudioBuffer<float> sendBus(2, blockSize);
-        juce::MidiBuffer         noLiveMidi;
-
-        int64_t playhead = 0;
-        for (int pos = 0; pos < totalSamples; pos += blockSize)
-        {
-            const int n = std::min(blockSize, totalSamples - pos);
-            block.setSize(2, n, false, false, true);
-            block.clear();
-            sendBus.setSize(2, n, false, false, true);
-            sendBus.clear();
-
-            ProcessContext ctx;
-            ctx.sampleRate                = sampleRate;
-            ctx.numSamples                = n;
-            fillTransport(ctx, playhead, n, bpm, sampleRate);
-
-            track.render(block, sendBus, noLiveMidi, ctx, false, false);
-
-            for (int ch = 0; ch < 2; ++ch)
-                output.copyFrom(ch, pos, block, ch, 0, n);
-
-            playhead += n;
-        }
-
-        return output;
-    }
-
-    /** Renders a drum pattern through a track's drum kit, bypassing the
-        synth entirely (`instrument` routes notes to drumKit instead) — for
-        verifying DrumKitNode's per-pad one-shot playback, driven by the
-        normal sequencer path like any other pattern. @p pads maps note
-        numbers to decoded samples. */
-    static juce::AudioBuffer<float> renderDrumPattern(const std::vector<DrumPadAssignment>& pads,
-                                                      const Pattern& pattern,
-                                                      double bpm, double sampleRate, double numSeconds,
-                                                      int blockSize = 512)
-    {
-        const int totalSamples = (int) std::ceil(numSeconds * sampleRate);
-        juce::AudioBuffer<float> output(2, std::max(1, totalSamples));
-        output.clear();
-
-        InstrumentTrack track;
-        track.prepare(sampleRate, blockSize);
-        track.instrument.store(TrackInstrument::Drum);
-        track.drumKit.setPadMap(new DrumPadMap(pads));
-
-        ClipSlot slot;
-        slot.pattern     = pattern;
-        slot.startBeats  = 0.0;
-        slot.lengthBeats = 1.0e9;
-        track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
 
         juce::AudioBuffer<float> block(2, blockSize);
         juce::AudioBuffer<float> sendBus(2, blockSize);
