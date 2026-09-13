@@ -19,9 +19,20 @@ juce_add_gui_app(SoundSplice
   MICROPHONE_PERMISSION_ENABLED TRUE
   MICROPHONE_PERMISSION_TEXT    "SoundSplice needs the microphone to record audio tracks.")
 
+# MainComponent is one class split across several files by area, rather than one
+# file of several thousand lines. MainComponentInternal.h holds what they share.
 target_sources(SoundSplice PRIVATE
   Main.cpp
   MainComponent.cpp
+  MainComponent_AudioEdit.cpp
+  MainComponent_Commands.cpp
+  MainComponent_Effects.cpp
+  MainComponent_ImportExport.cpp
+  MainComponent_Layout.cpp
+  MainComponent_Project.cpp
+  MainComponent_Recording.cpp
+  MainComponent_Tracks.cpp
+  MainComponent_Transport.cpp
   ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
   ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 

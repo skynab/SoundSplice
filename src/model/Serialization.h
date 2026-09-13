@@ -390,10 +390,21 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
     Song song;
 
-    if (! readTagged("BPM", rest))    return fail("missing tempo"); song.bpm = std::strtod(rest.c_str(), nullptr);
-    if (! readTagged("TSNUM", rest))  return fail("missing time signature"); song.timeSigNumerator = std::atoi(rest.c_str());
-    if (! readTagged("TSDEN", rest))  return fail("missing time signature"); song.timeSigDenominator = std::atoi(rest.c_str());
-    if (! readTagged("NEXTID", rest)) return fail("missing id counter"); song.nextId = std::atoi(rest.c_str());
+    if (! readTagged("BPM", rest))
+        return fail("missing tempo");
+    song.bpm = std::strtod(rest.c_str(), nullptr);
+
+    if (! readTagged("TSNUM", rest))
+        return fail("missing time signature");
+    song.timeSigNumerator = std::atoi(rest.c_str());
+
+    if (! readTagged("TSDEN", rest))
+        return fail("missing time signature");
+    song.timeSigDenominator = std::atoi(rest.c_str());
+
+    if (! readTagged("NEXTID", rest))
+        return fail("missing id counter");
+    song.nextId = std::atoi(rest.c_str());
 
     if (readTagged("FILTER", rest))
     {
