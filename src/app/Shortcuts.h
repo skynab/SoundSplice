@@ -126,6 +126,7 @@ inline std::vector<NamedShortcut> all()
         { "Redo",            redo },
         { "Redo (alt)",      redoAlt },
 
+        { "Cut Audio",       cutAudio },
         { "Copy Notes",      copyNotes },
         { "Paste Notes",     pasteNotes },
         { "Copy Clip",       copyClip },

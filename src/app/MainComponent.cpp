@@ -12,6 +12,16 @@ MainComponent::MainComponent()
     menuBar_.setModel(this);
     addAndMakeVisible(menuBar_);
 
+    // Every command goes through one manager, so the menus and the keyboard
+    // can't disagree about what a command is or whether it can be used right
+    // now — see CommandTable.h. The key mappings listen on this component,
+    // which is where keyPressed used to catch the same keys: a focused text
+    // field still gets its own keys first.
+    commandManager_.registerAllCommandsForTarget(this);
+    commandManager_.setFirstCommandTarget(this);
+    addKeyListener(commandManager_.getKeyMappings());
+    setApplicationCommandManagerToWatch(&commandManager_);
+
     // Dockable workspace: a tree of tab groups, arranged entirely by dragging
     // tabs (see DockWorkspace). The panel registry below is the one place
     // that maps a panel's name to the Component behind it — the workspace
@@ -933,6 +943,8 @@ MainComponent::~MainComponent()
 
     saveDockLayout();
     stopTimer();
+    removeKeyListener(commandManager_.getKeyMappings());
+    setApplicationCommandManagerToWatch(nullptr);
     menuBar_.setModel(nullptr);
     engine_.deviceManager().removeChangeListener(this);
 }

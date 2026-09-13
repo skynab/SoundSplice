@@ -71,6 +71,7 @@ public:
 */
 class MainComponent final : public juce::Component,
                             private juce::Timer,
+                            private juce::ApplicationCommandTarget,
                             private juce::ChangeListener,
                             private juce::MenuBarModel,
                             public juce::DragAndDropContainer
@@ -81,7 +82,6 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
-    bool keyPressed(const juce::KeyPress& key) override;
 
     /** True while the document differs from the file it came from. */
     bool hasUnsavedChanges() const;
@@ -99,6 +99,13 @@ public:
 
 private:
     void timerCallback() override;
+
+    // juce::ApplicationCommandTarget: every menu command and shortcut, listed
+    // in CommandTable.h and performed in MainComponent_Commands.cpp.
+    ApplicationCommandTarget* getNextCommandTarget() override;
+    void getAllCommands(juce::Array<juce::CommandID>& ids) override;
+    void getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& info) override;
+    bool perform(const juce::ApplicationCommandTarget::InvocationInfo& invocation) override;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
     void logAudioDeviceStatus();
     /** Switches to the system's default output when it changes — see
@@ -470,6 +477,10 @@ private:
     int               effectSlotDragTrack_ = -1;
     int               effectSlotDragIndex_ = -1;
     model::EffectSlot effectSlotDragFrom_;
+
+    // Every command, for the menus and the keyboard alike (see CommandTable.h).
+    // Declared before the menu bar that watches it, so it outlives it.
+    juce::ApplicationCommandManager commandManager_;
 
     juce::MenuBarComponent          menuBar_;
 
