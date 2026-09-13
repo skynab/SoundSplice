@@ -98,6 +98,10 @@ public:
     std::function<void(int markerId)> onMarkerMenuRequested;
     std::function<void(int markerId)> onMarkerRenameRequested;
 
+    /** Fired when a marker is dragged along the ruler and released somewhere
+        new, with where it should now start. */
+    std::function<void(int markerId, double newStartBeats)> onMarkerMoved;
+
     /** Fired instead of onClipMoved when a move-drag ends on a *different*
         track than it started on (see typesAreCompatibleForClipMove — the
         drag preview never lands on an incompatible track in the first
@@ -830,6 +834,22 @@ private:
                 return;
             }
 
+            // A marker is picked up rather than scrubbed through: dragging
+            // moves it, and a click goes to it (see mouseUp).
+            if (const int markerId = markerAt(e.position); markerId >= 0)
+            {
+                if (const auto* marker = model::findMarker(song_, markerId))
+                {
+                    markerDragId_        = markerId;
+                    markerDragMoved_     = false;
+                    markerPressX_        = e.position.x;
+                    markerGrabBeat_      = geometry_.beatForX(e.position.x);
+                    markerOriginalStart_ = marker->startBeats;
+                    markerPreviewStart_  = marker->startBeats;
+                    return;
+                }
+            }
+
             scrubbing_ = true;
             scrubTo(e.position.x);
             return;
@@ -912,6 +932,38 @@ private:
 
     void mouseDrag(const juce::MouseEvent& e) override
     {
+        if (markerDragId_ >= 0)
+        {
+            // A few pixels before it counts as a move, so a click that
+            // wobbles is still a click.
+            if (! markerDragMoved_ && std::abs(e.position.x - markerPressX_) < kMarkerDragPixels)
+                return;
+
+            markerDragMoved_ = true;
+
+            const auto* marker = model::findMarker(song_, markerDragId_);
+            if (marker == nullptr)
+                return;
+
+            // Snapped as a span, so a range lands with either edge on
+            // something; never onto where it's being dragged from.
+            const bool invert  = e.mods.isAltDown();
+            auto       magnets = invert ? std::vector<double> {} : magnetsExcluding(-1, -1);
+            magnets.erase(std::remove_if(magnets.begin(), magnets.end(), [marker](double m)
+                          {
+                              return std::abs(m - marker->startBeats) < 1.0e-9
+                                  || std::abs(m - (marker->startBeats + marker->lengthBeats)) < 1.0e-9;
+                          }),
+                          magnets.end());
+
+            const double tolerance = kSnapMagnetPixels / std::max(1.0e-3, (double) geometry_.pixelsPerBeat());
+            const double wanted    = markerOriginalStart_ + (geometry_.beatForX(e.position.x) - markerGrabBeat_);
+            markerPreviewStart_    = std::max(0.0, app::snapSpanStart(wanted, marker->lengthBeats, magnets, tolerance,
+                                                                      snapToGrid_ != invert, snapUnitBeats()));
+            repaint();
+            return;
+        }
+
         if (selectingTime_)
         {
             const int last  = (int) song_.tracks.size() - 1;
@@ -1037,6 +1089,42 @@ private:
             return;
         }
 
+        if (markerDragId_ >= 0)
+        {
+            const int  id    = markerDragId_;
+            const bool moved = markerDragMoved_;
+            markerDragId_    = -1;
+            markerDragMoved_ = false;
+            repaint();
+
+            if (moved)
+            {
+                if (onMarkerMoved && std::abs(markerPreviewStart_ - markerOriginalStart_) > 1.0e-9)
+                    onMarkerMoved(id, markerPreviewStart_);
+                return;
+            }
+
+            // A click: go there, and a range selects what it spans on every
+            // track, ready to cut, copy or export.
+            if (const auto* marker = model::findMarker(song_, id))
+            {
+                const double start  = marker->startBeats;
+                const double length = marker->lengthBeats;
+
+                if (onSeek)
+                    onSeek(start);
+
+                if (length > 0.0)
+                {
+                    model::TimeSelection all { start, start + length, {} };
+                    for (const auto& track : song_.tracks)
+                        all.trackIds.push_back(track.id);
+                    changeTimeSelection(all);
+                }
+            }
+            return;
+        }
+
         if (scrubbing_)
         {
             scrubbing_ = false;
@@ -1094,8 +1182,23 @@ private:
 
     void mouseDoubleClick(const juce::MouseEvent& e) override
     {
-        if (const int marker = markerAt(e.position); marker >= 0 && onMarkerRenameRequested)
-            onMarkerRenameRequested(marker);
+        if (const int marker = markerAt(e.position); marker >= 0)
+        {
+            if (onMarkerRenameRequested)
+                onMarkerRenameRequested(marker);
+            return;
+        }
+
+        // On a lane between markers: select from the marker before to the one
+        // after, on that track, as double-clicking between labels does in
+        // Audacity.
+        const int lane = trackAtY(e.position.y);
+        if (lane < 0 || e.position.x < geometry_.gutterWidth || song_.markers.empty())
+            return;
+
+        const auto [from, to] = model::spanBetweenMarkers(song_, geometry_.beatForX(e.position.x), contentEndBeats());
+        if (to > from)
+            changeTimeSelection({ from, to, { song_.tracks[(size_t) lane].id } });
     }
 
     void mouseMove(const juce::MouseEvent& e) override
@@ -1152,7 +1255,7 @@ private:
         if (const int markerId = markerAt(pos); markerId >= 0)
             if (const auto* marker = model::findMarker(song_, markerId))
                 return juce::String::fromUTF8(marker->name.c_str())
-                       + " - double-click to rename, right-click for more";
+                       + " - drag to move, double-click to rename, right-click for more";
         return {};
     }
 
@@ -1317,11 +1420,14 @@ private:
 
         for (const auto& marker : song_.markers)
         {
-            const float x = geometry_.xForBeat(marker.startBeats);
+            // A marker being dragged is drawn where it would land.
+            const double start = marker.id == markerDragId_ && markerDragMoved_ ? markerPreviewStart_
+                                                                                : marker.startBeats;
+            const float  x     = geometry_.xForBeat(start);
 
             if (marker.lengthBeats > 0.0)
             {
-                const float right = geometry_.xForBeat(marker.startBeats + marker.lengthBeats);
+                const float right = geometry_.xForBeat(start + marker.lengthBeats);
                 g.setColour(colour.withAlpha(0.18f));
                 g.fillRect(x, 0.0f, right - x, geometry_.rulerHeight);
                 g.setColour(colour.withAlpha(0.05f));
@@ -1611,6 +1717,26 @@ private:
         const auto   magnets   = invert ? std::vector<double> {} : magnetsExcluding(-1, -1);
         const double tolerance = kSnapMagnetPixels / std::max(1.0e-3, (double) geometry_.pixelsPerBeat());
         return std::max(0.0, app::snapPosition(geometry_.beatForX(x), magnets, tolerance, gridOn, snapUnitBeats()));
+    }
+
+    // A marker being dragged along the ruler: which, whether it has moved far
+    // enough to be a drag, and where it started and is now.
+    int    markerDragId_        = -1;
+    bool   markerDragMoved_     = false;
+    float  markerPressX_        = 0.0f;
+    double markerGrabBeat_      = 0.0;
+    double markerOriginalStart_ = 0.0;
+    double markerPreviewStart_  = 0.0;
+    static constexpr float kMarkerDragPixels = 3.0f;
+
+    /** Where the last clip ends, or the whole timeline if there are none. */
+    double contentEndBeats() const
+    {
+        double end = 0.0;
+        for (const auto& track : song_.tracks)
+            for (const auto& clip : track.clips)
+                end = std::max(end, clip.startBeats + clip.lengthBeats);
+        return end > 0.0 ? end : totalBeats();
     }
 
     /** The lane index for @p y, running past the last lane rather than

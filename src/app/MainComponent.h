@@ -296,6 +296,7 @@ private:
     void                   jumpToMarker(bool forward);
     void                   renameMarkerPrompt(int markerId);
     void                   deleteMarker(int markerId);
+    void                   moveMarkerTo(int markerId, double startBeats);
     void                   deleteAllMarkers();
     void                   showMarkerMenu(int markerId);
     void                   exportMarkersDialog();

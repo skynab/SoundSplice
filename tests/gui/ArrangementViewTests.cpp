@@ -531,6 +531,59 @@ TEST_CASE("Dragging across empty lanes selects time on every lane it crosses", "
     REQUIRE_FALSE(view->timeSelection().hasTracks());
 }
 
+TEST_CASE("A range marker is selected by a click and moved by a drag", "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = std::make_unique<ArrangementView>();
+    view->setVisible(true);
+    view->setSize(900, 500);
+    view->setZoom(1.0f);
+
+    auto song = songWithTracks(2);
+    const int markerId = model::addMarker(song, 8.0, 4.0, "Verse");
+    view->setSong(song);
+
+    // Beats to x, from the view's own mapping.
+    const float  gutter      = view->gutterWidthForTesting();
+    const double beatAt100px = view->beatForXForTesting(gutter + 100.0f) - view->beatForXForTesting(gutter);
+    const auto   xForBeat    = [&](double beat) { return gutter + (float) ((beat - view->beatForXForTesting(gutter)) * 100.0 / beatAt100px); };
+    const float  rulerY      = view->rulerHeightForTesting() * 0.5f;
+
+    double               seekedTo = -1.0;
+    int                  movedId  = -1;
+    double               movedTo  = -1.0;
+    model::TimeSelection selection;
+    view->onSeek                 = [&](double beat) { seekedTo = beat; };
+    view->onMarkerMoved          = [&](int id, double beat) { movedId = id; movedTo = beat; };
+    view->onTimeSelectionChanged = [&](const model::TimeSelection& s) { selection = s; };
+
+    SECTION("a click goes to it and selects its range on every track")
+    {
+        const juce::Point<float> press { xForBeat(9.0), rulerY };
+        sendMouseDown(*view, dragEventAt(*view, press, press));
+        sendMouseUp(*view, dragEventAt(*view, press, press));
+
+        REQUIRE(movedId == -1);
+        REQUIRE(seekedTo == 8.0);
+        REQUIRE(selection.startBeats == 8.0);
+        REQUIRE(selection.endBeats == 12.0);
+        REQUIRE(selection.trackIds.size() == 2);
+    }
+
+    SECTION("a drag moves it, snapped to the grid, without scrubbing")
+    {
+        const juce::Point<float> press { xForBeat(9.0), rulerY };
+        sendMouseDown(*view, dragEventAt(*view, press, press));
+        sendMouseDrag(*view, dragEventAt(*view, { xForBeat(13.1), rulerY }, press));
+        sendMouseUp(*view, dragEventAt(*view, { xForBeat(13.1), rulerY }, press));
+
+        REQUIRE(movedId == markerId);
+        REQUIRE(movedTo == 12.0);
+        REQUIRE(seekedTo == -1.0);
+        REQUIRE_FALSE(selection.hasTracks());
+    }
+}
+
 TEST_CASE("Dragging a clip onto an incompatible track is refused", "[gui][arrangement]")
 {
     // Track 2 is Audio; tracks 0/1 are Instrument. The ghost never follows

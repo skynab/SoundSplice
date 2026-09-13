@@ -99,6 +99,16 @@ void MainComponent::deleteMarker(int markerId)
     arrangementView_.setSong(history_.current());
 }
 
+/** Where a marker dragged along the ruler was dropped. */
+void MainComponent::moveMarkerTo(int markerId, double startBeats)
+{
+    history_.edit("Move marker", [markerId, startBeats](model::Song& s)
+    {
+        model::moveMarker(s, markerId, startBeats);
+    });
+    arrangementView_.setSong(history_.current());
+}
+
 /** Removes every marker, as one undoable step. */
 void MainComponent::deleteAllMarkers()
 {

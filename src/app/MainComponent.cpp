@@ -883,6 +883,7 @@ MainComponent::MainComponent()
 
     arrangementView_.onMarkerMenuRequested   = [this](int markerId) { showMarkerMenu(markerId); };
     arrangementView_.onMarkerRenameRequested = [this](int markerId) { renameMarkerPrompt(markerId); };
+    arrangementView_.onMarkerMoved = [this](int markerId, double startBeats) { moveMarkerTo(markerId, startBeats); };
 
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)
     {

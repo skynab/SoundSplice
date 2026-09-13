@@ -6,6 +6,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "engine/SequencerMath.h"
@@ -83,6 +84,47 @@ inline bool renameMarker(Song& song, int id, std::string name)
 
     marker->name = std::move(name);
     return true;
+}
+
+/** Moves marker @p id to start at @p startBeats (never before zero), keeping
+    its length, and keeping the list in timeline order. */
+inline bool moveMarker(Song& song, int id, double startBeats)
+{
+    const auto* marker = findMarker(song, id);
+    if (marker == nullptr)
+        return false;
+
+    Marker moved     = *marker;
+    moved.startBeats = std::max(0.0, startBeats);
+    removeMarker(song, id);
+
+    const auto position = std::upper_bound(song.markers.begin(), song.markers.end(), moved.startBeats,
+                                           [](double beat, const Marker& m) { return beat < m.startBeats; });
+    song.markers.insert(position, std::move(moved));
+    return true;
+}
+
+/** The stretch between the marker edges either side of @p beat: from the last
+    marker start or range end at or before it (the start of the song if there
+    is none) to the first one after it (@p endBeats if there is none). Inside a
+    range, that's the range. What double-clicking between markers selects. */
+inline std::pair<double, double> spanBetweenMarkers(const Song& song, double beat, double endBeats)
+{
+    double from = 0.0;
+    double to   = std::max(endBeats, beat);
+
+    for (const auto& marker : song.markers)
+    {
+        for (const double edge : { marker.startBeats, marker.startBeats + marker.lengthBeats })
+        {
+            if (edge <= beat + kMarkerTolerance)
+                from = std::max(from, edge);
+            else
+                to = std::min(to, edge);
+        }
+    }
+
+    return { from, to };
 }
 
 /** "Marker 3": the lowest "Marker N" not already in use, so new names stay

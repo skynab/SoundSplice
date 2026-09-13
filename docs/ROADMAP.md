@@ -77,10 +77,11 @@ all three.
   lanes, or Shift-drag over clips; snaps like a clip edge); Cut, Copy, Paste, Delete and Silence apply to
   the audio clips on every selected track, trimming and splitting without rewriting audio ✅
   (`src/model/TimeSelection.h`); effects on a time selection ⬜; instrument clips ⬜
-- 🟡 **Label tracks** (Audacity) / **markers and ranges** (Audition, REAPER): add at the playhead
-  (any time, playing or not) or from the audio selection ✅, rename and delete ✅, jump between ✅,
-  export and import as Audacity label text ✅ (Markers menu; `src/model/Markers.h`); snap to them ⬜,
-  select between them ⬜, drag to move ⬜
+- ✅ **Label tracks** (Audacity) / **markers and ranges** (Audition, REAPER): add at the playhead
+  (any time, playing or not) or from the audio selection, rename and delete, jump between, export
+  and import as Audacity label text (Markers menu; `src/model/Markers.h`); clip edges and time
+  selections snap to them; click a range to select it on every track, double-click a lane to select
+  between the markers either side; drag one along the ruler to move it
 - 🟡 **Snap options**: grid ✅, markers and the playhead ✅, clip edges ✅ (View menu; magnets win over the
   grid within a few pixels, and a moved clip snaps by whichever end is nearer; `src/app/SnapTargets.h`),
   and zero crossings ⬜ (surfacing `nearestZeroCrossing`)
