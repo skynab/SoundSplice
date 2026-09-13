@@ -97,8 +97,9 @@ all three.
   to sample level, to fix clicks by hand)
 - 🟡 **Scrub and seek** playback ⬜, **play-at-speed** (transport varispeed) ⬜, and **loop the selection** ✅
   (Loop plays the time selection when there is one)
-- ⬜ Zoom: to selection, fit project, fit vertically, sample-level zoom, a vertical dB/linear scale,
-  and waveform vs. **RMS overlay** display
+- 🟡 Zoom: to selection ✅ (Ctrl+E), fit project ✅ (Ctrl+F; View menu, `src/app/TimelineZoom.h`),
+  fit vertically ⬜, sample-level zoom ⬜, a vertical dB/linear scale ⬜, and waveform vs. **RMS overlay**
+  display ⬜
 - 🟡 Track channel ops: **split stereo to mono** ✅ and swap channels ✅ (Edit menu; each clip plays
   a chosen channel, so nothing is rendered; `src/model/TrackChannels.h`), **make stereo from two monos** ⬜,
   **mix and render to a new track** ✅

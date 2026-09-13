@@ -18,6 +18,7 @@
 #include "app/OfflineRenderJob.h"
 #include "app/RenderProgress.h"
 #include "app/StemNaming.h"
+#include "app/TimelineZoom.h"
 #include "engine/EffectSlotFactory.h"
 #include "engine/NoteOps.h"
 #include "engine/MidiFileIO.h"

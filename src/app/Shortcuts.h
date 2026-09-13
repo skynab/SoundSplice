@@ -115,6 +115,10 @@ inline const juce::KeyPress nextMarker     = detail::with(juce::KeyPress::rightK
 inline const juce::KeyPress zoomIn  = detail::with('=', detail::cmd);
 inline const juce::KeyPress zoomOut = detail::with('-', detail::cmd);
 
+// Audacity's keys for these.
+inline const juce::KeyPress zoomToSelection = detail::with('E', detail::cmd);
+inline const juce::KeyPress fitProject      = detail::with('F', detail::cmd);
+
 /** A shortcut with the name of what it does, so a test that finds a bad one
     can say which. */
 struct NamedShortcut
@@ -170,6 +174,8 @@ inline std::vector<NamedShortcut> all()
 
         { "Zoom In",         zoomIn },
         { "Zoom Out",        zoomOut },
+        { "Zoom to Selection", zoomToSelection },
+        { "Fit Project",     fitProject },
     };
 }
 

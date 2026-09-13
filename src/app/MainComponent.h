@@ -316,6 +316,11 @@ private:
     /** Renders the edit's tracks (see arrangementEditTracks) over the time
         selection, or everything arranged, onto a new audio track. */
     void                   mixAndRenderToNewTrack();
+
+    // Zooming the timeline onto a span of it — see app/TimelineZoom.h.
+    void                   zoomTimelineToSpan(double startBeats, double lengthBeats);
+    void                   zoomToTimeSelection();
+    void                   fitProjectInView();
     void                   deleteAllMarkers();
     void                   showMarkerMenu(int markerId);
     void                   exportMarkersDialog();

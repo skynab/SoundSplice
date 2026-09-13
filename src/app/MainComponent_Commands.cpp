@@ -191,6 +191,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(arrangementView_.canZoomOut());
             break;
 
+        case commands::zoomToSelection:
+            info.setActive(! timeSelection_.isEmpty());
+            break;
+
         case commands::snapToGrid:
             info.setTicked(arrangementView_.snapsToGrid());
             break;
@@ -352,6 +356,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
         case commands::zoomIn:  setTimelineZoom(arrangementView_.zoom() * 1.25f); break;
         case commands::zoomOut: setTimelineZoom(arrangementView_.zoom() / 1.25f); break;
+        case commands::zoomToSelection: zoomToTimeSelection(); break;
+        case commands::fitProject:      fitProjectInView(); break;
 
         case commands::snapToGrid:
         {
@@ -513,6 +519,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addSeparator();
         add(commands::zoomIn);
         add(commands::zoomOut);
+        add(commands::zoomToSelection);
+        add(commands::fitProject);
         add(commands::snapToGrid);
         add(commands::snapToMarkers);
         add(commands::snapToClipEdges);

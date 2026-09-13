@@ -169,6 +169,13 @@ public:
 
     float zoom() const noexcept { return geometry_.zoom; }
 
+    /** The timeline's geometry at the current zoom, for fitting a span of it
+        to the view (see app/TimelineZoom.h). */
+    const TimelineGeometry& geometry() const noexcept { return geometry_; }
+
+    /** Where the last clip ends, in beats: what Fit Project fits. */
+    double arrangedEndBeats() const { return contentEndBeats(); }
+
     /** Which beat sits under a given x. Exposed for the GUI tests, which is
         the only way to assert that zooming actually changed the mapping
         rather than merely storing a number. */

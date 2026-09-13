@@ -320,6 +320,39 @@ void MainComponent::setTimelineZoom(float zoom)
     updateZoomControls();
 }
 
+/** Zooms the timeline so [@p startBeats, + @p lengthBeats) fills the view,
+    with a little room either side, and scrolls it into place. The zoom is
+    clamped to the view's range, so a span too long or too short to fit
+    exactly is shown as near to it as that allows. */
+void MainComponent::zoomTimelineToSpan(double startBeats, double lengthBeats)
+{
+    const auto& geometry = arrangementView_.geometry();
+    const float visible  = (float) arrangementViewport_.getMaximumVisibleWidth() - geometry.gutterWidth;
+
+    setTimelineZoom(app::zoomToFit(lengthBeats, visible, geometry.basePixelsPerBeat,
+                                   ArrangementView::kMinZoom, ArrangementView::kMaxZoom));
+
+    // After the zoom, so the scroll is measured at the new scale.
+    arrangementViewport_.setViewPosition(app::scrollToShow(startBeats, lengthBeats, arrangementView_.geometry()),
+                                         arrangementViewport_.getViewPositionY());
+}
+
+void MainComponent::zoomToTimeSelection()
+{
+    if (timeSelection_.isEmpty())
+    {
+        showError("Select time on the timeline first");
+        return;
+    }
+
+    zoomTimelineToSpan(timeSelection_.startBeats, timeSelection_.lengthBeats());
+}
+
+void MainComponent::fitProjectInView()
+{
+    zoomTimelineToSpan(0.0, arrangementView_.arrangedEndBeats());
+}
+
 /** Mirrors the current zoom into both controls without either of them
     reporting it straight back as a user edit — they set each other, and the
     keyboard shortcuts set both. */
