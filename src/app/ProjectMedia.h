@@ -1,10 +1,12 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 
 #include <juce_core/juce_core.h>
 
+#include "engine/SequenceAudioFormat.h"
 #include "model/Song.h"
 
 namespace soundsplice::app::media
@@ -28,6 +30,10 @@ namespace soundsplice::app::media
         keeps in their own library) is still referred to where it is;
       - audio files in the folder that nothing uses any more are moved to the
         trash on save.
+
+    An edited clip's audio is a sample sequence (engine/SequenceAudioFormat.h)
+    whose blocks are separate files, so collecting one collects its blocks with
+    it, and a block counts as used for as long as any sequence reads it.
 
     In memory every path stays absolute; relative paths exist only in the file.
     Uses juce::File rather than std::filesystem because a std::string path on
@@ -122,6 +128,18 @@ inline bool shouldCollect(const juce::File& audio, const juce::File& projectAudi
     return false;
 }
 
+/** Whether saving into @p projectAudioFolder has anything of @p audio to copy:
+    the file itself, or for a sequence, any block it reads. */
+inline bool needsCollecting(const juce::File& audio, const juce::File& projectAudioFolder,
+                            const std::vector<juce::File>& ownedFolders)
+{
+    for (const auto& file : engine::sequencefile::filesUsedBy(audio))
+        if (shouldCollect(file, projectAudioFolder, ownedFolders))
+            return true;
+
+    return false;
+}
+
 /** A copy of @p source in @p folder. A file already there with the same name
     and identical contents is reused, so saving twice doesn't copy twice; one
     with the same name but different contents is never overwritten. Returns
@@ -144,6 +162,54 @@ inline juce::File collectInto(const juce::File& source, const juce::File& folder
     return source.copyFileTo(target) ? target : source;
 }
 
+/** @p sequenceFile collected into @p folder: the blocks it reads from
+    @p ownedFolders are copied in (once each, remembered in @p copies, which
+    maps an original path to its copy), and a sequence file pointing at the
+    copies is written there. Blocks elsewhere, such as the imported file an
+    edit started from, are left where they are.
+
+    Returns @p sequenceFile itself if any of it can't be copied, so a failure
+    leaves the clip playing audio that is all still in place. */
+inline juce::File collectSequenceInto(const juce::File& sequenceFile, const juce::File& folder,
+                                      const std::vector<juce::File>& ownedFolders,
+                                      std::map<juce::String, juce::File>& copies)
+{
+    auto sequence = engine::sequencefile::load(sequenceFile);
+    if (! sequence || folder.createDirectory().failed())
+        return sequenceFile;
+
+    for (auto& span : sequence->spans)
+    {
+        const auto block = fileFromPath(span.file);
+        if (! shouldCollect(block, folder, ownedFolders))
+            continue;
+
+        auto copy = copies.find(block.getFullPathName());
+        if (copy == copies.end())
+            copy = copies.emplace(block.getFullPathName(), collectInto(block, folder)).first;
+
+        if (copy->second == block)
+            return sequenceFile;
+
+        span.file = pathOf(copy->second);
+    }
+
+    // Already in the folder (its blocks were elsewhere): rewritten where it is,
+    // since it names the same audio as before. Otherwise a copy beside the
+    // blocks, reusing one saved identically before.
+    auto target = sequenceFile.isAChildOf(folder) ? sequenceFile : folder.getChildFile(sequenceFile.getFileName());
+    if (target != sequenceFile && target.existsAsFile())
+    {
+        const auto loaded = engine::sequencefile::load(target);
+        if (loaded && *loaded == *sequence)
+            return target;
+
+        target = target.getNonexistentSibling(false);
+    }
+
+    return engine::sequencefile::save(target, *sequence) ? target : sequenceFile;
+}
+
 /** Audio files directly inside @p folder that aren't in @p referenced. Other
     files, and anything in subfolders, are never reported. */
 inline juce::Array<juce::File> unusedAudioFiles(const juce::File& folder, const juce::Array<juce::File>& referenced)
@@ -152,7 +218,7 @@ inline juce::Array<juce::File> unusedAudioFiles(const juce::File& folder, const 
     if (! folder.isDirectory())
         return unused;
 
-    for (const auto& entry : juce::RangedDirectoryIterator(folder, false, "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3",
+    for (const auto& entry : juce::RangedDirectoryIterator(folder, false, "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3;*.sseq",
                                                            juce::File::findFiles))
         if (! referenced.contains(entry.getFile()))
             unused.add(entry.getFile());

@@ -5,6 +5,8 @@
 #include <map>
 #include <memory>
 
+#include "engine/SequenceAudioFormat.h"
+
 namespace soundsplice
 {
 /**
@@ -34,7 +36,7 @@ class WaveformCache : private juce::ChangeListener
 public:
     WaveformCache()
     {
-        formats_.registerBasicFormats();
+        engine::sequencefile::registerFormats(formats_);
     }
 
     ~WaveformCache() override

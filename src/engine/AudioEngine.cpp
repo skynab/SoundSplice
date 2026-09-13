@@ -1,5 +1,6 @@
 #include "engine/AudioEngine.h"
 
+#include "engine/SequenceAudioFormat.h"
 #include "rt/RealtimeGuard.h"
 
 #include <algorithm>
@@ -15,7 +16,8 @@ namespace
 
 AudioEngine::AudioEngine()
 {
-    formatManager_.registerBasicFormats();
+    // Sequences too: an edited clip's audio is one (engine/SequenceAudioFormat.h).
+    sequencefile::registerFormats(formatManager_);
 
     // Started once and left running for the engine's lifetime. It idles when
     // nothing is recording, and spinning a thread up at the instant the user

@@ -152,7 +152,7 @@ void MainComponent::collectProjectAudio(const juce::File& projectFile)
     bool anyToCollect = false;
     app::media::forEachAudioPath(history_.current(), [&](const std::string& path)
     {
-        anyToCollect = anyToCollect || app::media::shouldCollect(app::media::fileFromPath(path), folder, owned);
+        anyToCollect = anyToCollect || app::media::needsCollecting(app::media::fileFromPath(path), folder, owned);
     });
 
     if (! anyToCollect)
@@ -164,13 +164,15 @@ void MainComponent::collectProjectAudio(const juce::File& projectFile)
     app::media::forEachAudioPath(history_.mutableCurrent(), [&](std::string& path)
     {
         const auto audio = app::media::fileFromPath(path);
-        if (! app::media::shouldCollect(audio, folder, owned))
+        if (! app::media::needsCollecting(audio, folder, owned))
             return;
 
         auto copy = copies.find(audio.getFullPathName());
         if (copy == copies.end())
         {
-            const auto collected = app::media::collectInto(audio, folder);
+            const auto collected = engine::sequencefile::isSequenceFile(audio)
+                                       ? app::media::collectSequenceInto(audio, folder, owned, copies)
+                                       : app::media::collectInto(audio, folder);
             copy = copies.emplace(audio.getFullPathName(), collected).first;
             if (collected == audio)
                 ++failed;
@@ -213,7 +215,9 @@ void MainComponent::cleanUpProjectAudio()
     {
         app::media::forEachAudioPath(song, [&referenced](const std::string& path)
         {
-            referenced.addIfNotAlreadyThere(app::media::fileFromPath(path));
+            // A sequence keeps its blocks in use too.
+            for (const auto& file : engine::sequencefile::filesUsedBy(app::media::fileFromPath(path)))
+                referenced.addIfNotAlreadyThere(file);
         });
     });
 

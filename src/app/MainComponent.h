@@ -14,6 +14,7 @@
 #include "app/RecordSourceChoice.h"
 #include "app/MicrophonePermission.h"
 #include "engine/AudioEdits.h"
+#include "engine/SampleSequence.h"
 #include "engine/AudioExport.h"
 #include "engine/TimeStretch.h"
 #include "engine/NoiseReduction.h"
@@ -245,13 +246,14 @@ private:
     void                   endClipGainDrag();
     void                   normaliseSelectedClip();
     // The audio-editor edit actions. Each resolves the selection, transforms
-    // the samples and goes through applyDestructiveEdit.
-    /** Runs @p transform over the selected range, reading the clip once.
-        The one path the destructive selection edits share. */
+    // the samples and goes through replaceClipAudio.
+    /** Runs @p transform over the selected samples, reading only those, and
+        puts whatever it leaves in their place. The one path the destructive
+        selection edits share. */
     bool                   editSelection(
                                const juce::String& label, bool snapToZeroCrossings,
-                               const std::function<void(std::vector<std::vector<float>>&,
-                                                        int from, int to, double sampleRate)>& transform);
+                               const std::function<void(std::vector<std::vector<float>>& selection,
+                                                        double sampleRate)>& transform);
 
     void                   cutAudioSelection();
     void                   copyAudioSelection();
@@ -299,42 +301,46 @@ private:
     /** Where destructive edits write their output. */
     juce::File             editsDirectory() const;
 
-    /** Runs @p transform over every channel of the selected clip's audio,
-        writes the result to a new file and repoints the clip at it in one
-        undo step. The single path every destructive edit goes through, so
-        none of them can forget to update lengthBeats or to invalidate the
-        caches. @p label names the undo step. */
-    bool                   applyDestructiveEdit(
-                               const juce::String& label,
-                               const std::function<std::vector<float>(const std::vector<float>&, int channel)>& transform);
+    /** The selected clip's audio as a sample sequence (engine/SampleSequence.h)
+        and the samples of it the clip plays. Opening one reads no samples. */
+    struct ClipAudio
+    {
+        juce::File                       file;
+        engine::sequence::SampleSequence sequence;
+        SampleWindow                     window;
+    };
+    bool                   openSelectedClipAudio(ClipAudio& out) const;
 
-    /** As above, but handed every channel at once and the file's sample
-        rate. Effects are stereo processors — a reverb's width and a
-        compressor's linked detector both need both channels together — so
-        the per-channel signature above can't express them. */
-    bool                   applyDestructiveEditToAllChannels(
+    /** Samples [from, to) counted from the clip's start, one vector per
+        channel; only those samples are read. Empty if they can't be. */
+    std::vector<std::vector<float>> readClipAudio(const ClipAudio& audio, int from, int to) const;
+
+    /** Samples [from, to) of the selected clip become @p replacement, of any
+        length, in one undo step: new blocks for the replacement and a new
+        sequence file around them, with nothing else rewritten. The single path
+        every destructive edit goes through, so none of them can forget to
+        update lengthBeats or to invalidate the caches. @p label names the undo
+        step. */
+    bool                   replaceClipAudio(const juce::String& label, const ClipAudio& audio, int from, int to,
+                                            const std::vector<std::vector<float>>& replacement);
+
+    /** Runs @p transform over every sample the selected clip plays, handed
+        all channels at once and the sample rate, for the edits that change
+        the whole clip (speed, pitch, noise reduction). */
+    bool                   editWholeClip(
                                const juce::String& label,
                                const std::function<void(std::vector<std::vector<float>>&, double sampleRate)>& transform);
 
-    /** The selection in the audio editor as sample indices into @p clip's
-        file, or false when there isn't one. @p snapToZeroCrossings moves the
+    /** The selection in the audio editor as samples from @p audio's clip
+        start, or false when there isn't one. @p snapToZeroCrossings moves the
         boundaries to the nearest zero crossing, which is what stops a cut
         clicking. */
-    bool                   selectedSampleRange(int& fromOut, int& toOut, int& lengthOut,
-                                               double& sampleRateOut,
-                                               std::vector<std::vector<float>>& channelsOut,
-                                               bool snapToZeroCrossings) const;
-    /** Reads @p file fully into per-channel float vectors, or an empty
-        result if it can't be read. Message thread; used by the audio
-        editor's offline operations. */
-    std::vector<std::vector<float>> readAudioFileChannels(const juce::File& file,
-                                                          double& sampleRateOut) const;
-    /** Reads @p clip's whole file and the window of it the clip plays. */
-    bool                   readClipWindow(const model::Clip& clip,
-                                          std::vector<std::vector<float>>& channelsOut,
-                                          double& sampleRateOut, SampleWindow& windowOut) const;
-    /** @p clipSeconds, each moved to the nearest zero crossing in the clip. */
-    std::vector<double>    zeroCrossingsNear(const model::Clip& clip, std::vector<double> clipSeconds) const;
+    bool                   selectedClipRange(const ClipAudio& audio, int& fromOut, int& toOut,
+                                             bool snapToZeroCrossings) const;
+    /** The nearest zero crossing to sample @p at of the clip. */
+    int                    zeroCrossingNear(const ClipAudio& audio, int at) const;
+    /** @p clipSeconds, each moved to the nearest zero crossing in the selected clip. */
+    std::vector<double>    zeroCrossingsNear(std::vector<double> clipSeconds) const;
     void                   refreshEffectChainForSelected();
     void                   addEffectSlot(model::EffectKind kind, const model::PluginRef& plugin);
     void                   removeEffectSlot(int slotIndex);

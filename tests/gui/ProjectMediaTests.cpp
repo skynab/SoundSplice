@@ -149,6 +149,75 @@ TEST_CASE("Unused audio is found, and used audio and other files are left alone"
     REQUIRE(found[0] == unused);
 }
 
+namespace
+{
+    /** A block of @p frames of stereo audio in @p folder, as an edit writes one. */
+    engine::sequence::Span writeBlock(const juce::File& folder, const juce::String& stem, int frames)
+    {
+        juce::AudioBuffer<float> buffer(2, frames);
+        for (int i = 0; i < frames; ++i)
+        {
+            buffer.setSample(0, i, (float) i * 1.0e-3f);
+            buffer.setSample(1, i, -(float) i * 1.0e-3f);
+        }
+
+        const auto spans = engine::sequencefile::writeBlocks(folder, stem, buffer, 48000.0);
+        REQUIRE(spans);
+        REQUIRE(spans->size() == 1);
+        return spans->front();
+    }
+}
+
+TEST_CASE("Collecting a sequence copies its blocks and leaves an imported file where it is", "[gui][projectmedia]")
+{
+    TempFolder temp;
+    const auto edits        = temp.root.getChildFile("Edits");
+    const auto library      = temp.root.getChildFile("library");
+    const auto projectAudio = temp.root.getChildFile("song Audio");
+    const std::vector<juce::File> owned { edits };
+
+    const auto imported = writeBlock(library, "import", 100);
+    const auto block    = writeBlock(edits, "take", 10);
+
+    const auto sequenceFile = edits.getChildFile("take.sseq");
+    REQUIRE(engine::sequencefile::save(sequenceFile, { 48000.0, 2, { imported, block } }));
+
+    REQUIRE(media::needsCollecting(sequenceFile, projectAudio, owned));
+
+    std::map<juce::String, juce::File> copies;
+    const auto collected = media::collectSequenceInto(sequenceFile, projectAudio, owned, copies);
+    REQUIRE(collected.getParentDirectory() == projectAudio);
+
+    const auto loaded = engine::sequencefile::load(collected);
+    REQUIRE(loaded);
+    REQUIRE(loaded->spans[0] == imported);
+    REQUIRE(media::fileFromPath(loaded->spans[1].file).getParentDirectory() == projectAudio);
+    REQUIRE(media::fileFromPath(loaded->spans[1].file).hasIdenticalContentTo(media::fileFromPath(block.file)));
+    REQUIRE_FALSE(media::needsCollecting(collected, projectAudio, owned));
+
+    // Saving again reuses both copies rather than making more.
+    std::map<juce::String, juce::File> again;
+    REQUIRE(media::collectSequenceInto(sequenceFile, projectAudio, owned, again) == collected);
+    REQUIRE(projectAudio.getNumberOfChildFiles(juce::File::findFiles) == 2);
+}
+
+TEST_CASE("A block stays in use while a sequence reads it", "[gui][projectmedia]")
+{
+    TempFolder temp;
+    const auto folder   = temp.root.getChildFile("song Audio");
+    const auto used     = writeBlock(folder, "used", 10);
+    const auto orphaned = writeBlock(folder, "orphaned", 10);
+
+    const auto sequenceFile = folder.getChildFile("used.sseq");
+    REQUIRE(engine::sequencefile::save(sequenceFile, { 48000.0, 2, { used } }));
+    REQUIRE(engine::sequencefile::save(folder.getChildFile("stale.sseq"), { 48000.0, 2, { used } }));
+
+    const auto found = media::unusedAudioFiles(folder, engine::sequencefile::filesUsedBy(sequenceFile));
+    REQUIRE(found.size() == 2);
+    REQUIRE(found.contains(media::fileFromPath(orphaned.file)));
+    REQUIRE(found.contains(folder.getChildFile("stale.sseq")));
+}
+
 TEST_CASE("The history visits every state the user can still get back to", "[gui][projectmedia]")
 {
     model::History<model::Song> history;
