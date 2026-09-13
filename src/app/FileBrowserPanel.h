@@ -10,7 +10,7 @@
 #include "FileGrid.h"
 #include "Icons.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     A small TextButton that also reports right-clicks (used for "remove this
@@ -404,4 +404,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FileBrowserPanel)
 };
 
-} // namespace looper
+} // namespace soundsplice

@@ -4,7 +4,7 @@
 #include <engine/Interpolation.h>
 
 using Catch::Approx;
-using looper::engine::sampleLinear;
+using soundsplice::engine::sampleLinear;
 
 TEST_CASE("sampleLinear returns exact samples at integer positions", "[engine][interp]")
 {

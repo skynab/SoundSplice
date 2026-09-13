@@ -8,7 +8,7 @@
 #include "engine/MetronomeMath.h"
 #include "engine/ProcessContext.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     The click. A short decaying sine on every beat, pitched higher on the
@@ -142,4 +142,4 @@ private:
     std::atomic<float> level_   { 0.5f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

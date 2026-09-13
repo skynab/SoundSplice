@@ -4,7 +4,7 @@
 
 #include "model/Track.h"
 
-namespace looper
+namespace soundsplice
 {
 /** One entry in the track-colour menu. */
 struct TrackColourOption
@@ -113,4 +113,4 @@ inline void paintTrackHeader(juce::Graphics& g, juce::Rectangle<int> bounds,
                bounds, juce::Justification::centredLeft);
 }
 
-} // namespace looper
+} // namespace soundsplice

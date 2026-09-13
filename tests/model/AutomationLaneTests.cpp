@@ -4,7 +4,7 @@
 #include <model/AutomationLane.h>
 
 using Catch::Approx;
-using looper::model::AutomationLane;
+using soundsplice::model::AutomationLane;
 
 TEST_CASE("AutomationLane returns the fallback when empty", "[model][automation]")
 {

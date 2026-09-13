@@ -8,7 +8,7 @@
 
 #include "model/Song.h"
 
-namespace looper::model
+namespace soundsplice::model
 {
 /**
     A small, line-based text format for the project document. Deliberately
@@ -962,4 +962,4 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
     return true;
 }
 
-} // namespace looper::model
+} // namespace soundsplice::model

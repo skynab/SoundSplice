@@ -5,7 +5,7 @@
 
 #include "engine/Node.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A minimal processing graph: a set of source nodes summed into a master node.
@@ -54,4 +54,4 @@ private:
     std::unique_ptr<Node>              master_;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

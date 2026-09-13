@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-namespace looper
+namespace soundsplice
 {
 /** Where within a DockRegion a dragged panel was dropped, which decides what
     happens to it: Centre adds it to that region as another tab, while the
@@ -440,4 +440,4 @@ private:
     DropZone            dropZone_    = DropZone::Centre;
 };
 
-} // namespace looper
+} // namespace soundsplice

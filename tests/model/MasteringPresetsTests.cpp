@@ -6,7 +6,7 @@
 #include <set>
 #include <string>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

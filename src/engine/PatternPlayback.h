@@ -7,7 +7,7 @@
 #include "engine/Pattern.h"
 #include "engine/SequencerMath.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** The 128 note numbers a player currently has sounding, so they can be
     released when it stops or switches to different material. */
@@ -147,4 +147,4 @@ struct PatternPlayback
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

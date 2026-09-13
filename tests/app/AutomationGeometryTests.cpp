@@ -2,7 +2,7 @@
 
 #include <app/AutomationGeometry.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

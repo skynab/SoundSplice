@@ -4,7 +4,7 @@
 
 #include "engine/ProcessContext.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A processing-graph node. Sources add their output into the buffer; the master
@@ -23,4 +23,4 @@ public:
     virtual void release() {}
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

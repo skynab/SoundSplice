@@ -9,7 +9,7 @@
 
 #include "EffectChainPanel.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     Picks a chain of effects to render into an audio selection.
@@ -155,4 +155,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ApplyEffectsDialog)
 };
 
-} // namespace looper
+} // namespace soundsplice

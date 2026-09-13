@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-using looper::engine::ThreeBandEq;
+using soundsplice::engine::ThreeBandEq;
 
 namespace
 {

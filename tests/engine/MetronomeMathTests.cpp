@@ -4,7 +4,7 @@
 
 #include <vector>
 
-using namespace looper::engine;
+using namespace soundsplice::engine;
 
 namespace
 {

@@ -9,7 +9,7 @@
 #include "engine/ShelfPeakFilter.h"
 #include "engine/StateVariableFilter.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Anti-aliased waveshaping, the core of a drive pedal.
@@ -428,4 +428,4 @@ private:
     float highPassState_ = 0.0f;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -2,7 +2,7 @@
 
 #include <engine/NoteOps.h>
 
-using namespace looper::engine;
+using namespace soundsplice::engine;
 
 namespace
 {

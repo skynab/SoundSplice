@@ -6,7 +6,7 @@
 
 #include "engine/Interpolation.h"
 
-namespace looper::engine::audioedits
+namespace soundsplice::engine::audioedits
 {
 /**
     The destructive edit operations, as plain sample-vector transformations.
@@ -210,4 +210,4 @@ inline std::vector<float> resample(const std::vector<float>& samples, double rat
     return out;
 }
 
-} // namespace looper::engine::audioedits
+} // namespace soundsplice::engine::audioedits

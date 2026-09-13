@@ -33,7 +33,7 @@
 
 #include "model/Effects.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** One audio clip to load onto a track: a file plus its
     [startBeats, startBeats + lengthBeats) window — the AudioEngine-facing
@@ -610,4 +610,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

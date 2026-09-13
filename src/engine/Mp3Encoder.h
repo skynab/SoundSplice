@@ -2,7 +2,7 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     MP3 encoding, as a `juce::AudioFormat`.
@@ -50,4 +50,4 @@ public:
     using juce::AudioFormat::createWriterFor;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

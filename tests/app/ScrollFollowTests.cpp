@@ -2,7 +2,7 @@
 
 #include <app/ScrollFollow.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

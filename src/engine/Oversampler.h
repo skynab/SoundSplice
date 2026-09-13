@@ -5,7 +5,7 @@
 #include <cmath>
 #include <utility>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     4x oversampling around a nonlinearity.
@@ -163,4 +163,4 @@ private:
     int downIndex_ = 0;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

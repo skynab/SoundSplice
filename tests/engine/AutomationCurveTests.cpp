@@ -3,7 +3,7 @@
 #include <engine/AutomationCurve.h>
 #include <model/AutomationLane.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

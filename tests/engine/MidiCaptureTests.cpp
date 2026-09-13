@@ -2,7 +2,7 @@
 
 #include <engine/MidiCapture.h>
 
-using namespace looper::engine;
+using namespace soundsplice::engine;
 
 namespace
 {

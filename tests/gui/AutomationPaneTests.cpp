@@ -4,7 +4,7 @@
 
 #include <app/AutomationPane.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

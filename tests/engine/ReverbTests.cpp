@@ -4,7 +4,7 @@
 #include <engine/Reverb.h>
 
 using Catch::Approx;
-using looper::engine::Reverb;
+using soundsplice::engine::Reverb;
 
 TEST_CASE("Reverb produces a decaying tail from an impulse", "[engine][reverb]")
 {

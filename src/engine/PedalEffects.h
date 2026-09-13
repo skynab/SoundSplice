@@ -7,7 +7,7 @@
 
 #include "engine/PedalDsp.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     The compressor pedal as a chain node.
@@ -383,4 +383,4 @@ private:
     std::atomic<float> highShelfDb_ { 0.0f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -3,7 +3,7 @@
 #include "engine/MasteringPreset.h"
 #include "model/Effects.h"
 
-namespace looper::model
+namespace soundsplice::model
 {
 /**
     A mastering rack setting for @p preset, built the same in-memory,
@@ -105,4 +105,4 @@ inline MasteringSettings presetForMastering(engine::MasteringPreset preset)
     return m;
 }
 
-} // namespace looper::model
+} // namespace soundsplice::model

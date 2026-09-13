@@ -3,7 +3,7 @@
 #include <cmath>
 #include <string>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Equal-tempered MIDI note number → frequency in Hz (note 69 = A4 = 440 Hz).
@@ -37,4 +37,4 @@ inline std::string midiNoteName(int midiNote)
     return std::string(kNames[pitchClass]) + std::to_string(octave);
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

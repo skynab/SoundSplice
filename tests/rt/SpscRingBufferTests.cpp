@@ -4,7 +4,7 @@
 
 #include <thread>
 
-using looper::rt::SpscRingBuffer;
+using soundsplice::rt::SpscRingBuffer;
 
 TEST_CASE("SpscRingBuffer preserves FIFO order", "[rt][spsc]")
 {

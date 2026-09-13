@@ -10,7 +10,7 @@
 #include "DockLayoutTree.h"
 #include "DockRegion.h"
 
-namespace looper
+namespace soundsplice
 {
 /** The draggable bar between the two halves of a split. Owns no state — it
     reports drags to the workspace, which turns them into a new split ratio
@@ -698,4 +698,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DockWorkspace)
 };
 
-} // namespace looper
+} // namespace soundsplice

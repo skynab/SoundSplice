@@ -4,7 +4,7 @@
 #include <app/PianoRollGeometry.h>
 
 using Catch::Approx;
-using looper::PianoRollGeometry;
+using soundsplice::PianoRollGeometry;
 
 TEST_CASE("PianoRollGeometry pitchForRow and rowForPitch round-trip", "[app][pianoroll]")
 {

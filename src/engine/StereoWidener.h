@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Mid/side stereo width.
@@ -77,4 +77,4 @@ private:
     float width_ = 1.0f;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

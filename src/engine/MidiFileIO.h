@@ -9,7 +9,7 @@
 #include "engine/Pattern.h"
 #include "model/Song.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Converts between model::Song and Standard MIDI Files (.mid), using JUCE's
@@ -200,4 +200,4 @@ inline bool exportMidiFile(const juce::File& file, const model::Song& song)
     return midiFile.writeTo(*stream, 1);
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

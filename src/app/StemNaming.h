@@ -4,7 +4,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace looper::app
+namespace soundsplice::app
 {
 /**
     Names for the files in a stem export.
@@ -58,4 +58,4 @@ inline juce::String stemFileName(int oneBasedIndex, const std::string& trackName
     return index + " " + name.trim() + "." + extension;
 }
 
-} // namespace looper::app
+} // namespace soundsplice::app

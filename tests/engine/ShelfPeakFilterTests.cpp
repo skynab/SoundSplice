@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-using looper::engine::ShelfPeakFilter;
+using soundsplice::engine::ShelfPeakFilter;
 
 namespace
 {

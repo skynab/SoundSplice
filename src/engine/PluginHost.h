@@ -6,7 +6,7 @@
 
 #include "engine/PluginModule.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** One plugin the host knows about, in the plain terms the document and UI
     use — no juce::PluginDescription, for the same reason model::PluginRef
@@ -206,4 +206,4 @@ private:
     std::vector<juce::PluginDescription>  descriptions_;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -5,7 +5,7 @@
 
 #include "engine/Waveshaper.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A harmonic exciter: saturate the top end only, and mix it back under the
@@ -128,4 +128,4 @@ private:
     std::array<ChannelState, kMaxChannels> channels_;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

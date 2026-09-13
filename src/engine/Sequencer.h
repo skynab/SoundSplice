@@ -11,7 +11,7 @@
 #include "engine/SequencerMath.h"
 #include "rt/SpscRingBuffer.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Turns a track's ClipSlots into MIDI, emitted into the per-block buffer
@@ -152,4 +152,4 @@ private:
     ActiveNotes           activeNotes_ {};
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

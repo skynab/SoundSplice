@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** Where a loop should end, given how far the arranged content reaches.
 
@@ -135,4 +135,4 @@ inline bool edgeInBlockBeats(double edgeBeat, double blockStartBeat, double patt
     return false;
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

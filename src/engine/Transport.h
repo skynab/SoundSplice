@@ -7,7 +7,7 @@
 #include "engine/ProcessContext.h"
 #include "engine/TempoMap.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     The playhead and its state: playing/stopped, position, loop region, tempo.
@@ -104,4 +104,4 @@ private:
     std::atomic<bool>    uiPlaying_  { false };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

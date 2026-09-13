@@ -8,7 +8,7 @@
 #include "engine/Fft.h"
 #include "engine/NoiseReduction.h"
 
-namespace looper::engine::timestretch
+namespace soundsplice::engine::timestretch
 {
 /**
     Speed and pitch, as offline sample-vector transformations.
@@ -192,4 +192,4 @@ inline std::vector<float> pitchShift(const std::vector<float>& samples, double s
     return shifted;
 }
 
-} // namespace looper::engine::timestretch
+} // namespace soundsplice::engine::timestretch

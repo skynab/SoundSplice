@@ -11,7 +11,7 @@
 #include "model/AutomationLane.h"
 #include "model/Track.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     Draws and edits one track's automation curve.
@@ -399,4 +399,4 @@ private:
     int                  dragging_     = -1;
 };
 
-} // namespace looper
+} // namespace soundsplice

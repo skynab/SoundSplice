@@ -2,7 +2,7 @@
 
 #include <app/TrackSelection.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 TEST_CASE("Removing a track above the selection shifts it down", "[app][selection]")
 {

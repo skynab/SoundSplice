@@ -5,7 +5,7 @@
 
 #include <juce_events/juce_events.h>
 
-namespace looper::app
+namespace soundsplice::app
 {
 MicPermission microphonePermission()
 {
@@ -63,4 +63,4 @@ bool openMicrophonePrivacySettings()
     return [[NSWorkspace sharedWorkspace] openURL: url] == YES;
 }
 
-} // namespace looper::app
+} // namespace soundsplice::app

@@ -15,7 +15,7 @@
 #include "TrackColours.h"
 #include "TimelineGeometry.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     A bars/beats ruler, one lane per track with its clips drawn as blocks, and a
@@ -1069,4 +1069,4 @@ private:
     double dropPreviewBeat_ = 0.0;
 };
 
-} // namespace looper
+} // namespace soundsplice

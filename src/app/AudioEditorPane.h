@@ -12,7 +12,7 @@
 #include "TrackColours.h"
 #include "WaveformPeaks.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     The waveform editor: one audio clip drawn large, with a click-drag range
@@ -906,4 +906,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEditorPane)
 };
 
-} // namespace looper
+} // namespace soundsplice

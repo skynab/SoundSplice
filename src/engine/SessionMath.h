@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     When a launched session clip actually starts.
@@ -57,4 +57,4 @@ struct SessionMath
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -6,7 +6,7 @@
 
 #include "engine/Pattern.h"
 
-namespace looper
+namespace soundsplice
 {
 /** One note as a block inside a clip rectangle. All four values are
     fractions of the rectangle: x/width along it, y/height down it, with y
@@ -141,4 +141,4 @@ inline double audioClipAudibleSeconds(double fileSeconds, double clipLengthBeats
     return std::min(fileSeconds, clipLengthBeats * secondsPerBeat);
 }
 
-} // namespace looper
+} // namespace soundsplice

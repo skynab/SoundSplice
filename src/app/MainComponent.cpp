@@ -23,7 +23,7 @@
 #include <iterator>
 #include <vector>
 
-namespace looper
+namespace soundsplice
 {
 /** View-menu ids for panels start well clear of the fixed commands, so adding
     a pane can never collide with one. */
@@ -6275,4 +6275,4 @@ void MainComponent::layoutMasterPanel()
     meter_.setBounds(masterArea.removeFromTop(44));
 }
 
-} // namespace looper
+} // namespace soundsplice

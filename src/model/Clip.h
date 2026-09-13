@@ -4,7 +4,7 @@
 
 #include "engine/Pattern.h"
 
-namespace looper::model
+namespace soundsplice::model
 {
 enum class ClipType
 {
@@ -33,4 +33,4 @@ struct Clip
     bool operator==(const Clip&) const = default;
 };
 
-} // namespace looper::model
+} // namespace soundsplice::model

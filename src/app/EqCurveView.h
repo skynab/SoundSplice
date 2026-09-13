@@ -7,7 +7,7 @@
 #include "engine/EqCurve.h"
 #include "model/Effects.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     Draws the master EQ's frequency-response curve — the standard visual
@@ -89,4 +89,4 @@ private:
     model::EqSettings settings_;
 };
 
-} // namespace looper
+} // namespace soundsplice

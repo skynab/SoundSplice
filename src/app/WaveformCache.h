@@ -5,7 +5,7 @@
 #include <map>
 #include <memory>
 
-namespace looper
+namespace soundsplice
 {
 /**
     Waveform thumbnails for the audio files on the timeline, one per path.
@@ -99,4 +99,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformCache)
 };
 
-} // namespace looper
+} // namespace soundsplice

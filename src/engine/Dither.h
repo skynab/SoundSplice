@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     TPDF dither, for reducing a float mix to a fixed word length.
@@ -96,4 +96,4 @@ private:
     uint32_t state_ = 0x9E3779B9u;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

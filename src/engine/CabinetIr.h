@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A cabinet impulse response, and the convolver that plays it.
@@ -208,4 +208,4 @@ inline void normaliseCabinetImpulse(std::vector<float>& impulse, double targetEn
         tap *= scale;
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

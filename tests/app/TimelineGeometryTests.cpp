@@ -4,7 +4,7 @@
 #include <app/TimelineGeometry.h>
 
 using Catch::Approx;
-using looper::TimelineGeometry;
+using soundsplice::TimelineGeometry;
 
 TEST_CASE("TimelineGeometry converts beats <-> x at zoom 1", "[app][timeline]")
 {

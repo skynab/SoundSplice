@@ -5,7 +5,7 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Captures audio input to a file while armed and the transport is playing.
@@ -260,4 +260,4 @@ private:
     int    numChannels_  = 2;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

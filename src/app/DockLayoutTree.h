@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace looper
+namespace soundsplice
 {
 /**
     A pure description of a docking layout: which panels are grouped together,
@@ -207,4 +207,4 @@ inline int chooseReopenLeaf(const std::vector<DockLeafSummary>& leaves,
     return best;
 }
 
-} // namespace looper
+} // namespace soundsplice

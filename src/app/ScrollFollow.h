@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace looper
+namespace soundsplice
 {
 /**
     Where a horizontal viewport should scroll to keep a moving position in
@@ -46,4 +46,4 @@ inline int scrollToFollow(int positionX, int currentOffset, int viewportWidth,
     return std::clamp(positionX - safeMargin, 0, maxOffset);
 }
 
-} // namespace looper
+} // namespace soundsplice

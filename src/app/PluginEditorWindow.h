@@ -7,7 +7,7 @@
 
 #include "engine/PluginNode.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     A window hosting one plugin's own editor.
@@ -61,4 +61,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginEditorWindow)
 };
 
-} // namespace looper
+} // namespace soundsplice

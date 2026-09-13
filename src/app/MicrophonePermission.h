@@ -2,7 +2,7 @@
 
 #include <functional>
 
-namespace looper::app
+namespace soundsplice::app
 {
 /**
     Microphone access, as the OS sees it.
@@ -66,4 +66,4 @@ void requestMicrophonePermission(std::function<void(bool granted)> onDone);
 */
 bool openMicrophonePrivacySettings();
 
-} // namespace looper::app
+} // namespace soundsplice::app

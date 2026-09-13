@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace looper::keys
+namespace soundsplice::keys
 {
 /**
     The keyboard shortcuts, defined once.
@@ -153,4 +153,4 @@ inline std::vector<NamedShortcut> all()
     };
 }
 
-} // namespace looper::keys
+} // namespace soundsplice::keys

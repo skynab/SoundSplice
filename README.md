@@ -15,8 +15,9 @@ A cross-platform **audio editor** written in C++, in the spirit of Audacity.
 >   tempo maps collapse to the starting tempo, and warped clips play at their own rate.
 > - **Kept for review:** the Session view, plus the minimum it needs to play — MIDI clips, one
 >   basic synth (default settings, no editor) and the piano roll for writing clips.
-> - **Not yet renamed:** the `looper::` namespace, `looper_*` build targets, `LOOPER_*` CMake
->   options and the `.looper` file format.
+> - **Renamed:** the app and the C++ namespace (`soundsplice::`). **Not yet renamed:** the
+>   `looper_*` build targets and `looper::rt` CMake alias, the `LOOPER_*` CMake options and the
+>   `.looper` file format.
 >
 > The status notes below describe the inherited Looper-Audio feature set and predate the removals.
 

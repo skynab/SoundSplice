@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** One note in a pattern. Times are in quarter-note beats from the pattern start. */
 /** How a note is played, as distinct from how hard.
@@ -73,4 +73,4 @@ struct Pattern
     bool operator==(const Pattern&) const = default;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -4,7 +4,7 @@
 
 #include "engine/ClipData.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     One audio clip's placement on a track's timeline: decoded audio data plus
@@ -34,4 +34,4 @@ struct AudioClipSlot
     float  gain        = 1.0f;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

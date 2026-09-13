@@ -11,7 +11,7 @@
 #include "engine/SessionMath.h"
 #include "rt/SpscRingBuffer.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** One cell of a track's session column. An empty slot still occupies an
     index, because the index is the scene. */
@@ -193,4 +193,4 @@ private:
     std::atomic<int> activeSlotForUI_ { -1 }; // audio -> UI readout
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

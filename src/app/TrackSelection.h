@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace looper
+namespace soundsplice
 {
 /**
     Where the selection lands after a track is removed.
@@ -37,4 +37,4 @@ inline int selectionAfterTrackRemoved(int selectedIndex, int removedIndex, int t
     return std::clamp(selected, 0, tracksRemaining - 1);
 }
 
-} // namespace looper
+} // namespace soundsplice

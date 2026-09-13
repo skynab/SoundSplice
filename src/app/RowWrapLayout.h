@@ -4,7 +4,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace looper::app
+namespace soundsplice::app
 {
 /**
     Lays fixed-width controls left to right, wrapping onto a new row when the
@@ -114,4 +114,4 @@ inline int wrappedRowHeight(int width, int rowHeight, int rowGap, const std::vec
     return rows * rowHeight + (rows - 1) * rowGap;
 }
 
-} // namespace looper::app
+} // namespace soundsplice::app

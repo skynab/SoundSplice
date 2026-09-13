@@ -5,7 +5,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace looper::rt
+namespace soundsplice::rt
 {
 // Conservative cache-line size. std::hardware_destructive_interference_size
 // would be ideal but isn't reliably available across libc++/libstdc++, so we
@@ -106,4 +106,4 @@ private:
     alignas(kCacheLineSize) std::atomic<std::size_t> readPos_{0};
 };
 
-} // namespace looper::rt
+} // namespace soundsplice::rt

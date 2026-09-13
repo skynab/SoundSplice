@@ -2,7 +2,7 @@
 
 #include <app/StemNaming.h>
 
-using namespace looper::app;
+using namespace soundsplice::app;
 
 TEST_CASE("A stem file name carries its track index", "[app][stems]")
 {

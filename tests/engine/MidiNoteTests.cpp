@@ -4,9 +4,9 @@
 #include <engine/MidiNote.h>
 
 using Catch::Approx;
-using looper::engine::isBlackKey;
-using looper::engine::midiNoteName;
-using looper::engine::midiNoteToHertz;
+using soundsplice::engine::isBlackKey;
+using soundsplice::engine::midiNoteName;
+using soundsplice::engine::midiNoteToHertz;
 
 TEST_CASE("midiNoteToHertz maps reference pitches", "[engine][midi]")
 {

@@ -2,7 +2,7 @@
 
 #include <app/RecordSourceChoice.h>
 
-using namespace looper::app;
+using namespace soundsplice::app;
 
 namespace
 {

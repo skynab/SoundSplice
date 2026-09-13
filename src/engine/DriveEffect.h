@@ -8,7 +8,7 @@
 #include "engine/Oversampler.h"
 #include "engine/Waveshaper.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     An overdrive/distortion pedal: gain into a clipper, through a speaker.
@@ -310,4 +310,4 @@ private:
     std::atomic<bool>  oversample_ { false };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

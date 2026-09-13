@@ -4,8 +4,8 @@
 #include <engine/TempoMap.h>
 
 using Catch::Approx;
-using looper::engine::TempoMap;
-using looper::engine::TempoChange;
+using soundsplice::engine::TempoMap;
+using soundsplice::engine::TempoChange;
 
 TEST_CASE("TempoMap converts samples <-> beats at 120 bpm / 48k", "[engine][tempo]")
 {

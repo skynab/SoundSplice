@@ -8,7 +8,7 @@
 #include "engine/ShelfPeakFilter.h"
 #include "engine/StateVariableFilter.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A compressor pedal.
@@ -545,4 +545,4 @@ private:
     float  cutoffHz_     = 200.0f;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

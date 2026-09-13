@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-using looper::engine::StateVariableFilter;
+using soundsplice::engine::StateVariableFilter;
 
 namespace
 {

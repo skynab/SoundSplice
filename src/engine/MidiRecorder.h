@@ -7,7 +7,7 @@
 #include "engine/MidiCapture.h"
 #include "rt/SpscRingBuffer.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Captures incoming MIDI note events while armed and the transport is
@@ -225,4 +225,4 @@ private:
     bool wasRecording_ = false;              // audio-thread only
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

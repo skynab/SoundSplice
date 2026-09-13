@@ -8,7 +8,7 @@
 #include "engine/ShelfPeakFilter.h"
 #include "model/Effects.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     The master bus's 3-band EQ — bass (low shelf), mid (peaking), treble (high
@@ -96,4 +96,4 @@ private:
     std::atomic<float> trebleDb_ { 0.0f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

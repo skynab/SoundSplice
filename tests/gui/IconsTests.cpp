@@ -17,21 +17,21 @@ namespace
         that doesn't parse is otherwise invisible until someone looks at the
         control it belongs to. */
     const NamedIcon kAllIcons[] = {
-        { "Magnifier",       looper::icons::kMagnifier },
-        { "AudioOn",         looper::icons::kAudioOn },
-        { "AudioDisabled",   looper::icons::kAudioDisabled },
-        { "StarOn",          looper::icons::kStarOn },
-        { "StarOutlineOff",  looper::icons::kStarOutlineOff },
-        { "SidebarOn",       looper::icons::kSidebarOn },
-        { "SidebarOff",      looper::icons::kSidebarOff },
-        { "Play",            looper::icons::kPlay },
-        { "Pause",           looper::icons::kPause },
-        { "FirstFrame",      looper::icons::kFirstFrame },
-        { "LastFrame",       looper::icons::kLastFrame },
-        { "NextFrame",       looper::icons::kNextFrame },
-        { "PreviousFrame",   looper::icons::kPreviousFrame },
-        { "RecordButton",    looper::icons::kRecordButton },
-        { "RecordStopButton",looper::icons::kRecordStopButton },
+        { "Magnifier",       soundsplice::icons::kMagnifier },
+        { "AudioOn",         soundsplice::icons::kAudioOn },
+        { "AudioDisabled",   soundsplice::icons::kAudioDisabled },
+        { "StarOn",          soundsplice::icons::kStarOn },
+        { "StarOutlineOff",  soundsplice::icons::kStarOutlineOff },
+        { "SidebarOn",       soundsplice::icons::kSidebarOn },
+        { "SidebarOff",      soundsplice::icons::kSidebarOff },
+        { "Play",            soundsplice::icons::kPlay },
+        { "Pause",           soundsplice::icons::kPause },
+        { "FirstFrame",      soundsplice::icons::kFirstFrame },
+        { "LastFrame",       soundsplice::icons::kLastFrame },
+        { "NextFrame",       soundsplice::icons::kNextFrame },
+        { "PreviousFrame",   soundsplice::icons::kPreviousFrame },
+        { "RecordButton",    soundsplice::icons::kRecordButton },
+        { "RecordStopButton",soundsplice::icons::kRecordStopButton },
     };
 }
 
@@ -45,7 +45,7 @@ TEST_CASE("Every embedded icon parses into a drawable", "[gui][icons]")
     for (const auto& icon : kAllIcons)
     {
         INFO("icon " << icon.name);
-        auto drawable = looper::icons::fromSvg(icon.svg);
+        auto drawable = soundsplice::icons::fromSvg(icon.svg);
         REQUIRE(drawable != nullptr);
     }
 }
@@ -58,7 +58,7 @@ TEST_CASE("Every icon has something in it to draw", "[gui][icons]")
 
     for (const auto& icon : kAllIcons)
     {
-        auto drawable = looper::icons::fromSvg(icon.svg);
+        auto drawable = soundsplice::icons::fromSvg(icon.svg);
         REQUIRE(drawable != nullptr);
 
         const auto bounds = drawable->getDrawableBounds();
@@ -71,6 +71,6 @@ TEST_CASE("Every icon has something in it to draw", "[gui][icons]")
 TEST_CASE("A malformed icon is reported rather than crashing", "[gui][icons]")
 {
     JuceFixture fixture;
-    REQUIRE(looper::icons::fromSvg("not svg at all") == nullptr);
-    REQUIRE(looper::icons::fromSvg("") == nullptr);
+    REQUIRE(soundsplice::icons::fromSvg("not svg at all") == nullptr);
+    REQUIRE(soundsplice::icons::fromSvg("") == nullptr);
 }

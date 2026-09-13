@@ -2,7 +2,7 @@
 
 #include <engine/Transport.h>
 
-using looper::engine::Transport;
+using soundsplice::engine::Transport;
 
 TEST_CASE("Transport advances only while playing", "[engine][transport]")
 {

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** An immutable snapshot of the transport at the start of an audio block. */
 struct TransportSnapshot
@@ -45,4 +45,4 @@ struct ProcessContext
     TransportSnapshot transport;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

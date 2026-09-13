@@ -2,7 +2,7 @@
 
 #include <app/RenderProgress.h>
 
-using looper::app::overallProgress;
+using soundsplice::app::overallProgress;
 
 TEST_CASE("A single task's progress is its own", "[app][progress]")
 {

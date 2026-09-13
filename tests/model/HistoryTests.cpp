@@ -4,7 +4,7 @@
 
 #include <vector>
 
-using looper::model::History;
+using soundsplice::model::History;
 
 TEST_CASE("History holds the initial state and starts clean", "[model][history]")
 {

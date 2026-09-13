@@ -6,7 +6,7 @@
 
 #include "engine/AudioExport.h"
 
-namespace looper::app
+namespace soundsplice::app
 {
 /**
     The "what kind of file?" step of an audio export.
@@ -249,4 +249,4 @@ private:
     }
 };
 
-} // namespace looper::app
+} // namespace soundsplice::app

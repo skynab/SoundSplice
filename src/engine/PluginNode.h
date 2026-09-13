@@ -6,7 +6,7 @@
 
 #include "engine/EffectChain.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A hosted plugin as one node of a track's effect chain.
@@ -125,4 +125,4 @@ private:
     bool                                       bypassed_ = false;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

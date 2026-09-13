@@ -4,7 +4,7 @@
 #include <utility>
 #include <vector>
 
-namespace looper::model
+namespace soundsplice::model
 {
 /**
     Snapshot-based undo/redo over a copyable value state.
@@ -113,4 +113,4 @@ private:
     unsigned long long presentId_ = 0;
 };
 
-} // namespace looper::model
+} // namespace soundsplice::model

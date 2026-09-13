@@ -6,7 +6,7 @@
 
 #include "DockLayoutTree.h"
 
-namespace looper::layouts
+namespace soundsplice::layouts
 {
 /**
     The named arrangements of panes the app ships with.
@@ -160,4 +160,4 @@ inline std::vector<std::string> panelsInWorkspace(Workspace workspace)
     return names;
 }
 
-} // namespace looper::layouts
+} // namespace soundsplice::layouts

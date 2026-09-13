@@ -2,7 +2,7 @@
 
 #include <juce_events/juce_events.h>
 
-namespace looper::app
+namespace soundsplice::app
 {
 // Windows and Linux have no per-app microphone gate an application can query
 // or trigger from inside itself: Windows' privacy settings block the device at
@@ -36,4 +36,4 @@ bool openMicrophonePrivacySettings()
     return false;
 }
 
-} // namespace looper::app
+} // namespace soundsplice::app

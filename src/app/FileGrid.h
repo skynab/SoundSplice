@@ -14,7 +14,7 @@
 #include "AudioFileTypes.h"
 #include "Icons.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     A sortable, color-coded detail view of one folder's files — Name / Type /
@@ -278,4 +278,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FileGrid)
 };
 
-} // namespace looper
+} // namespace soundsplice

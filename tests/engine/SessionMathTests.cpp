@@ -2,7 +2,7 @@
 
 #include <engine/SessionMath.h>
 
-using namespace looper::engine;
+using namespace soundsplice::engine;
 
 namespace
 {

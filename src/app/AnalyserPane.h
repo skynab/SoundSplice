@@ -6,7 +6,7 @@
 
 #include "engine/Spectrum.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     The frequency content of a passage of audio.
@@ -186,4 +186,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AnalyserPane)
 };
 
-} // namespace looper
+} // namespace soundsplice

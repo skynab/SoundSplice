@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A single RBJ-cookbook biquad, in one of three shapes: low shelf, high
@@ -138,4 +138,4 @@ private:
     double x1_ = 0.0, x2_ = 0.0, y1_ = 0.0, y2_ = 0.0;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

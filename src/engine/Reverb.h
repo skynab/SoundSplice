@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A Freeverb-style algorithmic reverb (8 parallel damped comb filters into 4
@@ -128,4 +128,4 @@ private:
     float roomSize_ = 0.5f, damping_ = 0.5f, wet_ = 0.33f, dry_ = 0.7f, width_ = 1.0f;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

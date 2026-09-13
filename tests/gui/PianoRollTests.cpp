@@ -4,7 +4,7 @@
 
 #include <app/PianoRoll.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

@@ -7,7 +7,7 @@
 #include <limits>
 #include <memory>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 namespace
 {
@@ -1018,4 +1018,4 @@ void AudioEngine::audioDeviceStopped()
     filePlayer_.release();
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

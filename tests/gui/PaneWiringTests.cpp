@@ -9,7 +9,7 @@
 #include <app/MixerStrip.h>
 #include <app/SessionView.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

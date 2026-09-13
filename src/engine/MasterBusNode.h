@@ -5,7 +5,7 @@
 
 #include "engine/Node.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     The master bus: applies a smoothed output gain and measures per-channel peak
@@ -61,4 +61,4 @@ private:
     std::atomic<float> channelPeak_[2] {};
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

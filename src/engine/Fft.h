@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A small in-place radix-2 Cooley-Tukey FFT.
@@ -107,4 +107,4 @@ namespace fft
     }
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

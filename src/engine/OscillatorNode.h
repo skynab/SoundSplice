@@ -4,7 +4,7 @@
 
 #include "engine/Node.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A sine source used as the Phase 1 stand-in for real clips: it lets us hear the
@@ -61,4 +61,4 @@ private:
     juce::LinearSmoothedValue<float> gain_ { 0.0f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

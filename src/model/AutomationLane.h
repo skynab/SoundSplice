@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 
-namespace looper::model
+namespace soundsplice::model
 {
 struct AutomationPoint
 {
@@ -127,4 +127,4 @@ private:
     std::vector<AutomationPoint> points_; // sorted by beat
 };
 
-} // namespace looper::model
+} // namespace soundsplice::model

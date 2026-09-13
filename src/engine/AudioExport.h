@@ -7,7 +7,7 @@
 #include "engine/Dither.h"
 #include "engine/Mp3Encoder.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Writing a rendered mix to a file, in whichever format was asked for.
@@ -359,4 +359,4 @@ inline bool writeAudioFile (const juce::File& file,
     return ok;
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

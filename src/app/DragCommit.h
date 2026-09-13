@@ -6,7 +6,7 @@
 
 #include "model/History.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     Turns a whole drag into one undo step.
@@ -60,4 +60,4 @@ bool commitStructDrag(model::History<State>& history, std::string label,
     return true;
 }
 
-} // namespace looper
+} // namespace soundsplice

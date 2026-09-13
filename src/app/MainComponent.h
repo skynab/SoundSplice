@@ -45,7 +45,7 @@
 #include "TrackColours.h"
 #include "StatusBanner.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     A generic tab-content component that forwards resized() to a callback. Used
@@ -596,4 +596,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };
 
-} // namespace looper
+} // namespace soundsplice

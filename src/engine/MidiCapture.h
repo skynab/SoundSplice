@@ -7,7 +7,7 @@
 
 #include "engine/Pattern.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Turns a captured stream of MIDI note events into a Pattern's notes.
@@ -161,4 +161,4 @@ struct MidiCapture
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

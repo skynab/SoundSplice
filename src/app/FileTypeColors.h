@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace looper
+namespace soundsplice
 {
 /** The kinds of file the file manager cares about — used to color-code the
     grid and tree, and (for Folder) to distinguish navigation targets. */
@@ -47,4 +47,4 @@ inline juce::String labelForFileKind(FileKind kind)
     }
 }
 
-} // namespace looper
+} // namespace soundsplice

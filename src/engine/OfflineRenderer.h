@@ -18,7 +18,7 @@
 #include "engine/ProcessContext.h"
 #include "engine/ReverbEffect.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Renders patterns to audio offline (no audio device), reusing the exact same
@@ -340,4 +340,4 @@ public:
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

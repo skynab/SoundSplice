@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace looper::app
+namespace soundsplice::app
 {
 /**
     Progress across a run of renders.
@@ -32,4 +32,4 @@ inline double overallProgress(int taskIndex, int taskCount, double fractionWithi
     return std::clamp((index + fraction) / (double) taskCount, 0.0, 1.0);
 }
 
-} // namespace looper::app
+} // namespace soundsplice::app

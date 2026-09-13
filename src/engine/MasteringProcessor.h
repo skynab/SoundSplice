@@ -12,7 +12,7 @@
 #include "engine/ShelfPeakFilter.h"
 #include "engine/StereoWidener.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     The mastering rack: the master bus's last stage.
@@ -226,4 +226,4 @@ private:
     std::atomic<float> reduction_ { 0.0f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

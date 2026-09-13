@@ -6,7 +6,7 @@
 
 #include "engine/Pattern.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Edit-time operations on a pattern's notes.
@@ -92,4 +92,4 @@ struct NoteOps
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

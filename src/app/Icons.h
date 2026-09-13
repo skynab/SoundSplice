@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace looper::icons
+namespace soundsplice::icons
 {
 /** Parses an embedded SVG string into a Drawable. Returns nullptr if the SVG
     can't be parsed (shouldn't happen for the constants below — they're
@@ -151,4 +151,4 @@ inline constexpr const char* kLastFrame =
     "M11,0 L22,6.5 L11,13 L11,0 Z M1.77635684e-15,0 L11,6.5 L0,13 L1.77635684e-15,0 "
     "Z\"/></svg>";
 
-} // namespace looper::icons
+} // namespace soundsplice::icons

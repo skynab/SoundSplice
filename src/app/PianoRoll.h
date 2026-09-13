@@ -13,7 +13,7 @@
 #include "TrackColours.h"
 #include "model/Track.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     A step grid of rows x time steps, with a left-hand gutter naming each row's
@@ -921,4 +921,4 @@ private:
     float    defaultVelocity_    = 0.8f;
 };
 
-} // namespace looper
+} // namespace soundsplice

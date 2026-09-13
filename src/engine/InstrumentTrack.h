@@ -13,7 +13,7 @@
 #include "engine/SessionPlayer.h"
 #include "engine/SynthInstrumentNode.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     One mixer channel: a synth driven by its own sequencer, *and* an audio-clip
@@ -278,4 +278,4 @@ public:
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

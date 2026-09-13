@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace looper
+namespace soundsplice
 {
 /**
     Pure geometry for the audio editor: converts between a position in an
@@ -130,4 +130,4 @@ struct AudioRange
     bool operator==(const AudioRange&) const = default;
 };
 
-} // namespace looper
+} // namespace soundsplice

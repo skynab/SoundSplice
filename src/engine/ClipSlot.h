@@ -2,7 +2,7 @@
 
 #include "engine/Pattern.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     One scheduled clip within a track: a pattern that plays only within
@@ -18,4 +18,4 @@ struct ClipSlot
     double  lengthBeats = 4.0;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

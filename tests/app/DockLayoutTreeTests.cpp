@@ -2,7 +2,7 @@
 
 #include <app/DockLayoutTree.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

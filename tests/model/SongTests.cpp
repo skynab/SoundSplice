@@ -3,7 +3,7 @@
 #include <model/History.h>
 #include <model/Song.h>
 
-using namespace looper::model;
+using namespace soundsplice::model;
 
 TEST_CASE("addTrack assigns increasing ids and appends", "[model][song]")
 {

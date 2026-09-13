@@ -2,7 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace looper
+namespace soundsplice
 {
 /**
     The audio formats this app will import, in one place.
@@ -90,4 +90,4 @@ namespace audiofiles
     }
 }
 
-} // namespace looper
+} // namespace soundsplice

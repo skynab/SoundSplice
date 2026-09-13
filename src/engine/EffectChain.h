@@ -12,7 +12,7 @@
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** What one node of a chain is. Mirrors model::EffectKind, which `engine`
     can't reference: `model` already depends on `engine` (a Clip owns an
@@ -395,4 +395,4 @@ private:
     std::vector<std::unique_ptr<EffectProcessor>> nodes_;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

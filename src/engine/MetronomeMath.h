@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Which beats begin inside a block, and which of those are downbeats.
@@ -54,4 +54,4 @@ struct MetronomeMath
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

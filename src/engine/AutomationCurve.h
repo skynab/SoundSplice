@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     An audio-thread-readable parameter curve: breakpoints of (beat, value),
@@ -85,4 +85,4 @@ struct TrackAutomation
     bool any() const noexcept { return ! gain.empty() || ! pan.empty(); }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

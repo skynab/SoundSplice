@@ -5,7 +5,7 @@
 #include "engine/Node.h"
 #include "engine/SynthVoice.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A polyphonic instrument node driven by the per-block MIDI buffer. Wraps
@@ -127,4 +127,4 @@ private:
     std::atomic<float> unisonDetuneCents_  { 12.0f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

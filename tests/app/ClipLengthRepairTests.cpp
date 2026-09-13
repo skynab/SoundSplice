@@ -3,7 +3,7 @@
 #include <app/ClipLengthRepair.h>
 #include <model/Track.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

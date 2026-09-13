@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A single-channel feedback delay line. JUCE-free, so the delay/feedback maths
@@ -122,4 +122,4 @@ private:
     int                writeIndex_ = 0;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

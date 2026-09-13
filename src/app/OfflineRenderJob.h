@@ -6,7 +6,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace looper::app
+namespace soundsplice::app
 {
 /**
     Runs a long render on a background thread behind a progress window.
@@ -95,4 +95,4 @@ private:
     std::function<void (bool)> onFinished_;
 };
 
-} // namespace looper::app
+} // namespace soundsplice::app

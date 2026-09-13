@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Linearly interpolated read from a mono sample array at a fractional position.
@@ -22,4 +22,4 @@ inline float sampleLinear(const float* data, int length, double position) noexce
     return (float) (s0 + (s1 - s0) * frac);
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -7,7 +7,7 @@
 #include "engine/Fft.h"
 #include "engine/NoiseReduction.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     An averaged magnitude spectrum of a passage of audio, in dBFS.
@@ -150,4 +150,4 @@ namespace spectrum
     }
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -3,7 +3,7 @@
 #include "engine/ShelfPeakFilter.h"
 #include "model/Effects.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     The master EQ's combined frequency response at @p hz, in dB — the same
@@ -76,4 +76,4 @@ inline float masteringEqMagnitudeDb(const model::MasteringSettings& m, float hz,
     return low.magnitudeDbAt(hz) + peak.magnitudeDbAt(hz) + high.magnitudeDbAt(hz);
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

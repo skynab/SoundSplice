@@ -4,7 +4,7 @@
 #include <cassert>
 #include <thread>
 
-namespace looper::rt
+namespace soundsplice::rt
 {
 /**
     Debug-only tracking of "the audio thread", used to assert that code which is
@@ -29,11 +29,11 @@ inline bool isAudioThread() noexcept
         && gAudioThreadId == std::this_thread::get_id();
 }
 
-} // namespace looper::rt
+} // namespace soundsplice::rt
 
 #if defined(NDEBUG)
     #define LOOPER_ASSERT_NOT_AUDIO_THREAD() ((void) 0)
 #else
     #define LOOPER_ASSERT_NOT_AUDIO_THREAD() \
-        assert(!::looper::rt::isAudioThread() && "This code path must not run on the audio thread")
+        assert(!::soundsplice::rt::isAudioThread() && "This code path must not run on the audio thread")
 #endif

@@ -7,7 +7,7 @@
 #include "LayoutHelpers.h"
 #include "LevelMeter.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     A single channel strip in the mixer view: track name, mute/solo, a vertical
@@ -159,4 +159,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerStrip)
 };
 
-} // namespace looper
+} // namespace soundsplice

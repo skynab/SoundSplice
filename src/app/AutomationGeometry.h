@@ -5,7 +5,7 @@
 
 #include "model/Track.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     Pure geometry for an automation editor: converts between a parameter's
@@ -111,4 +111,4 @@ struct AutomationGeometry
     }
 };
 
-} // namespace looper
+} // namespace soundsplice

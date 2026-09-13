@@ -22,7 +22,7 @@ TEST_CASE("Every shortcut parses to a real key", "[gui][shortcuts]")
     // shows the command; it just quietly stops having a shortcut.
     JuceFixture fixture;
 
-    for (const auto& shortcut : looper::keys::all())
+    for (const auto& shortcut : soundsplice::keys::all())
     {
         INFO("shortcut for " << shortcut.name);
         REQUIRE(shortcut.key.isValid());
@@ -35,7 +35,7 @@ TEST_CASE("Every shortcut can describe itself to a menu", "[gui][shortcuts]")
     // the failure above, so it is checked in its own right.
     JuceFixture fixture;
 
-    for (const auto& shortcut : looper::keys::all())
+    for (const auto& shortcut : soundsplice::keys::all())
     {
         INFO("shortcut for " << shortcut.name);
         REQUIRE(shortcut.key.getTextDescription().isNotEmpty());
@@ -51,7 +51,7 @@ TEST_CASE("No two shortcuts are the same key", "[gui][shortcuts]")
     // reading, which is the reason for the test.
     JuceFixture fixture;
 
-    const auto shortcuts = looper::keys::all();
+    const auto shortcuts = soundsplice::keys::all();
 
     for (size_t i = 0; i < shortcuts.size(); ++i)
     {
@@ -72,20 +72,20 @@ TEST_CASE("Modifiers are what they claim to be", "[gui][shortcuts]")
     // through a typo rather than a duplicate.
     JuceFixture fixture;
 
-    REQUIRE(looper::keys::save.getModifiers().isCommandDown());
-    REQUIRE_FALSE(looper::keys::save.getModifiers().isShiftDown());
+    REQUIRE(soundsplice::keys::save.getModifiers().isCommandDown());
+    REQUIRE_FALSE(soundsplice::keys::save.getModifiers().isShiftDown());
 
-    REQUIRE(looper::keys::saveAs.getModifiers().isCommandDown());
-    REQUIRE(looper::keys::saveAs.getModifiers().isShiftDown());
+    REQUIRE(soundsplice::keys::saveAs.getModifiers().isCommandDown());
+    REQUIRE(soundsplice::keys::saveAs.getModifiers().isShiftDown());
 
-    REQUIRE(looper::keys::copyTrack.getModifiers().isCommandDown());
-    REQUIRE(looper::keys::copyTrack.getModifiers().isAltDown());
-    REQUIRE_FALSE(looper::keys::copyTrack.getModifiers().isShiftDown());
+    REQUIRE(soundsplice::keys::copyTrack.getModifiers().isCommandDown());
+    REQUIRE(soundsplice::keys::copyTrack.getModifiers().isAltDown());
+    REQUIRE_FALSE(soundsplice::keys::copyTrack.getModifiers().isShiftDown());
 
     // The transport keys are deliberately unmodified, so a focused text field
     // consumes them first and they can't interrupt typing.
-    REQUIRE(looper::keys::playPause.getModifiers().getRawFlags() == 0);
-    REQUIRE(looper::keys::deleteTrack.getModifiers().getRawFlags() == 0);
+    REQUIRE(soundsplice::keys::playPause.getModifiers().getRawFlags() == 0);
+    REQUIRE(soundsplice::keys::deleteTrack.getModifiers().getRawFlags() == 0);
 }
 
 TEST_CASE("The zoom shortcuts avoid the description parser", "[gui][shortcuts]")
@@ -96,11 +96,11 @@ TEST_CASE("The zoom shortcuts avoid the description parser", "[gui][shortcuts]")
     // that match nothing.
     JuceFixture fixture;
 
-    REQUIRE(looper::keys::zoomIn.isValid());
-    REQUIRE(looper::keys::zoomOut.isValid());
-    REQUIRE(looper::keys::zoomIn.getModifiers().isCommandDown());
-    REQUIRE(looper::keys::zoomOut.getModifiers().isCommandDown());
-    REQUIRE_FALSE(looper::keys::zoomIn == looper::keys::zoomOut);
+    REQUIRE(soundsplice::keys::zoomIn.isValid());
+    REQUIRE(soundsplice::keys::zoomOut.isValid());
+    REQUIRE(soundsplice::keys::zoomIn.getModifiers().isCommandDown());
+    REQUIRE(soundsplice::keys::zoomOut.getModifiers().isCommandDown());
+    REQUIRE_FALSE(soundsplice::keys::zoomIn == soundsplice::keys::zoomOut);
 }
 
 TEST_CASE("The two delete keys are different keys", "[gui][shortcuts]")
@@ -109,6 +109,6 @@ TEST_CASE("The two delete keys are different keys", "[gui][shortcuts]")
     // of them would be pointless, and the collision test above would be the
     // thing that noticed.
     JuceFixture fixture;
-    REQUIRE_FALSE(looper::keys::deleteTrack == looper::keys::deleteTrackAlt);
-    REQUIRE_FALSE(looper::keys::deleteTrack == looper::keys::deleteClip); // that one has cmd
+    REQUIRE_FALSE(soundsplice::keys::deleteTrack == soundsplice::keys::deleteTrackAlt);
+    REQUIRE_FALSE(soundsplice::keys::deleteTrack == soundsplice::keys::deleteClip); // that one has cmd
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** A small, fixed set of starting points for the mastering rack — the master
     bus's counterpart to GuitarTone, SynthTone and DrumKitStyle. */
@@ -31,4 +31,4 @@ inline const char* masteringPresetName(MasteringPreset preset)
     return "Flat";
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

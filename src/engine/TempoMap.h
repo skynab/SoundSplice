@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** A tempo in force from @p beat until the next change. */
 struct TempoChange
@@ -353,4 +353,4 @@ private:
     std::vector<double>      cumulativeSamples_ { 0.0 };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

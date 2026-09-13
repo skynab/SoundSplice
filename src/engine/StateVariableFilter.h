@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A 2-pole state-variable filter (Cytomic / TPT topology — stable, no
@@ -69,4 +69,4 @@ private:
     float ic1eq_ = 0.0f, ic2eq_ = 0.0f;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

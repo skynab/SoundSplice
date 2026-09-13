@@ -4,7 +4,7 @@
 
 #include <app/AudioFileTypes.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 TEST_CASE("Every importable extension is recognised", "[app][audiofiles]")
 {

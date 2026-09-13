@@ -3,7 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace looper
+namespace soundsplice
 {
 /**
     A simple stereo peak meter. The owner feeds it linear peak values on a timer
@@ -90,4 +90,4 @@ private:
     int   holdCountdown_[numChannels] { 0, 0 };
 };
 
-} // namespace looper
+} // namespace soundsplice

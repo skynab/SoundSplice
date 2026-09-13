@@ -1,6 +1,6 @@
 #pragma once
 
-namespace looper
+namespace soundsplice
 {
 /**
     Pure geometry for the arrangement timeline: converts between musical beats
@@ -43,4 +43,4 @@ struct TimelineGeometry
     }
 };
 
-} // namespace looper
+} // namespace soundsplice

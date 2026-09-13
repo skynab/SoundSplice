@@ -7,7 +7,7 @@
 #include "engine/SequencerMath.h"
 #include "model/Song.h"
 
-namespace looper
+namespace soundsplice
 {
 /** One audio clip whose stored length didn't match its file, and what it was
     changed to. */
@@ -83,4 +83,4 @@ std::vector<ClipLengthFix> repairAudioClipLengths(model::Song& song, ProbeSecond
     return fixes;
 }
 
-} // namespace looper
+} // namespace soundsplice

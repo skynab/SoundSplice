@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace looper::model
+namespace soundsplice::model
 {
 /** Master delay settings, stored in the document (saved + undoable state). */
 struct DelaySettings
@@ -324,4 +324,4 @@ struct EffectSlot
     bool operator==(const EffectSlot&) const = default;
 };
 
-} // namespace looper::model
+} // namespace soundsplice::model

@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 namespace
 {
@@ -210,4 +210,4 @@ Mp3AudioFormat::createWriterFor (std::unique_ptr<juce::OutputStream>& streamToWr
     return writer->isReady() ? std::move (writer) : nullptr;
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

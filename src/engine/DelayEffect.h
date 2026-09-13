@@ -6,7 +6,7 @@
 
 #include "engine/DelayLine.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A stereo feedback delay built on two DelayLines. Parameters are atomics set
@@ -66,4 +66,4 @@ private:
     std::atomic<float> mix_      { 0.30f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

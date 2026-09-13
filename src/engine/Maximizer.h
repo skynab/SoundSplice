@@ -5,7 +5,7 @@
 #include <cmath>
 #include <vector>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A lookahead brickwall limiter — the "loudness maximizer" of a mastering
@@ -167,4 +167,4 @@ private:
     std::array<std::vector<float>, kMaxChannels> delays_;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

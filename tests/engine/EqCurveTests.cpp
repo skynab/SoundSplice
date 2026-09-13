@@ -4,8 +4,8 @@
 
 #include <cmath>
 
-using looper::engine::eqMagnitudeDb;
-using looper::model::EqSettings;
+using soundsplice::engine::eqMagnitudeDb;
+using soundsplice::model::EqSettings;
 
 TEST_CASE("A flat EQ reads 0dB everywhere", "[engine][eq][curve]")
 {

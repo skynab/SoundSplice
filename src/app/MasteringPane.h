@@ -11,7 +11,7 @@
 #include "engine/MasteringPreset.h"
 #include "model/Effects.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     The mastering rack's controls: the last stage before the mix leaves the
@@ -488,4 +488,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MasteringPane)
 };
 
-} // namespace looper
+} // namespace soundsplice

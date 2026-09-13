@@ -3,7 +3,7 @@
 #include <model/Serialization.h>
 #include <model/Song.h>
 
-using namespace looper::model;
+using namespace soundsplice::model;
 
 static Song makeSampleSong()
 {
@@ -600,8 +600,8 @@ TEST_CASE("Note articulation round-trips", "[model][io]")
     auto& notes = original.tracks.front().clips.front().pattern.notes;
     REQUIRE(notes.size() >= 2);
 
-    notes[0].articulation = looper::engine::Articulation::PalmMute;
-    notes[1].articulation = looper::engine::Articulation::Normal;
+    notes[0].articulation = soundsplice::engine::Articulation::PalmMute;
+    notes[1].articulation = soundsplice::engine::Articulation::Normal;
 
     Song        restored;
     std::string error;
@@ -609,8 +609,8 @@ TEST_CASE("Note articulation round-trips", "[model][io]")
 
     const auto& back = restored.tracks.front().clips.front().pattern.notes;
     REQUIRE(back.size() == notes.size());
-    CHECK(back[0].articulation == looper::engine::Articulation::PalmMute);
-    CHECK(back[1].articulation == looper::engine::Articulation::Normal);
+    CHECK(back[0].articulation == soundsplice::engine::Articulation::PalmMute);
+    CHECK(back[1].articulation == soundsplice::engine::Articulation::Normal);
 
     // And the whole song still compares equal, which is what history dedup
     // relies on — a field that round-trips but breaks operator== would make
@@ -657,7 +657,7 @@ TEST_CASE("A v30 note opens as an open note", "[model][io]")
     const auto& notes = song.tracks.front().clips.front().pattern.notes;
     REQUIRE(notes.size() == 1);
     CHECK(notes[0].noteNumber == 60);
-    CHECK(notes[0].articulation == looper::engine::Articulation::Normal);
+    CHECK(notes[0].articulation == soundsplice::engine::Articulation::Normal);
 }
 
 TEST_CASE("Per-clip gain round-trips", "[model][io]")

@@ -5,7 +5,7 @@
 #include <cmath>
 #include <vector>
 
-using looper::engine::TpdfDither;
+using soundsplice::engine::TpdfDither;
 
 namespace
 {

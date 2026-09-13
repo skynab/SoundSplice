@@ -9,7 +9,7 @@
 #include "model/Effects.h"
 #include "model/SynthSettings.h"
 
-namespace looper::model
+namespace soundsplice::model
 {
 /** The numeric values are written to the project file, so they are part of
     the format. 2, 3 and 4 were the Drum, Guitar and Bus types, which have
@@ -130,4 +130,4 @@ struct Track
     }
 };
 
-} // namespace looper::model
+} // namespace soundsplice::model

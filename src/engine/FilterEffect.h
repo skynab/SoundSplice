@@ -6,7 +6,7 @@
 
 #include "engine/StateVariableFilter.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A stereo master filter built on two StateVariableFilters. Parameters are
@@ -61,4 +61,4 @@ private:
     std::atomic<int>    mode_      { 0 };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

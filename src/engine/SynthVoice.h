@@ -9,7 +9,7 @@
 #include "engine/Oscillator.h"
 #include "engine/StateVariableFilter.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /** The sound every SynthVoice can play. */
 struct SynthSound final : juce::SynthesiserSound
@@ -354,4 +354,4 @@ private:
     double unisonIncrements_[kMaxUnisonVoices] = {};
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

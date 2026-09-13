@@ -6,7 +6,7 @@
 
 #include "engine/Reverb.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Stereo master reverb wrapping the JUCE-free Reverb core. Parameters are
@@ -64,4 +64,4 @@ private:
     std::atomic<float> mix_      { 0.3f };
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

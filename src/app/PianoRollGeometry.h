@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace looper
+namespace soundsplice
 {
 /**
     Pure geometry for the piano roll: converts between grid rows/steps and
@@ -79,4 +79,4 @@ struct PianoRollGeometry
     }
 };
 
-} // namespace looper
+} // namespace soundsplice

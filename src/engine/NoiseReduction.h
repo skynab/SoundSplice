@@ -6,7 +6,7 @@
 
 #include "engine/Fft.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Spectral-subtraction noise reduction — the "capture a noise print from a
@@ -229,4 +229,4 @@ namespace noisereduction
     }
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

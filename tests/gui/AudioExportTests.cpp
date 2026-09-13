@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-using namespace looper::engine;
+using namespace soundsplice::engine;
 
 namespace
 {
@@ -315,7 +315,7 @@ TEST_CASE ("The export dialog offers no combination that fails to write", "[gui]
     // and exports what it produces, so the two can't drift apart into a UI that
     // offers something the writer then refuses at the end of a render.
     juce::AlertWindow window ("Export Audio", {}, juce::MessageBoxIconType::NoIcon);
-    looper::app::ExportAudioDialog::buildControls (window, 48000.0);
+    soundsplice::app::ExportAudioDialog::buildControls (window, 48000.0);
 
     const auto source = makeTestBuffer();
 
@@ -326,7 +326,7 @@ TEST_CASE ("The export dialog offers no combination that fails to write", "[gui]
 
         window.getComboBoxComponent ("format")->setSelectedItemIndex (formatIndex,
                                                                       juce::dontSendNotification);
-        looper::app::ExportAudioDialog::refreshDependentBoxes (window, 48000.0);
+        soundsplice::app::ExportAudioDialog::refreshDependentBoxes (window, 48000.0);
 
         auto* rateBox    = window.getComboBoxComponent ("rate");
         auto* bitsBox    = window.getComboBoxComponent ("bits");
@@ -352,7 +352,7 @@ TEST_CASE ("The export dialog offers no combination that fails to write", "[gui]
                 {
                     qualityBox->setSelectedItemIndex (q, juce::dontSendNotification);
 
-                    const auto options = looper::app::ExportAudioDialog::readOptions (window);
+                    const auto options = soundsplice::app::ExportAudioDialog::readOptions (window);
                     REQUIRE (options.format == format);
 
                     const auto file = scratchFile (format);
@@ -371,12 +371,12 @@ TEST_CASE ("The export dialog defaults to the device sample rate", "[gui][export
     // The common export is "what I am hearing, as a file". Defaulting to
     // anything else would resample it by default.
     juce::AlertWindow window ("Export Audio", {}, juce::MessageBoxIconType::NoIcon);
-    looper::app::ExportAudioDialog::buildControls (window, 48000.0);
+    soundsplice::app::ExportAudioDialog::buildControls (window, 48000.0);
 
     for (double deviceRate : { 44100.0, 48000.0, 96000.0 })
     {
-        looper::app::ExportAudioDialog::refreshDependentBoxes (window, deviceRate);
-        const auto options = looper::app::ExportAudioDialog::readOptions (window);
+        soundsplice::app::ExportAudioDialog::refreshDependentBoxes (window, deviceRate);
+        const auto options = soundsplice::app::ExportAudioDialog::readOptions (window);
 
         INFO ("device at " << deviceRate);
         CHECK (options.sampleRate == deviceRate);
@@ -518,7 +518,7 @@ TEST_CASE ("The export dialog's Contents option round-trips", "[gui][export][ste
     // distinguishable, since two of them writing the same thing would be a
     // silent no-op rather than a visible bug.
     juce::AlertWindow window ("Export Audio", {}, juce::MessageBoxIconType::NoIcon);
-    looper::app::ExportAudioDialog::buildControls (window, 48000.0);
+    soundsplice::app::ExportAudioDialog::buildControls (window, 48000.0);
 
     auto* contentsBox = window.getComboBoxComponent ("contents");
     REQUIRE (contentsBox != nullptr);
@@ -527,7 +527,7 @@ TEST_CASE ("The export dialog's Contents option round-trips", "[gui][export][ste
     for (int i = 0; i < kNumExportContents; ++i)
     {
         contentsBox->setSelectedItemIndex (i, juce::dontSendNotification);
-        const auto options = looper::app::ExportAudioDialog::readOptions (window);
+        const auto options = soundsplice::app::ExportAudioDialog::readOptions (window);
 
         INFO ("contents index " << i << ": " << displayNameFor (options.contents));
         CHECK ((int) options.contents == i);
@@ -536,7 +536,7 @@ TEST_CASE ("The export dialog's Contents option round-trips", "[gui][export][ste
     // The default is the plain master mix — adding stems is opting in, not
     // something an ordinary export starts doing by surprise.
     contentsBox->setSelectedItemIndex (0, juce::dontSendNotification);
-    CHECK (looper::app::ExportAudioDialog::readOptions (window).contents
+    CHECK (soundsplice::app::ExportAudioDialog::readOptions (window).contents
            == ExportContents::MasterMix);
 }
 

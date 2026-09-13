@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace looper
+namespace soundsplice
 {
 /**
     Positions a control, or hides it when the space it was given is unusable.
@@ -55,4 +55,4 @@ inline void layoutLabelledRow(juce::Rectangle<int> row, juce::Label& label,
     setBoundsOrHide(control, row);
 }
 
-} // namespace looper
+} // namespace soundsplice

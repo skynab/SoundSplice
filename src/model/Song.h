@@ -8,7 +8,7 @@
 #include "engine/TempoMap.h"
 #include "model/Track.h"
 
-namespace looper::model
+namespace soundsplice::model
 {
 /**
     The whole project document: tempo/metre plus a list of tracks. Pure value
@@ -255,4 +255,4 @@ inline bool removeScene(Song& song, int sceneIndex)
     return true;
 }
 
-} // namespace looper::model
+} // namespace soundsplice::model

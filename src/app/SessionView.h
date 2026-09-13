@@ -7,7 +7,7 @@
 
 #include "model/Song.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     The session grid: tracks across, scenes down, each cell either holding a
@@ -297,4 +297,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SessionView)
 };
 
-} // namespace looper
+} // namespace soundsplice

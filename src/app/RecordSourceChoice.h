@@ -1,6 +1,6 @@
 #pragma once
 
-namespace looper::app
+namespace soundsplice::app
 {
 /**
     What pressing Record captures, decided from the armed track's type and
@@ -96,4 +96,4 @@ inline RecordSourceDecision chooseRecordSource(bool trackHoldsMidi, bool haveMid
     return { RecordSource::None, RecordSourceReason::NothingConnected };
 }
 
-} // namespace looper::app
+} // namespace soundsplice::app

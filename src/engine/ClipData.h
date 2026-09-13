@@ -2,7 +2,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A whole audio clip decoded into RAM. Allocated and freed on the message
@@ -17,4 +17,4 @@ struct ClipData
     int    lengthSamples    = 0;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

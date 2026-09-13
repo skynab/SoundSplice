@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 
-namespace looper
+namespace soundsplice
 {
 /**
     A min/max peak summary of decoded audio, for drawing waveforms.
@@ -147,4 +147,4 @@ private:
     int                               samplesPerBin_ = kDefaultSamplesPerBin;
 };
 
-} // namespace looper
+} // namespace soundsplice

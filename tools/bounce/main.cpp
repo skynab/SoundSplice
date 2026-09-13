@@ -43,9 +43,9 @@
     the app uses, so a kind or a parameter added anywhere reaches this
     automatically. Plugin slots still return null (no host here) and are
     skipped by the callers. */
-static std::unique_ptr<looper::engine::EffectProcessor> nodeForSlot(const looper::model::EffectSlot& slot)
+static std::unique_ptr<soundsplice::engine::EffectProcessor> nodeForSlot(const soundsplice::model::EffectSlot& slot)
 {
-    return looper::engine::makeConfiguredNode(slot);
+    return soundsplice::engine::makeConfiguredNode(slot);
 }
 
 /** Summed energy in [loHz, hiHz] of @p buf's left channel, by direct
@@ -98,7 +98,7 @@ static float worstBufferDifference(const juce::AudioBuffer<float>& a, const juce
 // audio path can be verified without an audio device. Also usable as a smoke test.
 int main(int argc, char** argv)
 {
-    using namespace looper::engine;
+    using namespace soundsplice::engine;
 
     // AudioRecorder check: feeds synthetic "input" directly into process() —
     // there's no live microphone in this headless verification, so this can
@@ -475,7 +475,7 @@ int main(int argc, char** argv)
     // within the rounding tolerance a real tick-based file format implies.
     bool midiRoundTripWorks = false;
     {
-        using namespace looper::model;
+        using namespace soundsplice::model;
 
         Song original;
         original.bpm = 128.0;
@@ -1089,7 +1089,7 @@ int main(int argc, char** argv)
             return buf;
         };
 
-        auto runRack = [&](const looper::model::MasteringSettings& settings)
+        auto runRack = [&](const soundsplice::model::MasteringSettings& settings)
         {
             auto rackBuffer = makeMix();
 
@@ -1115,16 +1115,16 @@ int main(int argc, char** argv)
             return rackBuffer;
         };
 
-        const auto dry = runRack(looper::model::MasteringSettings {}); // disabled: must be untouched
+        const auto dry = runRack(soundsplice::model::MasteringSettings {}); // disabled: must be untouched
         const auto raw = makeMix();
         masteringChangesSound = worstBufferDifference(dry, raw) < 1.0e-9f; // bypassed really is bypassed
 
         // Every preset's ceiling must hold on this deliberately nasty input.
         masteringHoldsCeiling = true;
-        for (int i = 0; i < looper::engine::kNumMasteringPresets; ++i)
+        for (int i = 0; i < soundsplice::engine::kNumMasteringPresets; ++i)
         {
-            const auto preset   = (looper::engine::MasteringPreset) i;
-            const auto settings = looper::model::presetForMastering(preset);
+            const auto preset   = (soundsplice::engine::MasteringPreset) i;
+            const auto settings = soundsplice::model::presetForMastering(preset);
             const auto out      = runRack(settings);
 
             const float peak    = out.getMagnitude(0, 0, out.getNumSamples());
@@ -1138,7 +1138,7 @@ int main(int argc, char** argv)
                 if (peak > allowed)
                 {
                     masteringHoldsCeiling = false;
-                    std::cout << "  ceiling breached by " << looper::engine::masteringPresetName(preset)
+                    std::cout << "  ceiling breached by " << soundsplice::engine::masteringPresetName(preset)
                               << ": peak=" << peak << " allowed=" << allowed << "\n";
                 }
 
@@ -1146,7 +1146,7 @@ int main(int argc, char** argv)
                 if (worstBufferDifference(out, raw) < 1.0e-4f)
                 {
                     masteringChangesSound = false;
-                    std::cout << "  " << looper::engine::masteringPresetName(preset)
+                    std::cout << "  " << soundsplice::engine::masteringPresetName(preset)
                               << " changed nothing\n";
                 }
             }
@@ -1956,7 +1956,7 @@ int main(int argc, char** argv)
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         automated.copyFrom(ch, 0, buffer, ch, 0, buffer.getNumSamples());
 
-    looper::model::AutomationLane lane;
+    soundsplice::model::AutomationLane lane;
     lane.addPoint(0.0, -40.0f);
     lane.addPoint(bpm / 60.0 * seconds, 0.0f);
 

@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Waveform generation for the synth's oscillator.
@@ -81,4 +81,4 @@ struct Oscillator
     }
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -2,7 +2,7 @@
 
 #include "MainComponent.h"
 
-namespace looper
+namespace soundsplice
 {
 /** Application entry point and top-level window for Phase 0. */
 class SoundSpliceApplication final : public juce::JUCEApplication
@@ -81,6 +81,6 @@ private:
     std::unique_ptr<juce::FileLogger> logger;
 };
 
-} // namespace looper
+} // namespace soundsplice
 
-START_JUCE_APPLICATION(looper::SoundSpliceApplication)
+START_JUCE_APPLICATION(soundsplice::SoundSpliceApplication)

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     A message from the UI thread to the audio thread. Trivially copyable so it can
@@ -25,4 +25,4 @@ struct EngineCommand
     double b = 0.0;
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

@@ -5,7 +5,7 @@
 #include "engine/EffectChain.h"
 #include "model/Effects.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Turns a document effect slot into the engine node and parameter set that
@@ -106,4 +106,4 @@ inline std::unique_ptr<EffectProcessor> makeConfiguredNode(const model::EffectSl
     return node;
 }
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

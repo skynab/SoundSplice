@@ -1,6 +1,6 @@
 #pragma once
 
-namespace looper::model
+namespace soundsplice::model
 {
 /**
     Per-track synth timbre for an Instrument track (model::Track::synthSettings)
@@ -53,4 +53,4 @@ struct SynthSettings
     bool operator==(const SynthSettings&) const = default;
 };
 
-} // namespace looper::model
+} // namespace soundsplice::model

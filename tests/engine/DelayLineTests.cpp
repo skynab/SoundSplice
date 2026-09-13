@@ -6,7 +6,7 @@
 #include <vector>
 
 using Catch::Approx;
-using looper::engine::DelayLine;
+using soundsplice::engine::DelayLine;
 
 TEST_CASE("DelayLine delays an impulse by the delay time", "[engine][delay]")
 {

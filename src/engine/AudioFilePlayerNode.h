@@ -8,7 +8,7 @@
 #include "engine/Node.h"
 #include "rt/SpscRingBuffer.h"
 
-namespace looper::engine
+namespace soundsplice::engine
 {
 /**
     Plays a track's audio clips, slaved to the transport: each clip plays only
@@ -170,4 +170,4 @@ private:
     rt::SpscRingBuffer<ClipList*> reclaim_ { 32 }; // audio -> message
 };
 
-} // namespace looper::engine
+} // namespace soundsplice::engine

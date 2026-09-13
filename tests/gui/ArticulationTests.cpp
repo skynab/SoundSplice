@@ -3,7 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <engine/PatternPlayback.h>
 
-using namespace looper;
+using namespace soundsplice;
 
 namespace
 {

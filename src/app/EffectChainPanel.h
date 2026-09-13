@@ -9,7 +9,7 @@
 #include "engine/PluginHost.h"
 #include "model/Effects.h"
 
-namespace looper
+namespace soundsplice
 {
 /**
     The selected track's effect chain: an ordered list of slots, each a
@@ -741,4 +741,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EffectChainPanel)
 };
 
-} // namespace looper
+} // namespace soundsplice
