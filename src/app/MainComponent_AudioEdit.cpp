@@ -61,9 +61,20 @@ void MainComponent::refreshAudioEditorForSelected()
         ClipAudio audio;
         if (openSelectedClipAudio(audio))
         {
-            const auto channels = readClipAudio(audio, 0, audio.window.length());
-            if (! channels.empty() && ! channels[0].empty())
-                waveformPeaks_.build(channels);
+            // A chunk at a time, so a long recording is never all in memory
+            // at once just to be drawn: the peaks are a tiny fraction of it.
+            constexpr int chunk  = WaveformPeaks::kDefaultSamplesPerBin * 16384;
+            const int     length = audio.window.length();
+            for (int from = 0; from < length; from += chunk)
+            {
+                const auto channels = readClipAudio(audio, from, from + chunk);
+                if (channels.empty())
+                {
+                    waveformPeaks_.clear();
+                    break;
+                }
+                waveformPeaks_.append(channels);
+            }
             waveformPeaksSampleRate_ = audio.sequence.sampleRate;
         }
 

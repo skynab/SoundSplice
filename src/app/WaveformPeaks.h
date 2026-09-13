@@ -85,6 +85,57 @@ public:
         }
     }
 
+    /** Adds @p chunk (per channel, the samples that follow what's already
+        summarised) to the end, exactly as if it had been part of one build.
+        A long clip is summarised a chunk at a time this way, so drawing it
+        never needs the whole recording in memory. A chunk needn't end on a
+        bin boundary: the next one fills out the last bin first. */
+    void append(const std::vector<std::vector<float>>& chunk)
+    {
+        if (chunk.empty() || chunk[0].empty())
+            return;
+
+        if (bins_.empty())
+            bins_.resize(chunk.size());
+
+        const int filled      = totalSamples_ % samplesPerBin_; // already in the last, partial bin
+        const int chunkLength = (int) chunk[0].size();
+
+        for (size_t ch = 0; ch < bins_.size(); ++ch)
+        {
+            const auto& samples = chunk[std::min(ch, chunk.size() - 1)];
+            const int   length  = std::min(chunkLength, (int) samples.size());
+            auto&       bins    = bins_[ch];
+
+            int i = 0;
+            if (filled > 0 && ! bins.empty())
+            {
+                auto& last = bins.back();
+                for (; i < std::min(length, samplesPerBin_ - filled); ++i)
+                {
+                    last.minimum = std::min(last.minimum, samples[(size_t) i]);
+                    last.maximum = std::max(last.maximum, samples[(size_t) i]);
+                }
+            }
+
+            while (i < length)
+            {
+                const int to = std::min(length, i + samplesPerBin_);
+
+                PeakBin bin { samples[(size_t) i], samples[(size_t) i] };
+                for (int j = i + 1; j < to; ++j)
+                {
+                    bin.minimum = std::min(bin.minimum, samples[(size_t) j]);
+                    bin.maximum = std::max(bin.maximum, samples[(size_t) j]);
+                }
+                bins.push_back(bin);
+                i = to;
+            }
+        }
+
+        totalSamples_ += chunkLength;
+    }
+
     void clear()
     {
         bins_.clear();

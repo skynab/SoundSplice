@@ -32,6 +32,45 @@ TEST_CASE("An empty build leaves an empty cache", "[app][waveformpeaks]")
     REQUIRE(peaks.overallMagnitude() == 0.0f);
 }
 
+TEST_CASE("Peaks built a chunk at a time match peaks built at once", "[app][waveformpeaks]")
+{
+    // Distinct extremes everywhere, and a length that doesn't end on a bin.
+    std::vector<float> left((size_t) 1000), right((size_t) 1000);
+    for (int i = 0; i < 1000; ++i)
+    {
+        left[(size_t) i]  = std::sin((float) i * 0.37f) * (float) (i % 17);
+        right[(size_t) i] = std::cos((float) i * 0.11f) * (float) (i % 5);
+    }
+
+    WaveformPeaks whole;
+    whole.build({ left, right }, 64);
+
+    // Chunks of awkward sizes, none of them a multiple of a bin.
+    WaveformPeaks chunked;
+    chunked.clear();
+    int at = 0;
+    for (const int size : { 1, 63, 100, 200, 5, 631 })
+    {
+        chunked.append({ std::vector<float>(left.begin() + at, left.begin() + at + size),
+                         std::vector<float>(right.begin() + at, right.begin() + at + size) });
+        at += size;
+    }
+    REQUIRE(at == 1000);
+
+    REQUIRE(chunked.totalSamples() == whole.totalSamples());
+    REQUIRE(chunked.numChannels() == 2);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int from = 0; from < 1000; from += 64)
+        {
+            REQUIRE(chunked.range(ch, from, from + 64).minimum == whole.range(ch, from, from + 64).minimum);
+            REQUIRE(chunked.range(ch, from, from + 64).maximum == whole.range(ch, from, from + 64).maximum);
+        }
+
+    // Nothing appended is nothing changed.
+    chunked.append({});
+    REQUIRE(chunked.totalSamples() == 1000);
+}
+
 TEST_CASE("Peaks capture the extremes of each bin", "[app][waveformpeaks]")
 {
     // A signal whose min and max are both away from zero, so a cache that
