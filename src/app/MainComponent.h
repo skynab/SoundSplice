@@ -270,6 +270,13 @@ private:
     bool                   pasteAtTimeSelection();
     void                   refreshAfterArrangementEdit();
 
+    // Edits on the arrangement itself (model/ArrangementEdits.h), on the
+    // time selection's tracks, or the selected track when there isn't one.
+    std::vector<int>       arrangementEditTracks() const;
+    void                   splitClipsAtPlayhead();
+    void                   joinArrangementClips();
+    void                   duplicateTimeSelection();
+
     void                   cutAudioSelection();
     void                   copyAudioSelection();
     void                   pasteAudioAtSelection();

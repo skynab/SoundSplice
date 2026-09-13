@@ -42,6 +42,7 @@ add_executable(soundsplice_tests
   model/MarkersTests.cpp
   model/MarkerEditsTests.cpp
   model/TimeSelectionTests.cpp
+  model/ArrangementEditsTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp

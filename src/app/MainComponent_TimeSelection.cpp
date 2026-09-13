@@ -1,5 +1,7 @@
 #include "MainComponentInternal.h"
 
+#include "model/ArrangementEdits.h"
+
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // The arrangement's time selection across tracks: cut, copy, paste, delete
 // and silence over every clip it covers. The edits themselves are in
@@ -114,6 +116,89 @@ bool MainComponent::pasteAtTimeSelection()
     refreshAfterArrangementEdit();
     showStatus("Pasted");
     return true;
+}
+
+std::vector<int> MainComponent::arrangementEditTracks() const
+{
+    if (timeSelection_.hasTracks())
+        return timeSelection_.trackIds;
+
+    const auto& tracks = history_.current().tracks;
+    if (selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) tracks.size())
+        return { tracks[(size_t) selectedTrackIndex_].id };
+
+    return {};
+}
+
+// Each of these tries its edit on a copy first, so an edit that would change
+// nothing says so instead of leaving an undo step that does nothing.
+
+void MainComponent::splitClipsAtPlayhead()
+{
+    const auto   tracks = arrangementEditTracks();
+    const double beat   = playheadBeat();
+
+    auto trial = history_.current();
+    if (model::arrangeedit::splitClipsAt(trial, tracks, beat) == 0)
+    {
+        showStatus("No audio clip under the playhead on the selected tracks");
+        return;
+    }
+
+    int split = 0;
+    history_.edit("Split at playhead", [&tracks, beat, &split](model::Song& s)
+    {
+        split = model::arrangeedit::splitClipsAt(s, tracks, beat);
+    });
+
+    refreshAfterArrangementEdit();
+    showStatus("Split " + juce::String(split) + (split == 1 ? " clip" : " clips"));
+}
+
+/** Joins within the time selection when it has length, or anywhere on the
+    selected tracks when it doesn't. */
+void MainComponent::joinArrangementClips()
+{
+    const auto   tracks = arrangementEditTracks();
+    const double from   = timeSelection_.isEmpty() ? 0.0 : timeSelection_.startBeats;
+    const double to     = timeSelection_.isEmpty() ? std::numeric_limits<double>::max() : timeSelection_.endBeats;
+
+    auto trial = history_.current();
+    if (model::arrangeedit::joinClips(trial, tracks, from, to) == 0)
+    {
+        showStatus("Nothing to join - only clips that carry straight on from each other can be joined");
+        return;
+    }
+
+    int joined = 0;
+    history_.edit("Join clips", [&tracks, from, to, &joined](model::Song& s)
+    {
+        joined = model::arrangeedit::joinClips(s, tracks, from, to);
+    });
+
+    refreshAfterArrangementEdit();
+    showStatus("Made " + juce::String(joined) + (joined == 1 ? " join" : " joins"));
+}
+
+void MainComponent::duplicateTimeSelection()
+{
+    const auto selection = timeSelection_;
+
+    auto trial = history_.current();
+    if (model::arrangeedit::duplicateRange(trial, selection).isEmpty())
+    {
+        showError("Select time on at least one audio track to duplicate");
+        return;
+    }
+
+    model::TimeSelection copy;
+    history_.edit("Duplicate selection", [&selection, &copy](model::Song& s)
+    {
+        copy = model::arrangeedit::duplicateRange(s, selection);
+    });
+
+    setTimeSelection(copy);
+    refreshAfterArrangementEdit();
 }
 
 } // namespace soundsplice

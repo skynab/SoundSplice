@@ -85,8 +85,10 @@ all three.
 - 🟡 **Snap options**: grid ✅, markers and the playhead ✅, clip edges ✅ (View menu; magnets win over the
   grid within a few pixels, and a moved clip snaps by whichever end is nearer; `src/app/SnapTargets.h`),
   and zero crossings ⬜ (surfacing `nearestZeroCrossing`)
-- ⬜ Edits on the arrangement itself, not just in the editor pane: split at the playhead, **join
-  clips**, **detach at silences**, ripple delete, **duplicate selection**, and **paste as new clip**
+- 🟡 Edits on the arrangement itself, not just in the editor pane: split at the playhead ✅ (Ctrl+I),
+  **join clips** ✅ (Ctrl+J; clips that carry straight on from each other, so a split can be undone
+  on its own), ripple delete ✅ (Delete on a time selection), **duplicate selection** ✅
+  (`src/model/ArrangementEdits.h`), **detach at silences** ⬜, and **paste as new clip** ⬜
 - 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)
 - ⬜ **Envelope tool** (a volume curve drawn per clip) and **draw tool** (redraw samples when zoomed
   to sample level, to fix clicks by hand)
