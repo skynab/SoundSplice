@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "engine/AudioClipSlot.h"
+#include "engine/ClipStream.h"
 #include "engine/Interpolation.h"
 #include "engine/Node.h"
 #include "rt/SpscRingBuffer.h"
@@ -46,6 +47,11 @@ public:
     }
 
     void prepare(double sampleRate, int /*maxBlockSize*/) override { deviceSampleRate_ = sampleRate; }
+
+    /** Which of a stream's reader slots this player reports its position in
+        (ClipStream::noteReading): distinct per player, so two tracks playing
+        the same long file in different places both get read ahead of. */
+    void setReaderIndex(int index) noexcept { readerIndex_ = index; }
 
     // ---- message thread ----
     /** Hands ownership of @p clips (a whole new clip list for this track) to the audio thread. */
@@ -162,6 +168,32 @@ public:
         const double secondsPerSample = 1.0 / deviceSampleRate_;
         double       secondsIntoClip  = localStart * secondsPerSample;
 
+        // A long clip plays from disk: the same loop, reading through the
+        // stream's loaded pages. Live, a page that isn't loaded yet is heard
+        // as silence rather than waited for; offline, it's loaded on the spot.
+        if (auto* stream = clip->stream.get())
+        {
+            stream->noteReading(readerIndex_, (std::int64_t) juce::jmax(0.0, position), context.streamEpoch);
+            ClipStream::Cursor cursor(*stream, context.offline);
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                if (position >= 0.0 && position < (double) length)
+                {
+                    const float gain = fading ? clipGain * clipFadeGain(fades, secondsIntoClip, clipSeconds)
+                                              : clipGain;
+
+                    for (int ch = 0; ch < outChans; ++ch)
+                        buffer.getWritePointer(ch)[i] += gain * cursor.sampleLinear(juce::jmin(ch, fileChans - 1),
+                                                                                     position, length);
+                }
+
+                position        += ratio;
+                secondsIntoClip += secondsPerSample;
+            }
+            return;
+        }
+
         for (int i = 0; i < numSamples; ++i)
         {
             if (position >= 0.0 && position < (double) length)
@@ -184,6 +216,7 @@ public:
 
 private:
     double    deviceSampleRate_ = 0.0;
+    int       readerIndex_      = 0;
     ClipList* current_          = nullptr; // audio-thread owned
 
     rt::SpscRingBuffer<ClipList*> inbox_   { 16 }; // message -> audio

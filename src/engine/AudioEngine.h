@@ -524,10 +524,20 @@ private:
 
     /** Decodes @p file fully into RAM. Returns nullptr if it can't be read. Message thread. */
     std::unique_ptr<ClipData> decodeAudioFile(const juce::File& file);
-    /** As above, but cached by absolute path — repeated calls (even from
-        different tracks) reuse the same decoded ClipData instead of
-        re-reading the file. Message thread only; the cache is never touched
-        from the audio thread. */
+
+    /** Clips at least this long play from disk (engine/ClipStream.h) rather
+        than being decoded into RAM. Below it a whole decode is small, and
+        plays with no chance of a gap after a jump. */
+    static constexpr double kStreamClipsFromSeconds = 60.0;
+
+    /** @p file as a stream if it's at least kStreamClipsFromSeconds long, or
+        nullptr (too short, or unreadable). Message thread. */
+    std::shared_ptr<ClipData> openStreamedClip(const juce::File& file);
+
+    /** A clip ready to play — streamed if long, decoded if not — cached by
+        absolute path, so repeated calls (even from different tracks) reuse
+        the same ClipData instead of re-reading the file. Message thread only;
+        the cache is never touched from the audio thread. */
     std::shared_ptr<ClipData> decodeOrGetCached(const juce::File& file);
 
     juce::AudioDeviceManager          deviceManager_;
@@ -536,6 +546,12 @@ private:
     juce::MidiKeyboardState           keyboardState_;
     juce::MidiBuffer                  incomingMidi_;
     rt::SpscRingBuffer<EngineCommand> commandQueue_ { 1024 };
+
+    // Loads long clips' audio from disk ahead of where they play. Declared
+    // before the tracks and the decode cache, which hold the streams, so it
+    // is torn down after them.
+    juce::TimeSliceThread streamThread_ { "SoundSpliceClipStreams" };
+    ClipStreamer          streamer_ { streamThread_ };
 
     std::array<InstrumentTrack, kMaxTracks> tracks_;
     std::atomic<int>                        armedTrack_ { 0 };

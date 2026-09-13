@@ -23,6 +23,15 @@ AudioEngine::AudioEngine()
     // nothing is recording, and spinning a thread up at the instant the user
     // hits record is exactly the wrong moment to be doing it.
     recordWriterThread_.startThread(juce::Thread::Priority::normal);
+    streamThread_.startThread(juce::Thread::Priority::normal);
+
+    // Each player reports where it's reading a stream in a slot of its own;
+    // the last slot is the streamer's own guess for a stream nobody has
+    // played yet.
+    static_assert(kMaxTracks + 1 < ClipStream::kMaxReaders);
+    for (int i = 0; i < kMaxTracks; ++i)
+        tracks_[(size_t) i].audioPlayer.setReaderIndex(i);
+    filePlayer_.setReaderIndex(kMaxTracks);
 
     // Input is asked for, but never at the cost of output.
     //
@@ -215,6 +224,22 @@ void AudioEngine::stopAudition()
     audition_.collectRetired();
 }
 
+std::shared_ptr<ClipData> AudioEngine::openStreamedClip(const juce::File& file)
+{
+    std::unique_ptr<juce::AudioFormatReader> reader(formatManager_.createReaderFor(file));
+    if (reader == nullptr || reader->sampleRate <= 0.0 || reader->lengthInSamples <= 0
+        || (double) reader->lengthInSamples / reader->sampleRate < kStreamClipsFromSeconds)
+        return nullptr;
+
+    auto clip              = std::make_shared<ClipData>();
+    clip->sourceSampleRate = reader->sampleRate;
+    clip->numChannels      = juce::jmax(1, (int) reader->numChannels);
+    clip->lengthSamples    = (int) juce::jmin<juce::int64>(reader->lengthInSamples,
+                                                           (juce::int64) std::numeric_limits<int>::max());
+    clip->stream           = streamer_.open(std::move(reader));
+    return clip;
+}
+
 std::shared_ptr<ClipData> AudioEngine::decodeOrGetCached(const juce::File& file)
 {
     const auto path = file.getFullPathName();
@@ -222,11 +247,16 @@ std::shared_ptr<ClipData> AudioEngine::decodeOrGetCached(const juce::File& file)
     if (it != audioDecodeCache_.end())
         return it->second;
 
-    auto decoded = decodeAudioFile(file);
-    if (decoded == nullptr)
-        return nullptr;
+    auto shared = openStreamedClip(file);
+    if (shared == nullptr)
+    {
+        auto decoded = decodeAudioFile(file);
+        if (decoded == nullptr)
+            return nullptr;
 
-    std::shared_ptr<ClipData> shared(decoded.release());
+        shared.reset(decoded.release());
+    }
+
     audioDecodeCache_[path] = shared;
     return shared;
 }
@@ -677,6 +707,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     context.numSamples = numSamples;
     context.transport  = transport_.snapshot(context.numSamples);
 
+    // Before anything reads a streamed clip's pages: see ClipStream.
+    context.streamEpoch = streamer_.beginBlock();
+
     recorder_.process(inputChannelData, numInputChannels, numSamples,
                       context.transport.playing, context.transport.playheadSamples);
 
@@ -930,6 +963,12 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
         context.sampleRate = sampleRate;
         context.numSamples = n;
         context.transport  = transport_.snapshot(context.numSamples);
+
+        // This thread stands in for the audio thread, so it advances the
+        // block epoch the same way, and being offline it loads streamed audio
+        // it needs rather than skipping it.
+        context.streamEpoch = streamer_.beginBlock();
+        context.offline     = true;
 
         juce::AudioBuffer<float> view(output.getArrayOfWritePointers(), 2, pos, n);
         noLiveMidi.clear();

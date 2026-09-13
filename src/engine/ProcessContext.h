@@ -43,6 +43,15 @@ struct ProcessContext
     double            sampleRate = 0.0;
     int               numSamples = 0;
     TransportSnapshot transport;
+
+    /** This block's epoch (ClipStreamer::beginBlock), which a streamed clip
+        reports where it's reading against; see engine/ClipStream.h. */
+    std::uint64_t streamEpoch = 0;
+
+    /** Rendering offline rather than to a device: a streamed clip loads the
+        audio it needs on the spot instead of playing silence until it's
+        loaded. */
+    bool offline = false;
 };
 
 } // namespace soundsplice::engine

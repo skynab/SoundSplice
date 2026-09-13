@@ -94,6 +94,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/StemNamingTests.cpp
     gui/ProjectMediaTests.cpp
     gui/SequenceAudioFormatTests.cpp
+    gui/ClipStreamTests.cpp
     gui/PaneLayoutTests.cpp
     gui/PaneWiringTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
