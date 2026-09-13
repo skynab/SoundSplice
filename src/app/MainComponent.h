@@ -248,6 +248,7 @@ private:
     void                   promptToSaveEffectPreset(const model::EffectSlot& slot);
     void                   deleteUserEffectPreset(const std::string& effectId, const std::string& name);
     void                   storeUserEffectPresets();
+    void                   previewEffectsOnSelection(const std::vector<model::EffectSlot>& chain);
     void                   showSpeedPitchDialog();
     void                   analyseSelection();
     void                   applySpeedAndPitch(double speedFactor, double semitones);

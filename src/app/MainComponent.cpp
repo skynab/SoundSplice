@@ -3324,9 +3324,17 @@ void MainComponent::showApplyEffectsDialog()
     };
     applyEffectsDialog_ = dialog.get();
 
+    dialog->onPreview   = [this](const std::vector<model::EffectSlot>& chain) { previewEffectsOnSelection(chain); };
+    dialog->onDismissed = [safe = juce::Component::SafePointer<MainComponent>(this)]
+    {
+        if (safe != nullptr)
+            safe->engine_.stopAudition();
+    };
+
     auto* raw = dialog.get();
     raw->onApply = [this, raw](const std::vector<model::EffectSlot>& chain)
     {
+        engine_.stopAudition();
         applyEffectsToSelection(chain);
         if (auto* window = raw->findParentComponentOfClass<juce::DialogWindow>())
             window->exitModalState(0);
@@ -3409,6 +3417,98 @@ void MainComponent::storeUserEffectPresets()
         applyEffectsDialog_->setUserPresets(userEffectPresets_);
 }
 
+/** How many of @p chain's slots are enabled built-ins, and how many are
+    enabled plugins, which can't be rendered offline yet. */
+static std::pair<int, int> renderableEffectCounts(const std::vector<model::EffectSlot>& chain)
+{
+    int builtIns = 0, plugins = 0;
+    for (const auto& slot : chain)
+    {
+        if (! slot.enabled)
+            continue;
+        (slot.kind == model::EffectKind::Plugin ? plugins : builtIns) += 1;
+    }
+    return { builtIns, plugins };
+}
+
+/** Runs @p chain's enabled built-ins over @p block, in place. Shared by
+    Apply and Preview, so a preview is exactly what Apply will write. Plugin
+    slots are skipped — see applyEffectsToSelection. */
+static void renderEffectChain(const std::vector<model::EffectSlot>& chain, juce::AudioBuffer<float>& block,
+                              double sampleRate, double bpm)
+{
+    engine::EffectChain built;
+    for (const auto& slot : chain)
+    {
+        if (! slot.enabled || slot.kind == model::EffectKind::Plugin)
+            continue;
+
+        if (auto node = engine::makeConfiguredNode(slot))
+            built.add(std::move(node));
+    }
+
+    built.prepare(sampleRate, block.getNumSamples());
+    built.setBpm(bpm); // the wobble pedal is tempo-locked
+    built.process(block);
+}
+
+/** How much of a selection Preview plays: enough to judge an effect by,
+    short enough that rendering it doesn't stall the UI on a long selection. */
+static constexpr double kEffectPreviewSeconds = 10.0;
+
+/** Plays the start of the selection through @p chain without changing
+    anything, or stops a preview that is already playing, which is what
+    pressing Preview a second time means. */
+void MainComponent::previewEffectsOnSelection(const std::vector<model::EffectSlot>& chain)
+{
+    if (engine_.isAuditioning())
+    {
+        engine_.stopAudition();
+        showStatus("Preview stopped");
+        return;
+    }
+
+    const auto [builtIns, plugins] = renderableEffectCounts(chain);
+    if (builtIns == 0)
+    {
+        showError(plugins > 0 ? "Plugins can't be previewed on a selection yet" : "Add an effect first");
+        return;
+    }
+
+    int    from = 0, to = 0, length = 0;
+    double sampleRate = 0.0;
+    std::vector<std::vector<float>> channels;
+    if (! selectedSampleRange(from, to, length, sampleRate, channels, false) || to <= from)
+    {
+        showError("Select part of the clip first");
+        return;
+    }
+
+    const int count       = juce::jmin(to - from, (int) std::llround(kEffectPreviewSeconds * sampleRate));
+    const int numChannels = (int) channels.size();
+
+    juce::AudioBuffer<float> block(numChannels, count);
+    for (int ch = 0; ch < numChannels; ++ch)
+        std::copy(channels[(size_t) ch].begin() + from, channels[(size_t) ch].begin() + from + count,
+                  block.getWritePointer(ch));
+
+    renderEffectChain(chain, block, sampleRate, history_.current().bpm);
+
+    // A few milliseconds of fade at each end, so a preview that starts or
+    // ends mid-waveform doesn't click.
+    const int fade = juce::jmin(count / 2, (int) std::llround(sampleRate * kEffectEdgeFadeSeconds));
+    if (fade > 0)
+    {
+        block.applyGainRamp(0, fade, 0.0f, 1.0f);
+        block.applyGainRamp(count - fade, fade, 1.0f, 0.0f);
+    }
+
+    // The song stops: a preview heard over the mix is hard to judge.
+    post(Cmd::SetPlaying, 0.0);
+    engine_.startAudition(block, sampleRate);
+    showStatus("Previewing " + juce::String((double) count / sampleRate, 1) + "s - press Preview again to stop");
+}
+
 /** Renders @p chain into the selected range.
 
     The range is processed as its own buffer and written back over the
@@ -3427,13 +3527,7 @@ void MainComponent::applyEffectsToSelection(const std::vector<model::EffectSlot>
     if (range.isEmpty())
         return;
 
-    int builtIns = 0, plugins = 0;
-    for (const auto& slot : chain)
-    {
-        if (! slot.enabled)
-            continue;
-        (slot.kind == model::EffectKind::Plugin ? plugins : builtIns) += 1;
-    }
+    const auto [builtIns, plugins] = renderableEffectCounts(chain);
 
     if (builtIns == 0)
     {
@@ -3462,19 +3556,7 @@ void MainComponent::applyEffectsToSelection(const std::vector<model::EffectSlot>
                       channels[(size_t) ch].begin() + to,
                       block.getWritePointer(ch));
 
-        engine::EffectChain built;
-        for (const auto& slot : chain)
-        {
-            if (! slot.enabled || slot.kind == model::EffectKind::Plugin)
-                continue;
-
-            if (auto node = engine::makeConfiguredNode(slot))
-                built.add(std::move(node));
-        }
-
-        built.prepare(sampleRate, count);
-        built.setBpm(bpm); // the wobble pedal is tempo-locked
-        built.process(block);
+        renderEffectChain(chain, block, sampleRate, bpm);
 
         // Blend back over the original at both edges.
         const int fade = juce::jmin(count / 2, (int) std::llround(sampleRate * kEffectEdgeFadeSeconds));

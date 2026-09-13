@@ -43,6 +43,21 @@ public:
         chainPanel_.setUserPresets(std::move(presets));
     }
 
+    /** Fired by Preview, with the chain to hear. The owner renders and plays
+        it, or stops a preview already playing. */
+    std::function<void(const std::vector<model::EffectSlot>&)> onPreview;
+
+    /** Fired as the dialog goes away, however it was closed (Apply, Cancel,
+        Escape or the window's close button), so a preview can't keep playing
+        with nothing on screen to stop it. */
+    std::function<void()> onDismissed;
+
+    ~ApplyEffectsDialog() override
+    {
+        if (onDismissed)
+            onDismissed();
+    }
+
     ApplyEffectsDialog()
     {
         addAndMakeVisible(chainPanel_);
@@ -107,6 +122,11 @@ public:
         applyButton_.onClick = [this] { if (onApply) onApply(chain_); };
         addAndMakeVisible(applyButton_);
 
+        previewButton_.setButtonText("Preview");
+        previewButton_.setTooltip("Hear the selection through these effects without changing it - press again to stop");
+        previewButton_.onClick = [this] { if (onPreview) onPreview(chain_); };
+        addAndMakeVisible(previewButton_);
+
         cancelButton_.setButtonText("Cancel");
         cancelButton_.onClick = [this] { if (onCancel) onCancel(); };
         addAndMakeVisible(cancelButton_);
@@ -130,6 +150,7 @@ public:
         auto buttons = area.removeFromBottom(kButtonRowHeight);
         cancelButton_.setBounds(buttons.removeFromRight(juce::jmax(1, buttons.getWidth() / 3)).reduced(2));
         applyButton_.setBounds(buttons.removeFromRight(juce::jmax(1, buttons.getWidth() / 2)).reduced(2));
+        previewButton_.setBounds(buttons.reduced(2));
 
         hintLabel_.setBounds(area.removeFromBottom(kHintHeight));
         chainPanel_.setBounds(area);
@@ -144,7 +165,7 @@ private:
     std::vector<model::EffectSlot> chain_;
 
     EffectChainPanel chainPanel_;
-    juce::TextButton applyButton_, cancelButton_;
+    juce::TextButton previewButton_, applyButton_, cancelButton_;
     juce::Label      hintLabel_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ApplyEffectsDialog)

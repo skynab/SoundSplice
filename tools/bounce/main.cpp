@@ -7,6 +7,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 
 #include "engine/AudioClipSlot.h"
+#include "engine/AuditionPlayer.h"
 #include "engine/AudioRecorder.h"
 #include "engine/ClipData.h"
 #include "engine/ClipSlot.h"
@@ -505,6 +506,45 @@ int main(int argc, char** argv)
     const bool  clipFadesShape = rmsFadeBody > 0.3f
                               && rmsFadeHead < 0.25f * rmsFadeBody
                               && rmsFadeTail < 0.25f * rmsFadeBody;
+
+    // Audition check: the preview player sounds with no transport at all
+    // (that is its whole point), falls silent by itself at the end of what it
+    // was given, restarts from the top when given something new, and goes
+    // quiet at once when stopped.
+    bool auditionWorks = false;
+    {
+        AuditionPlayer audition;
+        audition.prepare(sampleRate);
+        audition.play(std::make_unique<ClipData>(sineClip)); // the two-second tone
+
+        juce::AudioBuffer<float> block(2, 512);
+        const int blocks       = (int) std::ceil(2.5 * sampleRate / 512.0);
+        double    openingLevel = 0.0;
+        float     lastLevel    = 1.0f;
+
+        for (int b = 0; b < blocks; ++b)
+        {
+            block.clear();
+            audition.process(block, 512);
+            if (b < 10)
+                openingLevel += block.getRMSLevel(0, 0, 512);
+            lastLevel = block.getRMSLevel(0, 0, 512);
+        }
+        const bool playedThenEnded = openingLevel > 0.1 && lastLevel < 1.0e-6f && ! audition.isPlaying();
+
+        audition.play(std::make_unique<ClipData>(sineClip));
+        block.clear();
+        audition.process(block, 512);
+        const bool restarted = block.getRMSLevel(0, 0, 512) > 0.01f && audition.isPlaying();
+
+        audition.stop();
+        block.clear();
+        audition.process(block, 512);
+        const bool stopped = block.getRMSLevel(0, 0, 512) < 1.0e-6f && ! audition.isPlaying();
+        audition.collectRetired();
+
+        auditionWorks = playedThenEnded && restarted && stopped;
+    }
 
     // MIDI import/export round-trip check: build a Song with three notes on
     // one track, export it to a temp .mid, re-import it into a fresh Song,
@@ -2076,6 +2116,7 @@ int main(int argc, char** argv)
               << "  multiClipAudioGates=" << (multiClipAudioGates ? 1 : 0)
               << "  sourceOffsetPlays=" << (sourceOffsetPlays ? 1 : 0)
               << "  clipFadesShape=" << (clipFadesShape ? 1 : 0)
+              << "  auditionWorks=" << (auditionWorks ? 1 : 0)
               << "  midiRoundTripWorks=" << (midiRoundTripWorks ? 1 : 0)
               << "  midiRecordingWorks=" << (midiRecordingWorks ? 1 : 0)
               << "  pluginsScanned=" << pluginsScanned
@@ -2124,7 +2165,7 @@ int main(int argc, char** argv)
                  && delayChanged && filterAttenuates && reverbChanged && automationFades
                  && perTrackAutomationWorks
                  && soloMatchesArpOnly && stemsSumToMix && clipStartGates && multiClipGates
-                 && audioTrackWorks && multiClipAudioGates && sourceOffsetPlays && clipFadesShape && midiRoundTripWorks
+                 && audioTrackWorks && multiClipAudioGates && sourceOffsetPlays && clipFadesShape && auditionWorks && midiRoundTripWorks
                  && midiRecordingWorks
                  && cascadedStagesEnrich
                  && pluginHostWorks

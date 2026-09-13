@@ -186,6 +186,33 @@ bool AudioEngine::loadAudioFile(const juce::File& file)
     return true;
 }
 
+void AudioEngine::startAudition(const juce::AudioBuffer<float>& audio, double sampleRate)
+{
+    audition_.collectRetired();
+
+    if (audio.getNumChannels() <= 0 || audio.getNumSamples() <= 0)
+    {
+        audition_.stop();
+        return;
+    }
+
+    // Copied into a ClipData here, on the message thread, so the audio thread
+    // receives a finished buffer it never has to allocate for.
+    auto clip = std::make_unique<ClipData>();
+    clip->audio.makeCopyOf(audio);
+    clip->sourceSampleRate = sampleRate;
+    clip->numChannels      = audio.getNumChannels();
+    clip->lengthSamples    = audio.getNumSamples();
+
+    audition_.play(std::move(clip));
+}
+
+void AudioEngine::stopAudition()
+{
+    audition_.stop();
+    audition_.collectRetired();
+}
+
 std::shared_ptr<ClipData> AudioEngine::decodeOrGetCached(const juce::File& file)
 {
     const auto path = file.getFullPathName();
@@ -603,6 +630,7 @@ void AudioEngine::pump() noexcept
     }
 
     filePlayer_.collectRetiredClips();
+    audition_.collectRetired();
 }
 
 void AudioEngine::drainCommandQueue() noexcept
@@ -665,6 +693,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     // effects, and — because renderOffline only ever calls processBlock — it
     // can never end up in an exported file.
     mixInputMonitoring(output, inputChannelData, numInputChannels, numSamples);
+
+    // An effect preview, on its own clock. Mixed in here, outside
+    // processBlock, for the same reason as the monitoring: it must never
+    // reach an exported file.
+    audition_.process(output, numSamples);
 
     // After the master bus deliberately: the click bypasses the master
     // effects and gain, stays off the meter, and can never be exported (it
@@ -962,6 +995,7 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
         rebuildTrackEffectChain(i);
 
     filePlayer_.prepare(sampleRate, blockSize);
+    audition_.prepare(sampleRate);
     masterFilter_.prepare(sampleRate, blockSize);
     masterDelay_.prepare(sampleRate, blockSize);
     masterReverb_.prepare(sampleRate, blockSize);

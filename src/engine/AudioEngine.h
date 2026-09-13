@@ -14,6 +14,7 @@
 
 #include "engine/AudioClipSlot.h"
 #include "engine/AudioFilePlayerNode.h"
+#include "engine/AuditionPlayer.h"
 #include "engine/AudioRecorder.h"
 #include "engine/MidiRecorder.h"
 #include "engine/ClipSlot.h"
@@ -74,6 +75,14 @@ public:
     /** Decode an audio file into RAM and hand it to the global preview player
         (used by the File > Import Audio quick-preview). Message thread. */
     bool loadAudioFile(const juce::File& file);
+
+    /** Plays @p audio (recorded at @p sampleRate) once from its start, on its
+        own clock rather than the song's, replacing any audition already
+        playing. For previewing effects on a selection; never exported — see
+        AuditionPlayer. Message thread. */
+    void startAudition(const juce::AudioBuffer<float>& audio, double sampleRate);
+    void stopAudition();
+    bool isAuditioning() const noexcept { return audition_.isPlaying(); }
 
     /** Reads just @p file's header to get its duration — cheap (no sample
         decode), unlike loadAudioFile/setTrackAudioClips. Returns 0.0 if the
@@ -532,6 +541,7 @@ private:
     std::atomic<int>                        armedTrack_ { 0 };
 
     AudioFilePlayerNode filePlayer_;
+    AuditionPlayer      audition_;
     FilterEffect        masterFilter_;
     DelayEffect         masterDelay_;
     ReverbEffect        masterReverb_;
