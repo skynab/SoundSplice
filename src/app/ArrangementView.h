@@ -12,6 +12,7 @@
 #include "ClipPreview.h"
 #include "Icons.h"
 #include "ClipWindow.h"
+#include "SnapTargets.h"
 #include "TimeFormat.h"
 #include "model/Markers.h"
 #include "WaveformCache.h"
@@ -170,6 +171,14 @@ public:
         inverts it for a single drag — see mouseDrag. */
     void setSnapToGrid(bool shouldSnap) { snapToGrid_ = shouldSnap; }
     bool snapsToGrid() const            { return snapToGrid_; }
+
+    /** Whether dragged clip edges are pulled onto nearby markers and the
+        playhead, and onto other clips' edges. These win over the grid when
+        one is close enough; Alt turns all snapping off for a single drag. */
+    void setSnapToMarkers(bool shouldSnap)   { snapToMarkers_ = shouldSnap; }
+    bool snapsToMarkers() const              { return snapToMarkers_; }
+    void setSnapToClipEdges(bool shouldSnap) { snapToClipEdges_ = shouldSnap; }
+    bool snapsToClipEdges() const            { return snapToClipEdges_; }
 
     /** How the ruler and grid count time (bars and beats, or a clock, sample
         or timecode grid), which is also what clips snap to. */
@@ -895,7 +904,11 @@ private:
         // once"; with snapping off it's the way back to the grid without
         // going to the menu. One modifier that always means "the other one"
         // is easier to remember than one that only works in one direction.
-        const bool snap = snapToGrid_ != e.mods.isAltDown();
+        const bool   invert    = e.mods.isAltDown();
+        const bool   gridOn    = snapToGrid_ != invert;
+        const auto   magnets   = invert ? std::vector<double> {} : magnetsExcluding(dragTrackIndex_, dragClipIndex_);
+        const double tolerance = kSnapMagnetPixels / std::max(1.0e-3, (double) geometry_.pixelsPerBeat());
+        const double gridUnit  = snapUnitBeats();
 
         if (fadeDrag_ != 0)
         {
@@ -928,21 +941,23 @@ private:
                 && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
             {
                 const auto& clip    = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
-                const auto  trimmed = trimClipStart(clip, maybeSnap(currentBeat, snap, 0.0), song_.bpm,
-                                                    kMinClipBeats);
+                const auto  start   = std::max(0.0, app::snapPosition(currentBeat, magnets, tolerance, gridOn, gridUnit));
+                const auto  trimmed = trimClipStart(clip, start, song_.bpm, kMinClipBeats);
                 dragPreviewStart_  = trimmed.startBeats;
                 dragPreviewLength_ = trimmed.lengthBeats;
             }
         }
         else if (resizing_)
         {
-            dragPreviewLength_ = std::max(kMinClipBeats,
-                                          maybeSnap(currentBeat - dragPreviewStart_, snap, kMinClipBeats));
+            // The end is what's being placed, so the end is what snaps.
+            const double end   = app::snapPosition(currentBeat, magnets, tolerance, gridOn, gridUnit);
+            dragPreviewLength_ = std::max(kMinClipBeats, end - dragPreviewStart_);
         }
         else
         {
-            dragPreviewStart_ = std::max(0.0, maybeSnap(dragOriginalStart_ + (currentBeat - dragGrabBeat_),
-                                                        snap, 0.0));
+            dragPreviewStart_ = std::max(0.0, app::snapSpanStart(dragOriginalStart_ + (currentBeat - dragGrabBeat_),
+                                                                 dragOriginalLength_, magnets, tolerance,
+                                                                 gridOn, gridUnit));
 
             // Follows the mouse into a different lane only if that track can
             // actually take this clip (see typesAreCompatibleForClipMove) —
@@ -1440,13 +1455,45 @@ private:
     // room. Labels need app::minLabelSpacing, which depends on the format.
     static constexpr float  kMinSnapSpacing       = 12.0f;
 
-    /** Rounds to the grid (see snapUnitBeats) when snapping is on, with a
-        floor so a snapped value can't collapse below its minimum. */
-    double maybeSnap(double beats, bool snap, double minimum) const
+    /** How close, on screen, a dragged edge has to come to a marker, the
+        playhead or another clip's edge to be pulled onto it. */
+    static constexpr float kSnapMagnetPixels = 8.0f;
+
+    /** The positions a dragged edge can snap to (see app::snapPosition), in
+        beats: marker starts and ends and the playhead, and the edges of every
+        clip except the one being dragged, as the snap settings allow. */
+    std::vector<double> magnetsExcluding(int trackIndex, int clipIndex) const
     {
-        const double unit    = snapUnitBeats();
-        const double snapped = snap && unit > 0.0 ? std::round(beats / unit) * unit : beats;
-        return std::max(minimum, snapped);
+        std::vector<double> magnets;
+
+        if (snapToMarkers_)
+        {
+            for (const auto& marker : song_.markers)
+            {
+                magnets.push_back(marker.startBeats);
+                if (marker.lengthBeats > 0.0)
+                    magnets.push_back(marker.startBeats + marker.lengthBeats);
+            }
+            magnets.push_back(playheadBeats_);
+        }
+
+        if (snapToClipEdges_)
+        {
+            for (int t = 0; t < (int) song_.tracks.size(); ++t)
+            {
+                const auto& clips = song_.tracks[(size_t) t].clips;
+                for (int c = 0; c < (int) clips.size(); ++c)
+                {
+                    if (t == trackIndex && c == clipIndex)
+                        continue;
+
+                    magnets.push_back(clips[(size_t) c].startBeats);
+                    magnets.push_back(clips[(size_t) c].startBeats + clips[(size_t) c].lengthBeats);
+                }
+            }
+        }
+
+        return magnets;
     }
 
     bool isOnClipRightEdge(const model::Clip& clip, float x) const
@@ -1494,6 +1541,8 @@ private:
     int selectedClipForEdit_  = -1;
 
     bool   snapToGrid_      = true;
+    bool   snapToMarkers_   = true;
+    bool   snapToClipEdges_ = true;
     app::TimeDisplay timeDisplay_;
     bool   fileDragActive_  = false;
     double dropPreviewBeat_ = 0.0;

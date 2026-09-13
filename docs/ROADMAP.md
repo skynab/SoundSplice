@@ -79,7 +79,9 @@ all three.
   (any time, playing or not) or from the audio selection ✅, rename and delete ✅, jump between ✅,
   export and import as Audacity label text ✅ (Markers menu; `src/model/Markers.h`); snap to them ⬜,
   select between them ⬜, drag to move ⬜
-- ⬜ **Snap options**: grid, labels, clip edges, and zero crossings (surfacing `nearestZeroCrossing`)
+- 🟡 **Snap options**: grid ✅, markers and the playhead ✅, clip edges ✅ (View menu; magnets win over the
+  grid within a few pixels, and a moved clip snaps by whichever end is nearer; `src/app/SnapTargets.h`),
+  and zero crossings ⬜ (surfacing `nearestZeroCrossing`)
 - ⬜ Edits on the arrangement itself, not just in the editor pane: split at the playhead, **join
   clips**, **detach at silences**, ripple delete, **duplicate selection**, and **paste as new clip**
 - 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)

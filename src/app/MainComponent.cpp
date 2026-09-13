@@ -129,6 +129,8 @@ MainComponent::MainComponent()
     // down to, rather than resizing the region from under them.
     followSystemOutput_ = settings_.getValue("followSystemOutput", "1") != "0";
     arrangementView_.setSnapToGrid(settings_.getValue("snapClipsToGrid", "1") != "0");
+    arrangementView_.setSnapToMarkers(settings_.getValue("snapToMarkers", "1") != "0");
+    arrangementView_.setSnapToClipEdges(settings_.getValue("snapToClipEdges", "1") != "0");
     {
         // Anything unrecognised (a hand-edited file, a format from a later
         // build) falls back to bars and beats and 30 fps.

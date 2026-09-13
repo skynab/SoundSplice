@@ -116,6 +116,8 @@ enum Id : int
     zoomIn,
     zoomOut,
     snapToGrid,
+    snapToMarkers,
+    snapToClipEdges,
     resetLayout,
 };
 
@@ -203,6 +205,8 @@ inline const std::vector<Definition>& all()
         { zoomIn,           "Zoom In",              "View", "Zoom the timeline in.", { keys::zoomIn } },
         { zoomOut,          "Zoom Out",             "View", "Zoom the timeline out.", { keys::zoomOut } },
         { snapToGrid,       "Snap Clips to Grid   (hold Alt to invert)", "View", "Snap dragged clips to whole beats.", {} },
+        { snapToMarkers,    "Snap to Markers and Playhead", "View", "Pull dragged clip edges onto nearby markers and the playhead.", {} },
+        { snapToClipEdges,  "Snap to Clip Edges", "View", "Pull dragged clip edges onto the edges of nearby clips.", {} },
         { resetLayout,      "Reset Layout",         "View", "Put the panes back where this layout starts them.", {} },
     };
 

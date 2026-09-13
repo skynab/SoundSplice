@@ -56,7 +56,8 @@ add_executable(soundsplice_tests
   app/DragCommitTests.cpp
   app/ClipWindowTests.cpp
   app/AutosaveTests.cpp
-  app/TimeFormatTests.cpp)
+  app/TimeFormatTests.cpp
+  app/SnapTargetsTests.cpp)
 
 target_link_libraries(soundsplice_tests
   PRIVATE

@@ -161,6 +161,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(arrangementView_.snapsToGrid());
             break;
 
+        case commands::snapToMarkers:
+            info.setTicked(arrangementView_.snapsToMarkers());
+            break;
+
+        case commands::snapToClipEdges:
+            info.setTicked(arrangementView_.snapsToClipEdges());
+            break;
+
         default:
             break;
     }
@@ -310,6 +318,26 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
+        case commands::snapToMarkers:
+        {
+            const bool snap = ! arrangementView_.snapsToMarkers();
+            arrangementView_.setSnapToMarkers(snap);
+            settings_.setValue("snapToMarkers", snap ? "1" : "0");
+            settings_.saveIfNeeded();
+            showStatus(snap ? "Clips snap to markers and the playhead" : "Clips no longer snap to markers");
+            break;
+        }
+
+        case commands::snapToClipEdges:
+        {
+            const bool snap = ! arrangementView_.snapsToClipEdges();
+            arrangementView_.setSnapToClipEdges(snap);
+            settings_.setValue("snapToClipEdges", snap ? "1" : "0");
+            settings_.saveIfNeeded();
+            showStatus(snap ? "Clips snap to each other's edges" : "Clips no longer snap to each other");
+            break;
+        }
+
         // Splitting is a drag gesture (drop a tab on a pane's edge), so the
         // only layout command is a way back to this layout's default.
         case commands::resetLayout:
@@ -431,6 +459,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::zoomIn);
         add(commands::zoomOut);
         add(commands::snapToGrid);
+        add(commands::snapToMarkers);
+        add(commands::snapToClipEdges);
         add(commands::resetLayout);
     }
     else if (topLevelMenuIndex == 3) // Markers
