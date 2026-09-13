@@ -49,7 +49,7 @@ add_executable(soundsplice_tests
   app/RecordSourceChoiceTests.cpp
   app/AutomationGeometryTests.cpp
   app/DragCommitTests.cpp
-  app/ClipLengthRepairTests.cpp)
+  app/ClipWindowTests.cpp)
 
 target_link_libraries(soundsplice_tests
   PRIVATE

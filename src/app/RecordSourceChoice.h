@@ -7,7 +7,7 @@ namespace soundsplice::app
     what is actually connected.
 
     JUCE-free and pulled out of MainComponent for the usual reason (see
-    TrackSelection, ClipLengthRepair, DragCommit) — but with a sharper one
+    TrackSelection, ClipWindow, DragCommit) — but with a sharper one
     here: this decision shipped wrong. Routing on the armed track's type
     *alone* meant that with the default Instrument track selected, Record chose
     MIDI and captured nothing at all on a machine that had only a microphone.

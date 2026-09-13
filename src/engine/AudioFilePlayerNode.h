@@ -144,7 +144,10 @@ public:
         const int    fileChans  = clip->numChannels;
         const int    outChans   = buffer.getNumChannels();
 
-        double position = localStart * ratio;
+        // Read position in source samples: the clip's offset into its file
+        // (AudioClipSlot::sourceOffsetSeconds) plus how far into the clip
+        // this block starts.
+        double position = (activeSlot.sourceOffsetSeconds * deviceSampleRate_ + localStart) * ratio;
 
         for (int i = 0; i < numSamples; ++i)
         {

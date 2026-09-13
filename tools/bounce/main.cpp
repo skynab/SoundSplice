@@ -469,6 +469,23 @@ int main(int argc, char** argv)
     const float rmsAudioClipB      = multiAudioClip.getRMSLevel(0, 6 * halfSec, 4 * halfSec); // 3-5s: clip B
     const bool  multiClipAudioGates = rmsAudioClipA > 0.01f && rmsAudioGap < 1.0e-5f && rmsAudioClipB > 0.01f;
 
+    // Source-offset check: the same two-second tone played from one second
+    // in, in a four-beat (two-second) window. Only the file's last second is
+    // left to play, so the window must fall silent halfway through — which it
+    // only does if playback really starts at the offset rather than at the
+    // start of the file.
+    AudioClipSlot audioClipOffset;
+    audioClipOffset.clipData            = std::make_shared<ClipData>(sineClip);
+    audioClipOffset.startBeats          = 0.0;
+    audioClipOffset.lengthBeats         = 4.0;
+    audioClipOffset.sourceOffsetSeconds = 1.0;
+
+    const auto  offsetAudioClip   = OfflineRenderer::renderAudioClips({ audioClipOffset },
+                                                                      0.0f, bpm, sampleRate, 2.0);
+    const float rmsOffsetPlaying  = offsetAudioClip.getRMSLevel(0, 0, 1 * halfSec);         // 0-0.5s
+    const float rmsOffsetFinished = offsetAudioClip.getRMSLevel(0, 3 * halfSec, 1 * halfSec); // 1.5-2s
+    const bool  sourceOffsetPlays = rmsOffsetPlaying > 0.01f && rmsOffsetFinished < 1.0e-5f;
+
     // MIDI import/export round-trip check: build a Song with three notes on
     // one track, export it to a temp .mid, re-import it into a fresh Song,
     // and confirm every note (and the tempo) survived — beat/pitch/velocity
@@ -2037,6 +2054,7 @@ int main(int argc, char** argv)
               << "  multiClipGates=" << (multiClipGates ? 1 : 0)
               << "  audioTrackWorks=" << (audioTrackWorks ? 1 : 0)
               << "  multiClipAudioGates=" << (multiClipAudioGates ? 1 : 0)
+              << "  sourceOffsetPlays=" << (sourceOffsetPlays ? 1 : 0)
               << "  midiRoundTripWorks=" << (midiRoundTripWorks ? 1 : 0)
               << "  midiRecordingWorks=" << (midiRecordingWorks ? 1 : 0)
               << "  pluginsScanned=" << pluginsScanned
@@ -2085,7 +2103,7 @@ int main(int argc, char** argv)
                  && delayChanged && filterAttenuates && reverbChanged && automationFades
                  && perTrackAutomationWorks
                  && soloMatchesArpOnly && stemsSumToMix && clipStartGates && multiClipGates
-                 && audioTrackWorks && multiClipAudioGates && midiRoundTripWorks
+                 && audioTrackWorks && multiClipAudioGates && sourceOffsetPlays && midiRoundTripWorks
                  && midiRecordingWorks
                  && cascadedStagesEnrich
                  && pluginHostWorks

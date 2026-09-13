@@ -54,6 +54,7 @@ namespace detail
         // rest-of-line field (a path may contain spaces), so nothing can
         // follow it on that line.
         out << "CLIPGAIN " << num((double) clip.gainDb) << "\n";
+        out << "CLIPSRC " << num(clip.sourceOffsetSeconds) << "\n";
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
             out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
@@ -314,6 +315,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
         if (readTagged("CLIPGAIN", rest))
             clip.gainDb = (float) std::strtod(rest.c_str(), nullptr);
+
+        if (readTagged("CLIPSRC", rest))
+            clip.sourceOffsetSeconds = std::strtod(rest.c_str(), nullptr);
 
         if (readTagged("PEDALS", rest))
         {
