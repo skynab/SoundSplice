@@ -14,6 +14,9 @@ void MainComponent::setTimeSelection(const model::TimeSelection& selection)
     timeSelection_ = selection;
     arrangementView_.setTimeSelection(selection);
 
+    // Looping plays the selection when there is one (see updateLoopRegion).
+    updateLoopRegion();
+
     if (selection.isEmpty())
         return;
 

@@ -191,7 +191,7 @@ inline const std::vector<Definition>& all()
         { backOneBar,       "Back One Bar",         "Transport", "Move the playhead back a bar.", { keys::backOneBar } },
         { forwardOneBar,    "Forward One Bar",      "Transport", "Move the playhead forward a bar.", { keys::onOneBar } },
         { record,           "Record",               "Transport", "Start or stop recording onto the selected track.", { keys::record } },
-        { loop,             "Loop",                 "Transport", "Loop playback over what's arranged.", { keys::loop } },
+        { loop,             "Loop",                 "Transport", "Loop playback over the time selection, or over what's arranged.", { keys::loop } },
 
         { addMarker,              "Add Marker",                  "Markers", "Put a marker at the playhead.", { keys::addMarker } },
         { addMarkerFromSelection, "Add Marker from Selection",   "Markers", "Mark the audio editor's selection as a range.", {} },

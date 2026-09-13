@@ -92,7 +92,8 @@ all three.
 - 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)
 - ⬜ **Envelope tool** (a volume curve drawn per clip) and **draw tool** (redraw samples when zoomed
   to sample level, to fix clicks by hand)
-- ⬜ **Scrub and seek** playback, **play-at-speed** (transport varispeed), and **loop the selection**
+- 🟡 **Scrub and seek** playback ⬜, **play-at-speed** (transport varispeed) ⬜, and **loop the selection** ✅
+  (Loop plays the time selection when there is one)
 - ⬜ Zoom: to selection, fit project, fit vertically, sample-level zoom, a vertical dB/linear scale,
   and waveform vs. **RMS overlay** display
 - ⬜ Track channel ops: **split stereo to mono**, **make stereo from two monos**, **mix and render to a

@@ -108,7 +108,7 @@ MainComponent::MainComponent()
         post(Cmd::SetLooping, loopButton.getToggleState() ? 1.0 : 0.0);
         updateLoopRegion();
     };
-    loopButton.setTooltip(withShortcut("Loop over what's arranged", keys::loop));
+    loopButton.setTooltip(withShortcut("Loop the time selection, or everything arranged", keys::loop));
     recordButton.onClick = [this] { toggleRecording(); };
     {
         // One control, two states: the disc arms, the square stops. They're

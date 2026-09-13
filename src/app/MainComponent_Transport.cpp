@@ -168,7 +168,9 @@ double MainComponent::songEndBeats() const
     return end;
 }
 
-/** The loop runs over what has actually been arranged, rounded up to a bar.
+/** The loop runs over the time selection when there is one, so the part
+    being worked on plays round and round as it does in Audacity; otherwise
+    over what has actually been arranged, rounded up to a bar.
 
     It used to be a hardcoded four bars whatever the song contained, so
     arranging anything longer than that silently looped only its opening —
@@ -181,10 +183,13 @@ void MainComponent::updateLoopRegion()
 
     uiTempoMap_.setSampleRate(sampleRate);
 
-    // Through the map, not a multiplication: the loop end is a musical
+    const bool   selected = ! timeSelection_.isEmpty();
+    const double from     = selected ? timeSelection_.startBeats : 0.0;
+    const double to       = selected ? timeSelection_.endBeats : loopEndBeats();
+
+    // Through the map, not a multiplication: a loop edge is a musical
     // position, and where it falls in samples depends on every tempo before it.
-    const auto endSamples = uiTempoMap_.samplesFromPpq(loopEndBeats());
-    post(Cmd::SetLoopRegion, 0.0, (double) endSamples);
+    post(Cmd::SetLoopRegion, (double) uiTempoMap_.samplesFromPpq(from), (double) uiTempoMap_.samplesFromPpq(to));
 }
 
 /** Where the arrangement ends, rounded up to a whole bar — an empty song
