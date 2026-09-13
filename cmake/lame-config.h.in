@@ -1,0 +1,54 @@
+/*
+    Hand-written replacement for the config.h that LAME's autoconf normally
+    generates. See cmake/lame.cmake for why this exists.
+
+    Only the macros libmp3lame's *encoder* actually reads are here. The full
+    autoconf config.h defines well over a hundred, but almost all of them are
+    for the command-line frontend, the mpglib decoder, or platforms this build
+    doesn't target - and a macro nothing reads is worse than absent, because it
+    reads like a decision that was made.
+
+    Deliberately NOT defined, each for a reason:
+
+      HAVE_MPGLIB        the decoder. Encoder only - JUCE decodes MP3 already
+                         (CoreAudioFormat on macOS, MediaFoundation on Windows),
+                         so the decoder would be dead weight.
+      HAVE_NASM          the hand-written x86 assembly. arm64 is the primary
+                         target here and the C paths are what both architectures
+                         would use anyway.
+      HAVE_XMMINTRIN_H   SSE intrinsics (libmp3lame/vector/). x86-only, and
+                         gating the build on the host architecture for a
+                         codec that runs once per export is not worth it.
+      TAKEHIRO_IEEE754_HACK
+                         a bit-punning shortcut that aliases float and int32.
+                         It is undefined behaviour under a modern compiler's
+                         strict aliasing and it buys a quantisation loop that
+                         is nowhere near the bottleneck of an offline export.
+*/
+
+#ifndef LOOPER_LAME_CONFIG_H
+#define LOOPER_LAME_CONFIG_H
+
+#define STDC_HEADERS 1
+
+#define HAVE_ERRNO_H    1
+#define HAVE_FCNTL_H    1
+#define HAVE_INTTYPES_H 1
+#define HAVE_STDINT_H   1
+#define HAVE_LIMITS_H   1
+#define HAVE_STRING_H   1
+
+#define HAVE_MEMCPY 1
+#define HAVE_STRCHR 1
+
+/* LAME names its float types rather than using float/double directly, so that
+   a platform with unusual float sizes can redirect them. Everything this ships
+   on is IEEE 754. */
+typedef float       ieee754_float32_t;
+typedef double      ieee754_float64_t;
+typedef long double ieee854_float80_t;
+
+#define PACKAGE "@LOOPER_LAME_PACKAGE@"
+#define VERSION "@LOOPER_LAME_VERSION@"
+
+#endif
