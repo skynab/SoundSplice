@@ -12,6 +12,7 @@
 #include "ClipPreview.h"
 #include "Icons.h"
 #include "ClipWindow.h"
+#include "TimeFormat.h"
 #include "WaveformCache.h"
 #include "TrackColours.h"
 #include "TimelineGeometry.h"
@@ -164,6 +165,11 @@ public:
     void setSnapToGrid(bool shouldSnap) { snapToGrid_ = shouldSnap; }
     bool snapsToGrid() const            { return snapToGrid_; }
 
+    /** Whether the ruler and grid count bars and beats or minutes and
+        seconds, which is also what clips snap to. */
+    void setTimeFormat(app::TimeFormat format) { timeFormat_ = format; repaint(); }
+    app::TimeFormat timeFormat() const          { return timeFormat_; }
+
     void setSelectedClip(int trackIndex, int clipIndex)
     {
         if (selectedTrackForEdit_ != trackIndex || selectedClipForEdit_ != clipIndex)
@@ -189,34 +195,41 @@ public:
         g.setColour(juce::Colours::white.withAlpha(0.06f));
         g.fillRect(0.0f, 0.0f, width, geometry_.rulerHeight);
         g.setFont(juce::FontOptions(12.0f));
-        // Beat lines inside each bar, so a bar reads as its beats rather than
-        // as one undivided box — in 4/4 that is four subdivisions per bar,
-        // and it follows the time signature rather than assuming four.
-        // Dropped when they'd be closer together than this, since a grid too
-        // fine to resolve is just a lighter background.
-        const float beatSpacing = ppb;
-        if (beatSpacing >= kMinGridSpacing)
+        if (timeFormat_ == app::TimeFormat::MinutesSeconds)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.07f));
-            const int totalBeatLines = (int) std::ceil(totalBeats());
-            for (int beat = 0; beat <= totalBeatLines; ++beat)
-            {
-                if (std::fmod((double) beat, qpb) < 1.0e-9)
-                    continue; // the bar line itself is drawn heavier below
-
-                g.fillRect(geometry_.xForBeat((double) beat), geometry_.rulerHeight,
-                           1.0f, height - geometry_.rulerHeight);
-            }
+            paintSecondsGrid(g, height);
         }
-
-        for (int bar = 0; bar <= numBars; ++bar)
+        else
         {
-            const float x = geometry_.xForBeat((double) bar * qpb);
-            g.setColour(juce::Colours::white.withAlpha(0.16f));
-            g.fillRect(x, 0.0f, 1.0f, height);
-            g.setColour(juce::Colours::white.withAlpha(0.5f));
-            g.drawText(juce::String(bar + 1), (int) x + 4, 2, 40, (int) geometry_.rulerHeight - 4,
-                       juce::Justification::centredLeft);
+            // Beat lines inside each bar, so a bar reads as its beats rather
+            // than as one undivided box — in 4/4 that is four subdivisions per
+            // bar, and it follows the time signature rather than assuming
+            // four. Dropped when they'd be closer together than this, since a
+            // grid too fine to resolve is just a lighter background.
+            const float beatSpacing = ppb;
+            if (beatSpacing >= kMinGridSpacing)
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.07f));
+                const int totalBeatLines = (int) std::ceil(totalBeats());
+                for (int beat = 0; beat <= totalBeatLines; ++beat)
+                {
+                    if (std::fmod((double) beat, qpb) < 1.0e-9)
+                        continue; // the bar line itself is drawn heavier below
+
+                    g.fillRect(geometry_.xForBeat((double) beat), geometry_.rulerHeight,
+                               1.0f, height - geometry_.rulerHeight);
+                }
+            }
+
+            for (int bar = 0; bar <= numBars; ++bar)
+            {
+                const float x = geometry_.xForBeat((double) bar * qpb);
+                g.setColour(juce::Colours::white.withAlpha(0.16f));
+                g.fillRect(x, 0.0f, 1.0f, height);
+                g.setColour(juce::Colours::white.withAlpha(0.5f));
+                g.drawText(juce::String(bar + 1), (int) x + 4, 2, 40, (int) geometry_.rulerHeight - 4,
+                           juce::Justification::centredLeft);
+            }
         }
 
 
@@ -1186,6 +1199,60 @@ private:
         return false;
     }
 
+    /** The Minutes:Seconds grid's labelled (major) and unlabelled (minor)
+        steps in seconds, chosen from the zoom and tempo so labels never
+        collide and lines never smear together. The minor step divides the
+        major one, and is what clips snap to. */
+    std::pair<double, double> secondsGridSteps() const
+    {
+        const double secondsPerBeat  = 60.0 / juce::jmax(1.0, song_.bpm);
+        const double pixelsPerSecond = (double) geometry_.pixelsPerBeat() / secondsPerBeat;
+        const double major           = app::secondsGridStep(pixelsPerSecond, kMinRulerLabelSpacing);
+        return { major, app::secondsMinorStep(major, pixelsPerSecond, kMinSnapSpacing) };
+    }
+
+    /** The ruler and grid in minutes and seconds: a labelled line every
+        major step and a light one every minor step. */
+    void paintSecondsGrid(juce::Graphics& g, float height)
+    {
+        const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
+        const auto [major, minor]   = secondsGridSteps();
+        const double totalSeconds   = totalBeats() * secondsPerBeat;
+
+        g.setColour(juce::Colours::white.withAlpha(0.07f));
+        const int minorLines = (int) std::ceil(totalSeconds / minor);
+        for (int i = 0; i <= minorLines; ++i)
+            g.fillRect(geometry_.xForBeat((double) i * minor / secondsPerBeat), geometry_.rulerHeight,
+                       1.0f, height - geometry_.rulerHeight);
+
+        const int decimals   = app::clockDecimalsForStep(major);
+        const int majorLines = (int) std::ceil(totalSeconds / major);
+        for (int i = 0; i <= majorLines; ++i)
+        {
+            const double seconds = (double) i * major;
+            const float  x       = geometry_.xForBeat(seconds / secondsPerBeat);
+
+            g.setColour(juce::Colours::white.withAlpha(0.16f));
+            g.fillRect(x, 0.0f, 1.0f, height);
+            g.setColour(juce::Colours::white.withAlpha(0.5f));
+            g.drawText(juce::String(app::formatClockTime(seconds, decimals)), (int) x + 4, 2,
+                       (int) kMinRulerLabelSpacing - 6, (int) geometry_.rulerHeight - 4,
+                       juce::Justification::centredLeft);
+        }
+    }
+
+    /** What a dragged clip edge or position snaps to, in beats: a whole beat
+        when counting bars and beats, the minor grid step when counting
+        minutes and seconds. */
+    double snapUnitBeats() const
+    {
+        if (timeFormat_ != app::TimeFormat::MinutesSeconds)
+            return 1.0;
+
+        const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
+        return secondsGridSteps().second / secondsPerBeat;
+    }
+
     double quartersPerBar() const
     {
         return juce::jmax(1, song_.timeSigNumerator) * 4.0 / (double) juce::jmax(1, song_.timeSigDenominator);
@@ -1266,11 +1333,17 @@ private:
     // and the grid stops being information.
     static constexpr float  kMinGridSpacing   = 6.0f;
 
-    /** Rounds to whole beats when snapping is on, with a floor so a snapped
-        value can't collapse below its minimum. */
-    static double maybeSnap(double beats, bool snap, double minimum)
+    // The Minutes:Seconds grid: labels need this much room, and unlabelled
+    // lines (and snap points) this much.
+    static constexpr float  kMinRulerLabelSpacing = 64.0f;
+    static constexpr float  kMinSnapSpacing       = 12.0f;
+
+    /** Rounds to the grid (see snapUnitBeats) when snapping is on, with a
+        floor so a snapped value can't collapse below its minimum. */
+    double maybeSnap(double beats, bool snap, double minimum) const
     {
-        const double snapped = snap ? std::round(beats) : beats;
+        const double unit    = snapUnitBeats();
+        const double snapped = snap && unit > 0.0 ? std::round(beats / unit) * unit : beats;
         return std::max(minimum, snapped);
     }
 
@@ -1319,6 +1392,7 @@ private:
     int selectedClipForEdit_  = -1;
 
     bool   snapToGrid_      = true;
+    app::TimeFormat timeFormat_ = app::TimeFormat::BarsBeats;
     bool   fileDragActive_  = false;
     double dropPreviewBeat_ = 0.0;
 };

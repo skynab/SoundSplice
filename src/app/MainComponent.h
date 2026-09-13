@@ -40,6 +40,7 @@
 #include "PluginEditorWindow.h"
 #include "ApplyEffectsDialog.h"
 #include "Autosave.h"
+#include "TimeFormat.h"
 #include "ClipWindow.h"
 #include "DragCommit.h"
 #include "TrackSelection.h"
@@ -461,6 +462,10 @@ private:
     unsigned long long autosavedStateId_ = 0;
     double             lastAutosaveMs_   = 0.0;
     bool               recoveryPending_  = false;
+
+    // Whether time is counted in bars and beats or minutes and seconds: an
+    // app preference, not project data (see the View menu).
+    app::TimeFormat    timeFormat_ = app::TimeFormat::BarsBeats;
 
     // Where a fader was grabbed, so the whole drag can be committed as one
     // undo step when it is released rather than one step per pixel.

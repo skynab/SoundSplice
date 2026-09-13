@@ -37,6 +37,7 @@ add_executable(soundsplice_tests
   model/SerializationTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp
+  model/TimebaseTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp
@@ -53,7 +54,8 @@ add_executable(soundsplice_tests
   app/AutomationGeometryTests.cpp
   app/DragCommitTests.cpp
   app/ClipWindowTests.cpp
-  app/AutosaveTests.cpp)
+  app/AutosaveTests.cpp
+  app/TimeFormatTests.cpp)
 
 target_link_libraries(soundsplice_tests
   PRIVATE

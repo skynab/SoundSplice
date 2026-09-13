@@ -121,6 +121,18 @@ public:
         return newIndex;
     }
 
+    /** Multiplies every point's beat by @p factor, which must be positive so
+        the lane stays sorted. How a lane on an audio track follows its audio
+        to a new tempo — see model::retimeAudioForTempoChange. */
+    void scaleBeats(double factor)
+    {
+        if (! (factor > 0.0))
+            return;
+
+        for (auto& point : points_)
+            point.beat *= factor;
+    }
+
     bool operator==(const AutomationLane&) const = default;
 
 private:

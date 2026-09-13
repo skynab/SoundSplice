@@ -1,5 +1,7 @@
 #include "MainComponentInternal.h"
 
+#include "model/Timebase.h"
+
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // The transport: position, tempo, time signature, looping and seeking.
 
@@ -64,14 +66,27 @@ double MainComponent::playheadBeat() const
     return juce::jmax(0.0, uiTempoMap_.ppqFromSamples(engine_.playheadSamples()));
 }
 
-/** Sets the project tempo as one undoable edit. */
+/** Sets the project tempo as one undoable edit. Audio tracks keep their clips
+    and automation at the same time in seconds, while instrument tracks stay
+    on their beats — see model::retimeAudioForTempoChange. */
 void MainComponent::setProjectTempo(double bpm)
 {
     if (std::abs(history_.current().bpm - bpm) < 1.0e-9)
         return;
 
-    history_.edit("Tempo", [bpm](model::Song& s) { s.bpm = bpm; });
+    history_.edit("Tempo", [bpm](model::Song& s)
+    {
+        model::retimeAudioForTempoChange(s, s.bpm, bpm);
+        s.bpm = bpm;
+    });
+
     pushTempoMap();
+
+    // Audio clips' beat positions just changed, so the engine's windows and
+    // the panes showing them have to follow.
+    syncEngineTracks();
+    refreshAudioEditorForSelected();
+    refreshAutomationPaneForSelected();
 }
 
 /** Hands the project tempo to the engine and the UI's own map, and refreshes

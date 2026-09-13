@@ -103,6 +103,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(trackCount() > 1);
             break;
 
+        case commands::timeFormatBarsBeats:
+            info.setTicked(timeFormat_ == app::TimeFormat::BarsBeats);
+            break;
+
+        case commands::timeFormatMinutesSeconds:
+            info.setTicked(timeFormat_ == app::TimeFormat::MinutesSeconds);
+            break;
+
         case commands::zoomIn:
             info.setActive(arrangementView_.canZoomIn());
             break;
@@ -213,6 +221,18 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::forwardOneBar: nextFrameButton.triggerClick(); break;
         case commands::record:        recordButton.triggerClick(); break;
         case commands::loop:          loopButton.triggerClick(); break;
+
+        // A preference, not an edit: it changes what time is counted in, not
+        // the song, so it's saved with the app settings and isn't undoable.
+        case commands::timeFormatBarsBeats:
+        case commands::timeFormatMinutesSeconds:
+            timeFormat_ = invocation.commandID == commands::timeFormatMinutesSeconds
+                              ? app::TimeFormat::MinutesSeconds
+                              : app::TimeFormat::BarsBeats;
+            arrangementView_.setTimeFormat(timeFormat_);
+            settings_.setValue("timeFormat", (int) timeFormat_);
+            settings_.saveIfNeeded();
+            break;
 
         case commands::zoomIn:  setTimelineZoom(arrangementView_.zoom() * 1.25f); break;
         case commands::zoomOut: setTimelineZoom(arrangementView_.zoom() / 1.25f); break;
@@ -336,6 +356,9 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         }
         menu.addSubMenu("Layout", layoutMenu);
 
+        add(commands::timeFormatBarsBeats);
+        add(commands::timeFormatMinutesSeconds);
+        menu.addSeparator();
         add(commands::zoomIn);
         add(commands::zoomOut);
         add(commands::snapToGrid);

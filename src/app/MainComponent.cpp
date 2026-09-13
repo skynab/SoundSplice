@@ -129,6 +129,10 @@ MainComponent::MainComponent()
     // down to, rather than resizing the region from under them.
     followSystemOutput_ = settings_.getValue("followSystemOutput", "1") != "0";
     arrangementView_.setSnapToGrid(settings_.getValue("snapClipsToGrid", "1") != "0");
+    timeFormat_ = settings_.getValue("timeFormat", "0").getIntValue() == (int) app::TimeFormat::MinutesSeconds
+                      ? app::TimeFormat::MinutesSeconds
+                      : app::TimeFormat::BarsBeats;
+    arrangementView_.setTimeFormat(timeFormat_);
     transportCollapsed_ = settings_.getValue("transportCollapsed", "0") != "0";
     collapseTransportButton_.onClick = [this]
     {
@@ -1112,8 +1116,14 @@ void MainComponent::timerCallback()
     // menu), so the glyph follows the engine rather than the last click.
     playPauseButton.setToggleState(engine_.isPlaying(), juce::dontSendNotification);
 
-    positionLabel.setText(juce::String::formatted("Bar %d  Beat %d   |   %.2f s   |   %s",
-                                                  bb.bar, bb.beat, seconds, transportState),
+    // The format chosen in the View menu leads, and the other follows: an
+    // editor wants the time and a musician wants the bar, and both fit.
+    const juce::String clock   (app::formatClockTime(seconds, 3));
+    const juce::String barBeat = juce::String::formatted("Bar %d  Beat %d", bb.bar, bb.beat);
+    const bool         byClock = timeFormat_ == app::TimeFormat::MinutesSeconds;
+
+    positionLabel.setText((byClock ? clock : barBeat) + "   |   " + (byClock ? barBeat : clock)
+                              + "   |   " + transportState,
                           juce::dontSendNotification);
 
     // The slider follows the document (undo, load), skipped while it is being

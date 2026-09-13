@@ -97,6 +97,8 @@ enum Id : int
     loop,
 
     // View
+    timeFormatBarsBeats,
+    timeFormatMinutesSeconds,
     zoomIn,
     zoomOut,
     snapToGrid,
@@ -169,6 +171,8 @@ inline const std::vector<Definition>& all()
         { record,           "Record",               "Transport", "Start or stop recording onto the selected track.", { keys::record } },
         { loop,             "Loop",                 "Transport", "Loop playback over what's arranged.", { keys::loop } },
 
+        { timeFormatBarsBeats,      "Bars and Beats",      "View", "Count the ruler, grid and position in bars and beats.", {} },
+        { timeFormatMinutesSeconds, "Minutes and Seconds", "View", "Count the ruler, grid and position in minutes and seconds.", {} },
         { zoomIn,           "Zoom In",              "View", "Zoom the timeline in.", { keys::zoomIn } },
         { zoomOut,          "Zoom Out",             "View", "Zoom the timeline out.", { keys::zoomOut } },
         { snapToGrid,       "Snap Clips to Grid   (hold Alt to invert)", "View", "Snap dragged clips to whole beats.", {} },
