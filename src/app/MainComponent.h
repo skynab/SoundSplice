@@ -94,7 +94,7 @@ public:
 
     /** Runs @p onProceed once it's safe to discard the current document,
         offering to save first if there's anything to lose. Public because
-        quitting has to ask too — see LooperAudioApplication::systemRequestedQuit
+        quitting has to ask too — see SoundSpliceApplication::systemRequestedQuit
         — and every destructive path must ask the same question the same way. */
     void confirmDiscardChanges(std::function<void()> onProceed);
 

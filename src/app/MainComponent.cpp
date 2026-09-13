@@ -143,9 +143,9 @@ namespace
     juce::PropertiesFile::Options makeSettingsOptions()
     {
         juce::PropertiesFile::Options opts;
-        opts.applicationName     = "Looper-Audio";
+        opts.applicationName     = "SoundSplice";
         opts.filenameSuffix      = ".settings";
-        opts.folderName          = "Looper-Audio";
+        opts.folderName          = "SoundSplice";
         opts.osxLibrarySubFolder = "Application Support";
         return opts;
     }
@@ -4737,7 +4737,7 @@ juce::File MainComponent::editsDirectory() const
     // with takes makes it impossible to tell which is which when clearing
     // out space later.
     auto dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                  .getChildFile("Looper-Audio Edits");
+                  .getChildFile("SoundSplice Edits");
     dir.createDirectory();
     return dir;
 }
@@ -6279,7 +6279,7 @@ bool MainComponent::ensureMicrophoneAccess()
     juce::NativeMessageBox::showOkCancelBox(
         juce::MessageBoxIconType::WarningIcon,
         "Microphone access is off",
-        "Looper-Audio needs microphone access to record audio.\n\n"
+        "SoundSplice needs microphone access to record audio.\n\n"
         "macOS will not ask again, so it has to be switched on in System Settings > "
         "Privacy & Security > Microphone. Recording will work as soon as it is on - "
         "no need to restart.",
@@ -6675,7 +6675,7 @@ bool MainComponent::isSilentAudioFile(const juce::File& file)
 juce::File MainComponent::recordingsDirectory() const
 {
     auto dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                  .getChildFile("Looper-Audio Recordings");
+                  .getChildFile("SoundSplice Recordings");
     dir.createDirectory();
     return dir;
 }
@@ -6686,7 +6686,7 @@ juce::File MainComponent::recordingsDirectory() const
 juce::File MainComponent::presetsDirectory() const
 {
     auto dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                  .getChildFile("Looper-Audio Presets");
+                  .getChildFile("SoundSplice Presets");
     dir.createDirectory();
     return dir;
 }
@@ -6981,7 +6981,7 @@ void MainComponent::seedFactoryPresets()
 juce::File MainComponent::factoryDrumKitDirectory() const
 {
     auto dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                  .getChildFile("Looper-Audio Factory Kit");
+                  .getChildFile("SoundSplice Factory Kit");
     dir.createDirectory();
     return dir;
 }
@@ -7234,7 +7234,7 @@ void MainComponent::updateWindowTitle()
                                   ? juce::String("Untitled")
                                   : projectFile_.getFileNameWithoutExtension();
 
-    const juce::String title = name + (hasUnsavedChanges() ? " *" : "") + " - Looper-Audio";
+    const juce::String title = name + (hasUnsavedChanges() ? " *" : "") + " - SoundSplice";
     if (title == windowTitle_)
         return;
 

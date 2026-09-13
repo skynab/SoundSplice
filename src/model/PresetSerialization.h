@@ -168,7 +168,7 @@ inline bool deserializePreset(const std::string& text, SynthPreset& result, std:
     int version = 0;
     header >> tag >> version;
     if (tag != "LOOPERPRESET")
-        return fail("not a Looper-Audio preset");
+        return fail("not a SoundSplice preset");
     if (version > kPresetFormatVersion)
         return fail("preset was saved by a newer version of the app");
 

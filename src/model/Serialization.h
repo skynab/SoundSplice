@@ -515,7 +515,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
     if (version <= 0)
         return fail("unrecognised project format version");
     if (version > kFormatVersion)
-        return fail("saved by a newer version of Looper-Audio");
+        return fail("saved by a newer version of SoundSplice");
 
     Song song;
 

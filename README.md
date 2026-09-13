@@ -1,7 +1,12 @@
-# Looper-Audio
+# SoundSplice
 
-A cross-platform **loop-centric, AI-assisted DAW** written in C++ — for arranging and
-generating music, in the spirit of FL Studio, Ableton Live, and Reason.
+A cross-platform **audio editor** written in C++, in the spirit of Audacity.
+
+> **Fork notice.** SoundSplice is forked from Looper-Audio, a loop-centric DAW, and is being
+> renamed and stripped down to a focused waveform editor. The rename has started with the
+> user-facing name only: the `looper::` namespace, `looper_*` build targets, `LOOPER_*` CMake
+> options and the `.looper` / `.looperpreset` file formats still carry the old name. The status
+> notes below describe the inherited Looper-Audio feature set, much of which is slated for removal.
 
 > **Status: Phase 4 (mixer + effects) + app shell.** On top of Phases 1–3 (multi-track sequenced
 > synth + audio playback, transport/loop, a project document with undo/redo and `.looper` save/load,
@@ -437,12 +442,12 @@ cmake -S . -B build
 # Build everything
 cmake --build build --parallel
 
-# Run the app — JUCE puts the GUI app under LooperAudio_artefacts/, not build/bin/
+# Run the app — JUCE puts the GUI app under SoundSplice_artefacts/, not build/bin/
 # (build/bin/ only holds console tools like looper_tests and looper_bounce).
-open build/src/app/LooperAudio_artefacts/Release/Looper-Audio.app                     # macOS
-# ./build/src/app/LooperAudio_artefacts/Release/Looper-Audio.app/Contents/MacOS/Looper-Audio  # macOS, attached to terminal
-# ./build/src/app/LooperAudio_artefacts/Release/Looper-Audio                          # Linux
-# .\build\src\app\LooperAudio_artefacts\Release\Looper-Audio.exe                      # Windows
+open build/src/app/SoundSplice_artefacts/Release/SoundSplice.app                     # macOS
+# ./build/src/app/SoundSplice_artefacts/Release/SoundSplice.app/Contents/MacOS/SoundSplice  # macOS, attached to terminal
+# ./build/src/app/SoundSplice_artefacts/Release/SoundSplice                          # Linux
+# .\build\src\app\SoundSplice_artefacts\Release\SoundSplice.exe                      # Windows
 ```
 
 (Replace `Release` with your build type if you configured a different one.)

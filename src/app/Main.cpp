@@ -5,18 +5,18 @@
 namespace looper
 {
 /** Application entry point and top-level window for Phase 0. */
-class LooperAudioApplication final : public juce::JUCEApplication
+class SoundSpliceApplication final : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName() override    { return "Looper-Audio"; }
+    const juce::String getApplicationName() override    { return "SoundSplice"; }
     const juce::String getApplicationVersion() override { return "0.0.1"; }
     bool moreThanOneInstanceAllowed() override          { return true; }
 
     void initialise(const juce::String&) override
     {
         logger.reset(juce::FileLogger::createDefaultAppLogger(
-            "Looper-Audio", "Looper-Audio.log",
-            "Looper-Audio " + getApplicationVersion() + " starting up"));
+            "SoundSplice", "SoundSplice.log",
+            "SoundSplice " + getApplicationVersion() + " starting up"));
         juce::Logger::setCurrentLogger(logger.get());
         juce::Logger::writeToLog("System: " + juce::SystemStats::getOperatingSystemName()
             + " (" + juce::SystemStats::getDeviceDescription() + ")");
@@ -27,7 +27,7 @@ public:
     void shutdown() override
     {
         mainWindow = nullptr;
-        juce::Logger::writeToLog("Looper-Audio shutting down");
+        juce::Logger::writeToLog("SoundSplice shutting down");
         juce::Logger::setCurrentLogger(nullptr);
         logger = nullptr;
     }
@@ -83,4 +83,4 @@ private:
 
 } // namespace looper
 
-START_JUCE_APPLICATION(looper::LooperAudioApplication)
+START_JUCE_APPLICATION(looper::SoundSpliceApplication)

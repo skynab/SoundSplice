@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(LooperAudio
+project(SoundSplice
   VERSION 0.0.1
-  DESCRIPTION "Looper-Audio — a loop-centric, AI-assisted DAW"
-  HOMEPAGE_URL "https://github.com/skynab/Looper-Audio"
+  DESCRIPTION "SoundSplice — a focused audio editor"
+  HOMEPAGE_URL "https://github.com/skynab/SoundSplice"
   LANGUAGES C CXX)
 
 # ---- Global settings ---------------------------------------------------------
@@ -26,7 +26,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # on (or verified against) Xcode 15.1 or later.
 add_compile_definitions(JUCE_SILENCE_XCODE_15_LINKER_WARNING=1)
 
-option(LOOPER_BUILD_APP   "Build the Looper-Audio application (pulls JUCE)" ON)
+# The DSP code uses M_PI, which MSVC's <cmath> only defines on request.
+if(MSVC)
+  add_compile_definitions(_USE_MATH_DEFINES)
+endif()
+
+option(LOOPER_BUILD_APP   "Build the SoundSplice application (pulls JUCE)" ON)
 option(LOOPER_BUILD_TESTS "Build unit tests (pulls Catch2)"                 ON)
 option(LOOPER_BUILD_TOOLS "Build command-line tools (needs JUCE)"          ON)
 
@@ -72,7 +77,7 @@ endif()
 
 # ---- Configure summary -------------------------------------------------------
 message(STATUS "")
-message(STATUS "Looper-Audio ${PROJECT_VERSION}")
+message(STATUS "SoundSplice ${PROJECT_VERSION}")
 message(STATUS "  Build type : ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Build app  : ${LOOPER_BUILD_APP}")
 message(STATUS "  Build tests: ${LOOPER_BUILD_TESTS}")
