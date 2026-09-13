@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 #include "model/Song.h"
@@ -145,6 +146,57 @@ namespace arrangeedit
             return {};
 
         return { selection.endBeats, selection.endBeats + selection.lengthBeats(), selection.trackIds };
+    }
+    /** Splits clip @p clipId on track @p trackId around @p silences (seconds
+        from the clip's start, in order and not overlapping), leaving the
+        silent parts out: the clip becomes the sounding pieces between them,
+        each still playing what it played, where it played it. A clip that is
+        silent throughout is removed. The first piece keeps the clip's id.
+        Returns how many pieces are left, or -1 if there's no such audio clip. */
+    inline int detachAtSilences(Song& song, int trackId, int clipId,
+                                const std::vector<std::pair<double, double>>& silences)
+    {
+        auto* track = findTrack(song, trackId);
+        if (track == nullptr || ! rangeedit::appliesTo(*track) || song.bpm <= 0.0)
+            return -1;
+
+        const auto found = std::find_if(track->clips.begin(), track->clips.end(),
+                                        [clipId](const Clip& c) { return c.id == clipId; });
+        if (found == track->clips.end() || found->type != ClipType::Audio)
+            return -1;
+
+        const Clip   clip          = *found;
+        const double start         = clip.startBeats;
+        const double end           = clip.startBeats + clip.lengthBeats;
+        const double beatsPerSecond = song.bpm / 60.0;
+
+        std::vector<Clip> pieces;
+        double            cursor = start;
+
+        for (const auto& [fromSeconds, toSeconds] : silences)
+        {
+            const double from = std::clamp(start + fromSeconds * beatsPerSecond, start, end);
+            const double to   = std::clamp(start + toSeconds * beatsPerSecond, start, end);
+            if (to <= from)
+                continue;
+
+            if (auto piece = rangeedit::pieceOf(clip, cursor, from, song.bpm))
+                pieces.push_back(*piece);
+            cursor = std::max(cursor, to);
+        }
+
+        if (auto piece = rangeedit::pieceOf(clip, cursor, end, song.bpm))
+            pieces.push_back(*piece);
+
+        if (pieces.size() == 1 && pieces[0] == clip)
+            return 1; // nothing silent enough to take out
+
+        for (size_t i = 1; i < pieces.size(); ++i)
+            pieces[i].id = allocateId(song);
+
+        const auto at = track->clips.erase(found);
+        track->clips.insert(at, pieces.begin(), pieces.end());
+        return (int) pieces.size();
     }
 } // namespace arrangeedit
 

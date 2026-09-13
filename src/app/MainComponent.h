@@ -276,6 +276,8 @@ private:
     void                   splitClipsAtPlayhead();
     void                   joinArrangementClips();
     void                   duplicateTimeSelection();
+    void                   showDetachAtSilencesDialog();
+    void                   detachAtSilences(float thresholdDb, double minSilenceSeconds);
 
     void                   cutAudioSelection();
     void                   copyAudioSelection();

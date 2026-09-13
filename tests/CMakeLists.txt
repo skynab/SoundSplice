@@ -22,6 +22,7 @@ add_executable(soundsplice_tests
   engine/NoiseReductionTests.cpp
   engine/AudioEditsTests.cpp
   engine/SampleSequenceTests.cpp
+  engine/SilenceDetectionTests.cpp
   engine/TimeStretchTests.cpp
   engine/SpectrumTests.cpp
   engine/CabinetIrTests.cpp

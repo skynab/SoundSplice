@@ -1,5 +1,6 @@
 #include "MainComponentInternal.h"
 
+#include "engine/SilenceDetection.h"
 #include "model/ArrangementEdits.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -202,6 +203,146 @@ void MainComponent::duplicateTimeSelection()
 
     setTimeSelection(copy);
     refreshAfterArrangementEdit();
+}
+
+/** Asks how quiet, and for how long, counts as silence. */
+void MainComponent::showDetachAtSilencesDialog()
+{
+    if (arrangementEditTracks().empty())
+        return;
+
+    auto* window = new juce::AlertWindow("Detach at Silences",
+                                         "Splits the audio clips on the selected tracks where they fall silent, "
+                                         "leaving the silent parts out. Only within the time selection, if there is one.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("threshold", "-40", "Silent below (dB):");
+    window->addTextEditor("minimum", "0.5", "For at least (seconds):");
+    window->addButton("Detach", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const float  threshold = juce::jlimit(-120.0f, 0.0f, window->getTextEditorContents("threshold").getFloatValue());
+            const double minimum   = juce::jlimit(0.01, 60.0, window->getTextEditorContents("minimum").getDoubleValue());
+            self->detachAtSilences(threshold, minimum);
+        }));
+}
+
+/** Scans each audio clip on the edit's tracks (within the time selection, if
+    there is one) for silence, then splits them all around what it found in
+    one undo step.
+
+    Reads a chunk at a time and keeps only a peak per 10 ms, so a long
+    recording costs a small fraction of its size to scan. */
+void MainComponent::detachAtSilences(float thresholdDb, double minSilenceSeconds)
+{
+    const auto  tracks  = arrangementEditTracks();
+    const auto& song    = history_.current();
+    const bool  limited = ! timeSelection_.isEmpty();
+    const double selectionFrom = timeSelection_.startBeats;
+    const double selectionTo   = timeSelection_.endBeats;
+
+    struct Found
+    {
+        int                                    trackId = 0;
+        int                                    clipId  = 0;
+        std::vector<std::pair<double, double>> silences;
+    };
+    std::vector<Found> found;
+    int                silenceCount = 0;
+
+    showBusy("Finding silences...");
+
+    for (const auto& track : song.tracks)
+    {
+        if (std::find(tracks.begin(), tracks.end(), track.id) == tracks.end() || ! model::rangeedit::appliesTo(track))
+            continue;
+
+        for (const auto& clip : track.clips)
+        {
+            if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+                continue;
+
+            const double clipEnd = clip.startBeats + clip.lengthBeats;
+            if (limited && (clipEnd <= selectionFrom || clip.startBeats >= selectionTo))
+                continue;
+
+            const juce::File file(clip.audioFile);
+            const auto       sequence = engine::sequencefile::sequenceOf(file);
+            if (! sequence || sequence->sampleRate <= 0.0)
+                continue;
+
+            const double rate   = sequence->sampleRate;
+            const auto   window = clipSampleWindow(clip,
+                                                   (int) juce::jmin<std::int64_t>(sequence->length(),
+                                                                                  std::numeric_limits<int>::max()),
+                                                   rate, song.bpm);
+            if (window.isEmpty())
+                continue;
+
+            engine::silence::PeakEnvelope envelope(juce::jmax(1, (int) std::llround(rate * 0.01)));
+            constexpr int kChunk = 1 << 20;
+            bool          read   = true;
+
+            for (int from = 0; from < window.length() && read; from += kChunk)
+            {
+                juce::AudioBuffer<float> buffer;
+                const int count = juce::jmin(kChunk, window.length() - from);
+                read = engine::sequencefile::readRange(file, (juce::int64) window.start + from, count, buffer);
+                if (read)
+                    envelope.append(buffer.getArrayOfReadPointers(), buffer.getNumChannels(), buffer.getNumSamples());
+            }
+
+            if (! read)
+                continue;
+
+            const auto runs = engine::silence::silentRuns(envelope.finish(), envelope.windowFrames(), window.length(),
+                                                          engine::silence::gainForDecibels(thresholdDb),
+                                                          std::llround(minSilenceSeconds * rate));
+
+            // Seconds from the clip's start, cut down to the time selection.
+            const double secondsPerBeat = 60.0 / song.bpm;
+            const double limitFrom      = limited ? (selectionFrom - clip.startBeats) * secondsPerBeat : 0.0;
+            const double limitTo        = limited ? (selectionTo - clip.startBeats) * secondsPerBeat
+                                                  : std::numeric_limits<double>::max();
+
+            Found clipFound { track.id, clip.id, {} };
+            for (const auto& run : runs)
+            {
+                const double from = juce::jmax((double) run.from / rate, limitFrom);
+                const double to   = juce::jmin((double) run.to / rate, limitTo);
+                if (to > from)
+                    clipFound.silences.emplace_back(from, to);
+            }
+
+            if (! clipFound.silences.empty())
+            {
+                silenceCount += (int) clipFound.silences.size();
+                found.push_back(std::move(clipFound));
+            }
+        }
+    }
+
+    if (found.empty())
+    {
+        showStatus("No silences below " + juce::String(thresholdDb, 1) + " dB lasting "
+                   + juce::String(minSilenceSeconds, 2) + "s or more");
+        return;
+    }
+
+    history_.edit("Detach at silences", [found](model::Song& s)
+    {
+        for (const auto& clip : found)
+            model::arrangeedit::detachAtSilences(s, clip.trackId, clip.clipId, clip.silences);
+    });
+
+    refreshAfterArrangementEdit();
+    showStatus("Detached " + juce::String(silenceCount) + (silenceCount == 1 ? " silence" : " silences"));
 }
 
 } // namespace soundsplice

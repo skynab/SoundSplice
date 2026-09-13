@@ -106,6 +106,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
         case commands::splitAtPlayhead:
         case commands::joinClips:
+        case commands::detachAtSilences:
             info.setActive(! arrangementEditTracks().empty());
             break;
 
@@ -260,6 +261,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::splitAtPlayhead: splitClipsAtPlayhead(); break;
         case commands::joinClips:       joinArrangementClips(); break;
         case commands::duplicateSelection: duplicateTimeSelection(); break;
+        case commands::detachAtSilences: showDetachAtSilencesDialog(); break;
 
         case commands::deleteClip:
         case commands::deleteSelectedClip:
@@ -435,6 +437,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::splitAtPlayhead);
         add(commands::joinClips);
         add(commands::duplicateSelection);
+        add(commands::detachAtSilences);
         menu.addSeparator();
         add(commands::copyTrack);
         add(commands::pasteTrack);

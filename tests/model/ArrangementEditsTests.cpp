@@ -150,3 +150,62 @@ TEST_CASE("Duplicating a selection puts a copy straight after it and selects the
     REQUIRE(duplicateRange(f.song, TimeSelection { 2.0, 2.0, { f.audio } }).isEmpty());
     REQUIRE(duplicateRange(f.song, TimeSelection { 2.0, 6.0, { f.synth } }).isEmpty());
 }
+
+TEST_CASE("Detaching at silences leaves the sounding pieces where they played", "[model][arrange]")
+{
+    Fixture f;
+    auto& clip = f.add(f.audio, 0.0, 10.0, 2.0);
+    clip.fades.inSeconds  = 0.5;
+    clip.fades.outSeconds = 0.5;
+    const int id = clip.id;
+    f.add(f.audio, 20.0, 2.0);
+
+    // Silent at the start, in the middle and at the end.
+    REQUIRE(detachAtSilences(f.song, f.audio, id, { { 0.0, 1.0 }, { 4.0, 5.0 }, { 9.0, 10.0 } }) == 2);
+
+    const auto clips = f.sorted(f.audio);
+    REQUIRE(clips.size() == 3);
+    requireClip(clips[0], 1.0, 3.0, 3.0);
+    requireClip(clips[1], 5.0, 4.0, 7.0);
+    requireClip(clips[2], 20.0, 2.0, 0.0);
+    REQUIRE(clips[0].id == id);
+    REQUIRE(clips[1].id != id);
+
+    // Neither piece keeps an edge of the original, so neither keeps a fade.
+    REQUIRE(clips[0].fades.inSeconds == 0.0);
+    REQUIRE(clips[1].fades.outSeconds == 0.0);
+}
+
+TEST_CASE("A middle silence keeps the clip's own fades on its outer pieces", "[model][arrange]")
+{
+    Fixture f;
+    auto& clip = f.add(f.audio, 0.0, 10.0);
+    clip.fades.inSeconds  = 0.5;
+    clip.fades.outSeconds = 1.0;
+
+    REQUIRE(detachAtSilences(f.song, f.audio, clip.id, { { 4.0, 6.0 } }) == 2);
+
+    const auto clips = f.sorted(f.audio);
+    REQUIRE(clips[0].fades.inSeconds == 0.5);
+    REQUIRE(clips[0].fades.outSeconds == 0.0);
+    REQUIRE(clips[1].fades.inSeconds == 0.0);
+    REQUIRE(clips[1].fades.outSeconds == 1.0);
+}
+
+TEST_CASE("A silent clip is removed, and no silence or no clip changes nothing", "[model][arrange]")
+{
+    Fixture f;
+    const int silent = f.add(f.audio, 0.0, 4.0).id;
+    const int loud   = f.add(f.audio, 8.0, 4.0).id;
+
+    REQUIRE(detachAtSilences(f.song, f.audio, silent, { { 0.0, 4.0 } }) == 0);
+    REQUIRE(f.sorted(f.audio).size() == 1);
+
+    const auto before = f.song;
+    REQUIRE(detachAtSilences(f.song, f.audio, loud, {}) == 1);
+    REQUIRE(detachAtSilences(f.song, f.audio, loud, { { 9.0, 12.0 } }) == 1); // past the clip's end
+    REQUIRE(f.song == before);
+
+    REQUIRE(detachAtSilences(f.song, f.audio, 999, { { 0.0, 1.0 } }) == -1);
+    REQUIRE(detachAtSilences(f.song, f.synth, loud, { { 0.0, 1.0 } }) == -1);
+}

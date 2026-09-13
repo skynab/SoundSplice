@@ -88,7 +88,8 @@ all three.
 - 🟡 Edits on the arrangement itself, not just in the editor pane: split at the playhead ✅ (Ctrl+I),
   **join clips** ✅ (Ctrl+J; clips that carry straight on from each other, so a split can be undone
   on its own), ripple delete ✅ (Delete on a time selection), **duplicate selection** ✅
-  (`src/model/ArrangementEdits.h`), **detach at silences** ⬜, and **paste as new clip** ⬜
+  (`src/model/ArrangementEdits.h`), **detach at silences** ✅ (Edit menu; threshold and minimum
+  length, within the time selection if any; `src/engine/SilenceDetection.h`), and **paste as new clip** ⬜
 - 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)
 - ⬜ **Envelope tool** (a volume curve drawn per clip) and **draw tool** (redraw samples when zoomed
   to sample level, to fix clicks by hand)
