@@ -131,6 +131,7 @@ MainComponent::MainComponent()
     arrangementView_.setSnapToGrid(settings_.getValue("snapClipsToGrid", "1") != "0");
     arrangementView_.setSnapToMarkers(settings_.getValue("snapToMarkers", "1") != "0");
     arrangementView_.setSnapToClipEdges(settings_.getValue("snapToClipEdges", "1") != "0");
+    arrangementView_.setShowEnvelopes(settings_.getValue("showClipEnvelopes", "0") == "1");
     {
         // Anything unrecognised (a hand-edited file, a format from a later
         // build) falls back to bars and beats and 30 fps.
@@ -888,6 +889,10 @@ MainComponent::MainComponent()
     arrangementView_.onMarkerMenuRequested   = [this](int markerId) { showMarkerMenu(markerId); };
     arrangementView_.onMarkerRenameRequested = [this](int markerId) { renameMarkerPrompt(markerId); };
     arrangementView_.onMarkerMoved = [this](int markerId, double startBeats) { moveMarkerTo(markerId, startBeats); };
+    arrangementView_.onClipEnvelopeChanged = [this](int trackIndex, int clipIndex, const engine::ClipEnvelope& envelope)
+    {
+        setClipEnvelope(trackIndex, clipIndex, envelope);
+    };
 
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)
     {

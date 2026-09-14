@@ -84,6 +84,24 @@ void MainComponent::refreshAudioEditorForSelected()
     audioEditor_.setWaveform(waveformPeaks_, waveformPeaksSampleRate_);
 }
 
+/** A clip's volume curve as drawn in the arrangement: one undo step per
+    gesture, since the view only reports a curve when a point is released. */
+void MainComponent::setClipEnvelope(int trackIndex, int clipIndex, const engine::ClipEnvelope& envelope)
+{
+    history_.edit("Edit volume curve", [trackIndex, clipIndex, envelope](model::Song& s)
+    {
+        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
+            return;
+
+        auto& clips = s.tracks[(size_t) trackIndex].clips;
+        if (clipIndex >= 0 && clipIndex < (int) clips.size())
+            clips[(size_t) clipIndex].envelope = envelope;
+    });
+
+    syncEngineTracks();
+    arrangementView_.setSong(history_.current());
+}
+
 /** The selected clip's actual samples over [fromSeconds, toSeconds), seconds
     from its start, for the audio editor zoomed in past its peaks. Only what's
     asked for is read, which at a zoom that close is a few tens of thousands

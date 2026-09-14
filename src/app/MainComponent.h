@@ -310,6 +310,9 @@ private:
     void                   deleteMarker(int markerId);
     void                   moveMarkerTo(int markerId, double startBeats);
 
+    /** A clip's volume curve as edited in the arrangement, one undo step. */
+    void                   setClipEnvelope(int trackIndex, int clipIndex, const engine::ClipEnvelope& envelope);
+
     // Track channel operations — see model/TrackChannels.h.
     void                   splitSelectedTrackToMono();
     void                   swapSelectedTrackChannels();

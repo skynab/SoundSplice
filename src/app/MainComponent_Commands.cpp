@@ -207,6 +207,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(arrangementView_.snapsToClipEdges());
             break;
 
+        case commands::showClipEnvelopes:
+            info.setTicked(arrangementView_.showsEnvelopes());
+            break;
+
         default:
             break;
     }
@@ -390,6 +394,19 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
+        // A view preference, like the snap settings: saved with the app, not
+        // the project, and not undoable.
+        case commands::showClipEnvelopes:
+        {
+            const bool show = ! arrangementView_.showsEnvelopes();
+            arrangementView_.setShowEnvelopes(show);
+            settings_.setValue("showClipEnvelopes", show ? "1" : "0");
+            settings_.saveIfNeeded();
+            showStatus(show ? "Volume curves shown - click a clip to add a point, drag to move, Alt-click to remove"
+                            : "Volume curves hidden");
+            break;
+        }
+
         // Splitting is a drag gesture (drop a tab on a pane's edge), so the
         // only layout command is a way back to this layout's default.
         case commands::resetLayout:
@@ -523,6 +540,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::zoomToSelection);
         add(commands::fitProject);
         add(commands::fitVertically);
+        add(commands::showClipEnvelopes);
         add(commands::snapToGrid);
         add(commands::snapToMarkers);
         add(commands::snapToClipEdges);

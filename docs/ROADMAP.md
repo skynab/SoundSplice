@@ -93,8 +93,10 @@ all three.
   length, within the time selection if any; `src/engine/SilenceDetection.h`), and **paste as new clip** ✅
   (a time selection's Paste always lands as clips of their own)
 - 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)
-- ⬜ **Envelope tool** (a volume curve drawn per clip) and **draw tool** (redraw samples when zoomed
-  to sample level, to fix clicks by hand)
+- 🟡 **Envelope tool** ✅ (a volume curve drawn per clip, kept in file time so trims and splits keep
+  it on its audio; View > Show Clip Volume Curves, then click to add, drag to move, Alt-click to
+  remove; `src/engine/ClipEnvelope.h`) and **draw tool** ⬜ (redraw samples when zoomed to sample
+  level, to fix clicks by hand)
 - 🟡 **Scrub and seek** playback ⬜, **play-at-speed** (transport varispeed) ⬜, and **loop the selection** ✅
   (Loop plays the time selection when there is one)
 - 🟡 Zoom: to selection ✅ (Ctrl+E), fit project ✅ (Ctrl+F; View menu, `src/app/TimelineZoom.h`),

@@ -6,6 +6,7 @@
 #include <app/TrackColours.h>
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 using namespace soundsplice;
@@ -582,6 +583,64 @@ TEST_CASE("A range marker is selected by a click and moved by a drag", "[gui][ar
         REQUIRE(seekedTo == -1.0);
         REQUIRE_FALSE(selection.hasTracks());
     }
+}
+
+TEST_CASE("With volume curves shown, a click on an audio clip adds a point and a drag moves it", "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = std::make_unique<ArrangementView>();
+    view->setVisible(true);
+    view->setSize(900, 500);
+    view->setZoom(1.0f);
+
+    model::Song song;
+    song.bpm = 120.0;
+    const int trackId = model::addTrack(song, model::TrackType::Audio, "Voice").id;
+
+    model::Clip clip;
+    clip.type                = model::ClipType::Audio;
+    clip.audioFile           = "voice.wav";
+    clip.lengthBeats         = 16.0;
+    clip.sourceOffsetSeconds = 1.0;
+    model::addClip(song, trackId, clip);
+
+    view->setSong(song);
+    view->setShowEnvelopes(true);
+
+    const float  gutter      = view->gutterWidthForTesting();
+    const double beatAt100px = view->beatForXForTesting(gutter + 100.0f) - view->beatForXForTesting(gutter);
+    const auto   xForBeat    = [&](double beat) { return gutter + (float) (beat * 100.0 / beatAt100px); };
+    const float  clipTop     = view->rulerHeightForTesting() + 3.0f;
+    const float  clipHeight  = view->laneHeightForTesting() - 6.0f;
+
+    int                  changes = 0;
+    engine::ClipEnvelope latest;
+    view->onClipEnvelopeChanged = [&](int, int, const engine::ClipEnvelope& envelope) { latest = envelope; ++changes; };
+
+    // Beat 4 at 120 bpm is 2 s into the clip, 3 s into its file; a quarter of
+    // the way down the clip is a gain of 1.5.
+    const juce::Point<float> press { xForBeat(4.0), clipTop + clipHeight * 0.25f };
+    sendMouseDown(*view, dragEventAt(*view, press, press));
+    sendMouseUp(*view, dragEventAt(*view, press, press));
+
+    REQUIRE(changes == 1);
+    REQUIRE(latest.points().size() == 1);
+    REQUIRE(std::abs(latest.points()[0].seconds - 3.0) < 0.05);
+    REQUIRE(std::abs(latest.points()[0].gain - 1.5f) < 0.05f);
+
+    // The owner puts the curve on the clip, as MainComponent does.
+    song.tracks[0].clips[0].envelope = latest;
+    view->setSong(song);
+
+    // Pressing on the point picks it up rather than adding another.
+    const juce::Point<float> bottom { xForBeat(4.0), clipTop + clipHeight };
+    sendMouseDown(*view, dragEventAt(*view, press, press));
+    sendMouseDrag(*view, dragEventAt(*view, bottom, press));
+    sendMouseUp(*view, dragEventAt(*view, bottom, press));
+
+    REQUIRE(changes == 2);
+    REQUIRE(latest.points().size() == 1);
+    REQUIRE(latest.points()[0].gain == 0.0f);
 }
 
 TEST_CASE("Dragging a clip onto an incompatible track is refused", "[gui][arrangement]")

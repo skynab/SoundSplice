@@ -12,6 +12,7 @@
 #include "ClipPreview.h"
 #include "Icons.h"
 #include "ClipWindow.h"
+#include "EnvelopeGeometry.h"
 #include "SnapTargets.h"
 #include "TimeFormat.h"
 #include "model/Markers.h"
@@ -101,6 +102,10 @@ public:
     /** Fired when a marker is dragged along the ruler and released somewhere
         new, with where it should now start. */
     std::function<void(int markerId, double newStartBeats)> onMarkerMoved;
+
+    /** Fired when a clip's volume curve is edited (with curves shown): a
+        point added, dragged or removed, with the curve as it should now be. */
+    std::function<void(int trackIndex, int clipIndex, const engine::ClipEnvelope& envelope)> onClipEnvelopeChanged;
 
     /** Fired instead of onClipMoved when a move-drag ends on a *different*
         track than it started on (see typesAreCompatibleForClipMove — the
@@ -216,6 +221,21 @@ public:
     bool snapsToMarkers() const              { return snapToMarkers_; }
     void setSnapToClipEdges(bool shouldSnap) { snapToClipEdges_ = shouldSnap; }
     bool snapsToClipEdges() const            { return snapToClipEdges_; }
+
+    /** Whether audio clips show their volume curves, and clicks on them edit
+        the curve rather than moving the clip: click to add a point, drag to
+        move one, Alt-click to remove one. */
+    void setShowEnvelopes(bool show)
+    {
+        if (show == showEnvelopes_)
+            return;
+
+        showEnvelopes_   = show;
+        envelopeEditing_ = false;
+        repaint();
+    }
+
+    bool showsEnvelopes() const { return showEnvelopes_; }
 
     /** How the ruler and grid count time (bars and beats, or a clock, sample
         or timecode grid), which is also what clips snap to. */
@@ -426,6 +446,11 @@ public:
                 g.fillRoundedRectangle(r, 3.0f);
 
                 paintClipContents(g, clip, r);
+
+                if (showEnvelopes_ && clip.type == model::ClipType::Audio)
+                    paintEnvelope(g, envelopeEditing_ && i == envelopeTrack_ && c == envelopeClip_
+                                         ? envelopePreview_ : clip.envelope,
+                                  clip, r);
 
                 // A grip along the right edge, so the resize handle is
                 // visible rather than only discoverable by hovering.
@@ -908,6 +933,17 @@ private:
 
             const auto& clip = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
 
+            // With curves shown, a click on an audio clip edits its curve.
+            // Started before the clip is reported selected: selecting can
+            // hand this view a new song, and the edit reads the clip.
+            if (showEnvelopes_ && clip.type == model::ClipType::Audio)
+            {
+                beginEnvelopeEdit(trackIndex, clipIndex, e);
+                if (onClipSelected)
+                    onClipSelected(trackIndex, clipIndex);
+                return;
+            }
+
             // A fade handle sits in a clip's top corner, on top of the edge
             // grips, so it is checked first.
             dragging_           = true;
@@ -958,6 +994,19 @@ private:
 
     void mouseDrag(const juce::MouseEvent& e) override
     {
+        if (envelopeEditing_)
+        {
+            if (envelopeTrack_ >= 0 && envelopeTrack_ < (int) song_.tracks.size()
+                && envelopeClip_ >= 0 && envelopeClip_ < (int) song_.tracks[(size_t) envelopeTrack_].clips.size())
+            {
+                const auto& clip           = song_.tracks[(size_t) envelopeTrack_].clips[(size_t) envelopeClip_];
+                const auto [seconds, gain] = envelopePositionAt(envelopeTrack_, clip, e.position);
+                envelopePoint_             = envelopePreview_.movePoint(envelopePoint_, seconds, gain);
+                repaint();
+            }
+            return;
+        }
+
         if (markerDragId_ >= 0)
         {
             // A few pixels before it counts as a move, so a click that
@@ -1115,6 +1164,18 @@ private:
             return;
         }
 
+        if (envelopeEditing_)
+        {
+            envelopeEditing_ = false;
+            envelopePoint_   = -1;
+            repaint();
+
+            // A click on an existing point that didn't move it changes nothing.
+            if (onClipEnvelopeChanged && envelopePreview_ != envelopeOriginal_)
+                onClipEnvelopeChanged(envelopeTrack_, envelopeClip_, envelopePreview_);
+            return;
+        }
+
         if (markerDragId_ >= 0)
         {
             const int  id    = markerDragId_;
@@ -1245,6 +1306,11 @@ private:
         if (findClipAt(e.position, trackIndex, clipIndex))
         {
             const auto& clip = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+            if (showEnvelopes_ && clip.type == model::ClipType::Audio)
+            {
+                setMouseCursor(juce::MouseCursor::CrosshairCursor);
+                return;
+            }
             if (fadeHandleAt(clip, trackIndex, e.position) != 0)
             {
                 setMouseCursor(juce::MouseCursor::DraggingHandCursor);
@@ -1743,6 +1809,109 @@ private:
         const auto   magnets   = invert ? std::vector<double> {} : magnetsExcluding(-1, -1);
         const double tolerance = kSnapMagnetPixels / std::max(1.0e-3, (double) geometry_.pixelsPerBeat());
         return std::max(0.0, app::snapPosition(geometry_.beatForX(x), magnets, tolerance, gridOn, snapUnitBeats()));
+    }
+
+    // Clip volume curves (engine/ClipEnvelope.h): whether they're shown and
+    // edited, and the edit in progress — which clip, which point, and the
+    // curve before and during it. The song only changes on release.
+    bool                 showEnvelopes_   = false;
+    bool                 envelopeEditing_ = false;
+    int                  envelopeTrack_   = -1;
+    int                  envelopeClip_    = -1;
+    int                  envelopePoint_   = -1;
+    engine::ClipEnvelope envelopeOriginal_;
+    engine::ClipEnvelope envelopePreview_;
+    static constexpr float kEnvelopeHitPixels = 6.0f;
+
+    /** A clip's box on its lane, as the clip loop in paint draws it. */
+    juce::Rectangle<float> clipBounds(int trackIndex, const model::Clip& clip) const
+    {
+        const float y = geometry_.rulerHeight + (float) trackIndex * geometry_.laneHeight;
+        return { geometry_.xForBeat(clip.startBeats), y + 3.0f,
+                 juce::jmax(2.0f, (float) clip.lengthBeats * geometry_.pixelsPerBeat()), geometry_.laneHeight - 6.0f };
+    }
+
+    /** Where a mouse position falls on @p clip's curve: seconds into its
+        file, kept to what it plays, and the gain its height means. */
+    std::pair<double, float> envelopePositionAt(int trackIndex, const model::Clip& clip, juce::Point<float> point) const
+    {
+        const auto   box     = clipBounds(trackIndex, clip);
+        const double seconds = app::clampToClipSource(
+            clip, app::sourceSecondsAtBeat(clip, geometry_.beatForX(point.x), song_.bpm), song_.bpm);
+        return { seconds, app::gainForY(point.y, box.getY(), box.getHeight()) };
+    }
+
+    /** Starts editing @p clip's curve at a press: Alt on a point removes it
+        straight away; on a point picks it up; anywhere else adds one there
+        and picks that up. */
+    void beginEnvelopeEdit(int trackIndex, int clipIndex, const juce::MouseEvent& e)
+    {
+        const auto& clip           = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+        const auto [seconds, gain] = envelopePositionAt(trackIndex, clip, e.position);
+
+        envelopeTrack_    = trackIndex;
+        envelopeClip_     = clipIndex;
+        envelopeOriginal_ = clip.envelope;
+        envelopePreview_  = clip.envelope;
+
+        const double pixelsPerSecond = (double) geometry_.pixelsPerBeat() * song_.bpm / 60.0;
+        const int    near = envelopePreview_.indexNear(seconds, kEnvelopeHitPixels / juce::jmax(1.0e-6, pixelsPerSecond));
+
+        if (near >= 0 && e.mods.isAltDown())
+        {
+            envelopePreview_.removePointAt(near);
+            repaint();
+            if (onClipEnvelopeChanged)
+                onClipEnvelopeChanged(trackIndex, clipIndex, envelopePreview_);
+            return;
+        }
+
+        envelopePoint_   = near >= 0 ? near : envelopePreview_.addPoint(seconds, gain);
+        envelopeEditing_ = true;
+        repaint();
+    }
+
+    /** A clip's volume curve over it: faint unity line, the curve as
+        playback follows it (from the same gainAt), and a handle at each
+        point. */
+    void paintEnvelope(juce::Graphics& g, const engine::ClipEnvelope& envelope, const model::Clip& clip,
+                       juce::Rectangle<float> box)
+    {
+        if (box.getWidth() < 4.0f || box.getHeight() < 8.0f)
+            return;
+
+        juce::Graphics::ScopedSaveState saved(g);
+        g.reduceClipRegion(box.toNearestInt());
+
+        g.setColour(juce::Colours::white.withAlpha(0.15f));
+        g.drawHorizontalLine((int) app::yForGain(1.0f, box.getY(), box.getHeight()), box.getX(), box.getRight());
+
+        juce::Path curve;
+        bool       started = false;
+        for (float x = box.getX(); x <= box.getRight(); x += 2.0f)
+        {
+            const double seconds = app::sourceSecondsAtBeat(clip, geometry_.beatForX(x), song_.bpm);
+            const float  y       = app::yForGain(envelope.gainAt(seconds), box.getY(), box.getHeight());
+            if (! started)
+            {
+                curve.startNewSubPath(x, y);
+                started = true;
+            }
+            else
+            {
+                curve.lineTo(x, y);
+            }
+        }
+
+        g.setColour(juce::Colours::yellow.withAlpha(0.9f));
+        g.strokePath(curve, juce::PathStrokeType(1.5f));
+
+        for (const auto& point : envelope.points())
+        {
+            const float x = geometry_.xForBeat(app::beatAtSourceSeconds(clip, point.seconds, song_.bpm));
+            const float y = app::yForGain(point.gain, box.getY(), box.getHeight());
+            g.fillRect(x - 3.0f, y - 3.0f, 6.0f, 6.0f);
+        }
     }
 
     // A marker being dragged along the ruler: which, whether it has moved far
