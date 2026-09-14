@@ -71,6 +71,39 @@ TEST_CASE("Peaks built a chunk at a time match peaks built at once", "[app][wave
     REQUIRE(chunked.totalSamples() == 1000);
 }
 
+TEST_CASE("RMS is the root-mean-square of the samples, however they were added", "[app][waveformpeaks]")
+{
+    WaveformPeaks peaks;
+
+    // A constant signal's RMS is its level.
+    peaks.build({ std::vector<float>(200, 0.5f) }, 64);
+    REQUIRE(std::abs(peaks.rms(0, 0, 200) - 0.5f) < 1.0e-5f);
+
+    // A full-scale sine over whole cycles: 1/sqrt(2).
+    std::vector<float> sine(6400);
+    for (int i = 0; i < 6400; ++i)
+        sine[(size_t) i] = std::sin(2.0f * 3.14159265f * (float) i / 64.0f);
+
+    peaks.build({ sine }, 64);
+    const float whole = peaks.rms(0, 0, 6400);
+    REQUIRE(std::abs(whole - 0.70710678f) < 1.0e-3f);
+
+    // Built in chunks that don't line up with bins, it comes out the same.
+    WaveformPeaks chunked;
+    chunked.append({ std::vector<float>(sine.begin(), sine.begin() + 100) });
+    chunked.append({ std::vector<float>(sine.begin() + 100, sine.end()) });
+    REQUIRE(std::abs(chunked.rms(0, 0, 6400) - whole) < 1.0e-4f);
+
+    // A partly filled last bin counts only the samples it has: 70 samples of
+    // 1.0 are an RMS of 1.0, not diluted by the six missing from its last bin.
+    peaks.build({ std::vector<float>(70, 1.0f) }, 64);
+    REQUIRE(std::abs(peaks.rms(0, 0, 70) - 1.0f) < 1.0e-5f);
+
+    // Nothing to measure.
+    REQUIRE(peaks.rms(3, 0, 70) == 0.0f);
+    REQUIRE(WaveformPeaks {}.rms(0, 0, 10) == 0.0f);
+}
+
 TEST_CASE("Peaks capture the extremes of each bin", "[app][waveformpeaks]")
 {
     // A signal whose min and max are both away from zero, so a cache that

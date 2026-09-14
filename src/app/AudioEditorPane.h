@@ -773,6 +773,20 @@ private:
             g.setColour(clips ? juce::Colours::red
                               : juce::Colours::aquamarine.withAlpha(0.85f));
             g.drawVerticalLine(x, centreY - top * halfH, centreY - bottom * halfH);
+
+            // The RMS level inside the peaks, lighter, as Audacity draws it:
+            // the peaks show the loudest instant, RMS how loud it sounds, and
+            // two passages with the same peaks can be very different to hear.
+            // Kept within the peaks, so it never draws past them.
+            const float level = juce::jlimit(0.0f, 1.0f,
+                                             peaks_.rms(channel, juce::jmax(0, from), juce::jmax(1, to)) * gain);
+            const float rmsTop    = centreY - juce::jmin(level, top) * halfH;
+            const float rmsBottom = centreY - juce::jmax(-level, bottom) * halfH;
+            if (level > 0.0f && rmsBottom > rmsTop)
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.45f));
+                g.drawVerticalLine(x, rmsTop, rmsBottom);
+            }
         }
     }
 

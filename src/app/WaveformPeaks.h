@@ -60,6 +60,7 @@ public:
         samplesPerBin_ = std::max(1, samplesPerBin);
 
         bins_.resize(channels.size());
+        squares_.resize(channels.size());
         for (size_t ch = 0; ch < channels.size(); ++ch)
         {
             const auto& samples = channels[ch];
@@ -67,6 +68,7 @@ public:
 
             const int binCount = ((int) samples.size() + samplesPerBin_ - 1) / samplesPerBin_;
             bins_[ch].resize((size_t) std::max(0, binCount));
+            squares_[ch].resize((size_t) std::max(0, binCount));
 
             for (int b = 0; b < binCount; ++b)
             {
@@ -75,12 +77,16 @@ public:
 
                 float lowest  = samples[(size_t) from];
                 float highest = samples[(size_t) from];
-                for (int i = from + 1; i < to; ++i)
+                float squares = 0.0f;
+                for (int i = from; i < to; ++i)
                 {
-                    lowest  = std::min(lowest, samples[(size_t) i]);
-                    highest = std::max(highest, samples[(size_t) i]);
+                    const float s = samples[(size_t) i];
+                    lowest   = std::min(lowest, s);
+                    highest  = std::max(highest, s);
+                    squares += s * s;
                 }
-                bins_[ch][(size_t) b] = { lowest, highest };
+                bins_[ch][(size_t) b]    = { lowest, highest };
+                squares_[ch][(size_t) b] = squares;
             }
         }
     }
@@ -96,7 +102,10 @@ public:
             return;
 
         if (bins_.empty())
+        {
             bins_.resize(chunk.size());
+            squares_.resize(chunk.size());
+        }
 
         const int filled      = totalSamples_ % samplesPerBin_; // already in the last, partial bin
         const int chunkLength = (int) chunk[0].size();
@@ -106,6 +115,7 @@ public:
             const auto& samples = chunk[std::min(ch, chunk.size() - 1)];
             const int   length  = std::min(chunkLength, (int) samples.size());
             auto&       bins    = bins_[ch];
+            auto&       squares = squares_[ch];
 
             int i = 0;
             if (filled > 0 && ! bins.empty())
@@ -113,8 +123,10 @@ public:
                 auto& last = bins.back();
                 for (; i < std::min(length, samplesPerBin_ - filled); ++i)
                 {
-                    last.minimum = std::min(last.minimum, samples[(size_t) i]);
-                    last.maximum = std::max(last.maximum, samples[(size_t) i]);
+                    const float s = samples[(size_t) i];
+                    last.minimum     = std::min(last.minimum, s);
+                    last.maximum     = std::max(last.maximum, s);
+                    squares.back() += s * s;
                 }
             }
 
@@ -123,12 +135,16 @@ public:
                 const int to = std::min(length, i + samplesPerBin_);
 
                 PeakBin bin { samples[(size_t) i], samples[(size_t) i] };
-                for (int j = i + 1; j < to; ++j)
+                float   sum = 0.0f;
+                for (int j = i; j < to; ++j)
                 {
-                    bin.minimum = std::min(bin.minimum, samples[(size_t) j]);
-                    bin.maximum = std::max(bin.maximum, samples[(size_t) j]);
+                    const float s = samples[(size_t) j];
+                    bin.minimum = std::min(bin.minimum, s);
+                    bin.maximum = std::max(bin.maximum, s);
+                    sum        += s * s;
                 }
                 bins.push_back(bin);
+                squares.push_back(sum);
                 i = to;
             }
         }
@@ -139,6 +155,7 @@ public:
     void clear()
     {
         bins_.clear();
+        squares_.clear();
         totalSamples_  = 0;
         samplesPerBin_ = kDefaultSamplesPerBin;
     }
@@ -181,6 +198,32 @@ public:
         return result;
     }
 
+    /** The root-mean-square level over [fromSample, toSample) of @p channel,
+        from the same bins range() reads: how loud a passage sounds, where the
+        peaks only show its loudest instant. A partly filled last bin counts
+        only the samples it holds. */
+    float rms(int channel, int fromSample, int toSample) const
+    {
+        if (channel < 0 || channel >= (int) squares_.size() || squares_[(size_t) channel].empty())
+            return 0.0f;
+
+        const auto& squares  = squares_[(size_t) channel];
+        const int   binCount = (int) squares.size();
+
+        const int first = std::clamp(fromSample / samplesPerBin_, 0, binCount - 1);
+        const int last  = std::clamp((toSample - 1) / samplesPerBin_, first, binCount - 1);
+
+        double sum   = 0.0;
+        long   count = 0;
+        for (int b = first; b <= last; ++b)
+        {
+            sum   += squares[(size_t) b];
+            count += std::max(0, std::min(samplesPerBin_, totalSamples_ - b * samplesPerBin_));
+        }
+
+        return count > 0 ? (float) std::sqrt(sum / (double) count) : 0.0f;
+    }
+
     /** The loudest excursion anywhere in the file — what a "this will clip at
         the current gain" warning is judged against. */
     float overallMagnitude() const
@@ -194,6 +237,7 @@ public:
 
 private:
     std::vector<std::vector<PeakBin>> bins_;
+    std::vector<std::vector<float>>   squares_; // sum of squared samples per bin, for rms()
     int                               totalSamples_  = 0;
     int                               samplesPerBin_ = kDefaultSamplesPerBin;
 };
