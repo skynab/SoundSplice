@@ -12,6 +12,11 @@ public:
     const juce::String getApplicationVersion() override { return "0.0.1"; }
     bool moreThanOneInstanceAllowed() override          { return true; }
 
+    void anotherInstanceStarted(const juce::String& commandLine) override
+    {
+        juce::Logger::writeToLog("Another instance started: " + commandLine);
+    }
+
     void initialise(const juce::String&) override
     {
         logger.reset(juce::FileLogger::createDefaultAppLogger(
@@ -38,6 +43,10 @@ public:
         finishes the job — a Cancel simply never calls back. */
     void systemRequestedQuit() override
     {
+        // With how it got here: a quit nobody asked for otherwise shows up in
+        // the log only as "shutting down", with nothing to say what caused it.
+        juce::Logger::writeToLog("Quit requested\n" + juce::SystemStats::getStackBacktrace());
+
         auto* main = mainWindow != nullptr
                          ? dynamic_cast<MainComponent*>(mainWindow->getContentComponent())
                          : nullptr;
@@ -70,6 +79,9 @@ private:
 
         void closeButtonPressed() override
         {
+            // The close button, Alt+F4, or anything else sending the window
+            // WM_CLOSE — logged so it can be told apart from other quits.
+            juce::Logger::writeToLog("Window close requested");
             JUCEApplication::getInstance()->systemRequestedQuit();
         }
 
