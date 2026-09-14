@@ -189,7 +189,7 @@ public:
         if (chain_.empty())
         {
             g.setColour(juce::Colours::white.withAlpha(0.45f));
-            g.drawText("No effects — use + Add", listArea(), juce::Justification::centred);
+            g.drawText("No effects - use + Add", listArea(), juce::Justification::centred);
         }
     }
 

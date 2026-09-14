@@ -135,7 +135,7 @@ public:
         {
             g.setColour(juce::Colours::white.withAlpha(0.45f));
             g.setFont(juce::FontOptions(13.0f));
-            g.drawText(sceneCount == 0 ? "No scenes yet — click + Scene to add one"
+            g.drawText(sceneCount == 0 ? "No scenes yet - click + Scene to add one"
                                        : "No tracks yet",
                        getLocalBounds().reduced(12), juce::Justification::centred);
         }

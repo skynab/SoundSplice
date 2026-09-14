@@ -1294,7 +1294,7 @@ void MainComponent::updateEditingLabel()
 
         if (selectedClipIndex_ >= 0 && selectedClipIndex_ < (int) track.clips.size()
             && track.clips[(size_t) selectedClipIndex_].type == model::ClipType::Audio)
-            text << "  (audio clip — not MIDI-editable)";
+            text << "  (audio clip - not MIDI-editable)";
     }
     editingLabel_.setText(text, juce::dontSendNotification);
 }

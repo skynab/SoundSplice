@@ -298,7 +298,7 @@ void MainComponent::exportProject(const engine::ExportOptions& options)
 
         if (tasks.empty())
         {
-            showError("Nothing to export — every track is muted or silenced by a solo");
+            showError("Nothing to export - every track is muted or silenced by a solo");
             return;
         }
 
@@ -459,14 +459,14 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
         // because the *next* one was interrupted would be its own surprise.
         if (cancelled)
         {
-            self->showError("Export cancelled — " + juce::String(result->written)
+            self->showError("Export cancelled - " + juce::String(result->written)
                             + " file(s) written");
             return;
         }
 
         if (result->anyFailure)
         {
-            self->showError("Exported with errors — " + juce::String(result->written)
+            self->showError("Exported with errors - " + juce::String(result->written)
                             + " file(s) written, some failed");
             return;
         }

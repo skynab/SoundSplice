@@ -297,7 +297,7 @@ void MainComponent::finishRecordingIfReady()
     // presented as a clean one.
     if (dropped > 0)
     {
-        showError("Recorded with gaps — the disk could not keep up ("
+        showError("Recorded with gaps - the disk could not keep up ("
                   + juce::String((int) dropped) + " samples lost)");
         return;
     }
@@ -311,7 +311,7 @@ void MainComponent::finishRecordingIfReady()
     // message names that first.
     if (isSilentAudioFile(file))
     {
-        showError("Recorded silence — check microphone permission "
+        showError("Recorded silence - check microphone permission "
                   "(System Settings > Privacy & Security > Microphone) and the input device");
         return;
     }
@@ -396,7 +396,7 @@ void MainComponent::finishMidiRecordingIfReady()
     // a take missing a note is still worth keeping, it just must not be
     // presented as a clean one.
     if (dropped > 0)
-        showError("Recorded with gaps — " + juce::String((int) dropped)
+        showError("Recorded with gaps - " + juce::String((int) dropped)
                   + " MIDI event(s) were lost");
 }
 
