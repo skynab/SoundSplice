@@ -4,6 +4,7 @@
 
 #include "engine/ClipChannels.h"
 #include "engine/ClipData.h"
+#include "engine/ClipEnvelope.h"
 #include "engine/ClipFade.h"
 
 namespace soundsplice::engine
@@ -47,6 +48,11 @@ struct AudioClipSlot
     /** Which of the file's channels plays on each output — see
         model::Clip::channels. */
     ClipChannels channels = ClipChannels::Both;
+
+    /** The clip's volume curve — see model::Clip::envelope. Built on the
+        message thread with the rest of the slot; only read on the audio
+        thread. */
+    ClipEnvelope envelope;
 };
 
 } // namespace soundsplice::engine

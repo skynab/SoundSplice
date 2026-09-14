@@ -3,6 +3,7 @@
 #include <string>
 
 #include "engine/ClipChannels.h"
+#include "engine/ClipEnvelope.h"
 #include "engine/ClipFade.h"
 #include "engine/Pattern.h"
 
@@ -49,6 +50,12 @@ struct Clip
         every output, or the two swapped. Non-destructive like the fades; see
         engine/ClipChannels.h and model/TrackChannels.h. Audio clips only. */
     engine::ClipChannels channels = engine::ClipChannels::Both;
+
+    /** A volume curve drawn on the clip, in seconds into its file so trims
+        and splits keep it on the audio it was drawn over. Empty is unity.
+        Non-destructive, like the fades; see engine/ClipEnvelope.h. Audio
+        clips only. */
+    engine::ClipEnvelope envelope;
 
     bool operator==(const Clip&) const = default;
 };

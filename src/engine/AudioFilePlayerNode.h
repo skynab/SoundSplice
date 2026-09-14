@@ -168,6 +168,13 @@ public:
         const double secondsPerSample = 1.0 / deviceSampleRate_;
         double       secondsIntoClip  = localStart * secondsPerSample;
 
+        // The clip's volume curve, at a read position in source samples: the
+        // curve is kept in file time (see ClipEnvelope). Unity with no curve.
+        const auto envelopeGainAt = [&activeSlot, sourceRate](double sourcePosition) noexcept
+        {
+            return activeSlot.envelope.isEmpty() ? 1.0f : activeSlot.envelope.gainAt(sourcePosition / sourceRate);
+        };
+
         // A long clip plays from disk: the same loop, reading through the
         // stream's loaded pages. Live, a page that isn't loaded yet is heard
         // as silence rather than waited for; offline, it's loaded on the spot.
@@ -180,8 +187,8 @@ public:
             {
                 if (position >= 0.0 && position < (double) length)
                 {
-                    const float gain = fading ? clipGain * clipFadeGain(fades, secondsIntoClip, clipSeconds)
-                                              : clipGain;
+                    const float gain = fading ? clipGain * envelopeGainAt(position) * clipFadeGain(fades, secondsIntoClip, clipSeconds)
+                                              : clipGain * envelopeGainAt(position);
 
                     for (int ch = 0; ch < outChans; ++ch)
                         buffer.getWritePointer(ch)[i] += gain * cursor.sampleLinear(
@@ -198,8 +205,8 @@ public:
         {
             if (position >= 0.0 && position < (double) length)
             {
-                const float gain = fading ? clipGain * clipFadeGain(fades, secondsIntoClip, clipSeconds)
-                                          : clipGain;
+                const float gain = fading ? clipGain * envelopeGainAt(position) * clipFadeGain(fades, secondsIntoClip, clipSeconds)
+                                          : clipGain * envelopeGainAt(position);
 
                 for (int ch = 0; ch < outChans; ++ch)
                 {

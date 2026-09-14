@@ -1071,6 +1071,7 @@ void MainComponent::syncEngineTracks()
             spec.sourceOffsetSeconds = clip.sourceOffsetSeconds;
             spec.fades               = clip.fades;
             spec.channels            = clip.channels;
+            spec.envelope            = clip.envelope;
             audioSpecs.push_back(spec);
         }
         // Submitted even when empty, which the guard here used to skip: the

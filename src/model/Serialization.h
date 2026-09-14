@@ -72,6 +72,15 @@ namespace detail
         out << "CLIPFADE " << num(clip.fades.inSeconds) << " " << (int) clip.fades.inShape << " "
             << num(clip.fades.outSeconds) << " " << (int) clip.fades.outShape << "\n";
         out << "CLIPCHANS " << (int) clip.channels << "\n";
+
+        // Only when there's a curve: a clip without one reads back as unity.
+        if (! clip.envelope.isEmpty())
+        {
+            out << "CLIPENV " << clip.envelope.points().size();
+            for (const auto& point : clip.envelope.points())
+                out << " " << num(point.seconds) << " " << num((double) point.gain);
+            out << "\n";
+        }
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
             out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
@@ -359,6 +368,22 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
         if (readTagged("CLIPCHANS", rest))
             clip.channels = engine::clipChannelsFrom(std::atoi(rest.c_str()));
+
+        if (readTagged("CLIPENV", rest))
+        {
+            std::istringstream es(rest);
+            es.imbue(std::locale::classic());
+
+            int count = 0;
+            es >> count;
+            for (int i = 0; i < count; ++i)
+            {
+                double seconds = 0.0, gain = 1.0;
+                if (! (es >> seconds >> gain))
+                    break; // a truncated line keeps the points it has
+                clip.envelope.addPoint(seconds, (float) gain);
+            }
+        }
 
         if (readTagged("PEDALS", rest))
         {

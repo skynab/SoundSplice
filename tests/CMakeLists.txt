@@ -8,6 +8,7 @@ add_executable(soundsplice_tests
   engine/InterpolationTests.cpp
   engine/ClipFadeTests.cpp
   engine/ClipChannelsTests.cpp
+  engine/ClipEnvelopeTests.cpp
   engine/MidiNoteTests.cpp
   engine/SequencerMathTests.cpp
   engine/MetronomeMathTests.cpp
@@ -46,6 +47,7 @@ add_executable(soundsplice_tests
   model/TimeSelectionTests.cpp
   model/ArrangementEditsTests.cpp
   model/TrackChannelsTests.cpp
+  model/ClipEnvelopeSaveTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp
@@ -104,6 +106,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/ProjectMediaTests.cpp
     gui/SequenceAudioFormatTests.cpp
     gui/ClipStreamTests.cpp
+    gui/ClipEnvelopePlaybackTests.cpp
     gui/PaneLayoutTests.cpp
     gui/PaneWiringTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)

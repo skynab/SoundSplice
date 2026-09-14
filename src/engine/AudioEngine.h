@@ -49,6 +49,7 @@ struct AudioClipSpec
     double     sourceOffsetSeconds = 0.0; // see model::Clip::sourceOffsetSeconds
     ClipFades  fades;                     // see model::Clip::fades
     ClipChannels channels = ClipChannels::Both; // see model::Clip::channels
+    ClipEnvelope envelope;                      // see model::Clip::envelope
 };
 
 /**
