@@ -736,6 +736,10 @@ MainComponent::MainComponent()
     // pane has to be handed the new one rather than keeping the old one on
     // screen under a new name.
     automationPane_.onParamChanged = [this](model::TrackParam) { refreshAutomationPaneForSelected(); };
+    audioEditor_.onSampleDetailNeeded = [this](double fromSeconds, double toSeconds)
+    {
+        sendSampleDetailToEditor(fromSeconds, toSeconds);
+    };
     audioEditor_.onCaptureNoisePrintRequested = [this] { captureNoisePrint(); };
     audioEditor_.onReduceNoiseRequested = [this](float amountDb, float floorDb)
     {

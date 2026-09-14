@@ -98,7 +98,8 @@ all three.
 - 🟡 **Scrub and seek** playback ⬜, **play-at-speed** (transport varispeed) ⬜, and **loop the selection** ✅
   (Loop plays the time selection when there is one)
 - 🟡 Zoom: to selection ✅ (Ctrl+E), fit project ✅ (Ctrl+F; View menu, `src/app/TimelineZoom.h`),
-  fit vertically ✅ (Ctrl+Shift+F), sample-level zoom ⬜, a vertical dB/linear scale ⬜, and waveform vs. **RMS overlay**
+  fit vertically ✅ (Ctrl+Shift+F), sample-level zoom ✅ (zoomed in past the
+  peaks, the audio editor draws the samples themselves, joined and marked; `src/app/SampleDetail.h`), a vertical dB/linear scale ⬜, and waveform vs. **RMS overlay**
   display ✅ (the audio editor draws RMS in a lighter band inside the peaks)
 - 🟡 Track channel ops: **split stereo to mono** ✅ and swap channels ✅ (Edit menu; each clip plays
   a chosen channel, so nothing is rendered; `src/model/TrackChannels.h`), **make stereo from two monos** ⬜,

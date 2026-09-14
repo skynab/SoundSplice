@@ -10,6 +10,7 @@
 #include "AudioFileTypes.h"
 #include "AudioSelection.h"
 #include "TrackColours.h"
+#include "SampleDetail.h"
 #include "WaveformPeaks.h"
 
 namespace soundsplice
@@ -96,6 +97,11 @@ public:
         more than the measured noise to remove; floor bounds how far any one
         frequency may be attenuated (the musical-noise guard). */
     std::function<void(float amountDb, float floorDb)> onReduceNoiseRequested;
+
+    /** The pane is zoomed in past what its peaks can show and needs the
+        actual samples of [fromSeconds, toSeconds) of the clip, answered with
+        setSampleDetail. This pane reads no files itself. */
+    std::function<void(double fromSeconds, double toSeconds)> onSampleDetailNeeded;
 
     AudioEditorPane()
     {
@@ -290,6 +296,7 @@ public:
             notifySelection();
         }
 
+        sampleDetail_ = {}; // another clip's, or another window of this one
         setContentVisible(true);
         repaint();
     }
@@ -317,6 +324,17 @@ public:
     {
         peaks_            = std::move(peaks);
         peaksSampleRate_  = sampleRate > 0.0 ? sampleRate : 0.0;
+
+        // New audio: any samples held for a close zoom describe the old.
+        sampleDetail_ = {};
+        requestSampleDetailIfZoomedIn();
+        repaint();
+    }
+
+    /** The samples asked for through onSampleDetailNeeded. */
+    void setSampleDetail(SampleDetail detail)
+    {
+        sampleDetail_ = std::move(detail);
         repaint();
     }
 
@@ -659,6 +677,8 @@ public:
         geometry_.contentLeft = (float) area.getX();
         geometry_.visibleStartSeconds =
             geometry_.clampedStart(geometry_.visibleStartSeconds, (float) area.getWidth());
+
+        requestSampleDetailIfZoomedIn(); // a wider pane shows more samples
     }
 
 private:
@@ -739,6 +759,18 @@ private:
         const double secondsPerPixel = geometry_.secondsPerPixel > 0.0 ? geometry_.secondsPerPixel : 1.0e-9;
         const bool   showGhost       = std::abs(gainDb_) > 0.05f;
 
+        // Zoomed in past what the peaks can show: draw the samples themselves,
+        // once they've arrived (until then, the peaks, blocky but not blank).
+        const double viewFrom = geometry_.visibleStartSeconds
+                              + (double) ((float) lane.getX() - geometry_.contentLeft) * secondsPerPixel;
+        const double viewTo   = viewFrom + (double) lane.getWidth() * secondsPerPixel;
+        if (SampleDetail::wanted(secondsPerPixel, peaksSampleRate_)
+            && sampleDetail_.covers(viewFrom, viewTo, geometry_.fileLengthSeconds))
+        {
+            paintChannelFromSamples(g, lane, channel, gain, centreY, halfH);
+            return;
+        }
+
         for (int x = lane.getX(); x < lane.getRight(); ++x)
         {
             const double startSeconds = geometry_.visibleStartSeconds
@@ -788,6 +820,86 @@ private:
                 g.drawVerticalLine(x, rmsTop, rmsBottom);
             }
         }
+    }
+
+    /** One channel drawn from its actual samples rather than its peaks, for a
+        view zoomed in to a few samples per pixel or fewer. At a sample a pixel
+        or more, each pixel is the exact extremes of its samples; closer than
+        that, the samples are joined up as the line they are, and marked once
+        they're far enough apart to pick out, which is where a click or an
+        edit point is placed by eye. Anything the clip's gain would push past
+        full scale is red, as in the peaks view. */
+    void paintChannelFromSamples(juce::Graphics& g, juce::Rectangle<int> lane, int channel, float gain,
+                                 float centreY, float halfH)
+    {
+        juce::Graphics::ScopedSaveState saved(g);
+        g.reduceClipRegion(lane);
+
+        const double secondsPerPixel = geometry_.secondsPerPixel;
+        const double samplesPerPixel = secondsPerPixel * sampleDetail_.sampleRate;
+        const auto   yFor            = [centreY, halfH, gain](float sample)
+        {
+            return centreY - juce::jlimit(-1.0f, 1.0f, sample * gain) * halfH;
+        };
+
+        if (samplesPerPixel >= 1.0)
+        {
+            for (int x = lane.getX(); x < lane.getRight(); ++x)
+            {
+                const double start = geometry_.visibleStartSeconds
+                                   + (double) ((float) x - geometry_.contentLeft) * secondsPerPixel;
+                const auto bin = sampleDetail_.range(channel, start, start + secondsPerPixel);
+                if (bin.isEmpty())
+                    continue;
+
+                const float top    = yFor(bin.maximum);
+                const float bottom = juce::jmax(top + 1.0f, yFor(bin.minimum));
+                g.setColour(bin.magnitude() * gain > 1.0f ? juce::Colours::red
+                                                          : juce::Colours::aquamarine.withAlpha(0.85f));
+                g.drawVerticalLine(x, top, bottom);
+            }
+            return;
+        }
+
+        const double viewFrom = geometry_.visibleStartSeconds
+                              + (double) ((float) lane.getX() - geometry_.contentLeft) * secondsPerPixel;
+        const double viewTo   = viewFrom + (double) lane.getWidth() * secondsPerPixel;
+        const long   first    = sampleDetail_.indexAt(viewFrom) - 1;
+        const long   last     = sampleDetail_.indexAt(viewTo) + 1;
+        const bool   marked   = 1.0 / samplesPerPixel >= 6.0;
+
+        juce::Path line;
+        bool       started = false;
+
+        for (long i = first; i <= last; ++i)
+        {
+            float sample = 0.0f;
+            if (! sampleDetail_.sampleAt(channel, i, sample))
+                continue;
+
+            const double seconds = sampleDetail_.startSeconds + (double) i / sampleDetail_.sampleRate;
+            const float  x       = geometry_.xForSeconds(seconds);
+            const float  y       = yFor(sample);
+
+            if (! started)
+            {
+                line.startNewSubPath(x, y);
+                started = true;
+            }
+            else
+            {
+                line.lineTo(x, y);
+            }
+
+            if (marked)
+            {
+                g.setColour(std::abs(sample * gain) > 1.0f ? juce::Colours::red : juce::Colours::aquamarine);
+                g.fillEllipse(x - 2.5f, y - 2.5f, 5.0f, 5.0f);
+            }
+        }
+
+        g.setColour(juce::Colours::aquamarine.withAlpha(0.85f));
+        g.strokePath(line, juce::PathStrokeType(1.5f));
     }
 
     void setSelection(AudioRange range)
@@ -848,6 +960,7 @@ private:
         geometry_.visibleStartSeconds =
             geometry_.clampedStart(centre - geometry_.visibleSeconds((float) area.getWidth()) * 0.5,
                                    (float) area.getWidth());
+        requestSampleDetailIfZoomedIn();
         repaint();
     }
 
@@ -859,7 +972,27 @@ private:
 
         geometry_.secondsPerPixel     = geometry_.secondsPerPixelToFit((float) area.getWidth());
         geometry_.visibleStartSeconds = 0.0;
+        requestSampleDetailIfZoomedIn(); // a clip short enough can fit at sample level
         repaint();
+    }
+
+    /** Asks for the visible samples, and half a view either side so a small
+        zoom doesn't read again, when the view is close enough to need them
+        and what's held doesn't already cover it. */
+    void requestSampleDetailIfZoomedIn()
+    {
+        const auto area = waveformArea();
+        if (! contentVisible_ || area.isEmpty() || ! onSampleDetailNeeded
+            || ! SampleDetail::wanted(geometry_.secondsPerPixel, peaksSampleRate_))
+            return;
+
+        const double from = geometry_.visibleStartSeconds;
+        const double to   = from + geometry_.visibleSeconds((float) area.getWidth());
+        if (sampleDetail_.covers(from, to, geometry_.fileLengthSeconds))
+            return;
+
+        const double margin = (to - from) * 0.5;
+        onSampleDetailNeeded(juce::jmax(0.0, from - margin), juce::jmin(geometry_.fileLengthSeconds, to + margin));
     }
 
     /** Every control this pane shows and hides, in one place, so none can be
@@ -922,6 +1055,7 @@ private:
     bool             fileDragActive_     = false;
     double           playheadSeconds_    = 0.0;
     WaveformPeaks    peaks_;
+    SampleDetail     sampleDetail_; // the visible samples, once zoomed in past the peaks
     double           peaksSampleRate_ = 0.0;
     float            gainDb_          = 0.0f;
 

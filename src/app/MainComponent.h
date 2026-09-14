@@ -356,6 +356,10 @@ private:
         channel; only those samples are read. Empty if they can't be. */
     std::vector<std::vector<float>> readClipAudio(const ClipAudio& audio, int from, int to) const;
 
+    /** Answers the audio editor's onSampleDetailNeeded: the selected clip's
+        samples over [fromSeconds, toSeconds), for drawing it zoomed right in. */
+    void                   sendSampleDetailToEditor(double fromSeconds, double toSeconds);
+
     /** Samples [from, to) of the selected clip become @p replacement, of any
         length, in one undo step: new blocks for the replacement and a new
         sequence file around them, with nothing else rewritten. The single path

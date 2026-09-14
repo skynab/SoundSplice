@@ -84,6 +84,33 @@ void MainComponent::refreshAudioEditorForSelected()
     audioEditor_.setWaveform(waveformPeaks_, waveformPeaksSampleRate_);
 }
 
+/** The selected clip's actual samples over [fromSeconds, toSeconds), seconds
+    from its start, for the audio editor zoomed in past its peaks. Only what's
+    asked for is read, which at a zoom that close is a few tens of thousands
+    of samples at most; a request for more than that isn't one a close zoom
+    makes, and is ignored. */
+void MainComponent::sendSampleDetailToEditor(double fromSeconds, double toSeconds)
+{
+    ClipAudio audio;
+    if (! openSelectedClipAudio(audio))
+        return;
+
+    constexpr int kMostFrames = 1 << 20;
+
+    const double rate   = audio.sequence.sampleRate;
+    const int    length = audio.window.length();
+    const int    from   = juce::jlimit(0, length, (int) std::floor(fromSeconds * rate));
+    const int    to     = juce::jlimit(from, length, (int) std::ceil(toSeconds * rate));
+    if (to <= from || to - from > kMostFrames)
+        return;
+
+    SampleDetail detail;
+    detail.startSeconds = (double) from / rate;
+    detail.sampleRate   = rate;
+    detail.channels     = readClipAudio(audio, from, to);
+    audioEditor_.setSampleDetail(std::move(detail));
+}
+
 /** Writes the selected clip's gain. Live during a slider drag — the
     surrounding beginStructDrag/commitStructDrag pair is what makes the whole
     drag one undo step, same as every other continuous control here. */
