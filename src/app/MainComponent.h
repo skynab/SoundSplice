@@ -316,6 +316,10 @@ private:
     // Track channel operations — see model/TrackChannels.h.
     void                   splitSelectedTrackToMono();
     void                   swapSelectedTrackChannels();
+    /** Joins the selected audio track and the one below it into one stereo
+        track: back into one without rendering if they are split halves,
+        otherwise by rendering each to a side of a new file. */
+    void                   makeStereoTrack();
     /** Renders the edit's tracks (see arrangementEditTracks) over the time
         selection, or everything arranged, onto a new audio track. */
     void                   mixAndRenderToNewTrack();

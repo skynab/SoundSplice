@@ -104,7 +104,8 @@ all three.
   peaks, the audio editor draws the samples themselves, joined and marked; `src/app/SampleDetail.h`), a vertical dB/linear scale ⬜, and waveform vs. **RMS overlay**
   display ✅ (the audio editor draws RMS in a lighter band inside the peaks)
 - 🟡 Track channel ops: **split stereo to mono** ✅ and swap channels ✅ (Edit menu; each clip plays
-  a chosen channel, so nothing is rendered; `src/model/TrackChannels.h`), **make stereo from two monos** ⬜,
+  a chosen channel, so nothing is rendered; `src/model/TrackChannels.h`), **make stereo from two monos** ✅
+  (split halves join back as they were; any other pair renders to one stereo file),
   **mix and render to a new track** ✅
   (the tracks' pre-master mix over the time selection, on the render thread), and per-track **resample** ⬜
 - ⬜ **Multiple open files** in the editor, as tabs (REAPER project tabs, Audition's file list)

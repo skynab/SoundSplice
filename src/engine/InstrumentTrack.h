@@ -121,6 +121,16 @@ struct InstrumentTrack
         scratch.setSize(2, juce::jmax(1, blockSize));
     }
 
+    /** Unity-centre linear pan law — see the note in render().
+        Public for anything that has to undo a pan, as Make Stereo Track does. */
+    static float panGainFor(int channel, float panPosition) noexcept
+    {
+        const float p = juce::jlimit(-1.0f, 1.0f, panPosition);
+        if (channel == 0) return p <= 0.0f ? 1.0f : 1.0f - p;
+        if (channel == 1) return p >= 0.0f ? 1.0f : 1.0f + p;
+        return 1.0f;
+    }
+
 private:
     // Automation lookups. Each returns nullptr when that parameter isn't
     // automated, which is what makes the track fall back to its static value.
@@ -136,15 +146,6 @@ private:
     static float decibelsAt(const AutomationCurve* curve, double beat, float staticDb)
     {
         return juce::Decibels::decibelsToGain(curve != nullptr ? curve->valueAt(beat, staticDb) : staticDb);
-    }
-
-    /** Unity-centre linear pan law — see the note in render(). */
-    static float panGainFor(int channel, float panPosition) noexcept
-    {
-        const float p = juce::jlimit(-1.0f, 1.0f, panPosition);
-        if (channel == 0) return p <= 0.0f ? 1.0f : 1.0f - p;
-        if (channel == 1) return p >= 0.0f ? 1.0f : 1.0f + p;
-        return 1.0f;
     }
 
     static double beatsPerBlock(const ProcessContext& context) noexcept

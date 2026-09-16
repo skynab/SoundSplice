@@ -502,6 +502,203 @@ void MainComponent::swapSelectedTrackChannels()
     showStatus("Swapped left and right");
 }
 
+/** Make Stereo Track, as in Audacity: the selected audio track becomes the
+    left channel and the track below it the right, as one track in their place.
+
+    Two halves of a split go back together as the track they came from, with
+    nothing rendered. Any other pair has no single file to play from, so each
+    track is rendered as a stem is (its clips, effects and gain, before the
+    master bus), folded back to mono through its pan, and the two written as
+    one stereo file. That bakes in their effects, so the new track starts with
+    none, at unity and centred. Pan is folded at its fixed value; a pan curve
+    isn't followed. */
+void MainComponent::makeStereoTrack()
+{
+    const int   index  = selectedTrackIndex_;
+    const auto& song   = history_.current();
+    const auto& tracks = song.tracks;
+    if (index < 0 || index + 1 >= (int) tracks.size() || tracks[(size_t) index].type != model::TrackType::Audio
+        || tracks[(size_t) index + 1].type != model::TrackType::Audio)
+    {
+        showError("Select an audio track with an audio track below it");
+        return;
+    }
+
+    if (model::channelops::areSplitHalves(song, index))
+    {
+        history_.edit("Make stereo track", [index](model::Song& s)
+        {
+            model::channelops::joinSplitHalves(s, index);
+        });
+
+        selectTrackAndRefreshAll(index);
+        showStatus("Joined the left and right tracks back into one");
+        return;
+    }
+
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+
+    if (index + 1 >= engine_.maxTracks() || ! engine_.trackContributesToMix(index)
+        || ! engine_.trackContributesToMix(index + 1))
+    {
+        showError("Both tracks need to be heard - unmute them, or clear the solo");
+        return;
+    }
+
+    const double rate = engine_.sampleRate();
+    if (rate <= 0.0)
+    {
+        showError("Rendering needs an audio device - choose one in Audio Settings");
+        return;
+    }
+
+    double startBeats = 0.0;
+    double endBeats   = 0.0;
+    bool   any        = false;
+    for (int i = index; i <= index + 1; ++i)
+        for (const auto& clip : tracks[(size_t) i].clips)
+        {
+            const double end = clip.startBeats + clip.lengthBeats;
+            startBeats       = any ? juce::jmin(startBeats, clip.startBeats) : clip.startBeats;
+            endBeats         = any ? juce::jmax(endBeats, end) : end;
+            any              = true;
+        }
+
+    if (! any || endBeats <= startBeats)
+    {
+        showError("Nothing on those tracks to join");
+        return;
+    }
+
+    const auto&  left    = tracks[(size_t) index];
+    const auto&  right   = tracks[(size_t) index + 1];
+    const float  pans[2] = { left.pan, right.pan };
+    const auto   name    = left.name.empty() ? std::string("Stereo")
+                                             : model::channelops::detail::withoutSideSuffix(left.name);
+    const int    leftId  = left.id;
+    const int    rightId = right.id;
+    const double length  = endBeats - startBeats;
+    const auto   file    = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Stereo", ".wav");
+    auto         written = std::make_shared<bool>(false);
+
+    // The engine belongs to the render thread for the duration, as for an export.
+    offlineRenderInProgress_ = true;
+
+    auto work = [this, index, startBeats, length, rate, file, written, pans](app::OfflineRenderJob& job)
+    {
+        juce::AudioBuffer<float> stereo;
+
+        for (int side = 0; side < 2; ++side)
+        {
+            engine::AudioEngine::OfflineRenderOptions options;
+            options.startBeats     = startBeats;
+            options.lengthBeats    = length;
+            options.soloTrack      = index + side;
+            options.applyMasterBus = false;
+            options.onProgress     = [&job, side](double fraction)
+            {
+                job.report(app::overallProgress(side, 2, fraction),
+                           side == 0 ? "Rendering the left track" : "Rendering the right track");
+                return ! job.shouldAbort();
+            };
+
+            const auto buffer = engine_.renderOffline(options);
+            if (buffer.getNumSamples() == 0 || job.shouldAbort())
+                return; // cancelled
+
+            if (stereo.getNumSamples() == 0)
+            {
+                stereo.setSize(2, buffer.getNumSamples());
+                stereo.clear();
+            }
+
+            const float leftGain  = engine::InstrumentTrack::panGainFor(0, pans[side]);
+            const float rightGain = engine::InstrumentTrack::panGainFor(1, pans[side]);
+            const int   samples   = juce::jmin(stereo.getNumSamples(), buffer.getNumSamples());
+            const auto* inLeft    = buffer.getReadPointer(0);
+            const auto* inRight   = buffer.getReadPointer(juce::jmin(1, buffer.getNumChannels() - 1));
+            auto*       out       = stereo.getWritePointer(side);
+
+            for (int n = 0; n < samples; ++n)
+                out[n] = model::channelops::foldToMono(inLeft[n], inRight[n], leftGain, rightGain);
+        }
+
+        *written = stereo.getNumSamples() > 0 && engine::OfflineRenderer::writeWav(file, stereo, rate);
+    };
+
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), written, file, startBeats, length,
+                       leftId, rightId, name](bool cancelled)
+    {
+        if (self == nullptr)
+            return;
+
+        self->offlineRenderInProgress_ = false;
+        self->renderJob_.reset();
+        self->followSystemOutputIfEnabled();
+
+        if (cancelled || ! *written)
+        {
+            file.deleteFile();
+            if (cancelled)
+                self->showStatus("Make stereo track cancelled");
+            else
+                self->showError("Could not write " + file.getFileName());
+            return;
+        }
+
+        const auto path     = file.getFullPathName().toStdString();
+        int        newIndex = -1;
+
+        // By id: the render ran behind a modal progress window, but ids are
+        // what edits address tracks by everywhere else too.
+        self->history_.edit("Make stereo track", [&](model::Song& s)
+        {
+            int at = -1;
+            for (int i = 0; i < (int) s.tracks.size(); ++i)
+                if (s.tracks[(size_t) i].id == leftId)
+                    at = i;
+            if (at < 0)
+                return;
+
+            model::Track track;
+            track.id   = model::allocateId(s);
+            track.name = name;
+            track.type = model::TrackType::Audio;
+            track.sessionSlots.resize(s.scenes.size());
+
+            model::Clip clip;
+            clip.id          = model::allocateId(s);
+            clip.type        = model::ClipType::Audio;
+            clip.startBeats  = startBeats;
+            clip.lengthBeats = length;
+            clip.audioFile   = path;
+            track.clips.push_back(clip);
+
+            s.tracks[(size_t) at] = std::move(track);
+            s.tracks.erase(std::remove_if(s.tracks.begin(), s.tracks.end(),
+                                          [rightId](const model::Track& t) { return t.id == rightId; }),
+                           s.tracks.end());
+            newIndex = (int) std::min((size_t) at, s.tracks.size() - 1);
+        });
+
+        if (newIndex < 0)
+        {
+            file.deleteFile();
+            self->showError("The tracks were removed while rendering");
+            return;
+        }
+
+        self->selectTrackAndRefreshAll(newIndex);
+        self->showStatus("Made a stereo track");
+    };
+
+    renderJob_ = app::OfflineRenderJob::launch("Make Stereo Track", std::move(work), std::move(onFinished));
+}
+
 /** Copies the selected track for later pasting. Deliberately its own
     clipboard rather than sharing the clip one: pasting a track when a clip
     was copied, or the reverse, is the kind of guess that loses work. */
