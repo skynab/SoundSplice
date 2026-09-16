@@ -366,6 +366,8 @@ private:
     /** Answers the audio editor's onSampleDetailNeeded: the selected clip's
         samples over [fromSeconds, toSeconds), for drawing it zoomed right in. */
     void                   sendSampleDetailToEditor(double fromSeconds, double toSeconds);
+    /** Writes a stroke of the audio editor's draw tool into the selected clip. */
+    void                   drawSamplesOnSelectedClip(int channel, long firstSample, const std::vector<float>& values);
 
     /** Samples [from, to) of the selected clip become @p replacement, of any
         length, in one undo step: new blocks for the replacement and a new

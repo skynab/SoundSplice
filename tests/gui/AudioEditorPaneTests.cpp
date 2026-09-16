@@ -512,3 +512,68 @@ TEST_CASE("The cursor starts at zero for a fresh clip", "[gui][audioeditor]")
     pane->setClip(juce::File("/nonexistent/other.wav"), 4.0, 0.0f, "Audio 2", 0xff30ff80);
     REQUIRE(pane->cursorSeconds() == 0.0);
 }
+
+TEST_CASE("Alt-dragging over the samples redraws them, once zoomed in to see them", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto pane = makeReadyPane(800, 400, 60.0);
+
+    int                channel = -1;
+    long               first   = -1;
+    std::vector<float> drawn;
+    pane->onSamplesDrawn = [&](int c, long f, const std::vector<float>& values)
+    {
+        channel = c;
+        first   = f;
+        drawn   = values;
+    };
+
+    const auto alt = [&](juce::Point<float> position, juce::Point<float> down)
+    {
+        const auto source = juce::Desktop::getInstance().getMainMouseSource();
+        const auto now    = juce::Time::getCurrentTime();
+        return juce::MouseEvent(source, position, juce::ModifierKeys(juce::ModifierKeys::altModifier), 1.0f,
+                                0.0f, 0.0f, 0.0f, 0.0f, pane.get(), pane.get(), now, down, now, 1, false);
+    };
+
+    const auto from  = waveformPoint(*pane, 0.45f);
+    const auto to    = waveformPoint(*pane, 0.55f);
+    const auto top   = juce::Point<float>(to.x, from.y - 1000.0f); // far above: full scale
+
+    SECTION("zoomed out, an Alt-drag doesn't draw")
+    {
+        sendMouseDown(*pane, alt(from, from));
+        sendMouseDrag(*pane, alt(top, from));
+        sendMouseUp(*pane, alt(top, from));
+        REQUIRE(drawn.empty());
+    }
+
+    SECTION("zoomed in, it draws the line from where it started to where it ended")
+    {
+        auto* zoomIn = findButton(*pane, "+");
+        REQUIRE(zoomIn != nullptr);
+        for (int i = 0; i < 14; ++i)
+            zoomIn->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // triggerClick is asynchronous
+
+        // Two seconds of silence at 48kHz around the middle of the view.
+        SampleDetail detail;
+        detail.sampleRate   = 48000.0;
+        detail.startSeconds = 30.0;
+        detail.channels     = { std::vector<float>(96000, 0.0f) };
+        pane->setSampleDetail(detail);
+        REQUIRE(pane->canDrawSamples());
+
+        sendMouseDown(*pane, alt(from, from));
+        sendMouseDrag(*pane, alt(top, from));
+        sendMouseUp(*pane, alt(top, from));
+
+        REQUIRE(channel == 0);
+        REQUIRE(first >= 30 * 48000);
+        REQUIRE(drawn.size() >= 2);
+        REQUIRE(std::abs(drawn.back() - 1.0f) < 1.0e-6f); // clamped to full scale
+        for (size_t i = 1; i < drawn.size(); ++i)
+            REQUIRE(drawn[i] >= drawn[i - 1]); // a rising line, not a comb
+
+    }
+}

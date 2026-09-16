@@ -741,6 +741,10 @@ MainComponent::MainComponent()
     {
         sendSampleDetailToEditor(fromSeconds, toSeconds);
     };
+    audioEditor_.onSamplesDrawn = [this](int channel, long firstSample, const std::vector<float>& values)
+    {
+        drawSamplesOnSelectedClip(channel, firstSample, values);
+    };
     audioEditor_.onCaptureNoisePrintRequested = [this] { captureNoisePrint(); };
     audioEditor_.onReduceNoiseRequested = [this](float amountDb, float floorDb)
     {

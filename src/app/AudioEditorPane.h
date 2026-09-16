@@ -11,6 +11,7 @@
 #include "AudioSelection.h"
 #include "TrackColours.h"
 #include "SampleDetail.h"
+#include "SampleDraw.h"
 #include "WaveformPeaks.h"
 
 namespace soundsplice
@@ -102,6 +103,14 @@ public:
         actual samples of [fromSeconds, toSeconds) of the clip, answered with
         setSampleDetail. This pane reads no files itself. */
     std::function<void(double fromSeconds, double toSeconds)> onSampleDetailNeeded;
+
+    /** A stroke of the draw tool (Alt-drag, zoomed in until the samples are
+        drawn as a line) has ended: samples [@p firstSample, @p firstSample +
+        values.size()) of @p channel, counted from the clip's start, should
+        now be @p values. The pane shows the stroke only while it's being
+        drawn; the edit is the owner's, and what it writes comes back as new
+        peaks and samples. */
+    std::function<void(int channel, long firstSample, const std::vector<float>& values)> onSamplesDrawn;
 
     AudioEditorPane()
     {
@@ -258,9 +267,12 @@ public:
     {
         // A trimmed or split clip can be a different stretch of the same
         // file, which moves every position in it just as a new file would.
-        const bool differentFile = file != file_
-                                || std::abs(windowStartSeconds - windowStartSeconds_) > 1.0e-9
-                                || std::abs(lengthSeconds - geometry_.fileLengthSeconds) > 1.0e-9;
+        const bool sameWindow    = std::abs(windowStartSeconds - windowStartSeconds_) <= 1.0e-9
+                                && std::abs(lengthSeconds - geometry_.fileLengthSeconds) <= 1.0e-9;
+        // A stroke of the draw tool writes the clip to a new file of the same
+        // length; being thrown back out to the whole clip after every stroke
+        // would make drawing unusable.
+        const bool differentFile = (file != file_ || ! sameWindow) && ! (keepViewForRedraw_ && sameWindow);
 
         file_               = file;
         windowStartSeconds_ = windowStartSeconds;
@@ -513,6 +525,12 @@ public:
         if (! contentVisible_ || ! waveformArea().contains(e.getPosition()))
             return;
 
+        if (e.mods.isAltDown() && canDrawSamples())
+        {
+            beginStroke(e.position);
+            return;
+        }
+
         dragAnchorSeconds_ = geometry_.secondsForX((float) e.position.x);
         dragging_          = true;
         draggedFar_        = false;
@@ -526,6 +544,12 @@ public:
 
     void mouseDrag(const juce::MouseEvent& e) override
     {
+        if (drawing_)
+        {
+            continueStroke(e.position);
+            return;
+        }
+
         if (! dragging_)
             return;
 
@@ -543,6 +567,12 @@ public:
 
     void mouseUp(const juce::MouseEvent&) override
     {
+        if (drawing_)
+        {
+            endStroke();
+            return;
+        }
+
         if (! dragging_)
             return;
 
@@ -559,6 +589,31 @@ public:
             if (onSeekRequested)
                 onSeekRequested(dragAnchorSeconds_);
         }
+    }
+
+    void mouseMove(const juce::MouseEvent& e) override
+    {
+        updateDrawCursor(e.mods, e.getPosition());
+    }
+
+    void modifierKeysChanged(const juce::ModifierKeys& mods) override
+    {
+        updateDrawCursor(mods, getMouseXYRelative());
+    }
+
+    /** Whether the draw tool works at the current zoom: the samples are held
+        for the whole view and far enough apart to be drawn as a line, so a
+        stroke lands on the samples the eye is placing it on. */
+    bool canDrawSamples() const
+    {
+        const auto area = waveformArea();
+        if (! contentVisible_ || area.isEmpty() || sampleDetail_.isEmpty())
+            return false;
+
+        const double from = geometry_.visibleStartSeconds;
+        const double to   = from + geometry_.visibleSeconds((float) area.getWidth());
+        return geometry_.secondsPerPixel * sampleDetail_.sampleRate < 1.0
+            && sampleDetail_.covers(from, to, geometry_.fileLengthSeconds);
     }
 
     void resized() override
@@ -942,6 +997,96 @@ private:
                                 juce::dontSendNotification);
     }
 
+    int laneCount() const
+    {
+        return juce::jmax(1, peaks_.isEmpty() ? (int) sampleDetail_.channels.size() : peaks_.numChannels());
+    }
+
+    void updateDrawCursor(const juce::ModifierKeys& mods, juce::Point<int> position)
+    {
+        const bool draw = mods.isAltDown() && waveformArea().contains(position) && canDrawSamples();
+        setMouseCursor(draw || drawing_ ? juce::MouseCursor::CrosshairCursor : juce::MouseCursor::NormalCursor);
+    }
+
+    /** The sample index into sampleDetail_ nearest @p x, and the value a
+        point at @p y on @p channel's lane stands for, undoing the clip's gain
+        so the sample drawn is where the line shows it. */
+    std::pair<long, float> strokePoint(juce::Point<float> position, int channel) const
+    {
+        const auto  area  = waveformArea();
+        const int   laneH = area.getHeight() / laneCount();
+        const auto  lane  = area.withY(area.getY() + channel * laneH).withHeight(laneH);
+        const float halfH = juce::jmax(1.0f, (float) lane.getHeight() * 0.5f);
+        const float gain  = juce::Decibels::decibelsToGain(gainDb_);
+
+        const double seconds = geometry_.secondsForX(position.x);
+        const long   index   = (long) std::lround((seconds - sampleDetail_.startSeconds) * sampleDetail_.sampleRate);
+        const float  shown   = ((float) lane.getCentreY() - position.y) / halfH;
+        return { index, gain > 0.0f ? shown / gain : 0.0f };
+    }
+
+    void beginStroke(juce::Point<float> position)
+    {
+        const auto area  = waveformArea();
+        const int  laneH = juce::jmax(1, area.getHeight() / laneCount());
+
+        drawChannel_ = juce::jlimit(0, (int) sampleDetail_.channels.size() - 1,
+                                    juce::jlimit(0, laneCount() - 1, ((int) position.y - area.getY()) / laneH));
+        drawOriginal_ = sampleDetail_.channels[(size_t) drawChannel_];
+        drawTouched_  = {};
+        drawing_      = true;
+
+        const auto [index, value] = strokePoint(position, drawChannel_);
+        drawLastIndex_ = index;
+        drawLastValue_ = value;
+        strokeTo(index, value);
+    }
+
+    void continueStroke(juce::Point<float> position)
+    {
+        const auto [index, value] = strokePoint(position, drawChannel_);
+        strokeTo(index, value);
+        drawLastIndex_ = index;
+        drawLastValue_ = value;
+    }
+
+    void strokeTo(long index, float value)
+    {
+        auto&      samples = sampleDetail_.channels[(size_t) drawChannel_];
+        const auto touched = app::sampledraw::drawLine(samples, drawLastIndex_, drawLastValue_, index, value);
+        if (! touched.isEmpty())
+            drawTouched_.include(touched.first, touched.last);
+        repaint();
+    }
+
+    void endStroke()
+    {
+        drawing_ = false;
+        if (drawTouched_.isEmpty() || drawChannel_ >= (int) sampleDetail_.channels.size())
+            return;
+
+        auto&      samples = sampleDetail_.channels[(size_t) drawChannel_];
+        const auto values  = std::vector<float>(samples.begin() + drawTouched_.first,
+                                                samples.begin() + drawTouched_.last + 1);
+
+        // Back to what the clip actually holds: if the edit is refused, the
+        // view mustn't go on showing a stroke that was never written.
+        const bool changed = values != std::vector<float>(drawOriginal_.begin() + drawTouched_.first,
+                                                          drawOriginal_.begin() + drawTouched_.last + 1);
+        samples = std::move(drawOriginal_);
+        drawOriginal_.clear();
+        repaint();
+
+        if (! changed || ! onSamplesDrawn)
+            return;
+
+        const long first = (long) std::lround(sampleDetail_.startSeconds * sampleDetail_.sampleRate) + drawTouched_.first;
+
+        keepViewForRedraw_ = true;
+        onSamplesDrawn(drawChannel_, first, values);
+        keepViewForRedraw_ = false;
+    }
+
     void zoomBy(double factor)
     {
         const auto area = waveformArea();
@@ -1057,6 +1202,15 @@ private:
     WaveformPeaks    peaks_;
     SampleDetail     sampleDetail_; // the visible samples, once zoomed in past the peaks
     double           peaksSampleRate_ = 0.0;
+
+    // The draw tool's stroke in progress, drawn straight into sampleDetail_.
+    bool                 drawing_           = false;
+    bool                 keepViewForRedraw_ = false;
+    int                  drawChannel_       = 0;
+    long                 drawLastIndex_     = 0;
+    float                drawLastValue_     = 0.0f;
+    app::sampledraw::Touched drawTouched_;
+    std::vector<float>   drawOriginal_; // the channel before the stroke
     float            gainDb_          = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEditorPane)

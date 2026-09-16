@@ -129,6 +129,35 @@ void MainComponent::sendSampleDetailToEditor(double fromSeconds, double toSecond
     audioEditor_.setSampleDetail(std::move(detail));
 }
 
+/** A stroke of the draw tool: samples from @p firstSample of @p channel
+    redrawn by hand, usually to take out a click. Written like any other edit,
+    as a new block over just those samples, so it undoes as one step; the
+    clip's other channels over the same span are written back unchanged. */
+void MainComponent::drawSamplesOnSelectedClip(int channel, long firstSample, const std::vector<float>& values)
+{
+    ClipAudio audio;
+    if (values.empty() || ! openSelectedClipAudio(audio))
+        return;
+
+    const int from = (int) juce::jlimit(0L, (long) audio.window.length(), firstSample);
+    const int to   = (int) juce::jlimit((long) from, (long) audio.window.length(), firstSample + (long) values.size());
+    if (to <= from)
+        return;
+
+    auto channels = readClipAudio(audio, from, to);
+    if (channels.empty() || channel < 0 || channel >= (int) channels.size())
+    {
+        showError("Could not read " + audio.file.getFileName());
+        return;
+    }
+
+    auto& target = channels[(size_t) channel];
+    std::copy_n(values.begin() + (from - firstSample), juce::jmin((size_t) (to - from), target.size()), target.begin());
+
+    if (replaceClipAudio("Draw samples", audio, from, to, channels))
+        showStatus("Redrew " + juce::String(to - from) + (to - from == 1 ? " sample" : " samples"));
+}
+
 /** Writes the selected clip's gain. Live during a slider drag — the
     surrounding beginStructDrag/commitStructDrag pair is what makes the whole
     drag one undo step, same as every other continuous control here. */
