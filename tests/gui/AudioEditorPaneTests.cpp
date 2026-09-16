@@ -577,3 +577,32 @@ TEST_CASE("Alt-dragging over the samples redraws them, once zoomed in to see the
 
     }
 }
+
+TEST_CASE("The dB scale draws a quiet waveform taller", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+
+    std::vector<float> channel((size_t) 48000 * 10);
+    for (size_t i = 0; i < channel.size(); ++i)
+        channel[i] = 0.01f * (float) std::sin(0.01 * (double) i); // -40 dB: a hair on the linear scale
+
+    WaveformPeaks peaks;
+    peaks.build({ channel });
+
+    AudioEditorPane pane;
+    pane.setVisible(true);
+    pane.setSize(600, 300);
+    pane.setClip(juce::File("/nonexistent/take.wav"), 10.0, 0.0f, "Audio 1", 0xff3080ff);
+    pane.setWaveform(std::move(peaks), 48000.0);
+    pane.resized();
+
+    const auto linear = renderPane(pane);
+    REQUIRE_FALSE(pane.showsDbScale());
+
+    pane.setDbScale(true);
+    REQUIRE(pane.showsDbScale());
+    const auto decibels = renderPane(pane);
+
+    INFO(differingPixels(linear, decibels) << " pixels changed");
+    REQUIRE(differingPixels(linear, decibels) > 1000);
+}

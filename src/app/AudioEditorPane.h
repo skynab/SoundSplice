@@ -12,6 +12,7 @@
 #include "TrackColours.h"
 #include "SampleDetail.h"
 #include "SampleDraw.h"
+#include "WaveformScale.h"
 #include "WaveformPeaks.h"
 
 namespace soundsplice
@@ -342,6 +343,19 @@ public:
         requestSampleDetailIfZoomedIn();
         repaint();
     }
+
+    /** Draws the waveform with height following level in decibels rather
+        than sample value (see app/WaveformScale.h), so quiet passages can be
+        seen. A view setting: the audio is the same either way. */
+    void setDbScale(bool db)
+    {
+        if (db == dbScale_)
+            return;
+        dbScale_ = db;
+        repaint();
+    }
+
+    bool showsDbScale() const noexcept { return dbScale_; }
 
     /** The samples asked for through onSampleDetailNeeded. */
     void setSampleDetail(SampleDetail detail)
@@ -787,12 +801,16 @@ private:
     {
         const float centreY = (float) lane.getCentreY();
         const float halfH   = (float) lane.getHeight() * 0.5f;
+        const auto  height  = [this](float sample) { return waveformscale::heightFor(sample, dbScale_); };
 
         // dBFS gridlines. Levels are judged in decibels, and a linear
         // waveform with no reference makes -6 and -12 look nearly identical.
-        for (float db : { -6.0f, -12.0f, -18.0f })
+        // The dB scale spreads its range evenly, so its lines are wider apart.
+        const std::initializer_list<float> linearLines { -6.0f, -12.0f, -18.0f };
+        const std::initializer_list<float> dbLines     { -12.0f, -24.0f, -36.0f, -48.0f };
+        for (float db : dbScale_ ? dbLines : linearLines)
         {
-            const float fraction = juce::Decibels::decibelsToGain(db);
+            const float fraction = waveformscale::heightFor(juce::Decibels::decibelsToGain(db), dbScale_);
             g.setColour(juce::Colours::white.withAlpha(0.07f));
             for (float sign : { -1.0f, 1.0f })
                 g.drawHorizontalLine((int) (centreY + sign * fraction * halfH),
@@ -846,7 +864,7 @@ private:
             if (showGhost)
             {
                 g.setColour(juce::Colours::white.withAlpha(0.16f));
-                g.drawVerticalLine(x, centreY - bin.maximum * halfH, centreY - bin.minimum * halfH);
+                g.drawVerticalLine(x, centreY - height(bin.maximum) * halfH, centreY - height(bin.minimum) * halfH);
             }
 
             const float top    = juce::jlimit(-1.0f, 1.0f, bin.maximum * gain);
@@ -859,7 +877,7 @@ private:
             // different problems.
             g.setColour(clips ? juce::Colours::red
                               : juce::Colours::aquamarine.withAlpha(0.85f));
-            g.drawVerticalLine(x, centreY - top * halfH, centreY - bottom * halfH);
+            g.drawVerticalLine(x, centreY - height(top) * halfH, centreY - height(bottom) * halfH);
 
             // The RMS level inside the peaks, lighter, as Audacity draws it:
             // the peaks show the loudest instant, RMS how loud it sounds, and
@@ -867,8 +885,8 @@ private:
             // Kept within the peaks, so it never draws past them.
             const float level = juce::jlimit(0.0f, 1.0f,
                                              peaks_.rms(channel, juce::jmax(0, from), juce::jmax(1, to)) * gain);
-            const float rmsTop    = centreY - juce::jmin(level, top) * halfH;
-            const float rmsBottom = centreY - juce::jmax(-level, bottom) * halfH;
+            const float rmsTop    = centreY - height(juce::jmin(level, top)) * halfH;
+            const float rmsBottom = centreY - height(juce::jmax(-level, bottom)) * halfH;
             if (level > 0.0f && rmsBottom > rmsTop)
             {
                 g.setColour(juce::Colours::white.withAlpha(0.45f));
@@ -892,9 +910,9 @@ private:
 
         const double secondsPerPixel = geometry_.secondsPerPixel;
         const double samplesPerPixel = secondsPerPixel * sampleDetail_.sampleRate;
-        const auto   yFor            = [centreY, halfH, gain](float sample)
+        const auto   yFor            = [this, centreY, halfH, gain](float sample)
         {
-            return centreY - juce::jlimit(-1.0f, 1.0f, sample * gain) * halfH;
+            return centreY - waveformscale::heightFor(sample * gain, dbScale_) * halfH;
         };
 
         if (samplesPerPixel >= 1.0)
@@ -1022,7 +1040,7 @@ private:
         const double seconds = geometry_.secondsForX(position.x);
         const long   index   = (long) std::lround((seconds - sampleDetail_.startSeconds) * sampleDetail_.sampleRate);
         const float  shown   = ((float) lane.getCentreY() - position.y) / halfH;
-        return { index, gain > 0.0f ? shown / gain : 0.0f };
+        return { index, gain > 0.0f ? waveformscale::sampleFor(shown, dbScale_) / gain : 0.0f };
     }
 
     void beginStroke(juce::Point<float> position)
@@ -1202,6 +1220,7 @@ private:
     WaveformPeaks    peaks_;
     SampleDetail     sampleDetail_; // the visible samples, once zoomed in past the peaks
     double           peaksSampleRate_ = 0.0;
+    bool             dbScale_         = false;
 
     // The draw tool's stroke in progress, drawn straight into sampleDetail_.
     bool                 drawing_           = false;

@@ -132,6 +132,7 @@ MainComponent::MainComponent()
     arrangementView_.setSnapToMarkers(settings_.getValue("snapToMarkers", "1") != "0");
     arrangementView_.setSnapToClipEdges(settings_.getValue("snapToClipEdges", "1") != "0");
     arrangementView_.setShowEnvelopes(settings_.getValue("showClipEnvelopes", "0") == "1");
+    audioEditor_.setDbScale(settings_.getValue("waveformDbScale", "0") == "1");
     {
         // Anything unrecognised (a hand-edited file, a format from a later
         // build) falls back to bars and beats and 30 fps.

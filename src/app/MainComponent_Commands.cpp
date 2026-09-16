@@ -221,6 +221,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(arrangementView_.showsEnvelopes());
             break;
 
+        case commands::waveformDbScale:
+            info.setTicked(audioEditor_.showsDbScale());
+            break;
+
         default:
             break;
     }
@@ -418,6 +422,15 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
+        case commands::waveformDbScale:
+        {
+            const bool db = ! audioEditor_.showsDbScale();
+            audioEditor_.setDbScale(db);
+            settings_.setValue("waveformDbScale", db ? "1" : "0");
+            settings_.saveIfNeeded();
+            break;
+        }
+
         // Splitting is a drag gesture (drop a tab on a pane's edge), so the
         // only layout command is a way back to this layout's default.
         case commands::resetLayout:
@@ -553,6 +566,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fitProject);
         add(commands::fitVertically);
         add(commands::showClipEnvelopes);
+        add(commands::waveformDbScale);
         add(commands::snapToGrid);
         add(commands::snapToMarkers);
         add(commands::snapToClipEdges);

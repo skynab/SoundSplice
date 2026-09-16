@@ -60,6 +60,7 @@ add_executable(soundsplice_tests
   app/SampleDetailTests.cpp
   app/EnvelopeGeometryTests.cpp
   app/SampleDrawTests.cpp
+  app/WaveformScaleTests.cpp
   app/RenderProgressTests.cpp
   app/ScrollFollowTests.cpp
   app/TrackSelectionTests.cpp
