@@ -15,12 +15,13 @@ namespace soundsplice::model
     editor: split at the playhead, join clips, and duplicate a time selection.
 
     Like the time selection's edits (model/TimeSelection.h), every one is
-    non-destructive, working through clip windows and source offsets, and
-    applies to audio tracks only for now.
+    non-destructive, working through clip windows and source offsets (or, on
+    an instrument track, pieces of pattern). Joining and detaching at silences
+    are audio only.
 */
 namespace arrangeedit
 {
-    /** Splits every audio clip on the tracks in @p trackIds that @p beat falls
+    /** Splits every clip on the tracks in @p trackIds that @p beat falls
         strictly inside into two that play back to back. Returns how many
         clips were split. */
     inline int splitClipsAt(Song& song, const std::vector<int>& trackIds, double beat)

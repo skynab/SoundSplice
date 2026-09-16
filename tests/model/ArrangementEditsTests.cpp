@@ -148,7 +148,7 @@ TEST_CASE("Duplicating a selection puts a copy straight after it and selects the
 
     // Nothing to duplicate.
     REQUIRE(duplicateRange(f.song, TimeSelection { 2.0, 2.0, { f.audio } }).isEmpty());
-    REQUIRE(duplicateRange(f.song, TimeSelection { 2.0, 6.0, { f.synth } }).isEmpty());
+    REQUIRE(duplicateRange(f.song, TimeSelection { 2.0, 6.0, {} }).isEmpty());
 }
 
 TEST_CASE("Detaching at silences leaves the sounding pieces where they played", "[model][arrange]")

@@ -3,6 +3,7 @@
 
 #include <model/TimeSelection.h>
 
+using namespace soundsplice;
 using namespace soundsplice::model;
 using namespace soundsplice::model::rangeedit;
 using Catch::Matchers::WithinAbs;
@@ -112,23 +113,139 @@ TEST_CASE("Silence leaves the gap and moves nothing", "[model][timeselection]")
     REQUIRE(a[1].fades.outSeconds == 2.0);
 }
 
-TEST_CASE("Tracks outside the selection, and instrument tracks, are left alone", "[model][timeselection]")
+TEST_CASE("Tracks outside the selection are left alone", "[model][timeselection]")
 {
     Fixture f;
     f.add(f.audioB, 0.0, 10.0);
 
-    Clip pattern;
-    pattern.type        = ClipType::Instrument;
-    pattern.lengthBeats = 10.0;
-    addClip(f.song, f.synth, pattern);
-
     const auto before = f.song;
-    removeRange(f.song, f.over(2.0, 6.0, { f.audioA, f.synth }), true);
+    removeRange(f.song, f.over(2.0, 6.0, { f.audioA }), true);
 
     REQUIRE(f.clips(f.audioB) == before.tracks[1].clips);
-    REQUIRE(f.clips(f.synth) == before.tracks[2].clips);
     REQUIRE(anyTrackApplies(f.song, f.over(2.0, 6.0, { f.audioA })));
-    REQUIRE_FALSE(anyTrackApplies(f.song, f.over(2.0, 6.0, { f.synth })));
+    REQUIRE(anyTrackApplies(f.song, f.over(2.0, 6.0, { f.synth })));
+}
+
+namespace
+{
+    engine::Note note(double start, double length, int number)
+    {
+        engine::Note n;
+        n.startBeats  = start;
+        n.lengthBeats = length;
+        n.noteNumber  = number;
+        return n;
+    }
+
+    /** A four-beat loop: notes 60, 62, 64 and 65, one on each beat, each
+        half a beat long. */
+    Clip loopClip(double start, double length)
+    {
+        Clip clip;
+        clip.type                = ClipType::Instrument;
+        clip.startBeats          = start;
+        clip.lengthBeats         = length;
+        clip.pattern.lengthBeats = 4.0;
+        clip.pattern.notes       = { note(0.0, 0.5, 60), note(1.0, 0.5, 62), note(2.0, 0.5, 64), note(3.0, 0.5, 65) };
+        return clip;
+    }
+}
+
+TEST_CASE("A piece of a pattern holds the notes that start in it, as the loop plays them", "[model][timeselection]")
+{
+    const auto clip = loopClip(0.0, 8.0);
+
+    // Beats 3 to 6 of a looping bar: 65, then round again to 60 and 62.
+    const auto piece = patternWindow(clip.pattern, 3.0, 6.0);
+    REQUIRE_THAT(piece.lengthBeats, WithinAbs(3.0, 1e-9));
+    REQUIRE(piece.notes.size() == 3);
+    REQUIRE(piece.notes[0].noteNumber == 65);
+    REQUIRE_THAT(piece.notes[0].startBeats, WithinAbs(0.0, 1e-9));
+    REQUIRE(piece.notes[1].noteNumber == 60);
+    REQUIRE_THAT(piece.notes[1].startBeats, WithinAbs(1.0, 1e-9));
+    REQUIRE(piece.notes[2].noteNumber == 62);
+    REQUIRE_THAT(piece.notes[2].startBeats, WithinAbs(2.0, 1e-9));
+
+    // A note running past the piece's end is cut short there; one already
+    // sounding at its start is left out.
+    const auto tight = patternWindow(clip.pattern, 1.25, 2.25);
+    REQUIRE(tight.notes.size() == 1);
+    REQUIRE(tight.notes[0].noteNumber == 64);
+    REQUIRE_THAT(tight.notes[0].startBeats, WithinAbs(0.75, 1e-9));
+    REQUIRE_THAT(tight.notes[0].lengthBeats, WithinAbs(0.25, 1e-9));
+}
+
+TEST_CASE("A held pedal stays held in a piece that starts while it's down", "[model][timeselection]")
+{
+    engine::Pattern pattern;
+    pattern.lengthBeats = 4.0;
+    pattern.pedals      = { { 1.0, true }, { 3.0, false } };
+
+    const auto during = patternWindow(pattern, 2.0, 5.0);
+    REQUIRE(during.pedals.size() == 2);
+    REQUIRE(during.pedals[0] == engine::PedalEvent { 0.0, true });
+    REQUIRE(during.pedals[1] == engine::PedalEvent { 1.0, false });
+
+    REQUIRE(patternWindow(pattern, 0.0, 0.5).pedals.empty()); // before it goes down
+}
+
+TEST_CASE("Delete on an instrument track takes the notes out and closes the gap", "[model][timeselection]")
+{
+    Fixture f;
+    addClip(f.song, f.synth, loopClip(0.0, 8.0));
+    f.add(f.audioA, 0.0, 8.0);
+
+    removeRange(f.song, f.over(2.0, 4.0, { f.audioA, f.synth }), true);
+
+    const auto& clips = f.clips(f.synth);
+    REQUIRE(clips.size() == 2);
+    REQUIRE(clips[0].id != clips[1].id);
+
+    // The first two beats, then the second bar moved back to beat 2.
+    REQUIRE_THAT(clips[0].lengthBeats, WithinAbs(2.0, 1e-9));
+    REQUIRE(clips[0].pattern.notes.size() == 2);
+    REQUIRE_THAT(clips[1].startBeats, WithinAbs(2.0, 1e-9));
+    REQUIRE_THAT(clips[1].lengthBeats, WithinAbs(4.0, 1e-9));
+    REQUIRE(clips[1].pattern.notes.size() == 4);
+    REQUIRE(clips[1].pattern.notes[0].noteNumber == 60);
+
+    // The audio track in the same selection was edited alongside.
+    REQUIRE(f.clips(f.audioA).size() == 2);
+}
+
+TEST_CASE("A whole instrument clip inside the selection is copied as it is", "[model][timeselection]")
+{
+    Fixture f;
+    const auto clip = loopClip(2.0, 8.0);
+    addClip(f.song, f.synth, clip);
+
+    const auto clipboard = copyRange(f.song, f.over(0.0, 12.0, { f.synth }));
+    REQUIRE(clipboard.tracks.size() == 1);
+    REQUIRE(clipboard.tracks[0].size() == 1);
+    REQUIRE(clipboard.tracks[0][0].pattern == clip.pattern); // still the four-beat loop
+}
+
+TEST_CASE("Paste puts clips only on tracks of their own kind", "[model][timeselection]")
+{
+    Fixture f;
+    f.add(f.audioA, 0.0, 4.0);
+    addClip(f.song, f.synth, loopClip(0.0, 4.0));
+
+    const auto audio = copyRange(f.song, f.over(0.0, 2.0, { f.audioA }));
+    const auto midi  = copyRange(f.song, f.over(0.0, 2.0, { f.synth }));
+
+    // Audio onto the instrument track alone: nowhere for it to go.
+    const auto before = f.song;
+    REQUIRE_FALSE(insertClipboard(f.song, { f.synth }, audio, 0.0));
+    REQUIRE(f.song.tracks == before.tracks);
+
+    REQUIRE(insertClipboard(f.song, { f.synth }, midi, 0.0));
+    const auto& clips   = f.clips(f.synth);
+    const auto  atStart = std::count_if(clips.begin(), clips.end(), [](const Clip& c)
+    {
+        return c.type == ClipType::Instrument && std::abs(c.startBeats) < 1e-9;
+    });
+    REQUIRE(atStart == 1);
 }
 
 TEST_CASE("Copy then paste puts the same audio back, pushing later clips along", "[model][timeselection]")

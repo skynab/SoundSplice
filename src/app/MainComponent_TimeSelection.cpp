@@ -54,7 +54,7 @@ bool MainComponent::editTimeSelection(const juce::String& label, bool copy, bool
     const auto& song = history_.current();
     if (! model::rangeedit::anyTrackApplies(song, timeSelection_))
     {
-        showError("Time selections edit audio tracks - include at least one");
+        showError("Time selections edit audio and instrument tracks - include at least one");
         return true;
     }
 
@@ -102,7 +102,7 @@ bool MainComponent::pasteAtTimeSelection()
 
     if (! model::rangeedit::anyTrackApplies(history_.current(), selection))
     {
-        showError("Time selections edit audio tracks - include at least one");
+        showError("Time selections edit audio and instrument tracks - include at least one");
         return true;
     }
 

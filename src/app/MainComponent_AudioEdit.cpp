@@ -625,8 +625,13 @@ void MainComponent::showApplyEffectsDialog()
 {
     // A time selection in the arrangement first, as the edit commands do;
     // otherwise the audio editor's selection.
-    const bool onTimeSelection = ! timeSelection_.isEmpty()
-                              && model::rangeedit::anyTrackApplies(history_.current(), timeSelection_);
+    const auto isSelectedAudioTrack = [this](const model::Track& track)
+    {
+        return track.type == model::TrackType::Audio && timeSelection_.includes(track.id);
+    };
+    const auto& tracks          = history_.current().tracks;
+    const bool  onTimeSelection = ! timeSelection_.isEmpty()
+                               && std::any_of(tracks.begin(), tracks.end(), isSelectedAudioTrack);
 
     if (! onTimeSelection && (selectedAudioClip() == nullptr || audioEditor_.selection().isEmpty()))
     {
