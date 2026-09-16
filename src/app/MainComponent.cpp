@@ -876,6 +876,11 @@ MainComponent::MainComponent()
         trimClipStartTo(trackIndex, clipIndex, newStartBeats);
     };
 
+    arrangementView_.onClipSlipped = [this](int trackIndex, int clipIndex, double newOffsetSeconds)
+    {
+        slipClipTo(trackIndex, clipIndex, newOffsetSeconds);
+    };
+
     arrangementView_.onClipFadesChanged = [this](int trackIndex, int clipIndex, const engine::ClipFades& fades)
     {
         setClipFades(trackIndex, clipIndex, fades, "Set clip fade");

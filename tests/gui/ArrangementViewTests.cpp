@@ -743,3 +743,49 @@ TEST_CASE("Turning snapping off lets a clip land off the grid", "[gui][arrangeme
     REQUIRE(landedOn >= 0.0);
     REQUIRE(std::abs(landedOn - std::round(landedOn)) > 1.0e-9);
 }
+
+TEST_CASE("Ctrl-dragging an audio clip slips its audio and leaves it in place", "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = std::make_unique<ArrangementView>();
+    view->setVisible(true);
+    view->setSize(900, 500);
+
+    auto song = mixedTypeSongWithTracks(3); // track 2 is audio
+    auto& clip = song.tracks[2].clips.at(0);
+    clip.type                = model::ClipType::Audio;
+    clip.audioFile           = "not-scanned.wav"; // no length known, so only the file's start limits a slip
+    clip.sourceOffsetSeconds = 4.0;
+    view->setSong(song);
+    view->setZoom(1.0f);
+
+    bool   moved  = false;
+    int    track  = -1, clipIndex = -1;
+    double offset = -1.0;
+    view->onClipMoved   = [&](int, int, double) { moved = true; };
+    view->onClipSlipped = [&](int t, int c, double seconds) { track = t; clipIndex = c; offset = seconds; };
+
+    const float laneY  = view->rulerHeightForTesting() + view->laneHeightForTesting() * 2.5f;
+    const float clipX  = view->gutterWidthForTesting() + 20.0f;
+    const auto  ctrl   = juce::ModifierKeys(juce::ModifierKeys::commandModifier);
+    const auto  source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto  now    = juce::Time::getCurrentTime();
+    const juce::Point<float> grab { clipX, laneY };
+
+    const auto eventAt = [&](juce::Point<float> position)
+    {
+        return juce::MouseEvent(source, position, ctrl, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, view.get(), view.get(),
+                                now, grab, now, 1, false);
+    };
+
+    sendMouseDown(*view, eventAt(grab));
+    sendMouseDrag(*view, eventAt({ clipX + 10.0f, laneY }));
+    sendMouseUp(*view, eventAt({ clipX + 10.0f, laneY }));
+
+    REQUIRE_FALSE(moved);
+    REQUIRE(track == 2);
+    REQUIRE(clipIndex == 0);
+    // Dragged right, so the clip shows audio from earlier in its file.
+    REQUIRE(offset < 4.0);
+    REQUIRE(offset >= 0.0);
+}

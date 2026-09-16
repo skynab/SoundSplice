@@ -86,6 +86,12 @@ public:
         trimClipStart, which the drag preview already clamps through). */
     std::function<void(int trackIndex, int clipIndex, double newStartBeats)> onClipStartTrimmed;
 
+    /** Fired when an audio clip's contents are Ctrl-dragged (Cmd on a Mac)
+        inside its edges: the clip should play its file from
+        @p newOffsetSeconds, staying where it is (see slipClip, which the drag
+        preview already clamps through). */
+    std::function<void(int trackIndex, int clipIndex, double newOffsetSeconds)> onClipSlipped;
+
     /** Fired when a fade handle on an audio clip is dragged and released,
         with the clip's fades as they should now be. */
     std::function<void(int trackIndex, int clipIndex, const engine::ClipFades& fades)> onClipFadesChanged;
@@ -496,8 +502,9 @@ public:
         // "this already belongs to that track."
         if (dragging_ && dragTrackIndex_ >= 0 && dragTrackIndex_ < (int) song_.tracks.size())
         {
-            const int ghostRow = (resizing_ || trimmingStart_ || fadeDrag_ != 0) ? dragTrackIndex_
-                                                                                  : dragPreviewTrackIndex_;
+            const int ghostRow = (resizing_ || trimmingStart_ || slipping_ || fadeDrag_ != 0)
+                                     ? dragTrackIndex_
+                                     : dragPreviewTrackIndex_;
             if (ghostRow >= 0 && ghostRow < (int) song_.tracks.size())
             {
                 const float ghostY = geometry_.rulerHeight + (float) ghostRow * geometry_.laneHeight;
@@ -518,6 +525,8 @@ public:
                         ghostClip = trimClipStart(ghostClip, dragPreviewStart_, song_.bpm, kMinClipBeats);
                     if (fadeDrag_ != 0)
                         ghostClip.fades = dragPreviewFades_;
+                    if (slipping_)
+                        ghostClip.sourceOffsetSeconds = dragPreviewOffset_;
                     paintClipContents(g, ghostClip, r);
                 }
 
@@ -623,6 +632,15 @@ private:
     float pixelsPerSecond() const
     {
         return geometry_.pixelsPerBeat() * (float) (juce::jmax(1.0, song_.bpm) / 60.0);
+    }
+
+    /** How long an audio clip's whole file is, in seconds, or 0 while it is
+        still being scanned. */
+    double fileSecondsFor(const model::Clip& clip) const
+    {
+        if (auto* thumbnail = waveforms_.find(juce::File(clip.audioFile)); thumbnail != nullptr)
+            return juce::jmax(0.0, thumbnail->getTotalLength());
+        return 0.0;
     }
 
     /** How long an audio clip is heard for, in seconds: its window, cut short
@@ -950,6 +968,13 @@ private:
             fadeDrag_           = fadeHandleAt(clip, trackIndex, e.position);
             resizing_           = fadeDrag_ == 0 && isOnClipRightEdge(clip, e.position.x);
             trimmingStart_      = fadeDrag_ == 0 && ! resizing_ && isOnClipLeftEdge(clip, e.position.x);
+            // Ctrl-drag (Cmd on a Mac) on a clip's body slips its audio
+            // inside its edges. Not Alt, which already inverts snapping, nor
+            // Shift, which selects time.
+            slipping_           = fadeDrag_ == 0 && ! resizing_ && ! trimmingStart_
+                        && clip.type == model::ClipType::Audio && e.mods.isCommandDown();
+            dragOriginalOffset_ = clip.sourceOffsetSeconds;
+            dragPreviewOffset_  = clip.sourceOffsetSeconds;
             dragOriginalFades_  = clip.fades;
             dragPreviewFades_   = clip.fades;
             dragTrackIndex_     = trackIndex;
@@ -1108,6 +1133,18 @@ private:
                         juce::jlimit(0.0, juce::jmax(0.0, audible - dragPreviewFades_.inSeconds), audible - atX);
             }
         }
+        else if (slipping_)
+        {
+            // Not snapped: slipping lines audio up by ear and eye, and the
+            // clip's edges, which are what the grid is for, don't move.
+            if (dragTrackIndex_ < (int) song_.tracks.size()
+                && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
+            {
+                const auto&  clip  = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
+                const double delta = (currentBeat - dragGrabBeat_) * 60.0 / juce::jmax(1.0, song_.bpm);
+                dragPreviewOffset_ = slipClip(clip, delta, fileSecondsFor(clip), song_.bpm).sourceOffsetSeconds;
+            }
+        }
         else if (trimmingStart_)
         {
             // Through the same function the edit itself uses, so the ghost
@@ -1229,10 +1266,12 @@ private:
 
         const bool wasResizing      = resizing_;
         const bool wasTrimmingStart = trimmingStart_;
+        const bool wasSlipping      = slipping_;
         const int  wasFadeDrag      = fadeDrag_;
         dragging_      = false;
         resizing_      = false;
         trimmingStart_ = false;
+        slipping_      = false;
         fadeDrag_      = 0;
 
         // Only fire for an actual change — a plain click-to-select (no drag)
@@ -1241,6 +1280,11 @@ private:
         {
             if (onClipFadesChanged && dragPreviewFades_ != dragOriginalFades_)
                 onClipFadesChanged(dragTrackIndex_, dragClipIndex_, dragPreviewFades_);
+        }
+        else if (wasSlipping)
+        {
+            if (onClipSlipped && std::abs(dragPreviewOffset_ - dragOriginalOffset_) > 1.0e-9)
+                onClipSlipped(dragTrackIndex_, dragClipIndex_, dragPreviewOffset_);
         }
         else if (wasTrimmingStart)
         {
@@ -1343,6 +1387,12 @@ private:
         if (findClipAt(pos, trackIndex, clipIndex)
             && fadeHandleAt(song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex], trackIndex, pos) != 0)
             return "Drag to fade - right-click the clip for fade shapes";
+
+        if (findClipAt(pos, trackIndex, clipIndex)
+            && song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex].type == model::ClipType::Audio
+            && ! showEnvelopes_)
+            return juce::String("Drag to move - ") + (juce::SystemStats::getOperatingSystemType() & juce::SystemStats::MacOSX ? "Cmd" : "Ctrl")
+                   + "-drag to slip the audio inside the clip";
 
         if (const int markerId = markerAt(pos); markerId >= 0)
             if (const auto* marker = model::findMarker(song_, markerId))
@@ -1778,6 +1828,9 @@ private:
     bool   dragging_          = false;
     bool   resizing_          = false;
     bool   trimmingStart_     = false; // dragging an audio clip's left edge
+    bool   slipping_          = false; // Ctrl-dragging an audio clip's contents inside its edges
+    double dragOriginalOffset_ = 0.0;  // the clip's sourceOffsetSeconds at grab
+    double dragPreviewOffset_  = 0.0;  // live preview while slipping
     int    fadeDrag_          = 0;     // +1 dragging a fade-in handle, -1 a fade-out, 0 neither
     engine::ClipFades dragOriginalFades_; // the clip's fades at grab
     engine::ClipFades dragPreviewFades_;  // live preview while dragging a fade handle

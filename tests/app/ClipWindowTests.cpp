@@ -145,3 +145,34 @@ TEST_CASE("A clip's start can't be dragged before beat zero", "[app][clipwindow]
     REQUIRE_THAT(trimmed.lengthBeats, WithinAbs(5.0, 1e-9));
     REQUIRE_THAT(trimmed.sourceOffsetSeconds, WithinAbs(4.5, 1e-9));
 }
+
+TEST_CASE("Slipping a clip moves its audio but not its edges", "[app][clipwindow]")
+{
+    // Four beats (two seconds) starting three seconds into a ten-second file.
+    const auto clip = audioClip(4.0, 4.0, 3.0);
+
+    const auto later = slipClip(clip, 1.0, 10.0, kBpm);
+    REQUIRE_THAT(later.sourceOffsetSeconds, WithinAbs(2.0, 1e-9));
+    REQUIRE_THAT(later.startBeats, WithinAbs(4.0, 1e-9));
+    REQUIRE_THAT(later.lengthBeats, WithinAbs(4.0, 1e-9));
+
+    const auto earlier = slipClip(clip, -2.5, 10.0, kBpm);
+    REQUIRE_THAT(earlier.sourceOffsetSeconds, WithinAbs(5.5, 1e-9));
+}
+
+TEST_CASE("A clip can't slip past either end of its file", "[app][clipwindow]")
+{
+    const auto clip = audioClip(4.0, 4.0, 3.0);
+
+    REQUIRE_THAT(slipClip(clip, 10.0, 10.0, kBpm).sourceOffsetSeconds, WithinAbs(0.0, 1e-9));
+    REQUIRE_THAT(slipClip(clip, -10.0, 10.0, kBpm).sourceOffsetSeconds, WithinAbs(8.0, 1e-9));
+
+    // Longer than what's left of its file: back towards the audio only.
+    const auto overhanging = audioClip(0.0, 8.0, 7.0); // four seconds from seven of ten
+    REQUIRE_THAT(slipClip(overhanging, -1.0, 10.0, kBpm).sourceOffsetSeconds, WithinAbs(7.0, 1e-9));
+    REQUIRE_THAT(slipClip(overhanging, 2.0, 10.0, kBpm).sourceOffsetSeconds, WithinAbs(5.0, 1e-9));
+
+    // A file still being scanned: only the start is known.
+    REQUIRE_THAT(slipClip(clip, -4.0, 0.0, kBpm).sourceOffsetSeconds, WithinAbs(7.0, 1e-9));
+    REQUIRE_THAT(slipClip(clip, 4.0, 0.0, kBpm).sourceOffsetSeconds, WithinAbs(0.0, 1e-9));
+}

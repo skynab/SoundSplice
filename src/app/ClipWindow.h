@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -166,6 +167,29 @@ inline model::Clip trimClipStart(const model::Clip& clip, double newStartBeats, 
     out.startBeats          = start;
     out.lengthBeats         = clip.lengthBeats - delta;
     out.sourceOffsetSeconds = std::max(0.0, clip.sourceOffsetSeconds + delta * secondsPerBeat);
+    return out;
+}
+
+/** @p clip with its audio slid @p deltaSeconds later inside its edges, as
+    slip-editing does: the clip stays where it is and shows an earlier part of
+    its file (or, for a negative delta, a later one).
+
+    Clamped so the clip never shows audio from before the file's first sample,
+    nor from past its last, where there is none. A clip already running past
+    the end of its file can still slip back towards the audio, but not further
+    out. @p fileSeconds of zero or less means the length isn't known yet (the
+    file is still being scanned), and only the start is enforced. */
+inline model::Clip slipClip(const model::Clip& clip, double deltaSeconds, double fileSeconds, double bpm)
+{
+    model::Clip out = clip;
+    if (bpm <= 0.0)
+        return out;
+
+    const double clipSeconds = clip.lengthBeats * 60.0 / bpm;
+    const double latest      = fileSeconds > 0.0 ? std::max(clip.sourceOffsetSeconds, fileSeconds - clipSeconds)
+                                                 : std::numeric_limits<double>::max();
+
+    out.sourceOffsetSeconds = std::clamp(clip.sourceOffsetSeconds - deltaSeconds, 0.0, latest);
     return out;
 }
 

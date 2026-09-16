@@ -92,7 +92,8 @@ all three.
   (`src/model/ArrangementEdits.h`), **detach at silences** ✅ (Edit menu; threshold and minimum
   length, within the time selection if any; `src/engine/SilenceDetection.h`), and **paste as new clip** ✅
   (a time selection's Paste always lands as clips of their own)
-- 🟡 Trim and **slip** a clip's contents inside its bounds (needs 0.2)
+- ✅ Trim and **slip** a clip's contents inside its bounds (drag an edge to trim; Ctrl-drag, Cmd on a Mac,
+  to slide the audio inside the clip without moving it; `slipClip` in `src/app/ClipWindow.h`)
 - 🟡 **Envelope tool** ✅ (a volume curve drawn per clip, kept in file time so trims and splits keep
   it on its audio; View > Show Clip Volume Curves, then click to add, drag to move, Alt-click to
   remove; `src/engine/ClipEnvelope.h`) and **draw tool** ⬜ (redraw samples when zoomed to sample

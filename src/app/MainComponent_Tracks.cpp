@@ -1067,6 +1067,31 @@ void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newSta
     updateEditingLabel();
 }
 
+/** Slides an audio clip's audio inside its edges (a Ctrl-drag in the
+    arrangement) by changing where in its file it starts playing. The clip
+    stays put and the file is untouched; its volume curve, kept in file time,
+    moves with the audio, while its fades stay on its edges. */
+void MainComponent::slipClipTo(int trackIndex, int clipIndex, double newOffsetSeconds)
+{
+    history_.edit("Slip clip", [trackIndex, clipIndex, newOffsetSeconds](model::Song& s)
+    {
+        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
+            return;
+        auto& clips = s.tracks[(size_t) trackIndex].clips;
+        if (clipIndex < 0 || clipIndex >= (int) clips.size())
+            return;
+
+        auto& clip = clips[(size_t) clipIndex];
+        if (clip.type == model::ClipType::Audio)
+            clip.sourceOffsetSeconds = std::max(0.0, newOffsetSeconds);
+    });
+
+    syncEngineTracks();
+    refreshAudioEditorForSelected();
+    arrangementView_.setSong(history_.current());
+    updateEditingLabel();
+}
+
 /** Replaces an audio clip's fades as one undo step, from dragging a fade
     handle or picking a shape. The file is never touched: fades are applied
     as the clip plays. */
