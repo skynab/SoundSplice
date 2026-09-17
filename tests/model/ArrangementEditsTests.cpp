@@ -272,3 +272,60 @@ TEST_CASE("Crossfade leaves clips that don't meet in the selection alone", "[mod
     requireClip(clips[1], 10.0, 5.0, 0.0);   // couldn't move back
     requireClip(clips[0], 0.0, 10.0, 0.0);   // nor could the overlap start before it
 }
+
+TEST_CASE("Gaps are what no sound on any track covers", "[model][arrange]")
+{
+    using Spans = std::vector<std::pair<double, double>>;
+
+    // Sound on one track at [1, 3) and [8, 9); on another at [2, 5).
+    const Spans sounds { { 8.0, 9.0 }, { 1.0, 3.0 }, { 2.0, 5.0 } };
+
+    REQUIRE(gapsBetween(sounds, 0.0, 12.0, 0.5) == Spans { { 0.0, 1.0 }, { 5.0, 8.0 }, { 9.0, 12.0 } });
+    REQUIRE(gapsBetween(sounds, 0.0, 12.0, 2.0) == Spans { { 5.0, 8.0 }, { 9.0, 12.0 } });
+    REQUIRE(gapsBetween(sounds, 4.0, 6.0, 0.1) == Spans { { 5.0, 6.0 } });
+    REQUIRE(gapsBetween({}, 2.0, 4.0, 0.0) == Spans { { 2.0, 4.0 } });
+}
+
+TEST_CASE("Truncating silences takes out each pause's middle and closes up", "[model][arrange]")
+{
+    Fixture f;
+    f.add(f.audio, 0.0, 10.0, 0.0);   // one clip, with silent stretches inside it
+    f.add(f.other, 12.0, 2.0, 0.0);
+
+    // Pauses at [2, 6) and [8, 13): keep 1 beat of each.
+    const std::vector<std::pair<double, double>> silences { { 2.0, 6.0 }, { 8.0, 13.0 } };
+    REQUIRE_THAT(truncateSilences(f.song, { f.audio, f.other }, silences, 1.0), WithinAbs(3.0 + 4.0, 1e-9));
+
+    // The clip ran to 10, inside the second pause, so it now ends half a beat
+    // into it; the first pause kept half a beat at each end.
+    const auto audio = f.sorted(f.audio);
+    REQUIRE(audio.size() == 2);
+    requireClip(audio[0], 0.0, 2.5, 0.0);
+    requireClip(audio[1], 2.5, 3.0, 5.5);
+
+    // The other track's clip started inside the part of the second pause that
+    // was taken out, so it lost that half beat, and closed up by both cuts.
+    const auto other = f.sorted(f.other);
+    REQUIRE(other.size() == 1);
+    requireClip(other[0], 5.5, 1.5, 0.5);
+}
+
+TEST_CASE("Repeat puts copies after the selection, one after another", "[model][arrange]")
+{
+    Fixture f;
+    f.add(f.audio, 0.0, 2.0, 0.0);
+    f.add(f.audio, 4.0, 2.0, 5.0);           // after the selection: pushed along
+
+    TimeSelection selection { 0.0, 2.0, { f.audio } };
+    const auto    repeats = repeatRange(f.song, selection, 3);
+    REQUIRE_THAT(repeats.startBeats, WithinAbs(2.0, 1e-9));
+    REQUIRE_THAT(repeats.endBeats, WithinAbs(8.0, 1e-9));
+
+    const auto clips = f.sorted(f.audio);
+    REQUIRE(clips.size() == 5);
+    for (int i = 0; i < 4; ++i)
+        requireClip(clips[(size_t) i], 2.0 * i, 2.0, 0.0);
+    requireClip(clips[4], 10.0, 2.0, 5.0);
+
+    REQUIRE(repeatRange(f.song, { 20.0, 20.0, { f.audio } }, 2).isEmpty());
+}

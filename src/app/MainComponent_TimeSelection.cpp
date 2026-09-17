@@ -240,6 +240,214 @@ void MainComponent::duplicateTimeSelection()
     refreshAfterArrangementEdit();
 }
 
+/** The silences in @p clip's audio, as seconds from its start: each stretch
+    staying under @p thresholdDb for at least @p minSilenceSeconds. Read a
+    chunk at a time, keeping only a peak per 10 ms, so a long recording costs a
+    small fraction of its size to scan. Nothing if the audio can't be read. */
+std::optional<std::vector<std::pair<double, double>>> MainComponent::silencesInClip(const model::Clip& clip,
+                                                                                    float thresholdDb,
+                                                                                    double minSilenceSeconds) const
+{
+    if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+        return std::nullopt;
+
+    const juce::File file(clip.audioFile);
+    const auto       sequence = engine::sequencefile::sequenceOf(file);
+    if (! sequence || sequence->sampleRate <= 0.0)
+        return std::nullopt;
+
+    const double rate   = sequence->sampleRate;
+    const auto   window = clipSampleWindow(clip,
+                                           (int) juce::jmin<std::int64_t>(sequence->length(), std::numeric_limits<int>::max()),
+                                           rate, history_.current().bpm);
+    std::vector<std::pair<double, double>> silences;
+    if (window.isEmpty())
+        return silences;
+
+    engine::silence::PeakEnvelope envelope(juce::jmax(1, (int) std::llround(rate * 0.01)));
+    constexpr int kChunk = 1 << 20;
+
+    for (int from = 0; from < window.length(); from += kChunk)
+    {
+        juce::AudioBuffer<float> buffer;
+        const int count = juce::jmin(kChunk, window.length() - from);
+        if (! engine::sequencefile::readRange(file, (juce::int64) window.start + from, count, buffer))
+            return std::nullopt;
+        envelope.append(buffer.getArrayOfReadPointers(), buffer.getNumChannels(), buffer.getNumSamples());
+    }
+
+    const auto runs = engine::silence::silentRuns(envelope.finish(), envelope.windowFrames(), window.length(),
+                                                  engine::silence::gainForDecibels(thresholdDb),
+                                                  std::llround(minSilenceSeconds * rate));
+    for (const auto& run : runs)
+        silences.emplace_back((double) run.from / rate, (double) run.to / rate);
+    return silences;
+}
+
+/** Truncate Silence, as Audacity's: every pause at least @p minSilenceSeconds
+    long in the time selection, silent on all its tracks at once, is cut down
+    to @p keepSeconds by taking out its middle and closing the gap. Silence is
+    measured in the audio clips; empty space between clips is silent too, and
+    instrument clips count as sound. Nothing is rewritten: clips are trimmed,
+    split and moved. One undo step. */
+void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds, double keepSeconds)
+{
+    const auto  selection = timeSelection_;
+    const auto& song      = history_.current();
+    if (selection.isEmpty() || song.bpm <= 0.0)
+    {
+        showError("Select the time to truncate silence in first");
+        return;
+    }
+
+    showBusy("Finding silences...");
+
+    const double beatsPerSecond = song.bpm / 60.0;
+    std::vector<std::pair<double, double>> sounds;
+
+    for (const auto& track : song.tracks)
+    {
+        if (! selection.includes(track.id) || ! model::rangeedit::appliesTo(track))
+            continue;
+
+        for (const auto& clip : track.clips)
+        {
+            const double clipEnd = clip.startBeats + clip.lengthBeats;
+            if (clipEnd <= selection.startBeats || clip.startBeats >= selection.endBeats)
+                continue;
+
+            const auto silences = clip.type == model::ClipType::Audio
+                                    ? silencesInClip(clip, thresholdDb, minSilenceSeconds)
+                                    : std::nullopt;
+            const auto quiet = silences ? *silences : std::vector<std::pair<double, double>> {};
+
+            // The clip minus its silences is sound. Unreadable audio counts
+            // as sound throughout, so nothing is cut from what can't be checked.
+            double cursor = clip.startBeats;
+            for (const auto& [from, to] : quiet)
+            {
+                const double quietFrom = clip.startBeats + from * beatsPerSecond;
+                if (quietFrom > cursor)
+                    sounds.emplace_back(cursor, quietFrom);
+                cursor = juce::jmax(cursor, clip.startBeats + to * beatsPerSecond);
+            }
+            if (clipEnd > cursor)
+                sounds.emplace_back(cursor, clipEnd);
+        }
+    }
+
+    const auto gaps = model::arrangeedit::gapsBetween(sounds, selection.startBeats, selection.endBeats,
+                                                      minSilenceSeconds * beatsPerSecond);
+    const double keep = keepSeconds * beatsPerSecond;
+
+    auto         trial   = song;
+    const double removed = model::arrangeedit::truncateSilences(trial, selection.trackIds, gaps, keep);
+    if (removed <= model::rangeedit::kEpsilonBeats)
+    {
+        showStatus("No pauses longer than " + juce::String(juce::jmax(minSilenceSeconds, keepSeconds), 2)
+                   + " s below " + juce::String(thresholdDb, 1) + " dB");
+        return;
+    }
+
+    history_.edit("Truncate silence", [&](model::Song& s)
+    {
+        model::arrangeedit::truncateSilences(s, selection.trackIds, gaps, keep);
+    });
+
+    auto shortened     = selection;
+    shortened.endBeats = juce::jmax(shortened.startBeats, shortened.endBeats - removed);
+    setTimeSelection(shortened);
+    refreshAfterArrangementEdit();
+    showStatus("Took " + juce::String(removed / beatsPerSecond, 2) + " s of silence out");
+}
+
+void MainComponent::showTruncateSilenceDialog()
+{
+    if (timeSelection_.isEmpty())
+    {
+        showError("Select the time to truncate silence in first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Truncate Silence",
+                                         "Shortens every pause in the time selection that is silent on all its tracks, "
+                                         "closing up the time. The audio itself isn't rewritten.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("threshold", juce::String(settings_.getDoubleValue("truncateSilence.threshold", -40.0)),
+                          "Silent below (dB):");
+    window->addTextEditor("minimum", juce::String(settings_.getDoubleValue("truncateSilence.minimum", 0.5)),
+                          "Pauses of at least (seconds):");
+    window->addTextEditor("keep", juce::String(settings_.getDoubleValue("truncateSilence.keep", 0.3)),
+                          "Shorten each to (seconds):");
+    window->addButton("Truncate", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double threshold = juce::jlimit(-120.0, 0.0, window->getTextEditorContents("threshold").getDoubleValue());
+            const double minimum   = juce::jlimit(0.01, 600.0, window->getTextEditorContents("minimum").getDoubleValue());
+            const double keep      = juce::jlimit(0.0, 600.0, window->getTextEditorContents("keep").getDoubleValue());
+            self->settings_.setValue("truncateSilence.threshold", threshold);
+            self->settings_.setValue("truncateSilence.minimum", minimum);
+            self->settings_.setValue("truncateSilence.keep", keep);
+            self->truncateSilence((float) threshold, juce::jmax(minimum, keep), keep);
+        }));
+}
+
+void MainComponent::showRepeatDialog()
+{
+    if (timeSelection_.isEmpty())
+    {
+        showError("Select the time to repeat first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Repeat", "Puts copies of the time selection straight after it.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("times", juce::String(settings_.getIntValue("repeat.times", 1)), "Number of repeats:");
+    window->addButton("Repeat", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const int times = juce::jlimit(1, 1000, window->getTextEditorContents("times").getIntValue());
+            self->settings_.setValue("repeat.times", times);
+            self->repeatTimeSelection(times);
+        }));
+}
+
+void MainComponent::repeatTimeSelection(int times)
+{
+    const auto selection = timeSelection_;
+
+    auto trial = history_.current();
+    if (model::arrangeedit::repeatRange(trial, selection, times).isEmpty())
+    {
+        showError("Select time on at least one audio or instrument track to repeat");
+        return;
+    }
+
+    model::TimeSelection repeats;
+    history_.edit("Repeat", [&](model::Song& s)
+    {
+        repeats = model::arrangeedit::repeatRange(s, selection, times);
+    });
+
+    setTimeSelection(repeats);
+    refreshAfterArrangementEdit();
+    showStatus("Repeated " + juce::String(times) + (times == 1 ? " time" : " times"));
+}
+
 /** Moves each edge of the time selection to the nearest zero crossing in the
     audio under it, so a cut or split there doesn't click.
 
@@ -618,38 +826,9 @@ void MainComponent::detachAtSilences(float thresholdDb, double minSilenceSeconds
             if (limited && (clipEnd <= selectionFrom || clip.startBeats >= selectionTo))
                 continue;
 
-            const juce::File file(clip.audioFile);
-            const auto       sequence = engine::sequencefile::sequenceOf(file);
-            if (! sequence || sequence->sampleRate <= 0.0)
+            const auto scanned = silencesInClip(clip, thresholdDb, minSilenceSeconds);
+            if (! scanned)
                 continue;
-
-            const double rate   = sequence->sampleRate;
-            const auto   window = clipSampleWindow(clip,
-                                                   (int) juce::jmin<std::int64_t>(sequence->length(),
-                                                                                  std::numeric_limits<int>::max()),
-                                                   rate, song.bpm);
-            if (window.isEmpty())
-                continue;
-
-            engine::silence::PeakEnvelope envelope(juce::jmax(1, (int) std::llround(rate * 0.01)));
-            constexpr int kChunk = 1 << 20;
-            bool          read   = true;
-
-            for (int from = 0; from < window.length() && read; from += kChunk)
-            {
-                juce::AudioBuffer<float> buffer;
-                const int count = juce::jmin(kChunk, window.length() - from);
-                read = engine::sequencefile::readRange(file, (juce::int64) window.start + from, count, buffer);
-                if (read)
-                    envelope.append(buffer.getArrayOfReadPointers(), buffer.getNumChannels(), buffer.getNumSamples());
-            }
-
-            if (! read)
-                continue;
-
-            const auto runs = engine::silence::silentRuns(envelope.finish(), envelope.windowFrames(), window.length(),
-                                                          engine::silence::gainForDecibels(thresholdDb),
-                                                          std::llround(minSilenceSeconds * rate));
 
             // Seconds from the clip's start, cut down to the time selection.
             const double secondsPerBeat = 60.0 / song.bpm;
@@ -658,10 +837,10 @@ void MainComponent::detachAtSilences(float thresholdDb, double minSilenceSeconds
                                                   : std::numeric_limits<double>::max();
 
             Found clipFound { track.id, clip.id, {} };
-            for (const auto& run : runs)
+            for (const auto& [runFrom, runTo] : *scanned)
             {
-                const double from = juce::jmax((double) run.from / rate, limitFrom);
-                const double to   = juce::jmin((double) run.to / rate, limitTo);
+                const double from = juce::jmax(runFrom, limitFrom);
+                const double to   = juce::jmin(runTo, limitTo);
                 if (to > from)
                     clipFound.silences.emplace_back(from, to);
             }

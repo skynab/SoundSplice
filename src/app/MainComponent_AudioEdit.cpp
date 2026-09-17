@@ -1068,6 +1068,56 @@ void MainComponent::analyseSelection()
     showStatus("Analysed " + juce::String((double) (to - from) / sampleRate, 2) + "s");
 }
 
+void MainComponent::showChangeTempoDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Change Tempo",
+                                         "Makes the whole clip faster or slower without changing its pitch.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("percent", juce::String(settings_.getDoubleValue("changeTempo.percent", 10.0)),
+                          "Change (%: 50 is half as fast again, -25 a quarter slower):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double percent = juce::jlimit(-90.0, 400.0, window->getTextEditorContents("percent").getDoubleValue());
+            self->settings_.setValue("changeTempo.percent", percent);
+            self->changeTempoOfSelectedClip(percent);
+        }));
+}
+
+/** Change Tempo, as Audacity's: the whole clip played @p percent faster (or
+    slower, for a negative change) at the same pitch, by the phase vocoder
+    Speed and Pitch uses. The clip's length follows. */
+void MainComponent::changeTempoOfSelectedClip(double percent)
+{
+    if (std::abs(percent) < 1.0e-6)
+        return;
+
+    showBusy("Processing...");
+    const double lengthFactor = 1.0 / (1.0 + percent / 100.0);
+
+    const bool applied = editWholeClip("Change tempo", [lengthFactor](std::vector<std::vector<float>>& channels, double)
+    {
+        for (auto& channel : channels)
+            channel = engine::timestretch::timeStretch(channel, lengthFactor);
+    });
+
+    if (applied)
+        showStatus("Tempo changed by " + juce::String(percent > 0 ? "+" : "") + juce::String(percent, 1) + "%");
+}
+
 /** Speed and pitch, on the whole clip.
 
     Whole clip rather than a selection on purpose: both change the audio's

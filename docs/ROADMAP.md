@@ -140,7 +140,7 @@ drawable transfer curve (Audition)
 ✅ **Crossfade clips** (Edit > Crossfade Clips: neighbours overlap from their hidden audio across the time selection; overlapping clips on a track now mix) · ⬜ Crossfade tracks · ⬜ Automatic crossfades on overlap (REAPER)
 
 **Pitch and time**
-✅ Change speed · ✅ Change pitch · ⬜ **Change tempo** (`timeStretch` exists; expose it) ·
+✅ Change speed · ✅ Change pitch · ✅ **Change tempo** (Edit > Change Tempo, on the whole clip) ·
 ⬜ Paulstretch · ⬜ Sliding stretch (pitch or tempo varying over the selection) · ⬜ **Formant-preserving
 pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercial) and Signalsmith Stretch
 (MIT) against the current phase vocoder · ⬜ Pitch correction / tuner (REAPER ReaTune)
@@ -161,7 +161,7 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 ✅ Flanger (`src/engine/ToneDsp.h`) · ⬜ Wah-wah · ⬜ Vocoder · ⬜ Ring modulator
 
 **Stereo and special**
-✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ⬜ Repeat · ⬜ **Truncate silence** · 🟡 **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap)
+✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ✅ Repeat · ✅ **Truncate silence** (across the time selection's tracks, without rewriting audio) · 🟡 **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap)
 · ⬜ Center channel extractor / vocal reduction (Audition) · ✅ Stereo-to-mono downmix (Stereo Tools' Mono)
 
 **Generators**

@@ -313,6 +313,14 @@ private:
     void                   duplicateTimeSelection();
     void                   showDetachAtSilencesDialog();
     void                   detachAtSilences(float thresholdDb, double minSilenceSeconds);
+    std::optional<std::vector<std::pair<double, double>>> silencesInClip(const model::Clip& clip, float thresholdDb,
+                                                                         double minSilenceSeconds) const;
+    void                   showTruncateSilenceDialog();
+    void                   truncateSilence(float thresholdDb, double minSilenceSeconds, double keepSeconds);
+    void                   showRepeatDialog();
+    void                   repeatTimeSelection(int times);
+    void                   showChangeTempoDialog();
+    void                   changeTempoOfSelectedClip(double percent);
     void                   snapTimeSelectionToZeroCrossings();
     void                   applyEffectsToTimeSelection(const std::vector<model::EffectSlot>& chain);
     void                   previewEffectsOnTimeSelection(const std::vector<model::EffectSlot>& chain);

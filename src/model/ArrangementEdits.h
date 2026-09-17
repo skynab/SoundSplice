@@ -233,6 +233,78 @@ namespace arrangeedit
 
         return { selection.endBeats, selection.endBeats + selection.lengthBeats(), selection.trackIds };
     }
+    /** Every stretch of [@p fromBeats, @p toBeats) none of @p sounds covers
+        (intervals in beats, in any order, overlapping or not) that lasts at
+        least @p minBeats, in order. */
+    inline std::vector<std::pair<double, double>> gapsBetween(std::vector<std::pair<double, double>> sounds,
+                                                              double fromBeats, double toBeats, double minBeats)
+    {
+        std::sort(sounds.begin(), sounds.end());
+
+        std::vector<std::pair<double, double>> gaps;
+        const auto add = [&](double from, double to)
+        {
+            from = std::max(from, fromBeats);
+            to   = std::min(to, toBeats);
+            if (to - from >= std::max(minBeats, rangeedit::kEpsilonBeats))
+                gaps.emplace_back(from, to);
+        };
+
+        double cursor = fromBeats;
+        for (const auto& [from, to] : sounds)
+        {
+            if (from > cursor)
+                add(cursor, from);
+            cursor = std::max(cursor, to);
+        }
+        add(cursor, toBeats);
+        return gaps;
+    }
+
+    /** Truncate Silence's edit: each of @p silences (in order, not
+        overlapping) longer than @p keepBeats loses its middle, so that much
+        is left, half from each end, and everything after closes up, on the
+        tracks in @p trackIds. Returns how many beats were taken out. */
+    inline double truncateSilences(Song& song, const std::vector<int>& trackIds,
+                                   const std::vector<std::pair<double, double>>& silences, double keepBeats)
+    {
+        double removed = 0.0;
+        keepBeats      = std::max(0.0, keepBeats);
+
+        // From the last back, so each cut leaves the earlier ones where they were.
+        for (auto it = silences.rbegin(); it != silences.rend(); ++it)
+        {
+            const double length = it->second - it->first;
+            if (length - keepBeats <= rangeedit::kEpsilonBeats)
+                continue;
+
+            TimeSelection cut;
+            cut.startBeats = it->first + keepBeats * 0.5;
+            cut.endBeats   = it->second - keepBeats * 0.5;
+            cut.trackIds   = trackIds;
+            rangeedit::removeRange(song, cut, true);
+            removed += cut.endBeats - cut.startBeats;
+        }
+        return removed;
+    }
+
+    /** Repeat, as Audacity's: @p times copies of what @p selection covers put
+        straight after it, one after another, pushing what follows along.
+        Returns the selection over all the copies, or an empty one if there was
+        nothing to repeat. */
+    inline TimeSelection repeatRange(Song& song, const TimeSelection& selection, int times)
+    {
+        if (selection.isEmpty() || times < 1 || ! rangeedit::anyTrackApplies(song, selection))
+            return {};
+
+        const auto clipboard = rangeedit::copyRange(song, selection);
+        for (int i = 0; i < times; ++i)
+            if (! rangeedit::insertClipboard(song, selection.trackIds, clipboard, selection.endBeats))
+                return {};
+
+        return { selection.endBeats, selection.endBeats + selection.lengthBeats() * times, selection.trackIds };
+    }
+
     /** Splits clip @p clipId on track @p trackId around @p silences (seconds
         from the clip's start, in order and not overlapping), leaving the
         silent parts out: the clip becomes the sounding pieces between them,

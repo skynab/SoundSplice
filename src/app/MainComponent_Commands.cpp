@@ -113,6 +113,8 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
         case commands::duplicateSelection:
         case commands::crossfadeClips:
+        case commands::truncateSilence:
+        case commands::repeatSelection:
             info.setActive(! timeSelection_.isEmpty());
             break;
 
@@ -155,6 +157,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::labelSounds:
         case commands::measureLoudness:
         case commands::normalizeLoudness:
+        case commands::changeTempo:
             info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr);
             break;
 
@@ -344,6 +347,9 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::clipFix:         showClipFixDialog(); break;
         case commands::humRemoval:      showHumRemovalDialog(); break;
         case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
+        case commands::truncateSilence: showTruncateSilenceDialog(); break;
+        case commands::repeatSelection: showRepeatDialog(); break;
+        case commands::changeTempo:     showChangeTempoDialog(); break;
         case commands::applyEffects:    showApplyEffectsDialog(); break;
         case commands::copyClip:        copyClip(); break;
         case commands::pasteClip:       pasteClip(); break;
@@ -573,6 +579,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fadeIn);
         add(commands::fadeOut);
         add(commands::studioFadeOut);
+        add(commands::changeTempo);
         add(commands::reverseAudio);
         add(commands::applyEffects);
         menu.addSeparator();
@@ -591,7 +598,9 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::joinClips);
         add(commands::crossfadeClips);
         add(commands::duplicateSelection);
+        add(commands::repeatSelection);
         add(commands::detachAtSilences);
+        add(commands::truncateSilence);
         add(commands::findZeroCrossings);
         menu.addSeparator();
         add(commands::copyTrack);
