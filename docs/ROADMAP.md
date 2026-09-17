@@ -117,7 +117,9 @@ all three.
   (Edit > Resample Track: a windowed-sinc copy of each file at the new rate, clips keep their timing;
   `src/engine/Resample.h`)
 - ⬜ **Multiple open files** in the editor, as tabs (REAPER project tabs, Audition's file list)
-- 🟡 Import: **Opus, WavPack, M4A/AAC, CAF, RF64/W64** ⬜, **raw PCM** ✅ (File > Import Raw Data: 8/16/24/32-bit,
+- 🟡 Import: **Opus** ✅ and **WavPack** ✅ (BSD-licensed opusfile and libwavpack; `cmake/codecs.cmake`,
+  `src/engine/AudioFormats.cpp`), **CAF** ✅ (PCM, U-law and A-law; AAC and ALAC inside CAF read on macOS only),
+  **RF64/BW64 and W64** ✅ (`src/engine/PcmContainers.h`), **M4A/AAC** ⬜ (no BSD-licensed decoder: needs a licensing decision), **raw PCM** ✅ (File > Import Raw Data: 8/16/24/32-bit,
   float, U-law and A-law, either byte order, a header to skip; `src/engine/RawPcm.h`), and audio pulled from video ⬜
   (optional FFmpeg module, as Audacity does)
 

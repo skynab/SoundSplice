@@ -15,6 +15,7 @@ add_executable(soundsplice_tests
   engine/MidiCaptureTests.cpp
   engine/MidiRecorderTests.cpp
   engine/RawPcmTests.cpp
+  engine/PcmContainersTests.cpp
   engine/VarispeedTests.cpp
   engine/ResampleTests.cpp
   engine/NoteOpsTests.cpp
@@ -116,6 +117,8 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/ClipEnvelopePlaybackTests.cpp
     gui/PaneLayoutTests.cpp
     gui/PaneWiringTests.cpp
+    gui/AudioFormatsTests.cpp
+    ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
   target_include_directories(soundsplice_gui_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
@@ -136,6 +139,8 @@ if (SOUNDSPLICE_BUILD_APP)
     PRIVATE
       soundsplice::rt
       lame::mp3
+      opusfile::opusfile
+      WavPack::WavPack
       juce::juce_audio_utils
       Catch2::Catch2WithMain
       juce::juce_recommended_config_flags

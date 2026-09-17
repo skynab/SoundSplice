@@ -10,6 +10,7 @@
 #include <set>
 #include <vector>
 
+#include "engine/AudioFormats.h"
 #include "FileTypeColors.h"
 #include "AudioFileTypes.h"
 #include "Icons.h"
@@ -44,7 +45,7 @@ public:
     FileGrid()
         : starOn_(icons::fromSvg(icons::kStarOn)), starOff_(icons::fromSvg(icons::kStarOutlineOff))
     {
-        formatManager_.registerBasicFormats();
+        engine::audioformats::registerAll(formatManager_);
 
         auto& header = table_.getHeader();
         header.addColumn({}, kFavColumnId, 26, 26, 26, juce::TableHeaderComponent::notResizableOrSortable);
@@ -107,7 +108,7 @@ public:
 private:
     static constexpr int kFavColumnId = 6;
     static constexpr const char* kWildcard =
-        "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.m4a;*.mp4;*.mid;*.midi;*.soundsplice";
+        "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.m4a;*.mp4;*.mid;*.midi;*.soundsplice";
 
     bool isFavorite(const juce::File& file) const { return favorites_.count(file.getFullPathName()) > 0; }
 

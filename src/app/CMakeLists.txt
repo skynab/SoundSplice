@@ -36,6 +36,7 @@ target_sources(SoundSplice PRIVATE
   MainComponent_Tracks.cpp
   MainComponent_Transport.cpp
   ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
+  ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
   ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
 # Microphone permission is a per-platform question with only one real answer
@@ -85,6 +86,8 @@ target_link_libraries(SoundSplice
   PRIVATE
     soundsplice::rt
     lame::mp3
+    opusfile::opusfile
+    WavPack::WavPack
     juce::juce_audio_utils
   PUBLIC
     juce::juce_recommended_config_flags

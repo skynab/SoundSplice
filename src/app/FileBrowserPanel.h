@@ -69,7 +69,7 @@ public:
     std::function<void()>                  onFavoritesChanged; // starred or unstarred a file in the grid
 
     FileBrowserPanel()
-        : audioFilter_("*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.m4a;*.mp4", "*", "Audio files"),
+        : audioFilter_("*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.m4a;*.mp4", "*", "Audio files"),
           directoryList_(&audioFilter_, fileThread_),
           fileTree_(directoryList_)
     {

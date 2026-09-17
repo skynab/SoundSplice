@@ -9,7 +9,8 @@ using namespace soundsplice;
 TEST_CASE("Every importable extension is recognised", "[app][audiofiles]")
 {
     for (const char* name : { "take.wav", "take.aiff", "take.aif",
-                              "take.flac", "take.ogg", "take.mp3" })
+                              "take.flac", "take.ogg", "take.mp3",
+                              "take.opus", "take.wv", "take.w64", "take.rf64", "take.bw64", "take.caf" })
     {
         INFO(name);
         REQUIRE(audiofiles::isImportableAudioFile(juce::String(name)));

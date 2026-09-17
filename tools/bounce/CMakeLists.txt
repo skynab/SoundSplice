@@ -4,6 +4,7 @@ juce_add_console_app(soundsplice_bounce PRODUCT_NAME "soundsplice-bounce")
 
 target_sources(soundsplice_bounce PRIVATE
   main.cpp
+  ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
   ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
 # Plugin hosting is enabled here too so the smoke tool can verify it against a
@@ -25,6 +26,8 @@ target_link_libraries(soundsplice_bounce
   PRIVATE
     soundsplice::rt
     lame::mp3
+    opusfile::opusfile
+    WavPack::WavPack
     juce::juce_audio_formats
     juce::juce_audio_processors_headless
   PUBLIC

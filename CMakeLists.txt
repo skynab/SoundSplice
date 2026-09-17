@@ -57,6 +57,9 @@ if(SOUNDSPLICE_BUILD_APP)
   # bounce tool and the GUI tests link the same export code.
   include(cmake/lame.cmake)
 
+  # Opus and WavPack decoders, for import - see cmake/codecs.cmake.
+  include(cmake/codecs.cmake)
+
   add_subdirectory(src/app)
 
   # Tools link JUCE, so they build only when the app (and thus JUCE) is enabled.

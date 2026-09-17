@@ -218,7 +218,7 @@ inline juce::Array<juce::File> unusedAudioFiles(const juce::File& folder, const 
     if (! folder.isDirectory())
         return unused;
 
-    for (const auto& entry : juce::RangedDirectoryIterator(folder, false, "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3;*.sseq",
+    for (const auto& entry : juce::RangedDirectoryIterator(folder, false, "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.sseq",
                                                            juce::File::findFiles))
         if (! referenced.contains(entry.getFile()))
             unused.add(entry.getFile());

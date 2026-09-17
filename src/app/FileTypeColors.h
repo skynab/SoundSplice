@@ -12,7 +12,7 @@ inline FileKind classifyFile(const juce::File& file)
 {
     if (file.isDirectory())
         return FileKind::Folder;
-    if (file.hasFileExtension("wav;aiff;aif;flac;ogg;mp3;m4a;mp4"))
+    if (file.hasFileExtension("wav;aiff;aif;flac;ogg;mp3;opus;wv;w64;rf64;bw64;caf;m4a;mp4"))
         return FileKind::Audio;
     if (file.hasFileExtension("mid;midi"))
         return FileKind::Midi;

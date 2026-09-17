@@ -13,13 +13,13 @@ namespace soundsplice
     and drop, which reads as "drag and drop is broken" rather than as "that
     format isn't handled". One list, used by both.
 
-    Matches what juce::AudioFormatManager::registerBasicFormats() actually
-    supports, which is what AudioEngine decodes with.
+    Matches what engine::audioformats::registerAll actually reads, which is
+    what AudioEngine decodes with.
 */
 namespace audiofiles
 {
     /** For juce::FileChooser, which wants a semicolon-separated wildcard list. */
-    inline const char* wildcards() { return "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3"; }
+    inline const char* wildcards() { return "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf"; }
 
     /** True if @p file looks like something importAudioFileAtBeat could open.
         Extension-based on purpose: a drag target has to answer during the
@@ -27,7 +27,7 @@ namespace audiofiles
         stall the UI on a slow or absent volume. */
     inline bool isImportableAudioFile(const juce::File& file)
     {
-        return file.hasFileExtension("wav;aiff;aif;flac;ogg;mp3");
+        return file.hasFileExtension("wav;aiff;aif;flac;ogg;mp3;opus;wv;w64;rf64;bw64;caf");
     }
 
     /** As above, for the path strings juce::FileDragAndDropTarget hands over

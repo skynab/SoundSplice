@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/AudioFormats.h"
 #include "engine/SampleSequence.h"
 
 namespace soundsplice::engine::sequencefile
@@ -129,7 +130,7 @@ public:
         : juce::AudioFormatReader(stream, "SoundSplice sequence"),
           sequence_(std::move(sequence))
     {
-        formats_.registerBasicFormats(); // not sequences: a span never points at another sequence
+        audioformats::registerAll(formats_); // not sequences: a span never points at another sequence
 
         sampleRate            = sequence_.sampleRate;
         numChannels           = (unsigned int) sequence_.numChannels;
@@ -266,10 +267,11 @@ public:
     using juce::AudioFormat::createWriterFor;
 };
 
-/** The formats every reader of project audio needs: JUCE's own, and sequences. */
+/** The formats every reader of project audio needs: every file format
+    (engine/AudioFormats.h), and sequences. */
 inline void registerFormats(juce::AudioFormatManager& formats)
 {
-    formats.registerBasicFormats();
+    audioformats::registerAll(formats);
     formats.registerFormat(new SequenceAudioFormat(), false);
 }
 
@@ -281,7 +283,7 @@ inline std::optional<sequence::SampleSequence> sequenceOf(const juce::File& audi
         return load(audio);
 
     juce::AudioFormatManager formats;
-    formats.registerBasicFormats();
+    audioformats::registerAll(formats);
 
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(audio));
     if (reader == nullptr || reader->sampleRate <= 0.0)
