@@ -328,6 +328,11 @@ private:
         track: back into one without rendering if they are split halves,
         otherwise by rendering each to a side of a new file. */
     void                   makeStereoTrack();
+    /** Asks for a sample rate, then resampleSelectedTrack. */
+    void                   showResampleTrackDialog();
+    /** Converts every audio file the selected track plays to @p sampleRate,
+        on the render thread, and points its clips at the copies. */
+    void                   resampleSelectedTrack(double sampleRate);
     /** Renders the edit's tracks (see arrangementEditTracks) over the time
         selection, or everything arranged, onto a new audio track. */
     void                   mixAndRenderToNewTrack();

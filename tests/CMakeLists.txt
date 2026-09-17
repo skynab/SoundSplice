@@ -16,6 +16,7 @@ add_executable(soundsplice_tests
   engine/MidiRecorderTests.cpp
   engine/RawPcmTests.cpp
   engine/VarispeedTests.cpp
+  engine/ResampleTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp
@@ -49,6 +50,7 @@ add_executable(soundsplice_tests
   model/TimeSelectionTests.cpp
   model/ArrangementEditsTests.cpp
   model/TrackChannelsTests.cpp
+  model/TrackResampleTests.cpp
   model/ClipEnvelopeSaveTests.cpp
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp

@@ -1,5 +1,8 @@
 #include "MainComponentInternal.h"
 
+#include "engine/Resample.h"
+#include "model/TrackResample.h"
+
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // Tracks, clips, notes, the session grid and the mixer, and keeping the engine's
 // tracks in step with the document.
@@ -697,6 +700,253 @@ void MainComponent::makeStereoTrack()
     };
 
     renderJob_ = app::OfflineRenderJob::launch("Make Stereo Track", std::move(work), std::move(onFinished));
+}
+
+void MainComponent::showResampleTrackDialog()
+{
+    const auto& tracks = history_.current().tracks;
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) tracks.size()
+        || tracks[(size_t) selectedTrackIndex_].type != model::TrackType::Audio)
+    {
+        showError("Select an audio track first");
+        return;
+    }
+
+    static const int kRates[] = { 8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
+
+    auto* window = new juce::AlertWindow("Resample Track",
+                                         "Converts the track's audio to a new sample rate. "
+                                         "Clips keep their timing, fades and volume curves.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+
+    juce::StringArray names;
+    int               selected = 6; // 48 kHz, unless the device runs at one of the others
+    for (int i = 0; i < (int) std::size(kRates); ++i)
+    {
+        names.add(juce::String(kRates[i]) + " Hz");
+        if (std::abs(engine_.sampleRate() - kRates[i]) < 0.5)
+            selected = i;
+    }
+    window->addComboBox("rate", names, "New sample rate:");
+    window->getComboBoxComponent("rate")->setSelectedItemIndex(selected);
+
+    window->addButton("Resample", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const int index = juce::jlimit(0, (int) std::size(kRates) - 1,
+                                           window->getComboBoxComponent("rate")->getSelectedItemIndex());
+            self->resampleSelectedTrack((double) kRates[index]);
+        }));
+}
+
+/** Resample, as in Audacity: the track's audio converted to another rate.
+
+    Clips here play files of any rate (the engine converts as it plays), so
+    this writes a converted copy of each file the track plays that isn't
+    already at the rate, and points the clips at the copies. Clip positions,
+    offsets, fades and volume curves are all in seconds, so nothing else about
+    a clip changes, and undo points them back at the files they played before,
+    which are untouched. Files are read and written a chunk at a time, so a
+    long recording never has to fit in memory. The engine isn't involved, so
+    it keeps its device. */
+void MainComponent::resampleSelectedTrack(double sampleRate)
+{
+    const int   index  = selectedTrackIndex_;
+    const auto& tracks = history_.current().tracks;
+    if (index < 0 || index >= (int) tracks.size() || tracks[(size_t) index].type != model::TrackType::Audio)
+    {
+        showError("Select an audio track first");
+        return;
+    }
+
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+
+    const auto sources = model::trackresample::audioFilesOf(tracks[(size_t) index]);
+    if (sources.empty())
+    {
+        showError("That track has no audio to resample");
+        return;
+    }
+
+    struct Outcome
+    {
+        std::map<std::string, std::string> replacements;
+        juce::Array<juce::File>            written;
+        juce::String                       error;
+    };
+
+    const int  trackId = tracks[(size_t) index].id;
+    const auto folder  = audioDirectoryFor(editsDirectory());
+    auto       outcome = std::make_shared<Outcome>();
+
+    auto work = [sources, sampleRate, folder, outcome](app::OfflineRenderJob& job)
+    {
+        juce::AudioFormatManager formats;
+        engine::sequencefile::registerFormats(formats);
+
+        constexpr int kChunk = 1 << 16;
+
+        for (size_t f = 0; f < sources.size(); ++f)
+        {
+            const auto source = engine::sequencefile::fileFromPath(sources[f]);
+            std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(source));
+            if (reader == nullptr || reader->sampleRate <= 0.0)
+            {
+                outcome->error = "Could not read " + source.getFileName();
+                return;
+            }
+
+            if (std::abs(reader->sampleRate - sampleRate) < 0.5)
+                continue; // already there
+
+            const engine::Resampler resampler(reader->sampleRate, sampleRate);
+            const auto              inputLength = (std::int64_t) reader->lengthInSamples;
+            const auto              outLength   = resampler.outputLength(inputLength);
+            const int               channels    = juce::jmax(1, (int) reader->numChannels);
+
+            if (folder.createDirectory().failed())
+            {
+                outcome->error = "Could not write into " + folder.getFullPathName();
+                return;
+            }
+
+            const auto destination = folder.getNonexistentChildFile(
+                source.getFileNameWithoutExtension() + "-" + juce::String((int) std::lround(sampleRate)), ".wav");
+
+            auto fileStream = std::make_unique<juce::FileOutputStream>(destination);
+            if (fileStream->failedToOpen())
+            {
+                outcome->error = "Could not write " + destination.getFileName();
+                return;
+            }
+            std::unique_ptr<juce::OutputStream> stream = std::move(fileStream);
+
+            const auto options = juce::AudioFormatWriterOptions{}
+                                     .withSampleRate(sampleRate)
+                                     .withNumChannels(channels)
+                                     .withBitsPerSample(32)
+                                     .withSampleFormat(juce::AudioFormatWriterOptions::SampleFormat::floatingPoint);
+
+            juce::WavAudioFormat wav;
+            auto                 writer = wav.createWriterFor(stream, options);
+            outcome->written.add(destination);
+            if (writer == nullptr)
+            {
+                outcome->error = "Could not write " + destination.getFileName();
+                return;
+            }
+
+            juce::AudioBuffer<float> input;
+            juce::AudioBuffer<float> output(channels, kChunk);
+            const auto               status = "Resampling " + source.getFileName();
+
+            for (std::int64_t out = 0; out < outLength; out += kChunk)
+            {
+                if (job.shouldAbort())
+                    return;
+
+                const int    count = (int) juce::jmin<std::int64_t>(kChunk, outLength - out);
+                std::int64_t first = 0, end = 0;
+                resampler.inputRangeFor(out, count, first, end);
+
+                // The reader gives silence for frames outside the file.
+                input.setSize(channels, (int) (end - first), false, false, true);
+                input.clear();
+                reader->read(input.getArrayOfWritePointers(), channels, first, input.getNumSamples());
+
+                for (int ch = 0; ch < channels; ++ch)
+                    resampler.process(input.getReadPointer(ch), first, input.getNumSamples(), inputLength, out, count,
+                                      output.getWritePointer(ch));
+
+                if (! writer->writeFromAudioSampleBuffer(output, 0, count))
+                {
+                    outcome->error = "Could not write " + destination.getFileName();
+                    return;
+                }
+
+                job.report(app::overallProgress((int) f, (int) sources.size(), (double) (out + count) / (double) outLength),
+                           status);
+            }
+
+            writer.reset(); // finishes the header before anything plays the file
+            outcome->replacements[sources[f]] = engine::sequencefile::pathOf(destination);
+        }
+    };
+
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), outcome, trackId,
+                       sampleRate](bool cancelled)
+    {
+        const auto discard = [outcome]
+        {
+            for (const auto& file : outcome->written)
+                file.deleteFile();
+        };
+
+        if (self == nullptr)
+            return;
+
+        self->renderJob_.reset();
+
+        if (cancelled || outcome->error.isNotEmpty())
+        {
+            discard();
+            if (cancelled)
+                self->showStatus("Resample cancelled");
+            else
+                self->showError(outcome->error);
+            return;
+        }
+
+        const auto rateText = juce::String((int) std::lround(sampleRate)) + " Hz";
+        if (outcome->replacements.empty())
+        {
+            self->showStatus("That track's audio is already at " + rateText);
+            return;
+        }
+
+        int trackIndex = -1;
+        self->history_.edit("Resample track", [&](model::Song& s)
+        {
+            for (int i = 0; i < (int) s.tracks.size(); ++i)
+                if (s.tracks[(size_t) i].id == trackId)
+                {
+                    model::trackresample::replaceAudioFiles(s.tracks[(size_t) i], outcome->replacements);
+                    trackIndex = i;
+                }
+        });
+
+        if (trackIndex < 0)
+        {
+            discard();
+            self->showError("The track was removed while resampling");
+            return;
+        }
+
+        // The noise print and the editor's peaks describe the old files.
+        self->noiseProfiles_.clear();
+        self->noiseProfileFile_ = juce::File{};
+        self->waveformPeaksKey_ = {};
+
+        // Every clip is where it was, so the selection stays.
+        self->syncEngineTracks();
+        self->refreshAudioEditorForSelected();
+        self->refreshSessionView();
+        self->arrangementView_.setSong(self->history_.current());
+        self->showStatus("Resampled the track to " + rateText);
+    };
+
+    renderJob_ = app::OfflineRenderJob::launch("Resample Track", std::move(work), std::move(onFinished));
 }
 
 /** Copies the selected track for later pasting. Deliberately its own

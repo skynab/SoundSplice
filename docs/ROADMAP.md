@@ -109,11 +109,13 @@ all three.
   peaks, the audio editor draws the samples themselves, joined and marked; `src/app/SampleDetail.h`), a vertical dB/linear scale ✅
   (View > Waveform dB Scale; `src/app/WaveformScale.h`), and waveform vs. **RMS overlay**
   display ✅ (the audio editor draws RMS in a lighter band inside the peaks)
-- 🟡 Track channel ops: **split stereo to mono** ✅ and swap channels ✅ (Edit menu; each clip plays
+- ✅ Track channel ops: **split stereo to mono** ✅ and swap channels ✅ (Edit menu; each clip plays
   a chosen channel, so nothing is rendered; `src/model/TrackChannels.h`), **make stereo from two monos** ✅
   (split halves join back as they were; any other pair renders to one stereo file),
   **mix and render to a new track** ✅
-  (the tracks' pre-master mix over the time selection, on the render thread), and per-track **resample** ⬜
+  (the tracks' pre-master mix over the time selection, on the render thread), and per-track **resample** ✅
+  (Edit > Resample Track: a windowed-sinc copy of each file at the new rate, clips keep their timing;
+  `src/engine/Resample.h`)
 - ⬜ **Multiple open files** in the editor, as tabs (REAPER project tabs, Audition's file list)
 - 🟡 Import: **Opus, WavPack, M4A/AAC, CAF, RF64/W64** ⬜, **raw PCM** ✅ (File > Import Raw Data: 8/16/24/32-bit,
   float, U-law and A-law, either byte order, a header to skip; `src/engine/RawPcm.h`), and audio pulled from video ⬜

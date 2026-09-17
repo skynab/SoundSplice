@@ -132,6 +132,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
         }
 
+        case commands::resampleTrack:
+        {
+            const auto& tracks = history_.current().tracks;
+            info.setActive(renderJob_ == nullptr && selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) tracks.size()
+                           && tracks[(size_t) selectedTrackIndex_].type == model::TrackType::Audio);
+            break;
+        }
+
         case commands::makeStereoTrack:
         {
             const auto& tracks = history_.current().tracks;
@@ -317,6 +325,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::splitStereoToMono: splitSelectedTrackToMono(); break;
         case commands::swapChannels:    swapSelectedTrackChannels(); break;
         case commands::makeStereoTrack: makeStereoTrack(); break;
+        case commands::resampleTrack:   showResampleTrackDialog(); break;
         case commands::mixAndRender:    mixAndRenderToNewTrack(); break;
         case commands::renameTrack:     renameSelectedTrack(); break;
         case commands::deleteTrack:     deleteSelectedTrack(); break;
@@ -523,6 +532,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::splitStereoToMono);
         add(commands::swapChannels);
         add(commands::makeStereoTrack);
+        add(commands::resampleTrack);
         add(commands::mixAndRender);
         add(commands::deleteClip);
         menu.addSeparator();
