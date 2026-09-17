@@ -284,6 +284,62 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "release", .name = "Release", .min = 1, .max = 1000, .step = 1, .unit = " ms",
                 .access = fieldAccess<&S::limiter, &LimiterSettings::releaseMs> } } },
 
+        { .kind = EffectKind::Phaser, .id = "phaser", .name = "Phaser", .group = "Modulation",
+          .params = {
+              { .id = "rate", .name = "Rate", .min = 0.05, .max = 5, .step = 0.05, .unit = " Hz",
+                .access = fieldAccess<&S::phaser, &PhaserSettings::rateHz> },
+              { .id = "depth", .name = "Depth", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .tooltip = "How far the notches sweep",
+                .access = fieldAccess<&S::phaser, &PhaserSettings::depth> },
+              { .id = "feedback", .name = "Feedback", .min = -0.9, .max = 0.9, .step = 0.01, .displayScale = 100,
+                .unit = " %", .tooltip = "Sharpens the notches; negative moves them",
+                .access = fieldAccess<&S::phaser, &PhaserSettings::feedback> },
+              { .id = "stages", .name = "Stages", .control = ParamControl::Choice, .min = 1, .max = 6, .step = 1,
+                .choices = { "2", "4", "6", "8", "10", "12" },
+                .tooltip = "More stages, more notches",
+                .access = fieldAccess<&S::phaser, &PhaserSettings::stagePairs> },
+              { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::phaser, &PhaserSettings::mix> } } },
+
+        { .kind = EffectKind::Flanger, .id = "flanger", .name = "Flanger", .group = "Modulation",
+          .params = {
+              { .id = "rate", .name = "Rate", .min = 0.05, .max = 5, .step = 0.05, .unit = " Hz",
+                .access = fieldAccess<&S::flanger, &FlangerSettings::rateHz> },
+              { .id = "depth", .name = "Depth", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::flanger, &FlangerSettings::depth> },
+              { .id = "delay", .name = "Delay", .min = 0.1, .max = 5, .step = 0.05, .unit = " ms",
+                .tooltip = "The shortest the delay gets, where the sweep starts",
+                .access = fieldAccess<&S::flanger, &FlangerSettings::delayMs> },
+              { .id = "feedback", .name = "Feedback", .min = -0.95, .max = 0.95, .step = 0.01, .displayScale = 100,
+                .unit = " %", .access = fieldAccess<&S::flanger, &FlangerSettings::feedback> },
+              { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::flanger, &FlangerSettings::mix> } } },
+
+        { .kind = EffectKind::BassTreble, .id = "bassTreble", .name = "Bass and Treble", .group = "",
+          .params = {
+              { .id = "bass", .name = "Bass", .min = -24, .max = 24, .step = 0.5, .unit = " dB",
+                .tooltip = "A shelf below 100 Hz",
+                .access = fieldAccess<&S::bassTreble, &BassTrebleSettings::bassDb> },
+              { .id = "treble", .name = "Treble", .min = -24, .max = 24, .step = 0.5, .unit = " dB",
+                .tooltip = "A shelf above 8 kHz",
+                .access = fieldAccess<&S::bassTreble, &BassTrebleSettings::trebleDb> },
+              { .id = "volume", .name = "Volume", .min = -24, .max = 24, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::bassTreble, &BassTrebleSettings::volumeDb> } } },
+
+        { .kind = EffectKind::StereoTool, .id = "stereoTool", .name = "Stereo Tools", .group = "Utility",
+          .params = {
+              { .id = "width", .name = "Width", .min = 0, .max = 2, .step = 0.01, .displayScale = 100, .unit = " %",
+                .tooltip = "0% is mono, 100% unchanged, 200% twice as wide",
+                .access = fieldAccess<&S::stereoTool, &StereoToolSettings::width> },
+              { .id = "balance", .name = "Balance", .min = -1, .max = 1, .step = 0.01, .displayScale = 100,
+                .unit = " %", .tooltip = "Turns one side down: negative favours the left",
+                .access = fieldAccess<&S::stereoTool, &StereoToolSettings::balance> },
+              { .id = "mono", .name = "Mono", .control = ParamControl::Toggle, .min = 0, .max = 1, .step = 1,
+                .tooltip = "Fold both channels into one, to hear what a mono speaker will",
+                .access = fieldAccess<&S::stereoTool, &StereoToolSettings::mono> },
+              { .id = "swap", .name = "Swap Left and Right", .control = ParamControl::Toggle, .min = 0, .max = 1,
+                .step = 1, .access = fieldAccess<&S::stereoTool, &StereoToolSettings::swap> } } },
+
         { .kind = EffectKind::Amplify, .id = "amplify", .name = "Amplify", .group = "Utility",
           .params = {
               { .id = "gain", .name = "Gain", .min = -48, .max = 48, .step = 0.1, .unit = " dB",
@@ -342,6 +398,10 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.invert.enabled     = kind == EffectKind::Invert;
     slot.dcOffset.enabled   = kind == EffectKind::DcOffset;
     slot.limiter.enabled    = kind == EffectKind::Limiter;
+    slot.phaser.enabled     = kind == EffectKind::Phaser;
+    slot.flanger.enabled    = kind == EffectKind::Flanger;
+    slot.bassTreble.enabled = kind == EffectKind::BassTreble;
+    slot.stereoTool.enabled = kind == EffectKind::StereoTool;
     return slot;
 }
 

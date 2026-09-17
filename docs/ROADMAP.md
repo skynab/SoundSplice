@@ -146,7 +146,7 @@ pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercia
 (MIT) against the current phase vocoder · ⬜ Pitch correction / tuner (REAPER ReaTune)
 
 **EQ and filters**
-✅ LP/HP/BP · ✅ 3-band EQ · ⬜ Bass and treble · ⬜ **Graphic EQ** (10/31 band) · ⬜ **Parametric EQ with
+✅ LP/HP/BP · ✅ 3-band EQ · ✅ Bass and treble · ⬜ **Graphic EQ** (10/31 band) · ⬜ **Parametric EQ with
 unlimited bands** and a drawable curve (Audacity Filter Curve, REAPER ReaEQ) · ⬜ Notch · ⬜ Shelf
 (`ShelfPeakFilter` exists) · ⬜ **Match EQ** (fit one clip's spectrum to another's)
 
@@ -157,12 +157,12 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 
 **Delay, reverb and modulation**
 ✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ⬜ Echo (multitap) ·
-⬜ **Convolution reverb** with impulse-response loading (`CabinetIr` is a starting point) · ⬜ Phaser ·
-⬜ Flanger · ⬜ Wah-wah · ⬜ Vocoder · ⬜ Ring modulator
+⬜ **Convolution reverb** with impulse-response loading (`CabinetIr` is a starting point) · ✅ Phaser ·
+✅ Flanger (`src/engine/ToneDsp.h`) · ⬜ Wah-wah · ⬜ Vocoder · ⬜ Ring modulator
 
 **Stereo and special**
-🟡 Widener (mastering only) · ✅ Invert (either channel or both) · ⬜ Repeat · ⬜ **Truncate silence** · ⬜ **Channel mixer / mid-side**
-· ⬜ Center channel extractor / vocal reduction (Audition) · ⬜ Stereo-to-mono downmix
+✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ⬜ Repeat · ⬜ **Truncate silence** · 🟡 **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap)
+· ⬜ Center channel extractor / vocal reduction (Audition) · ✅ Stereo-to-mono downmix (Stereo Tools' Mono)
 
 **Generators**
 ⬜ Tone (sine/square/saw) · ⬜ Chirp · ⬜ **Noise** (white/pink/brown) · ⬜ Silence · ⬜ DTMF · ⬜ Rhythm track

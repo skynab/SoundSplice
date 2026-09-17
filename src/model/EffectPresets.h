@@ -144,6 +144,26 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
             { "Broadcast",         { { "input", 0 }, { "ceiling", -2 },   { "release", 150 } } },
             { "Loud",              { { "input", 6 }, { "ceiling", -0.3 }, { "release", 50 } } } } },
 
+        { EffectKind::Phaser, {
+            { "Slow Swirl", { { "rate", 0.2 }, { "depth", 0.8 }, { "feedback", 0.4 }, { "stages", 3 }, { "mix", 0.5 } } },
+            { "Jet",        { { "rate", 1.5 }, { "depth", 0.9 }, { "feedback", 0.75 }, { "stages", 6 }, { "mix", 0.5 } } },
+            { "Subtle",     { { "rate", 0.4 }, { "depth", 0.5 }, { "feedback", 0.1 }, { "stages", 2 }, { "mix", 0.35 } } } } },
+
+        { EffectKind::Flanger, {
+            { "Classic",  { { "rate", 0.25 }, { "depth", 0.7 }, { "delay", 1 },   { "feedback", 0.5 },  { "mix", 0.5 } } },
+            { "Metallic", { { "rate", 0.1 },  { "depth", 0.5 }, { "delay", 0.5 }, { "feedback", 0.85 }, { "mix", 0.5 } } },
+            { "Wide",     { { "rate", 0.5 },  { "depth", 1 },   { "delay", 2 },   { "feedback", -0.4 }, { "mix", 0.5 } } } } },
+
+        { EffectKind::BassTreble, {
+            { "Bass Boost",  { { "bass", 6 },  { "treble", 0 },  { "volume", -3 } } },
+            { "Brighten",    { { "bass", 0 },  { "treble", 4 },  { "volume", -1 } } },
+            { "Telephone",   { { "bass", -24 }, { "treble", -18 }, { "volume", 6 } } } } },
+
+        { EffectKind::StereoTool, {
+            { "Mono Check",   { { "width", 1 },   { "balance", 0 }, { "mono", 1 }, { "swap", 0 } } },
+            { "Wider",        { { "width", 1.4 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } },
+            { "Narrower",     { { "width", 0.6 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } } } },
+
         { EffectKind::Invert, {
             { "Both Channels", { { "left", 1 }, { "right", 1 } } },
             { "Left Only",     { { "left", 1 }, { "right", 0 } } },

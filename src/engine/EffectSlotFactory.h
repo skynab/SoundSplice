@@ -43,6 +43,10 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::Invert:     return std::make_unique<InvertNode>();
         case model::EffectKind::DcOffset:   return std::make_unique<DcOffsetNode>();
         case model::EffectKind::Limiter:    return std::make_unique<LimiterNode>();
+        case model::EffectKind::Phaser:     return std::make_unique<PhaserNode>();
+        case model::EffectKind::Flanger:    return std::make_unique<FlangerNode>();
+        case model::EffectKind::BassTreble: return std::make_unique<BassTrebleNode>();
+        case model::EffectKind::StereoTool: return std::make_unique<StereoToolNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -104,6 +108,23 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.limiterInputDb   = slot.limiter.inputGainDb;
     params.limiterCeilingDb = slot.limiter.ceilingDb;
     params.limiterReleaseMs = slot.limiter.releaseMs;
+    params.phaserRateHz     = slot.phaser.rateHz;
+    params.phaserDepth      = slot.phaser.depth;
+    params.phaserFeedback   = slot.phaser.feedback;
+    params.phaserStagePairs = slot.phaser.stagePairs;
+    params.phaserMix        = slot.phaser.mix;
+    params.flangerRateHz    = slot.flanger.rateHz;
+    params.flangerDepth     = slot.flanger.depth;
+    params.flangerDelayMs   = slot.flanger.delayMs;
+    params.flangerFeedback  = slot.flanger.feedback;
+    params.flangerMix       = slot.flanger.mix;
+    params.bassDb           = slot.bassTreble.bassDb;
+    params.trebleDb         = slot.bassTreble.trebleDb;
+    params.toneVolumeDb     = slot.bassTreble.volumeDb;
+    params.stereoWidth      = slot.stereoTool.width;
+    params.stereoBalance    = slot.stereoTool.balance;
+    params.stereoMono       = slot.stereoTool.mono;
+    params.stereoSwap       = slot.stereoTool.swap;
     return params;
 }
 

@@ -158,7 +158,11 @@ enum class EffectKind
     Amplify    = 11, // see engine/UtilityEffects.h
     Invert     = 12,
     DcOffset   = 13,
-    Limiter    = 14
+    Limiter    = 14,
+    Phaser     = 15, // see engine/ToneEffects.h
+    Flanger    = 16,
+    BassTreble = 17,
+    StereoTool = 18
 };
 
 /**
@@ -347,6 +351,56 @@ struct LimiterSettings
     bool operator==(const LimiterSettings&) const = default;
 };
 
+/** A phaser: allpass stages swept by an LFO. `stagePairs` is half the
+    number of stages, 1..6, so every setting makes whole notches. */
+struct PhaserSettings
+{
+    bool  enabled    = false;
+    float rateHz     = 0.5f;
+    float depth      = 0.7f;
+    float feedback   = 0.5f;
+    int   stagePairs = 3;
+    float mix        = 0.5f;
+
+    bool operator==(const PhaserSettings&) const = default;
+};
+
+/** A flanger: a short swept delay mixed back in. */
+struct FlangerSettings
+{
+    bool  enabled  = false;
+    float rateHz   = 0.25f;
+    float depth    = 0.7f;
+    float delayMs  = 1.0f;
+    float feedback = 0.5f;
+    float mix      = 0.5f;
+
+    bool operator==(const FlangerSettings&) const = default;
+};
+
+/** Bass and treble shelves and an output volume, as Audacity's. */
+struct BassTrebleSettings
+{
+    bool  enabled  = false;
+    float bassDb   = 0.0f;
+    float trebleDb = 0.0f;
+    float volumeDb = 0.0f;
+
+    bool operator==(const BassTrebleSettings&) const = default;
+};
+
+/** Width, balance, mono and swap for a stereo pair. */
+struct StereoToolSettings
+{
+    bool  enabled = false;
+    float width   = 1.0f;
+    float balance = 0.0f;
+    bool  mono    = false;
+    bool  swap    = false;
+
+    bool operator==(const StereoToolSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -366,6 +420,10 @@ struct EffectSlot
     InvertSettings     invert;
     DcOffsetSettings   dcOffset;
     LimiterSettings    limiter;
+    PhaserSettings     phaser;
+    FlangerSettings    flanger;
+    BassTrebleSettings bassTreble;
+    StereoToolSettings stereoTool;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

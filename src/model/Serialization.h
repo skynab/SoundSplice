@@ -260,7 +260,24 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.dcOffset.cutoffHz) << " "
                 << detail::num((double) slot.limiter.inputGainDb) << " "
                 << detail::num((double) slot.limiter.ceilingDb) << " "
-                << detail::num((double) slot.limiter.releaseMs) << "\n";
+                << detail::num((double) slot.limiter.releaseMs) << " "
+                << detail::num((double) slot.phaser.rateHz) << " "
+                << detail::num((double) slot.phaser.depth) << " "
+                << detail::num((double) slot.phaser.feedback) << " "
+                << slot.phaser.stagePairs << " "
+                << detail::num((double) slot.phaser.mix) << " "
+                << detail::num((double) slot.flanger.rateHz) << " "
+                << detail::num((double) slot.flanger.depth) << " "
+                << detail::num((double) slot.flanger.delayMs) << " "
+                << detail::num((double) slot.flanger.feedback) << " "
+                << detail::num((double) slot.flanger.mix) << " "
+                << detail::num((double) slot.bassTreble.bassDb) << " "
+                << detail::num((double) slot.bassTreble.trebleDb) << " "
+                << detail::num((double) slot.bassTreble.volumeDb) << " "
+                << detail::num((double) slot.stereoTool.width) << " "
+                << detail::num((double) slot.stereoTool.balance) << " "
+                << (slot.stereoTool.mono ? 1 : 0) << " "
+                << (slot.stereoTool.swap ? 1 : 0) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -735,6 +752,16 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double dcCutoff = defaults.dcOffset.cutoffHz;
                 double limiterInput = defaults.limiter.inputGainDb, limiterCeiling = defaults.limiter.ceilingDb;
                 double limiterRelease = defaults.limiter.releaseMs;
+                double phaserRate = defaults.phaser.rateHz, phaserDepth = defaults.phaser.depth;
+                double phaserFeedback = defaults.phaser.feedback, phaserMix = defaults.phaser.mix;
+                int    phaserPairs = defaults.phaser.stagePairs;
+                double flangerRate = defaults.flanger.rateHz, flangerDepth = defaults.flanger.depth;
+                double flangerDelay = defaults.flanger.delayMs, flangerFeedback = defaults.flanger.feedback;
+                double flangerMix = defaults.flanger.mix;
+                double bassDb = defaults.bassTreble.bassDb, trebleDb = defaults.bassTreble.trebleDb;
+                double toneVolume = defaults.bassTreble.volumeDb;
+                double stereoWidth = defaults.stereoTool.width, stereoBalance = defaults.stereoTool.balance;
+                int    stereoMono = defaults.stereoTool.mono ? 1 : 0, stereoSwap = defaults.stereoTool.swap ? 1 : 0;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
                    >> delayTime >> delayFeedback >> delayMix >> room >> damping >> reverbMix
@@ -747,7 +774,11 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> gateThreshold >> gateRange >> gateAttack >> gateHold >> gateRelease
                    >> eqLowHz >> eqLowDb >> eqMidHz >> eqMidDb >> eqMidQ >> eqHighHz >> eqHighDb
                    >> amplifyGain >> invertLeft >> invertRight >> dcCutoff
-                   >> limiterInput >> limiterCeiling >> limiterRelease;
+                   >> limiterInput >> limiterCeiling >> limiterRelease
+                   >> phaserRate >> phaserDepth >> phaserFeedback >> phaserPairs >> phaserMix
+                   >> flangerRate >> flangerDepth >> flangerDelay >> flangerFeedback >> flangerMix
+                   >> bassDb >> trebleDb >> toneVolume
+                   >> stereoWidth >> stereoBalance >> stereoMono >> stereoSwap;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -817,6 +848,27 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.limiter.inputGainDb    = (float) limiterInput;
                 slot.limiter.ceilingDb      = (float) limiterCeiling;
                 slot.limiter.releaseMs      = (float) limiterRelease;
+                slot.phaser.enabled         = slot.enabled && slot.kind == EffectKind::Phaser;
+                slot.phaser.rateHz          = (float) phaserRate;
+                slot.phaser.depth           = (float) phaserDepth;
+                slot.phaser.feedback        = (float) phaserFeedback;
+                slot.phaser.stagePairs      = std::clamp(phaserPairs, 1, 6);
+                slot.phaser.mix             = (float) phaserMix;
+                slot.flanger.enabled        = slot.enabled && slot.kind == EffectKind::Flanger;
+                slot.flanger.rateHz         = (float) flangerRate;
+                slot.flanger.depth          = (float) flangerDepth;
+                slot.flanger.delayMs        = (float) flangerDelay;
+                slot.flanger.feedback       = (float) flangerFeedback;
+                slot.flanger.mix            = (float) flangerMix;
+                slot.bassTreble.enabled     = slot.enabled && slot.kind == EffectKind::BassTreble;
+                slot.bassTreble.bassDb      = (float) bassDb;
+                slot.bassTreble.trebleDb    = (float) trebleDb;
+                slot.bassTreble.volumeDb    = (float) toneVolume;
+                slot.stereoTool.enabled     = slot.enabled && slot.kind == EffectKind::StereoTool;
+                slot.stereoTool.width       = (float) stereoWidth;
+                slot.stereoTool.balance     = (float) stereoBalance;
+                slot.stereoTool.mono        = stereoMono != 0;
+                slot.stereoTool.swap        = stereoSwap != 0;
 
                 if (slot.kind == EffectKind::Plugin)
                 {

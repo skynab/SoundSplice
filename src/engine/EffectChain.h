@@ -11,6 +11,7 @@
 #include "engine/PedalEffects.h"
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
+#include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
 namespace soundsplice::engine
@@ -35,7 +36,11 @@ enum class EffectNodeKind
     Amplify    = 11,
     Invert     = 12,
     DcOffset   = 13,
-    Limiter    = 14
+    Limiter    = 14,
+    Phaser     = 15,
+    Flanger    = 16,
+    BassTreble = 17,
+    StereoTool = 18
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -128,6 +133,24 @@ struct EffectSlotParams
     float limiterInputDb   = 0.0f;
     float limiterCeilingDb = -1.0f;
     float limiterReleaseMs = 100.0f;
+
+    float phaserRateHz     = 0.5f;
+    float phaserDepth      = 0.7f;
+    float phaserFeedback   = 0.5f;
+    int   phaserStagePairs = 3;
+    float phaserMix        = 0.5f;
+    float flangerRateHz    = 0.25f;
+    float flangerDepth     = 0.7f;
+    float flangerDelayMs   = 1.0f;
+    float flangerFeedback  = 0.5f;
+    float flangerMix       = 0.5f;
+    float bassDb           = 0.0f;
+    float trebleDb         = 0.0f;
+    float toneVolumeDb     = 0.0f;
+    float stereoWidth      = 1.0f;
+    float stereoBalance    = 0.0f;
+    bool  stereoMono       = false;
+    bool  stereoSwap       = false;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -287,6 +310,46 @@ struct LimiterNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct PhaserNode final : EffectProcessor
+{
+    PhaserEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Phaser; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct FlangerNode final : EffectProcessor
+{
+    FlangerEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Flanger; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct BassTrebleNode final : EffectProcessor
+{
+    BassTrebleEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::BassTreble; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct StereoToolNode final : EffectProcessor
+{
+    StereoToolEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::StereoTool; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct ReverbNode final : EffectProcessor
 {
     ReverbEffect effect;
@@ -401,6 +464,35 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             limiter->effect.setInputGainDb(params.limiterInputDb);
             limiter->effect.setCeilingDb(params.limiterCeilingDb);
             limiter->effect.setReleaseMs(params.limiterReleaseMs);
+        }
+        else if (auto* phaser = dynamic_cast<PhaserNode*>(&node))
+        {
+            phaser->effect.setRateHz(params.phaserRateHz);
+            phaser->effect.setDepth(params.phaserDepth);
+            phaser->effect.setFeedback(params.phaserFeedback);
+            phaser->effect.setStages(params.phaserStagePairs * 2);
+            phaser->effect.setMix(params.phaserMix);
+        }
+        else if (auto* flanger = dynamic_cast<FlangerNode*>(&node))
+        {
+            flanger->effect.setRateHz(params.flangerRateHz);
+            flanger->effect.setDepth(params.flangerDepth);
+            flanger->effect.setDelayMs(params.flangerDelayMs);
+            flanger->effect.setFeedback(params.flangerFeedback);
+            flanger->effect.setMix(params.flangerMix);
+        }
+        else if (auto* tone = dynamic_cast<BassTrebleNode*>(&node))
+        {
+            tone->effect.setBassDb(params.bassDb);
+            tone->effect.setTrebleDb(params.trebleDb);
+            tone->effect.setVolumeDb(params.toneVolumeDb);
+        }
+        else if (auto* stereo = dynamic_cast<StereoToolNode*>(&node))
+        {
+            stereo->effect.setWidth(params.stereoWidth);
+            stereo->effect.setBalance(params.stereoBalance);
+            stereo->effect.setMono(params.stereoMono);
+            stereo->effect.setSwap(params.stereoSwap);
         }
 }
 
