@@ -24,6 +24,7 @@ juce_add_gui_app(SoundSplice
 target_sources(SoundSplice PRIVATE
   Main.cpp
   MainComponent.cpp
+  MainComponent_Analyze.cpp
   MainComponent_AudioEdit.cpp
   MainComponent_Commands.cpp
   MainComponent_Effects.cpp

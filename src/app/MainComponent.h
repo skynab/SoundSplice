@@ -20,6 +20,7 @@
 #include "engine/NoiseReduction.h"
 #include "engine/RawPcm.h"
 #include "engine/Generators.h"
+#include "engine/SilenceDetection.h"
 #include "engine/Loudness.h"
 #include "engine/TempoMap.h"
 #include "model/History.h"
@@ -106,6 +107,16 @@ public:
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu   getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) override;
     void              menuItemSelected(int menuItemID, int topLevelMenuIndex) override;
+
+public:
+    /** Reads a clip's audio as it plays, on the render thread; see scanClipAudio. */
+    struct ClipScan
+    {
+        virtual ~ClipScan() = default;
+        virtual void prepare(double sampleRate) = 0;
+        /** Two outputs, @p frames long. */
+        virtual void process(const float* const* outputs, int frames) = 0;
+    };
 
 private:
     void timerCallback() override;
@@ -391,6 +402,19 @@ private:
     /** Samples [from, to) counted from the clip's start, one vector per
         channel; only those samples are read. Empty if they can't be. */
     std::vector<std::vector<float>> readClipAudio(const ClipAudio& audio, int from, int to) const;
+
+    // The Analyze menu — see MainComponent_Analyze.cpp.
+    void                   scanClipAudio(const juce::String& title, const juce::String& activity, const ClipAudio& audio,
+                                         int from, int to, std::shared_ptr<ClipScan> scan,
+                                         std::function<void(double sampleRate)> onScanned);
+    bool                   selectedScanRange(ClipAudio& audio, int& from, int& to, bool& whole);
+    void                   showAmplitudeStatistics();
+    void                   findClipping();
+    void                   showLabelSoundsDialog();
+    void                   labelSounds(float thresholdDb, double minSilenceSeconds, double minSoundSeconds);
+    void                   addMarkerRangesInClip(int clipId, const std::vector<engine::silence::FrameRange>& runs,
+                                                 int offset, double sampleRate, const juce::String& name,
+                                                 bool numbered, const juce::String& label);
 
     // Loudness — see MainComponent_Loudness.cpp.
     void                   measureClipLoudness(const juce::String& title, const ClipAudio& audio, int from, int to,

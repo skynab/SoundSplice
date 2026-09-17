@@ -148,6 +148,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(renderJob_ == nullptr);
             break;
 
+        case commands::plotSpectrum:
+        case commands::amplitudeStatistics:
+        case commands::findClipping:
+        case commands::labelSounds:
         case commands::measureLoudness:
         case commands::normalizeLoudness:
             info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr);
@@ -355,6 +359,10 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::swapChannels:    swapSelectedTrackChannels(); break;
         case commands::makeStereoTrack: makeStereoTrack(); break;
         case commands::measureLoudness: measureLoudnessOfSelection(); break;
+        case commands::plotSpectrum:    analyseSelection(); break;
+        case commands::amplitudeStatistics: showAmplitudeStatistics(); break;
+        case commands::findClipping:    findClipping(); break;
+        case commands::labelSounds:     showLabelSoundsDialog(); break;
         case commands::generateTone:    showGenerateDialog(engine::GeneratorKind::Tone); break;
         case commands::generateChirp:   showGenerateDialog(engine::GeneratorKind::Chirp); break;
         case commands::generateNoise:   showGenerateDialog(engine::GeneratorKind::Noise); break;
@@ -504,7 +512,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View", "Markers", "Transport", "Generate" };
+    return { "File", "Edit", "View", "Markers", "Transport", "Generate", "Analyze" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String&)
@@ -560,7 +568,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::reverseAudio);
         add(commands::applyEffects);
         add(commands::normalizeLoudness);
-        add(commands::measureLoudness);
         menu.addSeparator();
         add(commands::copyClip);
         add(commands::pasteClip);
@@ -675,6 +682,15 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::generateDtmf);
         menu.addSeparator();
         add(commands::generateSilence);
+    }
+    else if (topLevelMenuIndex == 6) // Analyze
+    {
+        add(commands::plotSpectrum);
+        add(commands::measureLoudness);
+        add(commands::amplitudeStatistics);
+        menu.addSeparator();
+        add(commands::findClipping);
+        add(commands::labelSounds);
     }
 
     return menu;

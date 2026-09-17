@@ -33,95 +33,28 @@ namespace
     }
 }
 
-/** Measures samples [from, to) of the selected clip on the render thread, as
-    the clip plays them: two outputs, each carrying the channel the clip's
-    channel setting gives it, so a mono file counts on both sides as it's
-    heard in the mix. The clip's gain isn't applied. @p onMeasured runs on the
-    message thread with the report, unless the job was cancelled or failed. */
+/** Measures samples [from, to) of the selected clip, as scanClipAudio reads
+    them. @p onMeasured runs on the message thread with the report, unless the
+    job was cancelled or failed. */
 void MainComponent::measureClipLoudness(const juce::String& title, const ClipAudio& audio, int from, int to,
                                         std::function<void(const engine::LoudnessReport&)> onMeasured)
 {
-    if (renderJob_ != nullptr)
+    struct LoudnessScan final : ClipScan
     {
-        showError("A render is already running");
-        return;
-    }
-
-    const auto* clip = selectedAudioClip();
-    if (clip == nullptr)
-        return;
-
-    struct Outcome
-    {
-        engine::LoudnessReport report;
-        bool                   ok = false;
-    };
-
-    const auto   file     = audio.file;
-    const auto   start    = (std::int64_t) audio.window.start + from;
-    const auto   count    = (std::int64_t) juce::jmax(0, to - from);
-    const auto   channels = clip->channels;
-    auto         outcome  = std::make_shared<Outcome>();
-
-    auto work = [file, start, count, channels, outcome](app::OfflineRenderJob& job)
-    {
-        juce::AudioFormatManager formats;
-        engine::sequencefile::registerFormats(formats);
-        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
-        if (reader == nullptr || reader->sampleRate <= 0.0)
-            return;
-
-        const int fileChannels = juce::jmax(1, (int) reader->numChannels);
-
         engine::LoudnessMeter meter;
-        meter.prepare(reader->sampleRate, 2);
 
-        constexpr int            kChunk = 1 << 16;
-        juce::AudioBuffer<float> buffer(fileChannels, kChunk);
-
-        for (std::int64_t done = 0; done < count; done += kChunk)
-        {
-            if (job.shouldAbort())
-                return;
-
-            const int n = (int) juce::jmin<std::int64_t>(kChunk, count - done);
-            if (! reader->read(buffer.getArrayOfWritePointers(), fileChannels, start + done, n))
-                return;
-
-            const float* outputs[2] {
-                buffer.getReadPointer(engine::sourceChannelFor(channels, 0, fileChannels)),
-                buffer.getReadPointer(engine::sourceChannelFor(channels, 1, fileChannels)),
-            };
-            meter.process(outputs, 2, n);
-
-            job.report((double) (done + n) / (double) count, "Measuring loudness");
-        }
-
-        outcome->report = engine::LoudnessReport::of(meter, (double) count / reader->sampleRate);
-        outcome->ok     = true;
+        void prepare(double sampleRate) override { meter.prepare(sampleRate, 2); }
+        void process(const float* const* outputs, int frames) override { meter.process(outputs, 2, frames); }
     };
 
-    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), outcome,
-                       onMeasured = std::move(onMeasured)](bool cancelled)
+    auto       scan  = std::make_shared<LoudnessScan>();
+    const auto count = juce::jmax(0, to - from);
+
+    scanClipAudio(title, "Measuring loudness", audio, from, to, scan,
+                  [scan, count, onMeasured = std::move(onMeasured)](double rate)
     {
-        if (self == nullptr)
-            return;
-
-        self->renderJob_.reset();
-        if (cancelled)
-        {
-            self->showStatus("Loudness measurement cancelled");
-            return;
-        }
-        if (! outcome->ok)
-        {
-            self->showError("Could not read that clip");
-            return;
-        }
-        onMeasured(outcome->report);
-    };
-
-    renderJob_ = app::OfflineRenderJob::launch(title, std::move(work), std::move(onFinished));
+        onMeasured(engine::LoudnessReport::of(scan->meter, (double) count / rate));
+    });
 }
 
 /** The loudness of the audio editor's selection, or the whole clip, as heard:
