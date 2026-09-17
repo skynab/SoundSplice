@@ -140,6 +140,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
         }
 
+        case commands::generateTone:
+        case commands::generateChirp:
+        case commands::generateNoise:
+        case commands::generateSilence:
+        case commands::generateDtmf:
+            info.setActive(renderJob_ == nullptr);
+            break;
+
         case commands::measureLoudness:
         case commands::normalizeLoudness:
             info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr);
@@ -347,6 +355,11 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::swapChannels:    swapSelectedTrackChannels(); break;
         case commands::makeStereoTrack: makeStereoTrack(); break;
         case commands::measureLoudness: measureLoudnessOfSelection(); break;
+        case commands::generateTone:    showGenerateDialog(engine::GeneratorKind::Tone); break;
+        case commands::generateChirp:   showGenerateDialog(engine::GeneratorKind::Chirp); break;
+        case commands::generateNoise:   showGenerateDialog(engine::GeneratorKind::Noise); break;
+        case commands::generateSilence: showGenerateDialog(engine::GeneratorKind::Silence); break;
+        case commands::generateDtmf:    showGenerateDialog(engine::GeneratorKind::Dtmf); break;
         case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
         case commands::resampleTrack:   showResampleTrackDialog(); break;
         case commands::mixAndRender:    mixAndRenderToNewTrack(); break;
@@ -491,7 +504,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View", "Markers", "Transport" };
+    return { "File", "Edit", "View", "Markers", "Transport", "Generate" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String&)
@@ -653,6 +666,15 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::playFaster);
         add(commands::playSlower);
         add(commands::playNormalSpeed);
+    }
+    else if (topLevelMenuIndex == 5) // Generate
+    {
+        add(commands::generateTone);
+        add(commands::generateChirp);
+        add(commands::generateNoise);
+        add(commands::generateDtmf);
+        menu.addSeparator();
+        add(commands::generateSilence);
     }
 
     return menu;

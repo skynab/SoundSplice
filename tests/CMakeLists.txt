@@ -21,6 +21,7 @@ add_executable(soundsplice_tests
   engine/LoudnessTests.cpp
   engine/DcBlockerTests.cpp
   engine/ToneDspTests.cpp
+  engine/GeneratorsTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp

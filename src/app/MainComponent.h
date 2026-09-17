@@ -19,6 +19,7 @@
 #include "engine/TimeStretch.h"
 #include "engine/NoiseReduction.h"
 #include "engine/RawPcm.h"
+#include "engine/Generators.h"
 #include "engine/Loudness.h"
 #include "engine/TempoMap.h"
 #include "model/History.h"
@@ -396,6 +397,11 @@ private:
                                                std::function<void(const engine::LoudnessReport&)> onMeasured);
     void                   measureLoudnessOfSelection();
     void                   showNormalizeLoudnessDialog();
+
+    // The Generate menu — see MainComponent_Generate.cpp.
+    std::vector<int>       generateTargetTracks() const;
+    void                   showGenerateDialog(engine::GeneratorKind kind);
+    void                   generateAudio(const engine::GeneratorSpec& spec);
     void                   normalizeSelectedClipLoudness(double targetLufs, bool limitTruePeak);
 
     /** Answers the audio editor's onSampleDetailNeeded: the selected clip's

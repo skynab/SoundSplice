@@ -165,7 +165,8 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 · ⬜ Center channel extractor / vocal reduction (Audition) · ✅ Stereo-to-mono downmix (Stereo Tools' Mono)
 
 **Generators**
-⬜ Tone (sine/square/saw) · ⬜ Chirp · ⬜ **Noise** (white/pink/brown) · ⬜ Silence · ⬜ DTMF · ⬜ Rhythm track
+✅ Tone (sine/square/saw/triangle) · ✅ Chirp (linear or logarithmic) · ✅ **Noise** (white/pink/brown) · ✅ Silence · ✅ DTMF
+(Generate menu: into the time selection, at the playhead, or on a new track; `src/engine/Generators.h`) · ⬜ Rhythm track
 / click track (the metronome can render it) · ⬜ Pluck · ⬜ **Room tone fill** (synthesize or loop
 captured room tone into gaps)
 
