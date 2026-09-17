@@ -361,6 +361,138 @@ void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds,
     showStatus("Took " + juce::String(removed / beatsPerSecond, 2) + " s of silence out");
 }
 
+/** Auto Duck, as Audacity's: the music on the selected tracks dips wherever
+    the bottom selected track - the voice - is sounding. The dip is written as
+    a clip volume curve, so it can be redrawn by hand afterwards and nothing is
+    rendered. One undo step. */
+void MainComponent::autoDuck(float thresholdDb, double duckDb, double fadeSeconds, double pauseSeconds)
+{
+    const auto  selection = timeSelection_;
+    const auto& song      = history_.current();
+    if (selection.trackIds.size() < 2 || song.bpm <= 0.0)
+    {
+        showError("Select the tracks to duck and, below them, the one to duck against");
+        return;
+    }
+
+    // The control track is the lowest selected one, as Audacity's is.
+    int controlId = 0;
+    for (const auto& track : song.tracks)
+        if (selection.includes(track.id))
+            controlId = track.id;
+
+    std::vector<int> ducked;
+    for (int id : selection.trackIds)
+        if (id != controlId)
+            ducked.push_back(id);
+
+    const auto* control = model::findTrack(song, controlId);
+    if (control == nullptr || control->type != model::TrackType::Audio || ducked.empty())
+    {
+        showError("The lowest selected track has to be the audio track to duck against");
+        return;
+    }
+
+    showBusy("Listening for the voice...");
+
+    const double beatsPerSecond = song.bpm / 60.0;
+    std::vector<std::pair<double, double>> sounds;
+
+    for (const auto& clip : control->clips)
+    {
+        const double clipEnd = clip.startBeats + clip.lengthBeats;
+        if (clip.type != model::ClipType::Audio || clipEnd <= selection.startBeats
+            || clip.startBeats >= selection.endBeats)
+            continue;
+
+        const auto silences = silencesInClip(clip, thresholdDb, pauseSeconds);
+        const auto quiet    = silences ? *silences : std::vector<std::pair<double, double>> {};
+
+        double cursor = clip.startBeats;
+        for (const auto& [from, to] : quiet)
+        {
+            const double quietFrom = clip.startBeats + from * beatsPerSecond;
+            if (quietFrom > cursor)
+                sounds.emplace_back(cursor, quietFrom);
+            cursor = juce::jmax(cursor, clip.startBeats + to * beatsPerSecond);
+        }
+        if (clipEnd > cursor)
+            sounds.emplace_back(cursor, clipEnd);
+    }
+
+    // Everything outside the time selection is left alone, and pauses shorter
+    // than the one asked for don't let the music back up.
+    for (auto& sound : sounds)
+    {
+        sound.first  = juce::jmax(sound.first, selection.startBeats);
+        sound.second = juce::jmin(sound.second, selection.endBeats);
+    }
+    const auto merged = model::arrangeedit::mergeRegions(sounds, pauseSeconds * beatsPerSecond);
+
+    const auto gain = (float) juce::Decibels::decibelsToGain(-std::abs(duckDb));
+    int        count = 0;
+
+    auto trial = song;
+    if (model::arrangeedit::duckClips(trial, ducked, merged, gain, fadeSeconds) == 0)
+    {
+        showStatus("Nothing to duck: no sound found on the lowest selected track");
+        return;
+    }
+
+    history_.edit("Auto duck", [&](model::Song& s)
+    {
+        count = model::arrangeedit::duckClips(s, ducked, merged, gain, fadeSeconds);
+    });
+
+    refreshAfterArrangementEdit();
+    showStatus("Ducked " + juce::String(count) + (count == 1 ? " clip" : " clips") + " under "
+               + juce::String((int) merged.size()) + (merged.size() == 1 ? " passage" : " passages")
+               + " - the curves are editable with View > Show Clip Volume Curves");
+}
+
+void MainComponent::showAutoDuckDialog()
+{
+    if (timeSelection_.trackIds.size() < 2)
+    {
+        showError("Select the tracks to duck and, below them, the one to duck against");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Auto Duck",
+                                         "Dips the selected tracks wherever the lowest selected track is sounding, "
+                                         "as a volume curve on each clip.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("duck", juce::String(settings_.getDoubleValue("autoDuck.duckDb", 12.0)),
+                          "Duck by (dB):");
+    window->addTextEditor("threshold", juce::String(settings_.getDoubleValue("autoDuck.threshold", -30.0)),
+                          "Sounding above (dB):");
+    window->addTextEditor("fade", juce::String(settings_.getDoubleValue("autoDuck.fade", 0.5)),
+                          "Fade down and up over (seconds):");
+    window->addTextEditor("pause", juce::String(settings_.getDoubleValue("autoDuck.pause", 0.4)),
+                          "Come back up after a pause of (seconds):");
+    window->addButton("Duck", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double duck      = juce::jlimit(0.0, 60.0, window->getTextEditorContents("duck").getDoubleValue());
+            const double threshold = juce::jlimit(-120.0, 0.0, window->getTextEditorContents("threshold").getDoubleValue());
+            const double fade      = juce::jlimit(0.0, 10.0, window->getTextEditorContents("fade").getDoubleValue());
+            const double pause     = juce::jlimit(0.05, 30.0, window->getTextEditorContents("pause").getDoubleValue());
+
+            self->settings_.setValue("autoDuck.duckDb", duck);
+            self->settings_.setValue("autoDuck.threshold", threshold);
+            self->settings_.setValue("autoDuck.fade", fade);
+            self->settings_.setValue("autoDuck.pause", pause);
+            self->autoDuck((float) threshold, duck, fade, pause);
+        }));
+}
+
 void MainComponent::showTruncateSilenceDialog()
 {
     if (timeSelection_.isEmpty())

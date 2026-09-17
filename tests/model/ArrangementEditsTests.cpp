@@ -329,3 +329,51 @@ TEST_CASE("Repeat puts copies after the selection, one after another", "[model][
 
     REQUIRE(repeatRange(f.song, { 20.0, 20.0, { f.audio } }, 2).isEmpty());
 }
+
+TEST_CASE("Regions merge when they touch or nearly touch", "[model][arrange]")
+{
+    using Spans = std::vector<std::pair<double, double>>;
+
+    const Spans regions { { 4.0, 5.0 }, { 0.0, 1.0 }, { 1.2, 2.0 }, { 2.0, 3.0 } };
+
+    REQUIRE(mergeRegions(regions, 0.0) == Spans { { 0.0, 1.0 }, { 1.2, 3.0 }, { 4.0, 5.0 } });
+    REQUIRE(mergeRegions(regions, 0.5) == Spans { { 0.0, 3.0 }, { 4.0, 5.0 } });
+    REQUIRE(mergeRegions(regions, 2.0) == Spans { { 0.0, 5.0 } });
+    REQUIRE(mergeRegions({ { 3.0, 3.0 } }, 1.0).empty());
+}
+
+TEST_CASE("Auto Duck writes a dip around each passage, in the clip's own time", "[model][arrange]")
+{
+    Fixture f;
+    f.add(f.audio, 0.0, 20.0, 2.0);   // music, playing its file from 2 s in
+    f.add(f.other, 0.0, 20.0, 0.0);   // the voice, not ducked itself
+
+    // One passage of voice from beat 5 to beat 8 (seconds, at 60 bpm).
+    REQUIRE(duckClips(f.song, { f.audio }, { { 5.0, 8.0 } }, 0.25f, 0.5) == 1);
+
+    // By value: sorted() hands back a copy, and a reference into it would
+    // dangle the moment the statement ended.
+    const auto clip     = f.sorted(f.audio)[0];
+    const auto envelope = clip.envelope;
+    const auto points   = envelope.points();
+    REQUIRE(points.size() == 4);
+
+    // Beat 5 is 7 s into the file (2 s offset + 5), and the fade starts half a second before.
+    REQUIRE_THAT(points[0].seconds, WithinAbs(6.5, 1e-9));
+    REQUIRE(points[0].gain == 1.0f);
+    REQUIRE_THAT(points[1].seconds, WithinAbs(7.0, 1e-9));
+    REQUIRE(points[1].gain == 0.25f);
+    REQUIRE_THAT(points[2].seconds, WithinAbs(10.0, 1e-9));
+    REQUIRE(points[2].gain == 0.25f);
+    REQUIRE_THAT(points[3].seconds, WithinAbs(10.5, 1e-9));
+    REQUIRE(points[3].gain == 1.0f);
+
+    // Between the passages the music is at full level, and under them it's ducked.
+    REQUIRE(envelope.gainAt(6.0) == 1.0f);
+    REQUIRE(envelope.gainAt(8.5) == 0.25f);
+    REQUIRE(envelope.gainAt(11.0) == 1.0f);
+
+    // The voice track keeps its own curve, and so does a clip no passage reaches.
+    REQUIRE(f.sorted(f.other)[0].envelope.isEmpty());
+    REQUIRE(duckClips(f.song, { f.audio }, { { 40.0, 41.0 } }, 0.25f, 0.5) == 0);
+}

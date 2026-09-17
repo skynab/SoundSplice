@@ -315,6 +315,8 @@ private:
     void                   detachAtSilences(float thresholdDb, double minSilenceSeconds);
     std::optional<std::vector<std::pair<double, double>>> silencesInClip(const model::Clip& clip, float thresholdDb,
                                                                          double minSilenceSeconds) const;
+    void                   showAutoDuckDialog();
+    void                   autoDuck(float thresholdDb, double duckDb, double fadeSeconds, double pauseSeconds);
     void                   showTruncateSilenceDialog();
     void                   truncateSilence(float thresholdDb, double minSilenceSeconds, double keepSeconds);
     void                   showRepeatDialog();

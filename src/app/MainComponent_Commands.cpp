@@ -115,6 +115,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::crossfadeClips:
         case commands::truncateSilence:
         case commands::repeatSelection:
+        case commands::autoDuck:
             info.setActive(! timeSelection_.isEmpty());
             break;
 
@@ -350,6 +351,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::humRemoval:      showHumRemovalDialog(); break;
         case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
         case commands::truncateSilence: showTruncateSilenceDialog(); break;
+        case commands::autoDuck:        showAutoDuckDialog(); break;
         case commands::repeatSelection: showRepeatDialog(); break;
         case commands::changeTempo:     showChangeTempoDialog(); break;
         case commands::paulstretch:     showPaulstretchDialog(); break;
@@ -606,6 +608,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::repeatSelection);
         add(commands::detachAtSilences);
         add(commands::truncateSilence);
+        add(commands::autoDuck);
         add(commands::findZeroCrossings);
         menu.addSeparator();
         add(commands::copyTrack);

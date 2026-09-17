@@ -233,6 +233,90 @@ namespace arrangeedit
 
         return { selection.endBeats, selection.endBeats + selection.lengthBeats(), selection.trackIds };
     }
+    /** @p regions (in beats, any order) sorted and joined where they overlap
+        or lie within @p mergeBeats of each other: the pauses too short to be
+        worth acting on go, and what's left doesn't overlap. */
+    inline std::vector<std::pair<double, double>> mergeRegions(std::vector<std::pair<double, double>> regions,
+                                                               double mergeBeats)
+    {
+        std::sort(regions.begin(), regions.end());
+
+        std::vector<std::pair<double, double>> merged;
+        for (const auto& region : regions)
+        {
+            if (region.second <= region.first)
+                continue;
+
+            if (! merged.empty() && region.first <= merged.back().second + std::max(0.0, mergeBeats))
+                merged.back().second = std::max(merged.back().second, region.second);
+            else
+                merged.push_back(region);
+        }
+        return merged;
+    }
+
+    /** Auto Duck: writes a volume curve onto every audio clip of @p trackIds
+        that dips to @p duckGain wherever @p sounds (in beats, sorted and not
+        overlapping) are, fading down over @p fadeSeconds before each and back
+        up after it. The curve is kept in the clip's own file time, so it stays
+        on its audio through a trim or a split, and it replaces whatever curve
+        the clip had. Clips no sound reaches keep their curve. Returns how many
+        clips were ducked. */
+    inline int duckClips(Song& song, const std::vector<int>& trackIds,
+                         const std::vector<std::pair<double, double>>& sounds, float duckGain, double fadeSeconds)
+    {
+        if (song.bpm <= 0.0 || sounds.empty())
+            return 0;
+
+        const double secondsPerBeat = 60.0 / song.bpm;
+        const double fade           = std::max(0.0, fadeSeconds);
+        int          ducked         = 0;
+
+        for (auto& track : song.tracks)
+        {
+            if (std::find(trackIds.begin(), trackIds.end(), track.id) == trackIds.end()
+                || track.type != TrackType::Audio)
+                continue;
+
+            for (auto& clip : track.clips)
+            {
+                if (clip.type != ClipType::Audio)
+                    continue;
+
+                const double clipEnd = clip.startBeats + clip.lengthBeats;
+
+                // Beats on the timeline to seconds into the clip's file.
+                const auto fileSecondsAt = [&clip, secondsPerBeat](double beat)
+                {
+                    return clip.sourceOffsetSeconds + (beat - clip.startBeats) * secondsPerBeat;
+                };
+
+                engine::ClipEnvelope envelope;
+                bool                 reached = false;
+
+                for (const auto& [from, to] : sounds)
+                {
+                    if (to <= clip.startBeats || from >= clipEnd)
+                        continue;
+
+                    reached = true;
+                    envelope.addPoint(fileSecondsAt(from) - fade, 1.0f);
+                    envelope.addPoint(fileSecondsAt(from), duckGain);
+                    envelope.addPoint(fileSecondsAt(to), duckGain);
+                    envelope.addPoint(fileSecondsAt(to) + fade, 1.0f);
+                }
+
+                if (reached)
+                {
+                    clip.envelope = std::move(envelope);
+                    ++ducked;
+                }
+            }
+        }
+
+        return ducked;
+    }
+
     /** Every stretch of [@p fromBeats, @p toBeats) none of @p sounds covers
         (intervals in beats, in any order, overlapping or not) that lasts at
         least @p minBeats, in order. */

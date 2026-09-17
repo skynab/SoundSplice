@@ -131,7 +131,7 @@ Built on 0.4, so each line is mostly DSP plus tests. Anything marked ✅ as real
 offline apply and preview.
 
 **Volume and dynamics**
-✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ⬜ **Auto Duck** · ✅ Expander ·
+✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ✅ **Auto Duck** (Edit > Auto Duck: dips the selected tracks under the lowest selected one, as editable clip volume curves) · ✅ Expander ·
 ⬜ **Multiband compressor** (REAPER ReaXComp, Audition) · ✅ **De-esser** (split-band, Linkwitz-Riley crossover) · ⬜ Dynamics processor with a
 drawable transfer curve (Audition)
 
@@ -218,7 +218,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ⬜ **Essential Sound panel**: tag a clip as Dialogue, Music, SFX or Ambience to get a simple task
   panel (loudness match, repair, clarity, ducking) that drives the real effects underneath
 - ⬜ **Match loudness across clips** (non-destructive clip gain to a LUFS target)
-- ⬜ **Auto-ducking** of music under dialogue, generating editable automation rather than baking it in
+- ✅ **Auto-ducking** of music under dialogue, as clip volume curves rather than baked in (Edit > Auto Duck)
 - ⬜ **Diagnostics panel**: scan a file and list clicks, clipping, silence and DC offset, each with a
   fix and a select button (Audition's DeClicker/DeClipper diagnostics)
 - ⬜ **Batch process**: run an effect chain or preset over a folder of files
