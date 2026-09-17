@@ -154,7 +154,11 @@ enum class EffectKind
     Chorus     = 7,
     Wobble     = 8,
     Gate       = 9,
-    Eq         = 10
+    Eq         = 10,
+    Amplify    = 11, // see engine/UtilityEffects.h
+    Invert     = 12,
+    DcOffset   = 13,
+    Limiter    = 14
 };
 
 /**
@@ -304,6 +308,45 @@ struct GateSettings
     bool operator==(const GateSettings&) const = default;
 };
 
+/** Gain, as Audacity's Amplify. */
+struct AmplifySettings
+{
+    bool  enabled = false;
+    float gainDb  = 0.0f;
+
+    bool operator==(const AmplifySettings&) const = default;
+};
+
+/** Polarity inversion, per channel. */
+struct InvertSettings
+{
+    bool enabled = false;
+    bool left    = true;
+    bool right   = true;
+
+    bool operator==(const InvertSettings&) const = default;
+};
+
+/** DC offset removal: a high-pass a few hertz up. */
+struct DcOffsetSettings
+{
+    bool  enabled  = false;
+    float cutoffHz = 5.0f;
+
+    bool operator==(const DcOffsetSettings&) const = default;
+};
+
+/** A lookahead brickwall limiter, the mastering Maximizer as a chain effect. */
+struct LimiterSettings
+{
+    bool  enabled     = false;
+    float inputGainDb = 0.0f;
+    float ceilingDb   = -1.0f;
+    float releaseMs   = 100.0f;
+
+    bool operator==(const LimiterSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -319,6 +362,10 @@ struct EffectSlot
     WobbleSettings     wobble;
     GateSettings       gate;
     EqPedalSettings    eqPedal;
+    AmplifySettings    amplify;
+    InvertSettings     invert;
+    DcOffsetSettings   dcOffset;
+    LimiterSettings    limiter;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

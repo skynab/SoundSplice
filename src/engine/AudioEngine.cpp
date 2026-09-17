@@ -566,6 +566,10 @@ void AudioEngine::rebuildTrackEffectChain(int index)
             case EffectNodeKind::Wobble:     chain->add(std::make_unique<WobbleNode>());     break;
             case EffectNodeKind::Gate:       chain->add(std::make_unique<GateNode>());       break;
             case EffectNodeKind::Eq:         chain->add(std::make_unique<EqNode>());         break;
+            case EffectNodeKind::Amplify:    chain->add(std::make_unique<AmplifyNode>());    break;
+            case EffectNodeKind::Invert:     chain->add(std::make_unique<InvertNode>());     break;
+            case EffectNodeKind::DcOffset:   chain->add(std::make_unique<DcOffsetNode>());   break;
+            case EffectNodeKind::Limiter:    chain->add(std::make_unique<LimiterNode>());    break;
 
             case EffectNodeKind::Plugin:
             {

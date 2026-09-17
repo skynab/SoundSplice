@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <model/EffectParams.h>
 #include <model/Serialization.h>
 #include <model/Song.h>
 
@@ -504,3 +505,53 @@ TEST_CASE("Sustain-pedal movements round-trip", "[model][io]")
     REQUIRE(findTrack(restored, trackId)->clips[0].pattern.notes.size() == 1);
 }
 
+
+TEST_CASE("Utility effects round-trip, and older files load them at their defaults", "[model][io]")
+{
+    Song      song;
+    const int id    = addTrack(song, TrackType::Audio, "Vox").id;
+    auto&     chain = findTrack(song, id)->effectChain;
+
+    auto amplify           = makeEffectSlot(EffectKind::Amplify);
+    amplify.amplify.gainDb = -7.5f;
+    auto invert            = makeEffectSlot(EffectKind::Invert);
+    invert.invert.left     = false;
+    auto dc                = makeEffectSlot(EffectKind::DcOffset);
+    dc.dcOffset.cutoffHz   = 12.5f;
+    auto limiter           = makeEffectSlot(EffectKind::Limiter);
+    limiter.limiter.inputGainDb = 6.5f;
+    limiter.limiter.ceilingDb   = -2.5f;
+    limiter.limiter.releaseMs   = 40.0f;
+    chain = { amplify, invert, dc, limiter };
+
+    Song restored;
+    REQUIRE(deserialize(serialize(song), restored));
+    REQUIRE(restored.tracks[0].effectChain == chain);
+
+    // A file from before these existed: every FXSLOT line stops after the
+    // EQ's values, seven fields short of today's.
+    std::string text = serialize(song);
+    for (auto at = text.find("FXSLOT "); at != std::string::npos; at = text.find("FXSLOT ", at + 1))
+    {
+        const auto lineEnd = text.find('\n', at);
+        auto       cut     = lineEnd;
+        for (int field = 0; field < 7; ++field)
+            cut = text.rfind(' ', cut - 1);
+        text.erase(cut, lineEnd - cut);
+    }
+
+    Song old;
+    REQUIRE(deserialize(text, old));
+    REQUIRE(old.tracks[0].effectChain.size() == 4);
+    REQUIRE(old.tracks[0].effectChain[3].kind == EffectKind::Limiter);
+
+    const EffectSlot defaults;
+    for (const auto& slot : old.tracks[0].effectChain)
+    {
+        REQUIRE(slot.amplify.gainDb == defaults.amplify.gainDb);
+        REQUIRE(slot.invert.left == defaults.invert.left);
+        REQUIRE(slot.dcOffset.cutoffHz == defaults.dcOffset.cutoffHz);
+        REQUIRE(slot.limiter.ceilingDb == defaults.limiter.ceilingDb);
+        REQUIRE(slot.limiter.releaseMs == defaults.limiter.releaseMs);
+    }
+}

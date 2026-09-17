@@ -253,7 +253,14 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.eqPedal.midDb) << " "
                 << detail::num((double) slot.eqPedal.midQ) << " "
                 << detail::num((double) slot.eqPedal.highShelfHz) << " "
-                << detail::num((double) slot.eqPedal.highShelfDb) << "\n";
+                << detail::num((double) slot.eqPedal.highShelfDb) << " "
+                << detail::num((double) slot.amplify.gainDb) << " "
+                << (slot.invert.left ? 1 : 0) << " "
+                << (slot.invert.right ? 1 : 0) << " "
+                << detail::num((double) slot.dcOffset.cutoffHz) << " "
+                << detail::num((double) slot.limiter.inputGainDb) << " "
+                << detail::num((double) slot.limiter.ceilingDb) << " "
+                << detail::num((double) slot.limiter.releaseMs) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -721,6 +728,13 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double eqMidHz = defaults.eqPedal.midHz, eqMidDb = defaults.eqPedal.midDb;
                 double eqMidQ = defaults.eqPedal.midQ;
                 double eqHighHz = defaults.eqPedal.highShelfHz, eqHighDb = defaults.eqPedal.highShelfDb;
+                // Appended after the EQ; a file from before they existed stops
+                // short, and the stream leaves these at their defaults.
+                double amplifyGain = defaults.amplify.gainDb;
+                int    invertLeft = defaults.invert.left ? 1 : 0, invertRight = defaults.invert.right ? 1 : 0;
+                double dcCutoff = defaults.dcOffset.cutoffHz;
+                double limiterInput = defaults.limiter.inputGainDb, limiterCeiling = defaults.limiter.ceilingDb;
+                double limiterRelease = defaults.limiter.releaseMs;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
                    >> delayTime >> delayFeedback >> delayMix >> room >> damping >> reverbMix
@@ -731,7 +745,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> chorusRate >> chorusDepth >> chorusMix
                    >> wobbleRateBeats >> wobbleDepth >> wobbleBaseCutoffHz >> wobbleResonance >> wobbleMix
                    >> gateThreshold >> gateRange >> gateAttack >> gateHold >> gateRelease
-                   >> eqLowHz >> eqLowDb >> eqMidHz >> eqMidDb >> eqMidQ >> eqHighHz >> eqHighDb;
+                   >> eqLowHz >> eqLowDb >> eqMidHz >> eqMidDb >> eqMidQ >> eqHighHz >> eqHighDb
+                   >> amplifyGain >> invertLeft >> invertRight >> dcCutoff
+                   >> limiterInput >> limiterCeiling >> limiterRelease;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -790,6 +806,17 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.eqPedal.midQ           = (float) eqMidQ;
                 slot.eqPedal.highShelfHz    = (float) eqHighHz;
                 slot.eqPedal.highShelfDb    = (float) eqHighDb;
+                slot.amplify.enabled        = slot.enabled && slot.kind == EffectKind::Amplify;
+                slot.amplify.gainDb         = (float) amplifyGain;
+                slot.invert.enabled         = slot.enabled && slot.kind == EffectKind::Invert;
+                slot.invert.left            = invertLeft != 0;
+                slot.invert.right           = invertRight != 0;
+                slot.dcOffset.enabled       = slot.enabled && slot.kind == EffectKind::DcOffset;
+                slot.dcOffset.cutoffHz      = (float) dcCutoff;
+                slot.limiter.enabled        = slot.enabled && slot.kind == EffectKind::Limiter;
+                slot.limiter.inputGainDb    = (float) limiterInput;
+                slot.limiter.ceilingDb      = (float) limiterCeiling;
+                slot.limiter.releaseMs      = (float) limiterRelease;
 
                 if (slot.kind == EffectKind::Plugin)
                 {

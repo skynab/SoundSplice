@@ -1616,6 +1616,10 @@ void MainComponent::syncEngineTracks()
                 case model::EffectKind::Wobble:     spec.kind = engine::EffectNodeKind::Wobble;     break;
                 case model::EffectKind::Gate:       spec.kind = engine::EffectNodeKind::Gate;       break;
                 case model::EffectKind::Eq:         spec.kind = engine::EffectNodeKind::Eq;         break;
+                case model::EffectKind::Amplify:    spec.kind = engine::EffectNodeKind::Amplify;    break;
+                case model::EffectKind::Invert:     spec.kind = engine::EffectNodeKind::Invert;     break;
+                case model::EffectKind::DcOffset:   spec.kind = engine::EffectNodeKind::DcOffset;   break;
+                case model::EffectKind::Limiter:    spec.kind = engine::EffectNodeKind::Limiter;    break;
                 case model::EffectKind::Plugin:
                     spec.kind             = engine::EffectNodeKind::Plugin;
                     spec.pluginFormat     = pluginFormatName(slot.plugin.format);

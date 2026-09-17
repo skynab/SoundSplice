@@ -39,6 +39,10 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::Wobble:     return std::make_unique<WobbleNode>();
         case model::EffectKind::Gate:       return std::make_unique<GateNode>();
         case model::EffectKind::Eq:         return std::make_unique<EqNode>();
+        case model::EffectKind::Amplify:    return std::make_unique<AmplifyNode>();
+        case model::EffectKind::Invert:     return std::make_unique<InvertNode>();
+        case model::EffectKind::DcOffset:   return std::make_unique<DcOffsetNode>();
+        case model::EffectKind::Limiter:    return std::make_unique<LimiterNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -93,6 +97,13 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.gateAttackMs    = slot.gate.attackMs;
     params.gateHoldMs      = slot.gate.holdMs;
     params.gateReleaseMs   = slot.gate.releaseMs;
+    params.amplifyGainDb    = slot.amplify.gainDb;
+    params.invertLeft       = slot.invert.left;
+    params.invertRight      = slot.invert.right;
+    params.dcCutoffHz       = slot.dcOffset.cutoffHz;
+    params.limiterInputDb   = slot.limiter.inputGainDb;
+    params.limiterCeilingDb = slot.limiter.ceilingDb;
+    params.limiterReleaseMs = slot.limiter.releaseMs;
     return params;
 }
 

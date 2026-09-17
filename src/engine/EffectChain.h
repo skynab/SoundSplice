@@ -11,6 +11,7 @@
 #include "engine/PedalEffects.h"
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
+#include "engine/UtilityEffects.h"
 
 namespace soundsplice::engine
 {
@@ -30,7 +31,11 @@ enum class EffectNodeKind
     Chorus     = 7,
     Wobble     = 8,
     Gate       = 9,
-    Eq         = 10
+    Eq         = 10,
+    Amplify    = 11,
+    Invert     = 12,
+    DcOffset   = 13,
+    Limiter    = 14
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -115,6 +120,14 @@ struct EffectSlotParams
     float eqMidQ        = 1.0f;
     float eqHighShelfHz = 4000.0f;
     float eqHighShelfDb = 0.0f;
+
+    float amplifyGainDb    = 0.0f;
+    bool  invertLeft       = true;
+    bool  invertRight      = true;
+    float dcCutoffHz       = 5.0f;
+    float limiterInputDb   = 0.0f;
+    float limiterCeilingDb = -1.0f;
+    float limiterReleaseMs = 100.0f;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -234,6 +247,46 @@ struct EqNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct AmplifyNode final : EffectProcessor
+{
+    AmplifyEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Amplify; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct InvertNode final : EffectProcessor
+{
+    InvertEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Invert; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct DcOffsetNode final : EffectProcessor
+{
+    DcOffsetEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::DcOffset; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct LimiterNode final : EffectProcessor
+{
+    LimiterEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Limiter; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct ReverbNode final : EffectProcessor
 {
     ReverbEffect effect;
@@ -329,6 +382,25 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             gate->effect.setAttackMs(params.gateAttackMs);
             gate->effect.setHoldMs(params.gateHoldMs);
             gate->effect.setReleaseMs(params.gateReleaseMs);
+        }
+        else if (auto* amplify = dynamic_cast<AmplifyNode*>(&node))
+        {
+            amplify->effect.setGainDb(params.amplifyGainDb);
+        }
+        else if (auto* invert = dynamic_cast<InvertNode*>(&node))
+        {
+            invert->effect.setLeft(params.invertLeft);
+            invert->effect.setRight(params.invertRight);
+        }
+        else if (auto* dc = dynamic_cast<DcOffsetNode*>(&node))
+        {
+            dc->effect.setCutoffHz(params.dcCutoffHz);
+        }
+        else if (auto* limiter = dynamic_cast<LimiterNode*>(&node))
+        {
+            limiter->effect.setInputGainDb(params.limiterInputDb);
+            limiter->effect.setCeilingDb(params.limiterCeilingDb);
+            limiter->effect.setReleaseMs(params.limiterReleaseMs);
         }
 }
 

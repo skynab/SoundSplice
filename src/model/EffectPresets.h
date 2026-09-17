@@ -139,6 +139,25 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
             { "Tight Drums", { { "threshold", -30 }, { "range", 80 }, { "attack", 0.5 }, { "hold", 10 },
                                { "release", 60 } } } } },
 
+        { EffectKind::Limiter, {
+            { "Streaming Ceiling", { { "input", 0 }, { "ceiling", -1 },   { "release", 100 } } },
+            { "Broadcast",         { { "input", 0 }, { "ceiling", -2 },   { "release", 150 } } },
+            { "Loud",              { { "input", 6 }, { "ceiling", -0.3 }, { "release", 50 } } } } },
+
+        { EffectKind::Invert, {
+            { "Both Channels", { { "left", 1 }, { "right", 1 } } },
+            { "Left Only",     { { "left", 1 }, { "right", 0 } } },
+            { "Right Only",    { { "left", 0 }, { "right", 1 } } } } },
+
+        { EffectKind::DcOffset, {
+            { "Gentle (2 Hz)",   { { "cutoff", 2 } } },
+            { "Standard (5 Hz)", { { "cutoff", 5 } } },
+            { "Firm (15 Hz)",    { { "cutoff", 15 } } } } },
+
+        { EffectKind::Amplify, {
+            { "+6 dB", { { "gain", 6 } } },
+            { "-6 dB", { { "gain", -6 } } } } },
+
         { EffectKind::Eq, {
             { "Voice Clarity", { { "lowFreq", 100 }, { "low", -4 }, { "midFreq", 3000 }, { "mid", 3 },
                                  { "midQ", 1 }, { "highFreq", 8000 }, { "high", 2 } } },

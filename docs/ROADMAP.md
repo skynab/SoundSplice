@@ -131,8 +131,7 @@ Built on 0.4, so each line is mostly DSP plus tests. Anything marked ✅ as real
 offline apply and preview.
 
 **Volume and dynamics**
-✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · 🟡 Limiter (inside Maximizer; expose it as an
-effect) · ⬜ Amplify · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ⬜ **Auto Duck** · ⬜ Expander ·
+✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ⬜ **Auto Duck** · ⬜ Expander ·
 ⬜ **Multiband compressor** (REAPER ReaXComp, Audition) · ⬜ **De-esser** · ⬜ Dynamics processor with a
 drawable transfer curve (Audition)
 
@@ -154,7 +153,7 @@ unlimited bands** and a drawable curve (Audacity Filter Curve, REAPER ReaEQ) · 
 **Noise removal and repair** (Audacity *and* Audition)
 ✅ Noise reduction · ⬜ **Click/pop removal** · ⬜ **Clip fix / DeClipper** · ⬜ Repair (interpolate a short
 region) · ⬜ **DeHummer** (50/60 Hz and harmonics) · ⬜ **Adaptive noise reduction** (no noise print
-needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ⬜ DC offset removal
+needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 
 **Delay, reverb and modulation**
 ✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ⬜ Echo (multitap) ·
@@ -162,7 +161,7 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ⬜ DC offset removal
 ⬜ Flanger · ⬜ Wah-wah · ⬜ Vocoder · ⬜ Ring modulator
 
 **Stereo and special**
-🟡 Widener (mastering only) · ⬜ Invert · ⬜ Repeat · ⬜ **Truncate silence** · ⬜ **Channel mixer / mid-side**
+🟡 Widener (mastering only) · ✅ Invert (either channel or both) · ⬜ Repeat · ⬜ **Truncate silence** · ⬜ **Channel mixer / mid-side**
 · ⬜ Center channel extractor / vocal reduction (Audition) · ⬜ Stereo-to-mono downmix
 
 **Generators**

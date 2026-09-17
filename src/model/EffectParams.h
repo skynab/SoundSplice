@@ -272,6 +272,36 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
                 .access = fieldAccess<&S::eqPedal, &EqPedalSettings::highShelfHz> },
               { .id = "high", .name = "High", .min = -24, .max = 24, .step = 0.5, .unit = " dB",
                 .access = fieldAccess<&S::eqPedal, &EqPedalSettings::highShelfDb> } } },
+
+        { .kind = EffectKind::Limiter, .id = "limiter", .name = "Limiter", .group = "Pedals",
+          .params = {
+              { .id = "input", .name = "Input Gain", .min = 0, .max = 24, .step = 0.1, .unit = " dB",
+                .tooltip = "Drive into the limiter - louder, with the peaks held at the ceiling",
+                .access = fieldAccess<&S::limiter, &LimiterSettings::inputGainDb> },
+              { .id = "ceiling", .name = "Ceiling", .min = -24, .max = 0, .step = 0.1, .unit = " dB",
+                .tooltip = "Nothing gets past this",
+                .access = fieldAccess<&S::limiter, &LimiterSettings::ceilingDb> },
+              { .id = "release", .name = "Release", .min = 1, .max = 1000, .step = 1, .unit = " ms",
+                .access = fieldAccess<&S::limiter, &LimiterSettings::releaseMs> } } },
+
+        { .kind = EffectKind::Amplify, .id = "amplify", .name = "Amplify", .group = "Utility",
+          .params = {
+              { .id = "gain", .name = "Gain", .min = -48, .max = 48, .step = 0.1, .unit = " dB",
+                .access = fieldAccess<&S::amplify, &AmplifySettings::gainDb> } } },
+
+        { .kind = EffectKind::Invert, .id = "invert", .name = "Invert", .group = "Utility",
+          .params = {
+              { .id = "left", .name = "Invert Left", .control = ParamControl::Toggle, .min = 0, .max = 1, .step = 1,
+                .tooltip = "Flip the polarity of the left channel (a mono track's only channel)",
+                .access = fieldAccess<&S::invert, &InvertSettings::left> },
+              { .id = "right", .name = "Invert Right", .control = ParamControl::Toggle, .min = 0, .max = 1,
+                .step = 1, .access = fieldAccess<&S::invert, &InvertSettings::right> } } },
+
+        { .kind = EffectKind::DcOffset, .id = "dcOffset", .name = "DC Offset Removal", .group = "Utility",
+          .params = {
+              { .id = "cutoff", .name = "Cutoff", .min = 1, .max = 20, .step = 0.5, .unit = " Hz",
+                .tooltip = "The high-pass corner: low enough to leave every audible frequency alone",
+                .access = fieldAccess<&S::dcOffset, &DcOffsetSettings::cutoffHz> } } },
     };
 
     return effects;
@@ -308,6 +338,10 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.wobble.enabled     = kind == EffectKind::Wobble;
     slot.gate.enabled       = kind == EffectKind::Gate;
     slot.eqPedal.enabled    = kind == EffectKind::Eq;
+    slot.amplify.enabled    = kind == EffectKind::Amplify;
+    slot.invert.enabled     = kind == EffectKind::Invert;
+    slot.dcOffset.enabled   = kind == EffectKind::DcOffset;
+    slot.limiter.enabled    = kind == EffectKind::Limiter;
     return slot;
 }
 
