@@ -463,6 +463,8 @@ public:
     int64_t playheadSamples() const noexcept { return transport_.playheadForUI(); }
     double  sampleRate() const noexcept      { return sampleRate_.load(std::memory_order_relaxed); }
     float   masterPeak(int channel) const noexcept { return master_.peak(channel); }
+    LiveLoudness masterLoudness() const noexcept { return master_.loudness(); }
+    void    resetMasterLoudness() noexcept { master_.resetLoudness(); }
     /** Gain reduction the mastering rack's limiter is applying, in dB. */
     float   masteringReductionDb() const noexcept { return mastering_.currentReductionDb(); }
 

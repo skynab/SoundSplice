@@ -502,6 +502,9 @@ MainComponent::MainComponent()
 
     masterPanel_.addAndMakeVisible(meter_);
 
+    loudnessReadout_.onReset = [this] { engine_.resetMasterLoudness(); };
+    masterPanel_.addAndMakeVisible(loudnessReadout_);
+
     // ---- per-track channel strips ----
     for (int i = 0; i < engine_.maxTracks(); ++i)
     {
@@ -1205,6 +1208,7 @@ void MainComponent::timerCallback()
 
     meter_.setLevel(0, engine_.masterPeak(0));
     meter_.setLevel(1, engine_.masterPeak(1));
+    loudnessReadout_.setReading(engine_.masterLoudness());
     masteringPane_.setReductionDb(engine_.masteringReductionDb());
     audioEditor_.setPlaybackState(engine_.isPlaying(),
                                   clipSecondsForSongBeat(uiTempoMap_.ppqFromSamples(playhead)));

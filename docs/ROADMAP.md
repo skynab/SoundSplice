@@ -173,8 +173,8 @@ captured room tone into gaps)
 **Analyzers**
 ✅ Plot spectrum · ⬜ **Find clipping** (labels each run) · ⬜ **Measure RMS / amplitude statistics**
 (Audition: peak, RMS, DC offset, dynamic range) · ⬜ **Contrast** (WCAG foreground/background) ·
-⬜ **Label sounds / silence finder** · ⬜ **Beat finder** · 🟡 **Loudness meter** (momentary, short-term,
-integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser ✅ (Edit > Measure Loudness); live on the master ⬜ · ⬜ **Phase correlation meter / vectorscope** · ⬜ Oscilloscope
+⬜ **Label sounds / silence finder** · ⬜ **Beat finder** · ✅ **Loudness meter** (momentary, short-term,
+integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser (Edit > Measure Loudness), and live on the master bus in the Master pane, with a reset · ⬜ **Phase correlation meter / vectorscope** · ⬜ Oscilloscope
 
 ### Phase 3 — Spectral editing
 

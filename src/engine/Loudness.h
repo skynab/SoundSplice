@@ -72,6 +72,11 @@ public:
 
     double sampleRate() const noexcept { return sampleRate_; }
     int    channels() const noexcept { return channels_; }
+    bool   isPrepared() const noexcept { return ! filters_.empty(); }
+
+    /** 100 ms steps measured so far: integrated loudness and range can only
+        change when this does. */
+    std::int64_t hopCount() const noexcept { return hopCount_; }
 
     /** Measures @p numSamples more samples of @p numChannels channels. Extra
         channels beyond those prepared are ignored; missing ones count as silence. */
@@ -412,6 +417,16 @@ private:
     int                             historyAt_  = 0;
     double                          samplePeak_ = 0.0;
     double                          truePeak_   = 0.0;
+};
+
+/** What a live loudness meter shows. */
+struct LiveLoudness
+{
+    double momentaryLufs   = LoudnessMeter::kSilence;
+    double shortTermLufs   = LoudnessMeter::kSilence;
+    double integratedLufs  = LoudnessMeter::kSilence;
+    double loudnessRangeLu = 0.0;
+    double truePeakDb      = LoudnessMeter::kSilence;
 };
 
 /** Everything a loudness measurement of a passage reports. */

@@ -120,6 +120,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/PaneLayoutTests.cpp
     gui/PaneWiringTests.cpp
     gui/AudioFormatsTests.cpp
+    gui/MasterLoudnessTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 

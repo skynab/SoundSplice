@@ -512,6 +512,8 @@ void MainComponent::layoutMasterPanel()
     masterArea.removeFromTop(8);
 
     meter_.setBounds(masterArea.removeFromTop(44));
+    masterArea.removeFromTop(4);
+    loudnessReadout_.setBounds(masterArea.removeFromTop(24));
 }
 
 } // namespace soundsplice

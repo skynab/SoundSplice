@@ -39,6 +39,7 @@
 #include "WorkspaceLayouts.h"
 #include "FileBrowserPanel.h"
 #include "LevelMeter.h"
+#include "LoudnessReadout.h"
 #include "MixerStrip.h"
 #include "OpenFiles.h"
 #include "OpenFilesPane.h"
@@ -670,6 +671,7 @@ private:
     juce::MidiKeyboardComponent        keyboard_ { engine_.keyboardState(),
                                                    juce::MidiKeyboardComponent::horizontalKeyboard };
     LevelMeter                         meter_;
+    LoudnessReadout                    loudnessReadout_;
 
     CallbackComponent                  editTab_;
     juce::Label                        editingLabel_;
