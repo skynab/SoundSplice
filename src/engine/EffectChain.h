@@ -46,7 +46,8 @@ enum class EffectNodeKind
     DeEsser    = 20,
     Expander   = 21,
     RingMod    = 22,
-    Wah        = 23
+    Wah        = 23,
+    Echo       = 24
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -173,6 +174,11 @@ struct EffectSlotParams
     float wahDepth         = 0.8f;
     float wahResonance     = 4.0f;
     float wahMix           = 1.0f;
+    float echoTimeMs       = 250.0f;
+    int   echoTaps         = 3;
+    float echoDecay        = 0.5f;
+    float echoMix          = 0.35f;
+    bool  echoPingPong     = false;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -422,6 +428,16 @@ struct WahNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct EchoNode final : EffectProcessor
+{
+    EchoEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Echo; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct ReverbNode final : EffectProcessor
 {
     ReverbEffect effect;
@@ -596,6 +612,14 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             wah->effect.setDepth(params.wahDepth);
             wah->effect.setResonance(params.wahResonance);
             wah->effect.setMix(params.wahMix);
+        }
+        else if (auto* echo = dynamic_cast<EchoNode*>(&node))
+        {
+            echo->effect.setTimeMs(params.echoTimeMs);
+            echo->effect.setTaps(params.echoTaps);
+            echo->effect.setDecay(params.echoDecay);
+            echo->effect.setMix(params.echoMix);
+            echo->effect.setPingPong(params.echoPingPong);
         }
 }
 

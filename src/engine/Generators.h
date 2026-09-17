@@ -27,7 +27,8 @@ enum class GeneratorKind
     Chirp,
     Noise,
     Silence,
-    Dtmf
+    Dtmf,
+    Rhythm
 };
 
 enum class NoiseColour
@@ -52,6 +53,9 @@ struct GeneratorSpec
 
     std::string dtmf      = "0123456789";
     double      dtmfDuty  = 0.55; // how much of each digit's slot is tone rather than the gap after it
+
+    double rhythmBpm   = 120.0; // a rhythm track's tempo
+    int    beatsPerBar = 4;     // its first beat is accented
 
     double seconds = 30.0;
 };
@@ -128,6 +132,9 @@ private:
 
             case GeneratorKind::Dtmf:
                 return dtmfSample();
+
+            case GeneratorKind::Rhythm:
+                return rhythmSample();
 
             case GeneratorKind::Silence:
                 break;
@@ -226,6 +233,24 @@ private:
         const double seconds   = (double) at / rate_;
         const double value     = 0.5 * (std::sin(kTwoPi * low * seconds) + std::sin(kTwoPi * high * seconds));
         return (float) (clampAmplitude(spec_.startAmplitude) * envelope * value);
+    }
+
+    /** A click track: a short decaying tone on every beat, a higher one on the
+        first of each bar, as a metronome sounds. */
+    float rhythmSample() noexcept
+    {
+        const double beatFrames = rate_ * 60.0 / std::max(1.0, spec_.rhythmBpm);
+        const auto   beat       = (std::int64_t) ((double) frame_ / beatFrames);
+        const double into       = ((double) frame_ - (double) beat * beatFrames) / rate_;
+
+        constexpr double kClickSeconds = 0.04;
+        if (into >= kClickSeconds)
+            return 0.0f;
+
+        const bool   accent = spec_.beatsPerBar > 0 && beat % spec_.beatsPerBar == 0;
+        const double hz     = accent ? 1600.0 : 800.0;
+        const double decay  = std::exp(-into / (kClickSeconds * 0.35));
+        return (float) (clampAmplitude(spec_.startAmplitude) * decay * std::sin(kTwoPi * hz * into));
     }
 
     GeneratorSpec spec_;

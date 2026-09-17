@@ -303,7 +303,12 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.wah.rateHz) << " "
                 << detail::num((double) slot.wah.depth) << " "
                 << detail::num((double) slot.wah.resonance) << " "
-                << detail::num((double) slot.wah.mix) << "\n";
+                << detail::num((double) slot.wah.mix) << " "
+                << detail::num((double) slot.echo.timeMs) << " "
+                << slot.echo.taps << " "
+                << detail::num((double) slot.echo.decay) << " "
+                << detail::num((double) slot.echo.mix) << " "
+                << (slot.echo.pingPong ? 1 : 0) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -806,6 +811,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double ringFrequency = defaults.ringMod.frequencyHz, ringMix = defaults.ringMod.mix;
                 double wahRate = defaults.wah.rateHz, wahDepth = defaults.wah.depth;
                 double wahResonance = defaults.wah.resonance, wahMix = defaults.wah.mix;
+                double echoTime = defaults.echo.timeMs, echoDecay = defaults.echo.decay, echoMix = defaults.echo.mix;
+                int    echoTaps = defaults.echo.taps, echoPingPong = defaults.echo.pingPong ? 1 : 0;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
                    >> delayTime >> delayFeedback >> delayMix >> room >> damping >> reverbMix
@@ -827,7 +834,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> deEssFrequency >> deEssThreshold >> deEssReduction
                    >> expThreshold >> expRatio >> expRange >> expAttack >> expRelease
                    >> ringFrequency >> ringMix
-                   >> wahRate >> wahDepth >> wahResonance >> wahMix;
+                   >> wahRate >> wahDepth >> wahResonance >> wahMix
+                   >> echoTime >> echoTaps >> echoDecay >> echoMix >> echoPingPong;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -947,6 +955,12 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.wah.depth              = (float) wahDepth;
                 slot.wah.resonance          = (float) wahResonance;
                 slot.wah.mix                = (float) wahMix;
+                slot.echo.enabled           = slot.enabled && slot.kind == EffectKind::Echo;
+                slot.echo.timeMs            = (float) echoTime;
+                slot.echo.taps              = std::clamp(echoTaps, 1, 8);
+                slot.echo.decay             = (float) echoDecay;
+                slot.echo.mix               = (float) echoMix;
+                slot.echo.pingPong          = echoPingPong != 0;
 
                 if (slot.kind == EffectKind::Plugin)
                 {

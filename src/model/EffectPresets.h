@@ -164,6 +164,11 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
             { "Wider",        { { "width", 1.4 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } },
             { "Narrower",     { { "width", 0.6 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } } } },
 
+        { EffectKind::Echo, {
+            { "Slapback",   { { "time", 110 }, { "taps", 1 }, { "decay", 0.5 },  { "mix", 0.3 }, { "pingPong", 0 } } },
+            { "Tape Echo",  { { "time", 320 }, { "taps", 4 }, { "decay", 0.55 }, { "mix", 0.35 }, { "pingPong", 0 } } },
+            { "Ping-pong",  { { "time", 260 }, { "taps", 6 }, { "decay", 0.6 },  { "mix", 0.4 }, { "pingPong", 1 } } } } },
+
         { EffectKind::GraphicEq, {
             { "Bass Boost",      { { "band31", 6 }, { "band62", 5 }, { "band125", 3 }, { "band250", 1 }, { "band500", 0 }, { "band1k", 0 }, { "band2k", 0 }, { "band4k", 0 }, { "band8k", 0 }, { "band16k", 0 } } },
             { "Treble Boost",    { { "band31", 0 }, { "band62", 0 }, { "band125", 0 }, { "band250", 0 }, { "band500", 0 }, { "band1k", 0 }, { "band2k", 1 }, { "band4k", 3 }, { "band8k", 5 }, { "band16k", 6 } } },

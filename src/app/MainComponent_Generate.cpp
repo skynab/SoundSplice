@@ -20,6 +20,7 @@ namespace
             case engine::GeneratorKind::Noise:   return "Noise";
             case engine::GeneratorKind::Silence: return "Silence";
             case engine::GeneratorKind::Dtmf:    return "DTMF Tones";
+            case engine::GeneratorKind::Rhythm:  return "Rhythm Track";
         }
         return "Audio";
     }
@@ -123,17 +124,36 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
             window->addTextEditor("startAmplitude", value("startAmplitude", 0.8), "Amplitude (0 to 1):");
             break;
 
+        case engine::GeneratorKind::Rhythm:
+            window->addTextEditor("rhythmBpm", value("rhythmBpm", history_.current().bpm), "Tempo (bpm):");
+            window->addTextEditor("beatsPerBar", juce::String(settings_.getIntValue(prefix + "beatsPerBar",
+                                                                                    history_.current().timeSigNumerator)),
+                                  "Beats per bar:");
+            window->addTextEditor("bars", juce::String(settings_.getIntValue(prefix + "bars", 8)), "Bars:");
+            window->addTextEditor("startAmplitude", value("startAmplitude", 0.8), "Amplitude (0 to 1):");
+            break;
+
         case engine::GeneratorKind::Silence:
             break;
     }
 
     const double defaultSeconds = kind == engine::GeneratorKind::Dtmf ? 1.0 : 30.0;
+    if (kind == engine::GeneratorKind::Rhythm)
+    {
+        // A rhythm track's length is its bars, so it has no duration of its own.
+        window->addButton("Generate", 1, juce::KeyPress(juce::KeyPress::returnKey));
+        window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    }
+    else
     window->addTextEditor("seconds",
                           juce::String(selection > 0.0 ? selection : settings_.getDoubleValue(prefix + "seconds", defaultSeconds), 3),
                           "Duration (seconds):");
 
-    window->addButton("Generate", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    if (kind != engine::GeneratorKind::Rhythm)
+    {
+        window->addButton("Generate", 1, juce::KeyPress(juce::KeyPress::returnKey));
+        window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    }
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
         [self = juce::Component::SafePointer<MainComponent>(this), window, kind, prefix](int result)
@@ -164,6 +184,17 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
             spec.noise          = (engine::NoiseColour) juce::jlimit(0, 2, choice("colour"));
             spec.dtmfDuty       = juce::jlimit(1.0, 100.0, number("dtmfDuty", 55.0)) / 100.0;
             spec.seconds        = number("seconds", 0.0);
+            spec.rhythmBpm      = juce::jlimit(20.0, 400.0, number("rhythmBpm", 120.0));
+            spec.beatsPerBar    = juce::jlimit(1, 32, (int) std::lround(number("beatsPerBar", 4.0)));
+
+            if (kind == engine::GeneratorKind::Rhythm)
+            {
+                const int bars = juce::jlimit(1, 999, (int) std::lround(number("bars", 8.0)));
+                self->settings_.setValue(prefix + "beatsPerBar", spec.beatsPerBar);
+                self->settings_.setValue(prefix + "bars", bars);
+                self->settings_.setValue(prefix + "rhythmBpm", spec.rhythmBpm);
+                spec.seconds = bars * spec.beatsPerBar * 60.0 / spec.rhythmBpm;
+            }
             if (auto* keys = window->getTextEditor("dtmf"))
                 spec.dtmf = keys->getText().toStdString();
 

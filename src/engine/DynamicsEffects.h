@@ -207,4 +207,39 @@ private:
     std::atomic<float> mix_ { 1.0f };
 };
 
+class EchoEffect
+{
+public:
+    void prepare(double sampleRate, int) { echo_.prepare(sampleRate); }
+
+    void setEnabled(bool enabled)  { enabled_.store(enabled, std::memory_order_relaxed); }
+    void setTimeMs(float ms)       { timeMs_.store(ms, std::memory_order_relaxed); }
+    void setTaps(int taps)         { taps_.store(taps, std::memory_order_relaxed); }
+    void setDecay(float decay)     { decay_.store(decay, std::memory_order_relaxed); }
+    void setMix(float mix)         { mix_.store(mix, std::memory_order_relaxed); }
+    void setPingPong(bool on)      { pingPong_.store(on, std::memory_order_relaxed); }
+
+    void process(juce::AudioBuffer<float>& buffer)
+    {
+        if (! enabled_.load(std::memory_order_relaxed))
+            return;
+
+        echo_.setTimeMs(timeMs_.load(std::memory_order_relaxed));
+        echo_.setTaps(taps_.load(std::memory_order_relaxed));
+        echo_.setDecay(decay_.load(std::memory_order_relaxed));
+        echo_.setMix(mix_.load(std::memory_order_relaxed));
+        echo_.setPingPong(pingPong_.load(std::memory_order_relaxed));
+        processFrames(echo_, buffer);
+    }
+
+private:
+    MultitapEcho       echo_;
+    std::atomic<bool>  enabled_ { false };
+    std::atomic<float> timeMs_ { 250.0f };
+    std::atomic<int>   taps_ { 3 };
+    std::atomic<float> decay_ { 0.5f };
+    std::atomic<float> mix_ { 0.35f };
+    std::atomic<bool>  pingPong_ { false };
+};
+
 } // namespace soundsplice::engine

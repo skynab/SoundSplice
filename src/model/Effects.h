@@ -167,7 +167,8 @@ enum class EffectKind
     DeEsser    = 20,
     Expander   = 21,
     RingMod    = 22,
-    Wah        = 23
+    Wah        = 23,
+    Echo       = 24
 };
 
 /**
@@ -469,6 +470,19 @@ struct WahSettings
     bool operator==(const WahSettings&) const = default;
 };
 
+/** A multitap echo: several repeats at a fixed spacing, each quieter. */
+struct EchoSettings
+{
+    bool  enabled  = false;
+    float timeMs   = 250.0f;
+    int   taps     = 3;
+    float decay    = 0.5f;
+    float mix      = 0.35f;
+    bool  pingPong = false;
+
+    bool operator==(const EchoSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -497,6 +511,7 @@ struct EffectSlot
     ExpanderSettings   expander;
     RingModSettings    ringMod;
     WahSettings        wah;
+    EchoSettings       echo;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

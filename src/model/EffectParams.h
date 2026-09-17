@@ -405,6 +405,22 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
                 .access = fieldAccess<&S::wah, &WahSettings::mix> } } },
 
+        { .kind = EffectKind::Echo, .id = "echo", .name = "Echo", .group = "",
+          .params = {
+              { .id = "time", .name = "Time", .min = 1, .max = 2000, .step = 1, .unit = " ms",
+                .skewMidpoint = 300, .access = fieldAccess<&S::echo, &EchoSettings::timeMs> },
+              { .id = "taps", .name = "Repeats", .control = ParamControl::Choice, .min = 1, .max = 8, .step = 1,
+                .choices = { "1", "2", "3", "4", "5", "6", "7", "8" },
+                .access = fieldAccess<&S::echo, &EchoSettings::taps> },
+              { .id = "decay", .name = "Decay", .min = 0, .max = 0.95, .step = 0.01, .displayScale = 100,
+                .unit = " %", .tooltip = "How much of the last repeat's level each one keeps",
+                .access = fieldAccess<&S::echo, &EchoSettings::decay> },
+              { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::echo, &EchoSettings::mix> },
+              { .id = "pingPong", .name = "Ping-pong", .control = ParamControl::Toggle, .min = 0, .max = 1,
+                .step = 1, .tooltip = "Every other repeat on the other side",
+                .access = fieldAccess<&S::echo, &EchoSettings::pingPong> } } },
+
         { .kind = EffectKind::Amplify, .id = "amplify", .name = "Amplify", .group = "Utility",
           .params = {
               { .id = "gain", .name = "Gain", .min = -48, .max = 48, .step = 0.1, .unit = " dB",
@@ -472,6 +488,7 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.expander.enabled   = kind == EffectKind::Expander;
     slot.ringMod.enabled    = kind == EffectKind::RingMod;
     slot.wah.enabled        = kind == EffectKind::Wah;
+    slot.echo.enabled       = kind == EffectKind::Echo;
     return slot;
 }
 

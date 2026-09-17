@@ -321,6 +321,8 @@ private:
     void                   repeatTimeSelection(int times);
     void                   showChangeTempoDialog();
     void                   changeTempoOfSelectedClip(double percent);
+    void                   showPaulstretchDialog();
+    void                   paulstretchSelectedClip(double stretch, double windowSeconds);
     void                   snapTimeSelectionToZeroCrossings();
     void                   applyEffectsToTimeSelection(const std::vector<model::EffectSlot>& chain);
     void                   previewEffectsOnTimeSelection(const std::vector<model::EffectSlot>& chain);

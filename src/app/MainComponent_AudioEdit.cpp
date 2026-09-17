@@ -1,5 +1,7 @@
 #include "MainComponentInternal.h"
 
+#include "engine/Paulstretch.h"
+
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // The audio editor: clip gain, selection edits, noise reduction, speed and pitch,
 // analysis, and applying or previewing effects on a selection.
@@ -1066,6 +1068,58 @@ void MainComponent::analyseSelection()
 
     analyserPane_.setSpectrum(measured);
     showStatus("Analysed " + juce::String((double) (to - from) / sampleRate, 2) + "s");
+}
+
+void MainComponent::showPaulstretchDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Paulstretch",
+                                         "Stretches the whole clip many times over into a smooth pad. "
+                                         "For small changes use Change Tempo instead - this deliberately "
+                                         "throws away the sound's timing.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("stretch", juce::String(settings_.getDoubleValue("paulstretch.factor", 8.0)),
+                          "Stretch by (times):");
+    window->addTextEditor("window", juce::String(settings_.getDoubleValue("paulstretch.window", 0.25)),
+                          "Window (seconds: longer is smoother):");
+    window->addButton("Stretch", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double stretch = juce::jlimit(1.0, 100.0, window->getTextEditorContents("stretch").getDoubleValue());
+            const double seconds = juce::jlimit(0.02, 2.0, window->getTextEditorContents("window").getDoubleValue());
+            self->settings_.setValue("paulstretch.factor", stretch);
+            self->settings_.setValue("paulstretch.window", seconds);
+            self->paulstretchSelectedClip(stretch, seconds);
+        }));
+}
+
+void MainComponent::paulstretchSelectedClip(double stretch, double windowSeconds)
+{
+    showBusy("Stretching...");
+
+    const bool applied = editWholeClip("Paulstretch", [stretch, windowSeconds](std::vector<std::vector<float>>& channels,
+                                                                               double sampleRate)
+    {
+        // One seed for every channel, so a stereo pair keeps its image
+        // rather than drifting into two different washes.
+        for (auto& channel : channels)
+            channel = engine::timestretch::paulstretch(channel, stretch, windowSeconds, sampleRate);
+    });
+
+    if (applied)
+        showStatus("Stretched " + juce::String(stretch, 1) + "x");
 }
 
 void MainComponent::showChangeTempoDialog()

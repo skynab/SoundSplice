@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 
+#include "engine/DelayLine.h"
 #include "engine/ShelfPeakFilter.h"
 #include "engine/StateVariableFilter.h"
 
@@ -308,6 +309,71 @@ private:
     float  depth_      = 0.8f;
     float  q_          = 4.0f;
     float  mix_        = 1.0f;
+};
+
+/**
+    A multitap echo: several repeats of the input at a fixed spacing, each
+    quieter than the last, as a tape echo's repeats are. Unlike the Delay
+    effect, whose repeats come from feeding its output back in, every tap here
+    is read from the same line, so the echoes keep the sound they started with
+    rather than being filtered and smeared a little more each time. Ping-pong
+    puts every other tap on the other side.
+*/
+class MultitapEcho
+{
+public:
+    static constexpr int    kMaxTaps    = 8;
+    static constexpr double kMaxDelayMs = 2000.0;
+
+    void prepare(double sampleRate)
+    {
+        sampleRate_ = sampleRate > 0.0 ? sampleRate : 48000.0;
+        const int size = (int) std::ceil(kMaxDelayMs * 0.001 * sampleRate_) * kMaxTaps + 4;
+        for (auto& line : lines_)
+            line.prepare(size);
+    }
+
+    void setTimeMs(float ms) noexcept   { timeMs_ = std::clamp(ms, 1.0f, (float) kMaxDelayMs); }
+    void setTaps(int taps) noexcept     { taps_ = std::clamp(taps, 1, kMaxTaps); }
+    void setDecay(float decay) noexcept { decay_ = std::clamp(decay, 0.0f, 0.95f); }
+    void setMix(float mix) noexcept     { mix_ = std::clamp(mix, 0.0f, 1.0f); }
+    void setPingPong(bool on) noexcept  { pingPong_ = on; }
+
+    void processFrame(float* samples, int channels) noexcept
+    {
+        channels = std::clamp(channels, 0, 2);
+        if (channels == 0)
+            return;
+
+        float wet[2] {};
+        const double spacing = (double) timeMs_ * 0.001 * sampleRate_;
+
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            auto& line = lines_[(size_t) ch];
+            line.processSampleFractional(samples[ch], 0.0, 0.0f); // writes; the taps read behind it
+
+            float gain = decay_;
+            for (int tap = 1; tap <= taps_; ++tap, gain *= decay_)
+            {
+                const float value = line.readFractional(spacing * tap);
+                const int   side  = pingPong_ && channels > 1 && tap % 2 == 1 ? 1 - ch : ch;
+                wet[side] += value * gain;
+            }
+        }
+
+        for (int ch = 0; ch < channels; ++ch)
+            samples[ch] = samples[ch] * (1.0f - mix_) + wet[ch] * mix_;
+    }
+
+private:
+    std::array<DelayLine, 2> lines_;
+    double sampleRate_ = 48000.0;
+    float  timeMs_     = 250.0f;
+    int    taps_       = 3;
+    float  decay_      = 0.5f;
+    float  mix_        = 0.35f;
+    bool   pingPong_   = false;
 };
 
 } // namespace soundsplice::engine

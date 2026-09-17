@@ -543,7 +543,10 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     ring.ringMod.frequencyHz   = 123.0f;
     auto wah                   = makeEffectSlot(EffectKind::Wah);
     wah.wah.resonance          = 7.5f;
-    chain = { amplify, invert, dc, limiter, phaser, flanger, tone, stereo, graphic, deEss, expander, ring, wah };
+    auto echo          = makeEffectSlot(EffectKind::Echo);
+    echo.echo.taps     = 6;
+    echo.echo.pingPong = true;
+    chain = { amplify, invert, dc, limiter, phaser, flanger, tone, stereo, graphic, deEss, expander, ring, wah, echo };
 
     Song restored;
     REQUIRE(deserialize(serialize(song), restored));
@@ -557,14 +560,14 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     {
         const auto lineEnd = text.find('\n', at);
         auto       cut     = lineEnd;
-        for (int field = 0; field < 7 + 17 + 24; ++field)
+        for (int field = 0; field < 7 + 17 + 24 + 5; ++field)
             cut = text.rfind(' ', cut - 1);
         text.erase(cut, lineEnd - cut);
     }
 
     Song old;
     REQUIRE(deserialize(text, old));
-    REQUIRE(old.tracks[0].effectChain.size() == 13);
+    REQUIRE(old.tracks[0].effectChain.size() == 14);
     REQUIRE(old.tracks[0].effectChain[3].kind == EffectKind::Limiter);
 
     const EffectSlot defaults;
@@ -587,5 +590,6 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
         REQUIRE(settingsOnly(slot.expander) == defaults.expander);
         REQUIRE(settingsOnly(slot.ringMod) == defaults.ringMod);
         REQUIRE(settingsOnly(slot.wah) == defaults.wah);
+        REQUIRE(settingsOnly(slot.echo) == defaults.echo);
     }
 }

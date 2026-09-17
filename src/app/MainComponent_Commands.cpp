@@ -148,6 +148,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::generateNoise:
         case commands::generateSilence:
         case commands::generateDtmf:
+        case commands::generateRhythm:
             info.setActive(renderJob_ == nullptr);
             break;
 
@@ -158,6 +159,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::measureLoudness:
         case commands::normalizeLoudness:
         case commands::changeTempo:
+        case commands::paulstretch:
             info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr);
             break;
 
@@ -350,6 +352,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::truncateSilence: showTruncateSilenceDialog(); break;
         case commands::repeatSelection: showRepeatDialog(); break;
         case commands::changeTempo:     showChangeTempoDialog(); break;
+        case commands::paulstretch:     showPaulstretchDialog(); break;
         case commands::applyEffects:    showApplyEffectsDialog(); break;
         case commands::copyClip:        copyClip(); break;
         case commands::pasteClip:       pasteClip(); break;
@@ -381,6 +384,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::generateNoise:   showGenerateDialog(engine::GeneratorKind::Noise); break;
         case commands::generateSilence: showGenerateDialog(engine::GeneratorKind::Silence); break;
         case commands::generateDtmf:    showGenerateDialog(engine::GeneratorKind::Dtmf); break;
+        case commands::generateRhythm:  showGenerateDialog(engine::GeneratorKind::Rhythm); break;
         case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
         case commands::resampleTrack:   showResampleTrackDialog(); break;
         case commands::mixAndRender:    mixAndRenderToNewTrack(); break;
@@ -580,6 +584,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fadeOut);
         add(commands::studioFadeOut);
         add(commands::changeTempo);
+        add(commands::paulstretch);
         add(commands::reverseAudio);
         add(commands::applyEffects);
         menu.addSeparator();
@@ -704,6 +709,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::generateChirp);
         add(commands::generateNoise);
         add(commands::generateDtmf);
+        add(commands::generateRhythm);
         menu.addSeparator();
         add(commands::generateSilence);
     }

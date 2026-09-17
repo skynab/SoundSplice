@@ -52,6 +52,7 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::Expander:   return std::make_unique<ExpanderNode>();
         case model::EffectKind::RingMod:    return std::make_unique<RingModNode>();
         case model::EffectKind::Wah:        return std::make_unique<WahNode>();
+        case model::EffectKind::Echo:       return std::make_unique<EchoNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -154,6 +155,11 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.wahDepth         = slot.wah.depth;
     params.wahResonance     = slot.wah.resonance;
     params.wahMix           = slot.wah.mix;
+    params.echoTimeMs       = slot.echo.timeMs;
+    params.echoTaps         = slot.echo.taps;
+    params.echoDecay        = slot.echo.decay;
+    params.echoMix          = slot.echo.mix;
+    params.echoPingPong     = slot.echo.pingPong;
     return params;
 }
 

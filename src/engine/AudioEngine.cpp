@@ -579,6 +579,7 @@ void AudioEngine::rebuildTrackEffectChain(int index)
             case EffectNodeKind::Expander:   chain->add(std::make_unique<ExpanderNode>());   break;
             case EffectNodeKind::RingMod:    chain->add(std::make_unique<RingModNode>());    break;
             case EffectNodeKind::Wah:        chain->add(std::make_unique<WahNode>());        break;
+            case EffectNodeKind::Echo:       chain->add(std::make_unique<EchoNode>());       break;
 
             case EffectNodeKind::Plugin:
             {

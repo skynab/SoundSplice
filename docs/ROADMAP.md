@@ -141,7 +141,7 @@ drawable transfer curve (Audition)
 
 **Pitch and time**
 ✅ Change speed · ✅ Change pitch · ✅ **Change tempo** (Edit > Change Tempo, on the whole clip) ·
-⬜ Paulstretch · ⬜ Sliding stretch (pitch or tempo varying over the selection) · ⬜ **Formant-preserving
+✅ Paulstretch (`src/engine/Paulstretch.h`) · ⬜ Sliding stretch (pitch or tempo varying over the selection) · ⬜ **Formant-preserving
 pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercial) and Signalsmith Stretch
 (MIT) against the current phase vocoder · ⬜ Pitch correction / tuner (REAPER ReaTune)
 
@@ -156,7 +156,7 @@ region) · ✅ **DeHummer** (50/60 Hz and harmonics) (Edit menu, on the audio ed
 needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 
 **Delay, reverb and modulation**
-✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ⬜ Echo (multitap) ·
+✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ✅ Echo (multitap, with ping-pong) ·
 ⬜ **Convolution reverb** with impulse-response loading (`CabinetIr` is a starting point) · ✅ Phaser ·
 ✅ Flanger (`src/engine/ToneDsp.h`) · ✅ Wah-wah (auto-wah) · ⬜ Vocoder · ✅ Ring modulator (`src/engine/DynamicsDsp.h`)
 
@@ -166,8 +166,7 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 
 **Generators**
 ✅ Tone (sine/square/saw/triangle) · ✅ Chirp (linear or logarithmic) · ✅ **Noise** (white/pink/brown) · ✅ Silence · ✅ DTMF
-(Generate menu: into the time selection, at the playhead, or on a new track; `src/engine/Generators.h`) · ⬜ Rhythm track
-/ click track (the metronome can render it) · ⬜ Pluck · ⬜ **Room tone fill** (synthesize or loop
+(Generate menu: into the time selection, at the playhead, or on a new track; `src/engine/Generators.h`) · ✅ Rhythm track / click track (Generate > Rhythm Track: tempo, beats per bar, bars) · ⬜ Pluck · ⬜ **Room tone fill** (synthesize or loop
 captured room tone into gaps)
 
 **Analyzers**
