@@ -113,7 +113,8 @@ all three.
   **mix and render to a new track** ✅
   (the tracks' pre-master mix over the time selection, on the render thread), and per-track **resample** ⬜
 - ⬜ **Multiple open files** in the editor, as tabs (REAPER project tabs, Audition's file list)
-- ⬜ Import: **Opus, WavPack, M4A/AAC, CAF, RF64/W64, raw PCM**, and audio pulled from video
+- 🟡 Import: **Opus, WavPack, M4A/AAC, CAF, RF64/W64** ⬜, **raw PCM** ✅ (File > Import Raw Data: 8/16/24/32-bit,
+  float, U-law and A-law, either byte order, a header to skip; `src/engine/RawPcm.h`), and audio pulled from video ⬜
   (optional FFmpeg module, as Audacity does)
 
 ### Phase 2 — Effects, generators and analyzers parity

@@ -14,6 +14,7 @@
 
 #include "engine/ClipSlot.h"
 #include "app/ExportAudioDialog.h"
+#include "app/ImportRawDialog.h"
 #include "app/RowWrapLayout.h"
 #include "app/OfflineRenderJob.h"
 #include "app/RenderProgress.h"

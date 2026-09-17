@@ -74,6 +74,136 @@ void MainComponent::importMidiFileDialog()
     });
 }
 
+void MainComponent::importRawDataDialog()
+{
+    if (trackCount() >= engine_.maxTracks())
+    {
+        showError("Track limit reached");
+        return;
+    }
+
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+
+    chooser_ = std::make_unique<juce::FileChooser>("Import raw data", juce::File{}, "*");
+    const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    chooser_->launchAsync(flags, [self = juce::Component::SafePointer<MainComponent>(this)](const juce::FileChooser& fc)
+    {
+        const auto source = fc.getResult();
+        if (self == nullptr || source == juce::File{})
+            return;
+
+        app::ImportRawDialog::show(self, source, [self, source](engine::RawPcmFormat format)
+        {
+            if (self != nullptr)
+                self->importRawData(source, format);
+        });
+    });
+}
+
+/** Converts @p source, read as @p format, to a 32-bit float WAV beside the
+    project's other audio and imports that. A block at a time on the render
+    thread, so a file of any length converts without being held in memory or
+    freezing the app. Nothing about the engine is touched until the import. */
+void MainComponent::importRawData(const juce::File& source, const engine::RawPcmFormat& format)
+{
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+
+    const auto frames = format.framesIn((std::uint64_t) juce::jmax((juce::int64) 0, source.getSize()));
+    if (frames == 0)
+    {
+        showError("No whole samples in " + source.getFileName() + " after the bytes skipped");
+        return;
+    }
+
+    const auto destination = audioDirectoryFor(recordingsDirectory())
+                                 .getNonexistentChildFile(source.getFileNameWithoutExtension(), ".wav");
+    auto       written     = std::make_shared<bool>(false);
+
+    auto work = [source, format, frames, destination, written](app::OfflineRenderJob& job)
+    {
+        juce::FileInputStream input(source);
+        if (! input.openedOk() || ! input.setPosition((juce::int64) format.headerBytes))
+            return;
+
+        destination.getParentDirectory().createDirectory();
+        std::unique_ptr<juce::OutputStream> output(destination.createOutputStream());
+        if (output == nullptr)
+            return;
+
+        juce::WavAudioFormat wav;
+        auto writer = wav.createWriterFor(output, // consumed on success
+            juce::AudioFormatWriterOptions{}
+                .withSampleRate(format.sampleRate)
+                .withNumChannels(format.channels)
+                .withBitsPerSample(32)
+                .withSampleFormat(juce::AudioFormatWriterOptions::SampleFormat::floatingPoint));
+        if (writer == nullptr)
+            return;
+
+        constexpr std::uint64_t kBlockFrames = 1 << 16;
+        std::vector<std::uint8_t>       bytes;
+        std::vector<std::vector<float>> channels;
+        std::vector<const float*>       pointers;
+
+        for (std::uint64_t done = 0; done < frames;)
+        {
+            if (job.shouldAbort())
+                return;
+
+            const auto block = (std::size_t) std::min(kBlockFrames, frames - done);
+            bytes.resize(block * (std::size_t) format.frameBytes());
+            if (input.read(bytes.data(), (int) bytes.size()) != (int) bytes.size())
+                return;
+
+            engine::rawpcm::decodeFrames(bytes.data(), block, format, channels);
+            pointers.clear();
+            for (const auto& channel : channels)
+                pointers.push_back(channel.data());
+
+            if (! writer->writeFromFloatArrays(pointers.data(), (int) pointers.size(), (int) block))
+                return;
+
+            done += block;
+            job.report((double) done / (double) frames, "Converting " + source.getFileName());
+        }
+
+        writer.reset(); // finishes the header
+        *written = true;
+    };
+
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), written, destination,
+                       source](bool cancelled)
+    {
+        if (self == nullptr)
+            return;
+
+        self->renderJob_.reset();
+
+        if (cancelled || ! *written)
+        {
+            destination.deleteFile();
+            if (cancelled)
+                self->showStatus("Import cancelled");
+            else
+                self->showError("Could not convert " + source.getFileName());
+            return;
+        }
+
+        self->importAudioFileAtBeat(destination, 0.0);
+    };
+
+    renderJob_ = app::OfflineRenderJob::launch("Import Raw Data", std::move(work), std::move(onFinished));
+}
+
 void MainComponent::exportMidiFileDialog()
 {
     chooser_ = std::make_unique<juce::FileChooser>("Export MIDI file", juce::File{}, "*.mid");

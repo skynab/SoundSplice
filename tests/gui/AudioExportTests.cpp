@@ -563,3 +563,34 @@ TEST_CASE ("Export contents modes say what they write", "[engine][export][stems]
         CHECK ((writesMasterMix (contents) || writesStems (contents)));
     }
 }
+
+#include <app/ImportRawDialog.h>
+
+TEST_CASE ("The raw import dialog reads back what it shows", "[gui][import]")
+{
+    juce::AlertWindow window ("Import Raw Data", {}, juce::MessageBoxIconType::NoIcon);
+    soundsplice::app::ImportRawDialog::buildControls (window);
+
+    // Audacity's defaults: 16-bit little-endian mono at 44.1kHz, nothing skipped.
+    auto format = soundsplice::app::ImportRawDialog::readFormat (window);
+    CHECK (format.encoding == RawEncoding::Signed16);
+    CHECK_FALSE (format.bigEndian);
+    CHECK (format.channels == 1);
+    CHECK ((int) format.sampleRate == 44100);
+    CHECK (format.headerBytes == 0);
+    CHECK (window.getComboBoxComponent ("encoding")->getNumItems() == kNumRawEncodings);
+
+    window.getComboBoxComponent ("encoding")->setSelectedItemIndex ((int) RawEncoding::ALaw, juce::dontSendNotification);
+    window.getComboBoxComponent ("order")->setSelectedItemIndex (1, juce::dontSendNotification);
+    window.getTextEditor ("channels")->setText ("2");
+    window.getTextEditor ("rate")->setText ("8000");
+    window.getTextEditor ("header")->setText ("44");
+
+    format = soundsplice::app::ImportRawDialog::readFormat (window);
+    CHECK (format.encoding == RawEncoding::ALaw);
+    CHECK (format.bigEndian);
+    CHECK (format.channels == 2);
+    CHECK ((int) format.sampleRate == 8000);
+    CHECK (format.headerBytes == 44);
+    CHECK (format.isValid());
+}

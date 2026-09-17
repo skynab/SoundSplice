@@ -18,6 +18,7 @@
 #include "engine/AudioExport.h"
 #include "engine/TimeStretch.h"
 #include "engine/NoiseReduction.h"
+#include "engine/RawPcm.h"
 #include "engine/TempoMap.h"
 #include "model/History.h"
 #include "model/Song.h"
@@ -173,6 +174,10 @@ private:
                                                  int targetTrackIndex = -1);
     void                   previewAudioFile(const juce::File& file);
     void                   importMidiFileDialog();
+    /** Import Raw Data: asks how a headerless file's samples are stored, then
+        converts it to a WAV in the project's audio folder on a new track. */
+    void                   importRawDataDialog();
+    void                   importRawData(const juce::File& source, const engine::RawPcmFormat& format);
     void                   exportMidiFileDialog();
     void                   setProjectRootFolderDialog();
 

@@ -244,6 +244,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::previewAudioFile: chooseFile(); break; // preview only - see chooseFile
         case commands::importAudio:      importAudioToNewTrack(); break;
         case commands::importMidi:       importMidiFileDialog(); break;
+        case commands::importRawData:    importRawDataDialog(); break;
         case commands::exportMidi:       exportMidiFileDialog(); break;
         case commands::exportAudio:      exportAudioDialog(); break;
         case commands::setProjectRoot:   setProjectRootFolderDialog(); break;
@@ -468,6 +469,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::previewAudioFile);
         add(commands::importAudio);
         add(commands::importMidi);
+        add(commands::importRawData);
         add(commands::exportMidi);
         add(commands::exportAudio);
         menu.addSeparator();
