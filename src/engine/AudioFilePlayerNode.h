@@ -108,36 +108,30 @@ public:
         // change from stretching the audio.
         const double samplesPerBeat = (double) numSamples / (blockEndBeats - blockStartBeats);
 
-        // Find the clip whose window overlaps this block — same
-        // block-granularity selection rule as Sequencer::renderBlock (clips
-        // are expected not to overlap; the first match wins).
-        int    foundIndex = -1;
-        double localStart = 0.0;
-
-        for (int i = 0; i < (int) current_->size(); ++i)
+        // Every clip whose window overlaps this block plays, mixed: clips that
+        // overlap on a track are how a crossfade sounds, each fading as the
+        // other comes in.
+        for (const auto& slot : *current_)
         {
-            const auto&  slot  = (*current_)[(size_t) i];
             const double startedBeatsAgo = blockStartBeats - slot.startBeats;
 
             // Window tested in beats, where the clip is actually placed; the
             // offset into the file is then a real-time distance in samples.
-            const double local = startedBeatsAgo * samplesPerBeat;
-
-            if (blockEndBeats > slot.startBeats && startedBeatsAgo < slot.lengthBeats)
-            {
-                foundIndex = i;
-                localStart = local;
-                break;
-            }
+            if (blockEndBeats > slot.startBeats && startedBeatsAgo < slot.lengthBeats && slot.clipData != nullptr)
+                renderSlot(slot, startedBeatsAgo * samplesPerBeat, samplesPerBeat, buffer, context);
         }
+    }
 
-        if (foundIndex < 0)
-            return; // between clips, or before/after every clip's window
-
-        const auto& activeSlot = current_->at((size_t) foundIndex);
+private:
+    /** Adds @p activeSlot's audio to @p buffer, @p localStart samples into
+        its window at the block's start (negative when it starts during the
+        block). Sample-accurate at both ends: nothing before its start or
+        past the end of its window is heard. */
+    void renderSlot(const AudioClipSlot& activeSlot, double localStart, double samplesPerBeat,
+                    juce::AudioBuffer<float>& buffer, const ProcessContext& context) noexcept
+    {
+        const int   numSamples = context.numSamples;
         const auto* clip       = activeSlot.clipData.get();
-        if (clip == nullptr)
-            return;
 
         // Per-clip trim (model::Clip::gainDb), already linear — see
         // AudioClipSlot::gain.
@@ -185,7 +179,7 @@ public:
 
             for (int i = 0; i < numSamples; ++i)
             {
-                if (position >= 0.0 && position < (double) length)
+                if (position >= 0.0 && position < (double) length && secondsIntoClip < clipSeconds)
                 {
                     const float gain = fading ? clipGain * envelopeGainAt(position) * clipFadeGain(fades, secondsIntoClip, clipSeconds)
                                               : clipGain * envelopeGainAt(position);
@@ -203,7 +197,7 @@ public:
 
         for (int i = 0; i < numSamples; ++i)
         {
-            if (position >= 0.0 && position < (double) length)
+            if (position >= 0.0 && position < (double) length && secondsIntoClip < clipSeconds)
             {
                 const float gain = fading ? clipGain * envelopeGainAt(position) * clipFadeGain(fades, secondsIntoClip, clipSeconds)
                                           : clipGain * envelopeGainAt(position);
@@ -221,7 +215,6 @@ public:
         }
     }
 
-private:
     double    deviceSampleRate_ = 0.0;
     int       readerIndex_      = 0;
     ClipList* current_          = nullptr; // audio-thread owned

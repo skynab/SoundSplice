@@ -3,6 +3,8 @@
 
 #include <model/ArrangementEdits.h>
 
+#include <string>
+
 using namespace soundsplice::model;
 using namespace soundsplice::model::arrangeedit;
 using Catch::Matchers::WithinAbs;
@@ -208,4 +210,65 @@ TEST_CASE("A silent clip is removed, and no silence or no clip changes nothing",
 
     REQUIRE(detachAtSilences(f.song, f.audio, 999, { { 0.0, 1.0 } }) == -1);
     REQUIRE(detachAtSilences(f.song, f.synth, loud, { { 0.0, 1.0 } }) == -1);
+}
+
+TEST_CASE("Crossfading split pieces overlaps them from their hidden audio, fading linearly", "[model][arrange]")
+{
+    Fixture f;
+    // Pieces of one 30 s take split at 10 s.
+    f.add(f.audio, 0.0, 10.0, 0.0);
+    f.add(f.audio, 10.0, 10.0, 10.0);
+    const auto length = [](const std::string&) { return 30.0; };
+
+    REQUIRE(crossfadeClips(f.song, { f.audio }, 9.5, 10.5, length) == 1);
+
+    const auto clips = f.sorted(f.audio);
+    requireClip(clips[0], 0.0, 10.5, 0.0);   // runs on half a second
+    requireClip(clips[1], 9.5, 10.5, 9.5);   // starts half a second early, from where its audio was
+    REQUIRE_THAT(clips[0].fades.outSeconds, WithinAbs(1.0, 1e-9));
+    REQUIRE_THAT(clips[1].fades.inSeconds, WithinAbs(1.0, 1e-9));
+    REQUIRE(clips[0].fades.outShape == soundsplice::engine::FadeShape::Linear);
+    REQUIRE(clips[1].fades.inShape == soundsplice::engine::FadeShape::Linear);
+}
+
+TEST_CASE("Crossfading unrelated clips fades at equal power, as far as their audio reaches", "[model][arrange]")
+{
+    Fixture f;
+    f.add(f.audio, 0.0, 10.0, 0.0, "a.wav");  // a.wav is exactly 10 s: nothing past its end
+    f.add(f.audio, 10.0, 5.0, 3.0, "b.wav");  // 3 s of b.wav before its start
+    const auto length = [](const std::string& file) { return file == "a.wav" ? 10.0 : 60.0; };
+
+    REQUIRE(crossfadeClips(f.song, { f.audio }, 8.0, 12.0, length) == 1);
+
+    const auto clips = f.sorted(f.audio);
+    // The first can't go on past 10 s, so the overlap is [8, 10]: the second
+    // moves back 2 s of its 3.
+    requireClip(clips[0], 0.0, 10.0, 0.0);
+    requireClip(clips[1], 8.0, 7.0, 1.0);
+    REQUIRE_THAT(clips[0].fades.outSeconds, WithinAbs(2.0, 1e-9));
+    REQUIRE(clips[1].fades.inShape == soundsplice::engine::FadeShape::EqualPower);
+}
+
+TEST_CASE("Crossfade leaves clips that don't meet in the selection alone", "[model][arrange]")
+{
+    Fixture f;
+    f.add(f.audio, 0.0, 4.0);
+    f.add(f.audio, 6.0, 4.0, 6.0);            // a gap
+    f.add(f.other, 0.0, 10.0, 0.0);
+    f.add(f.other, 10.0, 10.0, 0.0);          // meets at 10, outside the selection
+    f.add(f.synth, 0.0, 4.0);
+    const auto length = [](const std::string&) { return 60.0; };
+    const auto before = f.song;
+
+    REQUIRE(crossfadeClips(f.song, { f.audio, f.other, f.synth }, 3.0, 7.0, length) == 0);
+    REQUIRE(f.song == before);
+
+    // And a second clip with no audio before its start has nothing to overlap with.
+    Fixture g;
+    g.add(g.audio, 0.0, 10.0, 0.0, "a.wav");
+    g.add(g.audio, 10.0, 5.0, 0.0, "b.wav");
+    REQUIRE(crossfadeClips(g.song, { g.audio }, 9.0, 10.0, [](const std::string&) { return 60.0; }) == 0);
+    const auto clips = g.sorted(g.audio);
+    requireClip(clips[1], 10.0, 5.0, 0.0);   // couldn't move back
+    requireClip(clips[0], 0.0, 10.0, 0.0);   // nor could the overlap start before it
 }

@@ -144,6 +144,39 @@ inline std::vector<float> fadeOut(const std::vector<float>& samples, int from, i
     return out;
 }
 
+/** Studio Fade Out, as Audacity's: the level eases down (a raised-cosine
+    curve) while a two-pole low-pass sweeps from the top of the audio band to
+    250 Hz, so the sound darkens as it goes, the way a mixed fade on a
+    console sounds rather than a turned-down fader. Ends in exact silence. */
+inline std::vector<float> studioFadeOut(const std::vector<float>& samples, int from, int to, double sampleRate)
+{
+    int first = from, last = to;
+    clampRange((int) samples.size(), first, last);
+
+    std::vector<float> out   = samples;
+    const int          count = last - first;
+    if (count <= 0 || sampleRate <= 0.0)
+        return out;
+
+    constexpr double pi      = 3.14159265358979323846;
+    const double     topHz   = std::min(20000.0, sampleRate * 0.45);
+    constexpr double lowHz   = 250.0;
+    double           stage1  = 0.0, stage2 = 0.0;
+
+    for (int i = 0; i < count; ++i)
+    {
+        const double x      = count > 1 ? (double) i / (double) (count - 1) : 1.0;
+        const double gain   = 0.5 + 0.5 * std::cos(pi * x);
+        const double hz     = topHz * std::pow(lowHz / topHz, x);
+        const double coeff  = 1.0 - std::exp(-2.0 * pi * hz / sampleRate);
+
+        stage1 += coeff * ((double) samples[(size_t) (first + i)] - stage1);
+        stage2 += coeff * (stage1 - stage2);
+        out[(size_t) (first + i)] = (float) (stage2 * gain);
+    }
+    return out;
+}
+
 /**
     The nearest point to @p index where the waveform crosses zero, within
     @p searchRadius samples.

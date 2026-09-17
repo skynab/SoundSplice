@@ -136,8 +136,8 @@ offline apply and preview.
 drawable transfer curve (Audition)
 
 **Fades**
-✅ Fade in/out (linear) · 🟡 Adjustable fade curves (clip fades have linear, equal power and S-curve; exponential and log to come) · ⬜ **Studio fade out** ·
-⬜ **Crossfade clips** · ⬜ Crossfade tracks · ⬜ Automatic crossfades on overlap (REAPER)
+✅ Fade in/out (linear) · ✅ Adjustable fade curves (clip fades: linear, equal power, S-curve, exponential, logarithmic) · ✅ **Studio fade out** ·
+✅ **Crossfade clips** (Edit > Crossfade Clips: neighbours overlap from their hidden audio across the time selection; overlapping clips on a track now mix) · ⬜ Crossfade tracks · ⬜ Automatic crossfades on overlap (REAPER)
 
 **Pitch and time**
 ✅ Change speed · ✅ Change pitch · ⬜ **Change tempo** (`timeStretch` exists; expose it) ·

@@ -52,6 +52,8 @@ namespace detail
         {
             case (int) engine::FadeShape::EqualPower: return engine::FadeShape::EqualPower;
             case (int) engine::FadeShape::SCurve:     return engine::FadeShape::SCurve;
+            case (int) engine::FadeShape::Exponential: return engine::FadeShape::Exponential;
+            case (int) engine::FadeShape::Logarithmic: return engine::FadeShape::Logarithmic;
             default:                                  return engine::FadeShape::Linear;
         }
     }

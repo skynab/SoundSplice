@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -132,6 +134,89 @@ namespace arrangeedit
         }
 
         return joined;
+    }
+
+    /** Crossfades neighbouring audio clips on the tracks in @p trackIds
+        wherever one ends and the next begins (or they already overlap) inside
+        [@p fromBeats, @p toBeats]: the first is lengthened and the second
+        started earlier, from the audio each has beyond its edge, so they
+        overlap across the range, and each fades over the overlap. As much of
+        the range as both clips have audio for is used; @p fileSeconds gives a
+        file's length. Pieces of one recording that carry straight on from each
+        other fade linearly, which keeps their sum level; anything else fades
+        at equal power. Returns how many crossfades were made. */
+    inline int crossfadeClips(Song& song, const std::vector<int>& trackIds, double fromBeats, double toBeats,
+                              const std::function<double(const std::string&)>& fileSeconds)
+    {
+        if (song.bpm <= 0.0 || toBeats <= fromBeats)
+            return 0;
+
+        const double secondsPerBeat = 60.0 / song.bpm;
+        constexpr double kEpsilon   = rangeedit::kEpsilonBeats;
+        int              made       = 0;
+
+        for (auto& track : song.tracks)
+        {
+            if (std::find(trackIds.begin(), trackIds.end(), track.id) == trackIds.end()
+                || track.type != TrackType::Audio)
+                continue;
+
+            // In timeline order, by index: the clips stay where they are in
+            // the track's list, which is what the selection refers to them by.
+            std::vector<size_t> order(track.clips.size());
+            for (size_t i = 0; i < order.size(); ++i)
+                order[i] = i;
+            std::stable_sort(order.begin(), order.end(), [&track](size_t a, size_t b)
+            {
+                return track.clips[a].startBeats < track.clips[b].startBeats;
+            });
+
+            for (size_t i = 0; i + 1 < order.size(); ++i)
+            {
+                auto& first  = track.clips[order[i]];
+                auto& second = track.clips[order[i + 1]];
+                if (first.type != ClipType::Audio || second.type != ClipType::Audio)
+                    continue;
+
+                const double firstEnd = first.startBeats + first.lengthBeats;
+                const double seam     = std::min(firstEnd, second.startBeats);
+
+                // Touching or overlapping, with where they meet in the range.
+                if (second.startBeats > firstEnd + kEpsilon || seam < fromBeats - kEpsilon
+                    || std::max(firstEnd, second.startBeats) > toBeats + kEpsilon)
+                    continue;
+
+                const bool carriesOn = continues(first, second, song.bpm);
+
+                // How far each can reach: the first to the end of its audio,
+                // the second back to the start of its file.
+                const double firstAudioEnd = first.startBeats
+                                           + (fileSeconds(first.audioFile) - first.sourceOffsetSeconds) / secondsPerBeat;
+                const double secondEarliest = second.startBeats - second.sourceOffsetSeconds / secondsPerBeat;
+                const double secondEnd      = second.startBeats + second.lengthBeats;
+
+                const double from = std::max({ fromBeats, secondEarliest, first.startBeats });
+                const double to   = std::min({ toBeats, firstAudioEnd, secondEnd });
+                if (to - from <= kEpsilon)
+                    continue;
+
+                const double moveBack = second.startBeats - from;
+                second.sourceOffsetSeconds = std::max(0.0, second.sourceOffsetSeconds - moveBack * secondsPerBeat);
+                second.lengthBeats        += moveBack;
+                second.startBeats          = from;
+                first.lengthBeats          = std::max(first.lengthBeats, to - first.startBeats);
+
+                const double seconds = (to - from) * secondsPerBeat;
+                const auto   shape   = carriesOn ? engine::FadeShape::Linear : engine::FadeShape::EqualPower;
+                first.fades.outSeconds  = seconds;
+                first.fades.outShape    = shape;
+                second.fades.inSeconds  = seconds;
+                second.fades.inShape    = shape;
+                ++made;
+            }
+        }
+
+        return made;
     }
 
     /** Puts a copy of what @p selection covers straight after it on the same

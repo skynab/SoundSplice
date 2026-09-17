@@ -1,7 +1,8 @@
-#include <catch2/catch_test_macros.hpp>
+﻿#include <catch2/catch_test_macros.hpp>
 
 #include <engine/AudioEdits.h>
 
+#include <algorithm>
 #include <cmath>
 #include <numeric>
 
@@ -36,7 +37,7 @@ TEST_CASE("Keeping a range gives exactly that range", "[engine][audioedits]")
 
 TEST_CASE("Ranges are half-open", "[engine][audioedits]")
 {
-    // [from, to) — the sample at `to` survives a remove and is absent from a
+    // [from, to) â€” the sample at `to` survives a remove and is absent from a
     // keep. Getting this backwards is a one-sample error nobody would hear
     // but which accumulates over repeated edits.
     REQUIRE(audioedits::removeRange(counting(5), 1, 2) == std::vector<float> { 0, 2, 3, 4 });
@@ -80,7 +81,7 @@ TEST_CASE("Inserting at either end works", "[engine][audioedits]")
 {
     REQUIRE(audioedits::insertAt(counting(3), { 9 }, 0) == std::vector<float> { 9, 0, 1, 2 });
     REQUIRE(audioedits::insertAt(counting(3), { 9 }, 3) == std::vector<float> { 0, 1, 2, 9 });
-    // Past the end appends — pasting with the cursor at the end.
+    // Past the end appends â€” pasting with the cursor at the end.
     REQUIRE(audioedits::insertAt(counting(3), { 9 }, 999) == std::vector<float> { 0, 1, 2, 9 });
 }
 
@@ -130,7 +131,7 @@ TEST_CASE("A fade in starts at silence and ends near unity", "[engine][audioedit
     REQUIRE(out.back() > 0.85f);
     REQUIRE(out.back() <= 1.0f);
 
-    // Monotonic — a fade that dipped would be audible as a wobble.
+    // Monotonic â€” a fade that dipped would be audible as a wobble.
     for (size_t i = 1; i < out.size(); ++i)
         REQUIRE(out[i] >= out[i - 1]);
 }
@@ -219,4 +220,37 @@ TEST_CASE("Resampling nonsense is refused rather than crashing", "[engine][audio
     REQUIRE(audioedits::resample({}, 2.0).empty());
     REQUIRE(audioedits::resample(counting(10), 0.0).size() == 10);
     REQUIRE(audioedits::resample(counting(10), -1.0).size() == 10);
+}
+
+TEST_CASE("Studio fade out ends silent and darkens as it goes", "[engine][audioedits]")
+{
+    constexpr double rate = 48000.0;
+    constexpr double pi   = 3.14159265358979323846;
+
+    const auto faded = [&](double hz)
+    {
+        std::vector<float> tone(48000);
+        for (size_t n = 0; n < tone.size(); ++n)
+            tone[n] = (float) std::sin(2.0 * pi * hz * (double) n / rate);
+        return audioedits::studioFadeOut(tone, 0, (int) tone.size(), rate);
+    };
+
+    const auto low  = faded(100.0);
+    const auto high = faded(8000.0);
+    REQUIRE(low.back() == 0.0f);
+    REQUIRE(high.back() == 0.0f);
+
+    const auto peakAround = [](const std::vector<float>& x, size_t centre)
+    {
+        float peak = 0.0f;
+        for (size_t n = centre - 1000; n < centre + 1000; ++n)
+            peak = std::max(peak, std::abs(x[n]));
+        return peak;
+    };
+
+    // At the start both are near full level; by three quarters of the way the
+    // high tone has been filtered far more than the fade alone would take it.
+    REQUIRE(peakAround(low, 2000) > 0.95f);
+    REQUIRE(peakAround(high, 2000) > 0.6f);
+    REQUIRE(peakAround(high, 36000) < peakAround(low, 36000) * 0.25f);
 }

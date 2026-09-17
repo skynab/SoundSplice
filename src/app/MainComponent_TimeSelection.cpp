@@ -123,6 +123,40 @@ bool MainComponent::pasteAtTimeSelection()
     return true;
 }
 
+/** Crossfade Clips over the time selection: see arrangeedit::crossfadeClips.
+    File lengths come from the engine's probe, which reads a header, not the
+    audio. */
+void MainComponent::crossfadeClipsInSelection()
+{
+    if (timeSelection_.isEmpty())
+    {
+        showError("Select the time where two clips meet, then Crossfade Clips");
+        return;
+    }
+
+    const auto selection   = timeSelection_;
+    const auto fileSeconds = [this](const std::string& path)
+    {
+        return engine_.probeDurationSeconds(juce::File(juce::String::fromUTF8(path.c_str())));
+    };
+
+    auto trial = history_.current();
+    if (model::arrangeedit::crossfadeClips(trial, selection.trackIds, selection.startBeats, selection.endBeats, fileSeconds) == 0)
+    {
+        showStatus("No neighbouring clips meet in the time selection, or they have no audio beyond their edges to overlap");
+        return;
+    }
+
+    int made = 0;
+    history_.edit("Crossfade clips", [&](model::Song& s)
+    {
+        made = model::arrangeedit::crossfadeClips(s, selection.trackIds, selection.startBeats, selection.endBeats, fileSeconds);
+    });
+
+    refreshAfterArrangementEdit();
+    showStatus("Crossfaded " + juce::String(made) + (made == 1 ? " pair of clips" : " pairs of clips"));
+}
+
 std::vector<int> MainComponent::arrangementEditTracks() const
 {
     if (timeSelection_.hasTracks())

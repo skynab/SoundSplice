@@ -112,6 +112,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
 
         case commands::duplicateSelection:
+        case commands::crossfadeClips:
             info.setActive(! timeSelection_.isEmpty());
             break;
 
@@ -337,6 +338,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::fadeIn:          fadeInAudioSelection(); break;
         case commands::fadeOut:         fadeOutAudioSelection(); break;
         case commands::reverseAudio:    reverseAudioSelection(); break;
+        case commands::studioFadeOut:   studioFadeOutAudioSelection(); break;
+        case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
         case commands::applyEffects:    showApplyEffectsDialog(); break;
         case commands::copyClip:        copyClip(); break;
         case commands::pasteClip:       pasteClip(); break;
@@ -565,6 +568,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::silenceAudio);
         add(commands::fadeIn);
         add(commands::fadeOut);
+        add(commands::studioFadeOut);
         add(commands::reverseAudio);
         add(commands::applyEffects);
         add(commands::normalizeLoudness);
@@ -575,6 +579,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addSeparator();
         add(commands::splitAtPlayhead);
         add(commands::joinClips);
+        add(commands::crossfadeClips);
         add(commands::duplicateSelection);
         add(commands::detachAtSilences);
         add(commands::findZeroCrossings);

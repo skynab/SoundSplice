@@ -1389,7 +1389,9 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
     static constexpr std::pair<engine::FadeShape, const char*> kShapes[] {
         { engine::FadeShape::Linear,     "Linear" },
         { engine::FadeShape::EqualPower, "Equal Power" },
-        { engine::FadeShape::SCurve,     "S-Curve" }
+        { engine::FadeShape::SCurve,     "S-Curve" },
+        { engine::FadeShape::Exponential, "Exponential" },
+        { engine::FadeShape::Logarithmic, "Logarithmic" }
     };
     static constexpr int kFadeInBase  = 100;
     static constexpr int kFadeOutBase = 200;

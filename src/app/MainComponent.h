@@ -327,6 +327,8 @@ private:
     void                   fadeInAudioSelection();
     void                   fadeOutAudioSelection();
     void                   reverseAudioSelection();
+    void                   studioFadeOutAudioSelection();
+    void                   crossfadeClipsInSelection();
 
     void                   showApplyEffectsDialog();
     void                   promptToSaveEffectPreset(const model::EffectSlot& slot);

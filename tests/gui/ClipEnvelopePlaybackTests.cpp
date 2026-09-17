@@ -108,3 +108,36 @@ TEST_CASE("A clip plays through its volume curve", "[gui][envelope]")
         REQUIRE(std::abs(out.getSample(0, 36000) - 0.75f) < 1.0e-3f);
     }
 }
+
+TEST_CASE("Overlapping clips on a track mix, and each stops at the end of its window", "[gui][envelope]")
+{
+    AudioFilePlayerNode player;
+    player.prepare(kRate, kBlock);
+
+    // At 120 bpm a beat is 24000 samples. The first clip's window ends at
+    // 1.1 beats, inside a block; the second starts at 1.0 beat, also inside one.
+    AudioClipSlot first;
+    first.clipData    = fullScale(2.0);
+    first.startBeats  = 0.0;
+    first.lengthBeats = 1.1;
+    first.gain        = 0.25f;
+
+    AudioClipSlot second = first;
+    second.startBeats    = 1.0;
+    second.lengthBeats   = 1.0;
+    second.gain          = 0.5f;
+
+    auto* clips = new AudioFilePlayerNode::ClipList();
+    clips->push_back(first);
+    clips->push_back(second);
+    player.submitClips(clips);
+
+    const auto out = play(player, 120);
+    // A sample either side of each edge, which fall inside blocks.
+    REQUIRE(out.getSample(0, 23998) == 0.25f);         // the first alone
+    REQUIRE(out.getSample(0, 24002) == 0.75f);         // both, once the second starts
+    REQUIRE(out.getSample(0, 26398) == 0.75f);
+    REQUIRE(out.getSample(0, 26402) == 0.5f);          // the first stops at 1.1 beats
+    REQUIRE(out.getSample(0, 47998) == 0.5f);
+    REQUIRE(out.getSample(0, 48002) == 0.0f);          // and the second at 2.0
+}

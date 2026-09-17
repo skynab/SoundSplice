@@ -653,6 +653,16 @@ void MainComponent::fadeOutAudioSelection()
         showStatus("Faded out");
 }
 
+void MainComponent::studioFadeOutAudioSelection()
+{
+    if (editSelection("Studio fade out", false, [](std::vector<std::vector<float>>& selection, double sampleRate)
+        {
+            for (auto& channel : selection)
+                channel = engine::audioedits::studioFadeOut(channel, 0, (int) channel.size(), sampleRate);
+        }))
+        showStatus("Faded out");
+}
+
 void MainComponent::reverseAudioSelection()
 {
     if (editSelection("Reverse audio", true, [](std::vector<std::vector<float>>& selection, double)

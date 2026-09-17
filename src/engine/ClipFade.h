@@ -20,8 +20,19 @@ enum class FadeShape
 {
     Linear     = 0, // straight in amplitude: predictable, though the quiet end sounds abrupt
     EqualPower = 1, // quarter sine: two of these crossfading hold the combined loudness steady
-    SCurve     = 2  // eases in and out: the smoothest start and finish
+    SCurve     = 2, // eases in and out: the smoothest start and finish
+    Exponential = 3, // even in decibels over 60 dB: slow to start, then quick, as a level fader is moved
+    Logarithmic = 4  // the reverse: most of the level at once, then a long gentle tail
 };
+
+/** A rise even in decibels from -60 dB at @p x = 0 to 0 dB at 1, pulled down
+    to exactly 0 at the start so a fade still begins in silence. */
+inline float exponentialFade(double x) noexcept
+{
+    constexpr double kFloor = 0.001; // -60 dB
+    const double     gain   = std::pow(10.0, 3.0 * (std::clamp(x, 0.0, 1.0) - 1.0));
+    return (float) ((gain - kFloor) / (1.0 - kFloor));
+}
 
 /** Gain along a fade-in of @p shape at @p t, from 0 (the start, silent) to 1
     (the end, full level). @p t is clamped to that range. A fade-out is the
@@ -35,6 +46,8 @@ inline float fadeCurve(FadeShape shape, double t) noexcept
     {
         case FadeShape::EqualPower: return (float) std::sin(x * kPi * 0.5);
         case FadeShape::SCurve:     return (float) (0.5 - 0.5 * std::cos(x * kPi));
+        case FadeShape::Exponential: return exponentialFade(x);
+        case FadeShape::Logarithmic: return 1.0f - exponentialFade(1.0 - x);
         case FadeShape::Linear:
         default:                    return (float) x;
     }

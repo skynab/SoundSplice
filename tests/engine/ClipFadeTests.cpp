@@ -8,7 +8,8 @@ using Catch::Matchers::WithinAbs;
 
 namespace
 {
-    constexpr FadeShape kAllShapes[] { FadeShape::Linear, FadeShape::EqualPower, FadeShape::SCurve };
+    constexpr FadeShape kAllShapes[] { FadeShape::Linear, FadeShape::EqualPower, FadeShape::SCurve,
+                                       FadeShape::Exponential, FadeShape::Logarithmic };
 }
 
 TEST_CASE("Every fade shape runs from silence to full level", "[engine][fade]")
@@ -96,4 +97,15 @@ TEST_CASE("Fades longer than their clip are shortened to meet", "[engine][fade]"
 
     // A clip with no length has no room for any fade.
     REQUIRE(fittedFades(fades, 0.0).isNone());
+}
+
+TEST_CASE("Exponential and logarithmic fades mirror each other", "[engine][fade]")
+{
+    // Even in decibels: halfway through, -30 dB of the 60, less the floor pulled out.
+    REQUIRE_THAT(fadeCurve(FadeShape::Exponential, 0.5), WithinAbs((std::pow(10.0, -1.5) - 0.001) / 0.999, 1e-6));
+    REQUIRE(fadeCurve(FadeShape::Exponential, 0.25) < fadeCurve(FadeShape::Linear, 0.25));
+    REQUIRE(fadeCurve(FadeShape::Logarithmic, 0.25) > fadeCurve(FadeShape::EqualPower, 0.25));
+
+    for (double t : { 0.1, 0.3, 0.7, 0.9 })
+        REQUIRE_THAT(fadeCurve(FadeShape::Logarithmic, t), WithinAbs(1.0 - fadeCurve(FadeShape::Exponential, 1.0 - t), 1e-6));
 }
