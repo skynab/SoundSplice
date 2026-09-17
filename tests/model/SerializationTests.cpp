@@ -532,7 +532,18 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     auto stereo               = makeEffectSlot(EffectKind::StereoTool);
     stereo.stereoTool.width   = 0.4f;
     stereo.stereoTool.swap    = true;
-    chain = { amplify, invert, dc, limiter, phaser, flanger, tone, stereo };
+    auto graphic               = makeEffectSlot(EffectKind::GraphicEq);
+    graphic.graphicEq.band1k   = -3.5f;
+    graphic.graphicEq.band16k  = 6.0f;
+    auto deEss                 = makeEffectSlot(EffectKind::DeEsser);
+    deEss.deEsser.frequencyHz  = 7250.0f;
+    auto expander              = makeEffectSlot(EffectKind::Expander);
+    expander.expander.ratio    = 3.5f;
+    auto ring                  = makeEffectSlot(EffectKind::RingMod);
+    ring.ringMod.frequencyHz   = 123.0f;
+    auto wah                   = makeEffectSlot(EffectKind::Wah);
+    wah.wah.resonance          = 7.5f;
+    chain = { amplify, invert, dc, limiter, phaser, flanger, tone, stereo, graphic, deEss, expander, ring, wah };
 
     Song restored;
     REQUIRE(deserialize(serialize(song), restored));
@@ -540,20 +551,20 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
 
     // A file from before these existed: every FXSLOT line stops after the
     // EQ's values, short of the utility effects' seven fields and the tone
-    // effects' seventeen after them.
+    // effects' seventeen after them, and the dynamics effects' twenty-four.
     std::string text = serialize(song);
     for (auto at = text.find("FXSLOT "); at != std::string::npos; at = text.find("FXSLOT ", at + 1))
     {
         const auto lineEnd = text.find('\n', at);
         auto       cut     = lineEnd;
-        for (int field = 0; field < 7 + 17; ++field)
+        for (int field = 0; field < 7 + 17 + 24; ++field)
             cut = text.rfind(' ', cut - 1);
         text.erase(cut, lineEnd - cut);
     }
 
     Song old;
     REQUIRE(deserialize(text, old));
-    REQUIRE(old.tracks[0].effectChain.size() == 8);
+    REQUIRE(old.tracks[0].effectChain.size() == 13);
     REQUIRE(old.tracks[0].effectChain[3].kind == EffectKind::Limiter);
 
     const EffectSlot defaults;
@@ -571,5 +582,10 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
         REQUIRE(settingsOnly(slot.flanger) == defaults.flanger);
         REQUIRE(settingsOnly(slot.bassTreble) == defaults.bassTreble);
         REQUIRE(settingsOnly(slot.stereoTool) == defaults.stereoTool);
+        REQUIRE(settingsOnly(slot.graphicEq) == defaults.graphicEq);
+        REQUIRE(settingsOnly(slot.deEsser) == defaults.deEsser);
+        REQUIRE(settingsOnly(slot.expander) == defaults.expander);
+        REQUIRE(settingsOnly(slot.ringMod) == defaults.ringMod);
+        REQUIRE(settingsOnly(slot.wah) == defaults.wah);
     }
 }

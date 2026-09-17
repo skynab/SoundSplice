@@ -131,8 +131,8 @@ Built on 0.4, so each line is mostly DSP plus tests. Anything marked ✅ as real
 offline apply and preview.
 
 **Volume and dynamics**
-✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ⬜ **Auto Duck** · ⬜ Expander ·
-⬜ **Multiband compressor** (REAPER ReaXComp, Audition) · ⬜ **De-esser** · ⬜ Dynamics processor with a
+✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ⬜ **Auto Duck** · ✅ Expander ·
+⬜ **Multiband compressor** (REAPER ReaXComp, Audition) · ✅ **De-esser** (split-band, Linkwitz-Riley crossover) · ⬜ Dynamics processor with a
 drawable transfer curve (Audition)
 
 **Fades**
@@ -146,7 +146,7 @@ pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercia
 (MIT) against the current phase vocoder · ⬜ Pitch correction / tuner (REAPER ReaTune)
 
 **EQ and filters**
-✅ LP/HP/BP · ✅ 3-band EQ · ✅ Bass and treble · ⬜ **Graphic EQ** (10/31 band) · ⬜ **Parametric EQ with
+✅ LP/HP/BP · ✅ 3-band EQ · ✅ Bass and treble · 🟡 **Graphic EQ** (10 bands ✅; 31 ⬜) · ⬜ **Parametric EQ with
 unlimited bands** and a drawable curve (Audacity Filter Curve, REAPER ReaEQ) · ⬜ Notch · ⬜ Shelf
 (`ShelfPeakFilter` exists) · ⬜ **Match EQ** (fit one clip's spectrum to another's)
 
@@ -158,7 +158,7 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 **Delay, reverb and modulation**
 ✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ⬜ Echo (multitap) ·
 ⬜ **Convolution reverb** with impulse-response loading (`CabinetIr` is a starting point) · ✅ Phaser ·
-✅ Flanger (`src/engine/ToneDsp.h`) · ⬜ Wah-wah · ⬜ Vocoder · ⬜ Ring modulator
+✅ Flanger (`src/engine/ToneDsp.h`) · ✅ Wah-wah (auto-wah) · ⬜ Vocoder · ✅ Ring modulator (`src/engine/DynamicsDsp.h`)
 
 **Stereo and special**
 ✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ✅ Repeat · ✅ **Truncate silence** (across the time selection's tracks, without rewriting audio) · 🟡 **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap)

@@ -340,6 +340,71 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "swap", .name = "Swap Left and Right", .control = ParamControl::Toggle, .min = 0, .max = 1,
                 .step = 1, .access = fieldAccess<&S::stereoTool, &StereoToolSettings::swap> } } },
 
+        { .kind = EffectKind::GraphicEq, .id = "graphicEq", .name = "Graphic EQ", .group = "",
+          .params = {
+              { .id = "band31", .name = "31 Hz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band31> },
+              { .id = "band62", .name = "62 Hz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band62> },
+              { .id = "band125", .name = "125 Hz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band125> },
+              { .id = "band250", .name = "250 Hz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band250> },
+              { .id = "band500", .name = "500 Hz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band500> },
+              { .id = "band1k", .name = "1 kHz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band1k> },
+              { .id = "band2k", .name = "2 kHz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band2k> },
+              { .id = "band4k", .name = "4 kHz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band4k> },
+              { .id = "band8k", .name = "8 kHz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band8k> },
+              { .id = "band16k", .name = "16 kHz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::graphicEq, &GraphicEqSettings::band16k> } } },
+
+        { .kind = EffectKind::DeEsser, .id = "deEsser", .name = "De-esser", .group = "Dynamics",
+          .params = {
+              { .id = "frequency", .name = "Frequency", .min = 2000, .max = 12000, .step = 50, .unit = " Hz",
+                .tooltip = "Everything above this is what's turned down",
+                .access = fieldAccess<&S::deEsser, &DeEsserSettings::frequencyHz> },
+              { .id = "threshold", .name = "Threshold", .min = -60, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::deEsser, &DeEsserSettings::thresholdDb> },
+              { .id = "reduction", .name = "Max Reduction", .min = 0, .max = 24, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::deEsser, &DeEsserSettings::maxReductionDb> } } },
+
+        { .kind = EffectKind::Expander, .id = "expander", .name = "Expander", .group = "Dynamics",
+          .params = {
+              { .id = "threshold", .name = "Threshold", .min = -80, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::expander, &ExpanderSettings::thresholdDb> },
+              { .id = "ratio", .name = "Ratio", .min = 1, .max = 10, .step = 0.1, .unit = " :1",
+                .tooltip = "Below the threshold, each dB quieter becomes this many",
+                .access = fieldAccess<&S::expander, &ExpanderSettings::ratio> },
+              { .id = "range", .name = "Range", .min = 0, .max = 80, .step = 1, .unit = " dB",
+                .access = fieldAccess<&S::expander, &ExpanderSettings::rangeDb> },
+              { .id = "attack", .name = "Attack", .min = 0.1, .max = 100, .step = 0.1, .unit = " ms",
+                .access = fieldAccess<&S::expander, &ExpanderSettings::attackMs> },
+              { .id = "release", .name = "Release", .min = 5, .max = 2000, .step = 1, .unit = " ms",
+                .access = fieldAccess<&S::expander, &ExpanderSettings::releaseMs> } } },
+
+        { .kind = EffectKind::RingMod, .id = "ringMod", .name = "Ring Modulator", .group = "Modulation",
+          .params = {
+              { .id = "frequency", .name = "Frequency", .min = 1, .max = 5000, .step = 1, .unit = " Hz",
+                .skewMidpoint = 200, .access = fieldAccess<&S::ringMod, &RingModSettings::frequencyHz> },
+              { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::ringMod, &RingModSettings::mix> } } },
+
+        { .kind = EffectKind::Wah, .id = "wah", .name = "Wah-wah", .group = "Modulation",
+          .params = {
+              { .id = "rate", .name = "Rate", .min = 0.1, .max = 10, .step = 0.05, .unit = " Hz",
+                .access = fieldAccess<&S::wah, &WahSettings::rateHz> },
+              { .id = "depth", .name = "Depth", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::wah, &WahSettings::depth> },
+              { .id = "resonance", .name = "Resonance", .min = 0.5, .max = 20, .step = 0.1, .unit = " Q",
+                .access = fieldAccess<&S::wah, &WahSettings::resonance> },
+              { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::wah, &WahSettings::mix> } } },
+
         { .kind = EffectKind::Amplify, .id = "amplify", .name = "Amplify", .group = "Utility",
           .params = {
               { .id = "gain", .name = "Gain", .min = -48, .max = 48, .step = 0.1, .unit = " dB",
@@ -402,6 +467,11 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.flanger.enabled    = kind == EffectKind::Flanger;
     slot.bassTreble.enabled = kind == EffectKind::BassTreble;
     slot.stereoTool.enabled = kind == EffectKind::StereoTool;
+    slot.graphicEq.enabled  = kind == EffectKind::GraphicEq;
+    slot.deEsser.enabled    = kind == EffectKind::DeEsser;
+    slot.expander.enabled   = kind == EffectKind::Expander;
+    slot.ringMod.enabled    = kind == EffectKind::RingMod;
+    slot.wah.enabled        = kind == EffectKind::Wah;
     return slot;
 }
 

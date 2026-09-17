@@ -47,6 +47,11 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::Flanger:    return std::make_unique<FlangerNode>();
         case model::EffectKind::BassTreble: return std::make_unique<BassTrebleNode>();
         case model::EffectKind::StereoTool: return std::make_unique<StereoToolNode>();
+        case model::EffectKind::GraphicEq:  return std::make_unique<GraphicEqNode>();
+        case model::EffectKind::DeEsser:    return std::make_unique<DeEsserNode>();
+        case model::EffectKind::Expander:   return std::make_unique<ExpanderNode>();
+        case model::EffectKind::RingMod:    return std::make_unique<RingModNode>();
+        case model::EffectKind::Wah:        return std::make_unique<WahNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -125,6 +130,30 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.stereoBalance    = slot.stereoTool.balance;
     params.stereoMono       = slot.stereoTool.mono;
     params.stereoSwap       = slot.stereoTool.swap;
+    params.graphicEqDb[0]   = slot.graphicEq.band31;
+    params.graphicEqDb[1]   = slot.graphicEq.band62;
+    params.graphicEqDb[2]   = slot.graphicEq.band125;
+    params.graphicEqDb[3]   = slot.graphicEq.band250;
+    params.graphicEqDb[4]   = slot.graphicEq.band500;
+    params.graphicEqDb[5]   = slot.graphicEq.band1k;
+    params.graphicEqDb[6]   = slot.graphicEq.band2k;
+    params.graphicEqDb[7]   = slot.graphicEq.band4k;
+    params.graphicEqDb[8]   = slot.graphicEq.band8k;
+    params.graphicEqDb[9]   = slot.graphicEq.band16k;
+    params.deEssFrequencyHz = slot.deEsser.frequencyHz;
+    params.deEssThresholdDb = slot.deEsser.thresholdDb;
+    params.deEssReductionDb = slot.deEsser.maxReductionDb;
+    params.expThresholdDb   = slot.expander.thresholdDb;
+    params.expRatio         = slot.expander.ratio;
+    params.expRangeDb       = slot.expander.rangeDb;
+    params.expAttackMs      = slot.expander.attackMs;
+    params.expReleaseMs     = slot.expander.releaseMs;
+    params.ringFrequencyHz  = slot.ringMod.frequencyHz;
+    params.ringMix          = slot.ringMod.mix;
+    params.wahRateHz        = slot.wah.rateHz;
+    params.wahDepth         = slot.wah.depth;
+    params.wahResonance     = slot.wah.resonance;
+    params.wahMix           = slot.wah.mix;
     return params;
 }
 

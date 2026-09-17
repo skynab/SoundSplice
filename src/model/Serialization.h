@@ -279,7 +279,31 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.stereoTool.width) << " "
                 << detail::num((double) slot.stereoTool.balance) << " "
                 << (slot.stereoTool.mono ? 1 : 0) << " "
-                << (slot.stereoTool.swap ? 1 : 0) << "\n";
+                << (slot.stereoTool.swap ? 1 : 0) << " "
+                << detail::num((double) slot.graphicEq.band31) << " "
+                << detail::num((double) slot.graphicEq.band62) << " "
+                << detail::num((double) slot.graphicEq.band125) << " "
+                << detail::num((double) slot.graphicEq.band250) << " "
+                << detail::num((double) slot.graphicEq.band500) << " "
+                << detail::num((double) slot.graphicEq.band1k) << " "
+                << detail::num((double) slot.graphicEq.band2k) << " "
+                << detail::num((double) slot.graphicEq.band4k) << " "
+                << detail::num((double) slot.graphicEq.band8k) << " "
+                << detail::num((double) slot.graphicEq.band16k) << " "
+                << detail::num((double) slot.deEsser.frequencyHz) << " "
+                << detail::num((double) slot.deEsser.thresholdDb) << " "
+                << detail::num((double) slot.deEsser.maxReductionDb) << " "
+                << detail::num((double) slot.expander.thresholdDb) << " "
+                << detail::num((double) slot.expander.ratio) << " "
+                << detail::num((double) slot.expander.rangeDb) << " "
+                << detail::num((double) slot.expander.attackMs) << " "
+                << detail::num((double) slot.expander.releaseMs) << " "
+                << detail::num((double) slot.ringMod.frequencyHz) << " "
+                << detail::num((double) slot.ringMod.mix) << " "
+                << detail::num((double) slot.wah.rateHz) << " "
+                << detail::num((double) slot.wah.depth) << " "
+                << detail::num((double) slot.wah.resonance) << " "
+                << detail::num((double) slot.wah.mix) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -764,6 +788,24 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double toneVolume = defaults.bassTreble.volumeDb;
                 double stereoWidth = defaults.stereoTool.width, stereoBalance = defaults.stereoTool.balance;
                 int    stereoMono = defaults.stereoTool.mono ? 1 : 0, stereoSwap = defaults.stereoTool.swap ? 1 : 0;
+                double eqBand31 = defaults.graphicEq.band31;
+                double eqBand62 = defaults.graphicEq.band62;
+                double eqBand125 = defaults.graphicEq.band125;
+                double eqBand250 = defaults.graphicEq.band250;
+                double eqBand500 = defaults.graphicEq.band500;
+                double eqBand1k = defaults.graphicEq.band1k;
+                double eqBand2k = defaults.graphicEq.band2k;
+                double eqBand4k = defaults.graphicEq.band4k;
+                double eqBand8k = defaults.graphicEq.band8k;
+                double eqBand16k = defaults.graphicEq.band16k;
+                double deEssFrequency = defaults.deEsser.frequencyHz, deEssThreshold = defaults.deEsser.thresholdDb;
+                double deEssReduction = defaults.deEsser.maxReductionDb;
+                double expThreshold = defaults.expander.thresholdDb, expRatio = defaults.expander.ratio;
+                double expRange = defaults.expander.rangeDb, expAttack = defaults.expander.attackMs;
+                double expRelease = defaults.expander.releaseMs;
+                double ringFrequency = defaults.ringMod.frequencyHz, ringMix = defaults.ringMod.mix;
+                double wahRate = defaults.wah.rateHz, wahDepth = defaults.wah.depth;
+                double wahResonance = defaults.wah.resonance, wahMix = defaults.wah.mix;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
                    >> delayTime >> delayFeedback >> delayMix >> room >> damping >> reverbMix
@@ -780,7 +822,12 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> phaserRate >> phaserDepth >> phaserFeedback >> phaserPairs >> phaserMix
                    >> flangerRate >> flangerDepth >> flangerDelay >> flangerFeedback >> flangerMix
                    >> bassDb >> trebleDb >> toneVolume
-                   >> stereoWidth >> stereoBalance >> stereoMono >> stereoSwap;
+                   >> stereoWidth >> stereoBalance >> stereoMono >> stereoSwap
+                   >> eqBand31 >> eqBand62 >> eqBand125 >> eqBand250 >> eqBand500 >> eqBand1k >> eqBand2k >> eqBand4k >> eqBand8k >> eqBand16k
+                   >> deEssFrequency >> deEssThreshold >> deEssReduction
+                   >> expThreshold >> expRatio >> expRange >> expAttack >> expRelease
+                   >> ringFrequency >> ringMix
+                   >> wahRate >> wahDepth >> wahResonance >> wahMix;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -871,6 +918,35 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.stereoTool.balance     = (float) stereoBalance;
                 slot.stereoTool.mono        = stereoMono != 0;
                 slot.stereoTool.swap        = stereoSwap != 0;
+                slot.graphicEq.enabled      = slot.enabled && slot.kind == EffectKind::GraphicEq;
+                slot.graphicEq.band31 = (float) eqBand31;
+                slot.graphicEq.band62 = (float) eqBand62;
+                slot.graphicEq.band125 = (float) eqBand125;
+                slot.graphicEq.band250 = (float) eqBand250;
+                slot.graphicEq.band500 = (float) eqBand500;
+                slot.graphicEq.band1k = (float) eqBand1k;
+                slot.graphicEq.band2k = (float) eqBand2k;
+                slot.graphicEq.band4k = (float) eqBand4k;
+                slot.graphicEq.band8k = (float) eqBand8k;
+                slot.graphicEq.band16k = (float) eqBand16k;
+                slot.deEsser.enabled        = slot.enabled && slot.kind == EffectKind::DeEsser;
+                slot.deEsser.frequencyHz    = (float) deEssFrequency;
+                slot.deEsser.thresholdDb    = (float) deEssThreshold;
+                slot.deEsser.maxReductionDb = (float) deEssReduction;
+                slot.expander.enabled       = slot.enabled && slot.kind == EffectKind::Expander;
+                slot.expander.thresholdDb   = (float) expThreshold;
+                slot.expander.ratio         = (float) expRatio;
+                slot.expander.rangeDb       = (float) expRange;
+                slot.expander.attackMs      = (float) expAttack;
+                slot.expander.releaseMs     = (float) expRelease;
+                slot.ringMod.enabled        = slot.enabled && slot.kind == EffectKind::RingMod;
+                slot.ringMod.frequencyHz    = (float) ringFrequency;
+                slot.ringMod.mix            = (float) ringMix;
+                slot.wah.enabled            = slot.enabled && slot.kind == EffectKind::Wah;
+                slot.wah.rateHz             = (float) wahRate;
+                slot.wah.depth              = (float) wahDepth;
+                slot.wah.resonance          = (float) wahResonance;
+                slot.wah.mix                = (float) wahMix;
 
                 if (slot.kind == EffectKind::Plugin)
                 {

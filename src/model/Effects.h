@@ -162,7 +162,12 @@ enum class EffectKind
     Phaser     = 15, // see engine/ToneEffects.h
     Flanger    = 16,
     BassTreble = 17,
-    StereoTool = 18
+    StereoTool = 18,
+    GraphicEq  = 19, // see engine/DynamicsEffects.h
+    DeEsser    = 20,
+    Expander   = 21,
+    RingMod    = 22,
+    Wah        = 23
 };
 
 /**
@@ -401,6 +406,69 @@ struct StereoToolSettings
     bool operator==(const StereoToolSettings&) const = default;
 };
 
+/** Ten octave bands, 31 Hz to 16 kHz, each -12..+12 dB. */
+struct GraphicEqSettings
+{
+    bool  enabled = false;
+    float band31 = 0.0f;
+    float band62 = 0.0f;
+    float band125 = 0.0f;
+    float band250 = 0.0f;
+    float band500 = 0.0f;
+    float band1k = 0.0f;
+    float band2k = 0.0f;
+    float band4k = 0.0f;
+    float band8k = 0.0f;
+    float band16k = 0.0f;
+
+    bool operator==(const GraphicEqSettings&) const = default;
+};
+
+/** Turns the audio above a frequency down while it's over a threshold. */
+struct DeEsserSettings
+{
+    bool  enabled        = false;
+    float frequencyHz    = 5500.0f;
+    float thresholdDb    = -30.0f;
+    float maxReductionDb = 12.0f;
+
+    bool operator==(const DeEsserSettings&) const = default;
+};
+
+/** A downward expander. */
+struct ExpanderSettings
+{
+    bool  enabled     = false;
+    float thresholdDb = -40.0f;
+    float ratio       = 2.0f;
+    float rangeDb     = 40.0f;
+    float attackMs    = 5.0f;
+    float releaseMs   = 100.0f;
+
+    bool operator==(const ExpanderSettings&) const = default;
+};
+
+struct RingModSettings
+{
+    bool  enabled     = false;
+    float frequencyHz = 440.0f;
+    float mix         = 1.0f;
+
+    bool operator==(const RingModSettings&) const = default;
+};
+
+/** An auto-wah. */
+struct WahSettings
+{
+    bool  enabled   = false;
+    float rateHz    = 1.5f;
+    float depth     = 0.8f;
+    float resonance = 4.0f;
+    float mix       = 1.0f;
+
+    bool operator==(const WahSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -424,6 +492,11 @@ struct EffectSlot
     FlangerSettings    flanger;
     BassTrebleSettings bassTreble;
     StereoToolSettings stereoTool;
+    GraphicEqSettings  graphicEq;
+    DeEsserSettings    deEsser;
+    ExpanderSettings   expander;
+    RingModSettings    ringMod;
+    WahSettings        wah;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

@@ -1626,6 +1626,11 @@ void MainComponent::syncEngineTracks()
                 case model::EffectKind::Flanger:    spec.kind = engine::EffectNodeKind::Flanger;    break;
                 case model::EffectKind::BassTreble: spec.kind = engine::EffectNodeKind::BassTreble; break;
                 case model::EffectKind::StereoTool: spec.kind = engine::EffectNodeKind::StereoTool; break;
+                case model::EffectKind::GraphicEq:  spec.kind = engine::EffectNodeKind::GraphicEq;  break;
+                case model::EffectKind::DeEsser:    spec.kind = engine::EffectNodeKind::DeEsser;    break;
+                case model::EffectKind::Expander:   spec.kind = engine::EffectNodeKind::Expander;   break;
+                case model::EffectKind::RingMod:    spec.kind = engine::EffectNodeKind::RingMod;    break;
+                case model::EffectKind::Wah:        spec.kind = engine::EffectNodeKind::Wah;        break;
                 case model::EffectKind::Plugin:
                     spec.kind             = engine::EffectNodeKind::Plugin;
                     spec.pluginFormat     = pluginFormatName(slot.plugin.format);

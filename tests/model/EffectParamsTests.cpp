@@ -17,7 +17,8 @@ namespace
         EffectKind::Compressor, EffectKind::Tremolo, EffectKind::Chorus, EffectKind::Wobble,
         EffectKind::Gate, EffectKind::Eq, EffectKind::Amplify, EffectKind::Invert,
         EffectKind::DcOffset, EffectKind::Limiter, EffectKind::Phaser, EffectKind::Flanger,
-        EffectKind::BassTreble, EffectKind::StereoTool
+        EffectKind::BassTreble, EffectKind::StereoTool, EffectKind::GraphicEq, EffectKind::DeEsser,
+        EffectKind::Expander, EffectKind::RingMod, EffectKind::Wah
     };
 
     /** Every parameter of every built-in, read from @p slot. */

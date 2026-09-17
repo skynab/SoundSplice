@@ -164,6 +164,29 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
             { "Wider",        { { "width", 1.4 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } },
             { "Narrower",     { { "width", 0.6 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } } } },
 
+        { EffectKind::GraphicEq, {
+            { "Bass Boost",      { { "band31", 6 }, { "band62", 5 }, { "band125", 3 }, { "band250", 1 }, { "band500", 0 }, { "band1k", 0 }, { "band2k", 0 }, { "band4k", 0 }, { "band8k", 0 }, { "band16k", 0 } } },
+            { "Treble Boost",    { { "band31", 0 }, { "band62", 0 }, { "band125", 0 }, { "band250", 0 }, { "band500", 0 }, { "band1k", 0 }, { "band2k", 1 }, { "band4k", 3 }, { "band8k", 5 }, { "band16k", 6 } } },
+            { "Loudness Smile",  { { "band31", 5 }, { "band62", 4 }, { "band125", 2 }, { "band250", 0 }, { "band500", -1 }, { "band1k", -1 }, { "band2k", 0 }, { "band4k", 2 }, { "band8k", 4 }, { "band16k", 5 } } },
+            { "Voice Presence",  { { "band31", -6 }, { "band62", -4 }, { "band125", -2 }, { "band250", 0 }, { "band500", 0 }, { "band1k", 1 }, { "band2k", 3 }, { "band4k", 3 }, { "band8k", 1 }, { "band16k", 0 } } } } },
+
+        { EffectKind::DeEsser, {
+            { "Gentle", { { "frequency", 6000 }, { "threshold", -24 }, { "reduction", 6 } } },
+            { "Female Voice", { { "frequency", 7000 }, { "threshold", -30 }, { "reduction", 10 } } },
+            { "Male Voice", { { "frequency", 5000 }, { "threshold", -30 }, { "reduction", 10 } } } } },
+
+        { EffectKind::Expander, {
+            { "Background Noise", { { "threshold", -50 }, { "ratio", 2 }, { "range", 20 }, { "attack", 2 }, { "release", 150 } } },
+            { "Tighten Drums",    { { "threshold", -30 }, { "ratio", 4 }, { "range", 40 }, { "attack", 1 }, { "release", 60 } } } } },
+
+        { EffectKind::RingMod, {
+            { "Robot",  { { "frequency", 50 },  { "mix", 1 } } },
+            { "Bell",   { { "frequency", 880 }, { "mix", 0.6 } } } } },
+
+        { EffectKind::Wah, {
+            { "Funky",     { { "rate", 2 },   { "depth", 0.9 }, { "resonance", 6 }, { "mix", 1 } } },
+            { "Slow Sweep", { { "rate", 0.3 }, { "depth", 1 },   { "resonance", 3 }, { "mix", 0.8 } } } } },
+
         { EffectKind::Invert, {
             { "Both Channels", { { "left", 1 }, { "right", 1 } } },
             { "Left Only",     { { "left", 1 }, { "right", 0 } } },

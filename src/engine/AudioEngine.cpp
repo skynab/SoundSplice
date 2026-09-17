@@ -574,6 +574,11 @@ void AudioEngine::rebuildTrackEffectChain(int index)
             case EffectNodeKind::Flanger:    chain->add(std::make_unique<FlangerNode>());    break;
             case EffectNodeKind::BassTreble: chain->add(std::make_unique<BassTrebleNode>()); break;
             case EffectNodeKind::StereoTool: chain->add(std::make_unique<StereoToolNode>()); break;
+            case EffectNodeKind::GraphicEq:  chain->add(std::make_unique<GraphicEqNode>());  break;
+            case EffectNodeKind::DeEsser:    chain->add(std::make_unique<DeEsserNode>());    break;
+            case EffectNodeKind::Expander:   chain->add(std::make_unique<ExpanderNode>());   break;
+            case EffectNodeKind::RingMod:    chain->add(std::make_unique<RingModNode>());    break;
+            case EffectNodeKind::Wah:        chain->add(std::make_unique<WahNode>());        break;
 
             case EffectNodeKind::Plugin:
             {

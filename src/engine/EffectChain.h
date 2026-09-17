@@ -11,6 +11,7 @@
 #include "engine/PedalEffects.h"
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
+#include "engine/DynamicsEffects.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
@@ -40,7 +41,12 @@ enum class EffectNodeKind
     Phaser     = 15,
     Flanger    = 16,
     BassTreble = 17,
-    StereoTool = 18
+    StereoTool = 18,
+    GraphicEq  = 19,
+    DeEsser    = 20,
+    Expander   = 21,
+    RingMod    = 22,
+    Wah        = 23
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -151,6 +157,22 @@ struct EffectSlotParams
     float stereoBalance    = 0.0f;
     bool  stereoMono       = false;
     bool  stereoSwap       = false;
+
+    float graphicEqDb[10] {};
+    float deEssFrequencyHz = 5500.0f;
+    float deEssThresholdDb = -30.0f;
+    float deEssReductionDb = 12.0f;
+    float expThresholdDb   = -40.0f;
+    float expRatio         = 2.0f;
+    float expRangeDb       = 40.0f;
+    float expAttackMs      = 5.0f;
+    float expReleaseMs     = 100.0f;
+    float ringFrequencyHz  = 440.0f;
+    float ringMix          = 1.0f;
+    float wahRateHz        = 1.5f;
+    float wahDepth         = 0.8f;
+    float wahResonance     = 4.0f;
+    float wahMix           = 1.0f;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -350,6 +372,56 @@ struct StereoToolNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct GraphicEqNode final : EffectProcessor
+{
+    GraphicEqEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::GraphicEq; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct DeEsserNode final : EffectProcessor
+{
+    DeEsserEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::DeEsser; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct ExpanderNode final : EffectProcessor
+{
+    ExpanderEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Expander; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct RingModNode final : EffectProcessor
+{
+    RingModulatorEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::RingMod; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct WahNode final : EffectProcessor
+{
+    WahEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Wah; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct ReverbNode final : EffectProcessor
 {
     ReverbEffect effect;
@@ -493,6 +565,37 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             stereo->effect.setBalance(params.stereoBalance);
             stereo->effect.setMono(params.stereoMono);
             stereo->effect.setSwap(params.stereoSwap);
+        }
+        else if (auto* graphic = dynamic_cast<GraphicEqNode*>(&node))
+        {
+            for (int band = 0; band < 10; ++band)
+                graphic->effect.setBandDb(band, params.graphicEqDb[band]);
+        }
+        else if (auto* deEss = dynamic_cast<DeEsserNode*>(&node))
+        {
+            deEss->effect.setFrequencyHz(params.deEssFrequencyHz);
+            deEss->effect.setThresholdDb(params.deEssThresholdDb);
+            deEss->effect.setMaxReductionDb(params.deEssReductionDb);
+        }
+        else if (auto* expander = dynamic_cast<ExpanderNode*>(&node))
+        {
+            expander->effect.setThresholdDb(params.expThresholdDb);
+            expander->effect.setRatio(params.expRatio);
+            expander->effect.setRangeDb(params.expRangeDb);
+            expander->effect.setAttackMs(params.expAttackMs);
+            expander->effect.setReleaseMs(params.expReleaseMs);
+        }
+        else if (auto* ring = dynamic_cast<RingModNode*>(&node))
+        {
+            ring->effect.setFrequencyHz(params.ringFrequencyHz);
+            ring->effect.setMix(params.ringMix);
+        }
+        else if (auto* wah = dynamic_cast<WahNode*>(&node))
+        {
+            wah->effect.setRateHz(params.wahRateHz);
+            wah->effect.setDepth(params.wahDepth);
+            wah->effect.setResonance(params.wahResonance);
+            wah->effect.setMix(params.wahMix);
         }
 }
 
