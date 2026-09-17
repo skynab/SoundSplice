@@ -744,6 +744,7 @@ MainComponent::MainComponent()
     audioEditor_.onApplyEffectsRequested = [this] { showApplyEffectsDialog(); };
     audioEditor_.onSpeedPitchRequested   = [this] { showSpeedPitchDialog(); };
     analyserPane_.onAnalyseRequested     = [this] { analyseSelection(); };
+    analyserPane_.onLoudnessRequested    = [this] { measureLoudnessOfSelection(); };
 
     openFilesPane_.onChosen   = [this](int clipId) { showOpenFile(clipId); };
     openFilesPane_.onClosed   = [this](int clipId) { closeOpenFile(clipId); };

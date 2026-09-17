@@ -140,6 +140,11 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
         }
 
+        case commands::measureLoudness:
+        case commands::normalizeLoudness:
+            info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr);
+            break;
+
         case commands::makeStereoTrack:
         {
             const auto& tracks = history_.current().tracks;
@@ -341,6 +346,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::splitStereoToMono: splitSelectedTrackToMono(); break;
         case commands::swapChannels:    swapSelectedTrackChannels(); break;
         case commands::makeStereoTrack: makeStereoTrack(); break;
+        case commands::measureLoudness: measureLoudnessOfSelection(); break;
+        case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
         case commands::resampleTrack:   showResampleTrackDialog(); break;
         case commands::mixAndRender:    mixAndRenderToNewTrack(); break;
         case commands::renameTrack:     renameSelectedTrack(); break;
@@ -539,6 +546,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fadeOut);
         add(commands::reverseAudio);
         add(commands::applyEffects);
+        add(commands::normalizeLoudness);
+        add(commands::measureLoudness);
         menu.addSeparator();
         add(commands::copyClip);
         add(commands::pasteClip);

@@ -291,3 +291,34 @@ TEST_CASE("The effect panel brackets every slider drag, for every kind", "[gui][
     }
 }
 
+
+TEST_CASE("The analyser pane asks for loudness and shows what was measured", "[gui][wiring]")
+{
+    JuceFixture fixture;
+
+    AnalyserPane pane;
+    pane.setVisible(true);
+    pane.setBounds(0, 0, 900, 300);
+    pane.resized();
+
+    bool asked = false;
+    pane.onLoudnessRequested = [&asked] { asked = true; };
+    for (auto* child : pane.getChildren())
+        if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr
+            && button->getButtonText() == "Measure Loudness")
+            button->triggerClick();
+    pump();
+    REQUIRE(asked);
+
+    soundsplice::engine::LoudnessReport report;
+    report.integratedLufs  = -16.04;
+    report.loudnessRangeLu = 6.2;
+    report.truePeakDb      = -1.26;
+    pane.setLoudness(report.withGain(2.0));
+
+    const auto text = pane.loudnessText();
+    REQUIRE(text.contains("Integrated -14.0 LUFS"));
+    REQUIRE(text.contains("Range 6.2 LU"));
+    REQUIRE(text.contains("True peak 0.7 dBTP"));
+    REQUIRE(text.contains("Max momentary -inf LUFS"));
+}

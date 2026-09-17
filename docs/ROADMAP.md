@@ -132,7 +132,7 @@ offline apply and preview.
 
 **Volume and dynamics**
 ✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · 🟡 Limiter (inside Maximizer; expose it as an
-effect) · ⬜ Amplify · ⬜ **Loudness normalization (LUFS/LU, EBU R128)** · ⬜ **Auto Duck** · ⬜ Expander ·
+effect) · ⬜ Amplify · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ⬜ **Auto Duck** · ⬜ Expander ·
 ⬜ **Multiband compressor** (REAPER ReaXComp, Audition) · ⬜ **De-esser** · ⬜ Dynamics processor with a
 drawable transfer curve (Audition)
 
@@ -173,8 +173,8 @@ captured room tone into gaps)
 **Analyzers**
 ✅ Plot spectrum · ⬜ **Find clipping** (labels each run) · ⬜ **Measure RMS / amplitude statistics**
 (Audition: peak, RMS, DC offset, dynamic range) · ⬜ **Contrast** (WCAG foreground/background) ·
-⬜ **Label sounds / silence finder** · ⬜ **Beat finder** · ⬜ **Loudness meter** (momentary, short-term,
-integrated LUFS, true peak, LRA) · ⬜ **Phase correlation meter / vectorscope** · ⬜ Oscilloscope
+⬜ **Label sounds / silence finder** · ⬜ **Beat finder** · 🟡 **Loudness meter** (momentary, short-term,
+integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser ✅ (Edit > Measure Loudness); live on the master ⬜ · ⬜ **Phase correlation meter / vectorscope** · ⬜ Oscilloscope
 
 ### Phase 3 — Spectral editing
 

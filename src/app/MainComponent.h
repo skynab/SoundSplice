@@ -19,6 +19,7 @@
 #include "engine/TimeStretch.h"
 #include "engine/NoiseReduction.h"
 #include "engine/RawPcm.h"
+#include "engine/Loudness.h"
 #include "engine/TempoMap.h"
 #include "model/History.h"
 #include "model/Song.h"
@@ -388,6 +389,13 @@ private:
     /** Samples [from, to) counted from the clip's start, one vector per
         channel; only those samples are read. Empty if they can't be. */
     std::vector<std::vector<float>> readClipAudio(const ClipAudio& audio, int from, int to) const;
+
+    // Loudness — see MainComponent_Loudness.cpp.
+    void                   measureClipLoudness(const juce::String& title, const ClipAudio& audio, int from, int to,
+                                               std::function<void(const engine::LoudnessReport&)> onMeasured);
+    void                   measureLoudnessOfSelection();
+    void                   showNormalizeLoudnessDialog();
+    void                   normalizeSelectedClipLoudness(double targetLufs, bool limitTruePeak);
 
     /** Answers the audio editor's onSampleDetailNeeded: the selected clip's
         samples over [fromSeconds, toSeconds), for drawing it zoomed right in. */

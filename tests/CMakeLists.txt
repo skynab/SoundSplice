@@ -18,6 +18,7 @@ add_executable(soundsplice_tests
   engine/PcmContainersTests.cpp
   engine/VarispeedTests.cpp
   engine/ResampleTests.cpp
+  engine/LoudnessTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp

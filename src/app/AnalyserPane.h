@@ -4,6 +4,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "engine/Loudness.h"
 #include "engine/Spectrum.h"
 
 namespace soundsplice
@@ -30,6 +31,9 @@ public:
     /** Analyse whatever is currently selected in the audio editor. */
     std::function<void()> onAnalyseRequested;
 
+    /** Measure the loudness of the same selection. */
+    std::function<void()> onLoudnessRequested;
+
     AnalyserPane()
     {
         analyseButton_.setButtonText("Analyse Selection");
@@ -37,12 +41,42 @@ public:
         analyseButton_.onClick = [this] { if (onAnalyseRequested) onAnalyseRequested(); };
         addAndMakeVisible(analyseButton_);
 
+        loudnessButton_.setButtonText("Measure Loudness");
+        loudnessButton_.setTooltip("Measure the loudness (EBU R128) and true peak of the selected audio");
+        loudnessButton_.onClick = [this] { if (onLoudnessRequested) onLoudnessRequested(); };
+        addAndMakeVisible(loudnessButton_);
+
+        loudnessLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
+        loudnessLabel_.setInterceptsMouseClicks(false, false);
+        loudnessLabel_.setJustificationType(juce::Justification::centredLeft);
+        loudnessLabel_.setText("No loudness measured yet", juce::dontSendNotification);
+        addAndMakeVisible(loudnessLabel_);
+
         readoutLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
         readoutLabel_.setInterceptsMouseClicks(false, false);
         addAndMakeVisible(readoutLabel_);
 
         updateReadout();
     }
+
+    void setLoudness(const engine::LoudnessReport& report)
+    {
+        const auto level = [](double value, const char* unit)
+        {
+            return std::isfinite(value) ? juce::String(value, 1) + " " + unit : juce::String("-inf ") + unit;
+        };
+
+        loudnessLabel_.setText("Integrated " + level(report.integratedLufs, "LUFS")
+                                   + "   Range " + juce::String(report.loudnessRangeLu, 1) + " LU"
+                                   + "   Max short-term " + level(report.maxShortTermLufs, "LUFS")
+                                   + "   Max momentary " + level(report.maxMomentaryLufs, "LUFS")
+                                   + "   True peak " + level(report.truePeakDb, "dBTP")
+                                   + "   Sample peak " + level(report.samplePeakDb, "dBFS"),
+                               juce::dontSendNotification);
+        loudnessLabel_.setTooltip(loudnessLabel_.getText());
+    }
+
+    juce::String loudnessText() const { return loudnessLabel_.getText(); }
 
     void setSpectrum(engine::Spectrum spectrum)
     {
@@ -99,6 +133,10 @@ public:
         auto row = area.removeFromTop(kRowHeight);
         analyseButton_.setBounds(row.removeFromLeft(juce::jmax(1, row.getWidth() / 3)).reduced(1));
         readoutLabel_.setBounds(row.reduced(4, 0));
+
+        row = area.removeFromTop(kRowHeight);
+        loudnessButton_.setBounds(row.removeFromLeft(juce::jmax(1, row.getWidth() / 3)).reduced(1));
+        loudnessLabel_.setBounds(row.reduced(4, 0));
     }
 
 private:
@@ -111,7 +149,7 @@ private:
     juce::Rectangle<int> graphBounds() const
     {
         auto area = getLocalBounds().reduced(6);
-        area.removeFromTop(kRowHeight);
+        area.removeFromTop(kRowHeight * 2);
         return area;
     }
 
@@ -182,6 +220,8 @@ private:
 
     juce::TextButton analyseButton_;
     juce::Label      readoutLabel_;
+    juce::TextButton loudnessButton_;
+    juce::Label      loudnessLabel_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AnalyserPane)
 };
