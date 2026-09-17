@@ -35,6 +35,7 @@ target_sources(SoundSplice PRIVATE
   MainComponent_Markers.cpp
   MainComponent_Project.cpp
   MainComponent_Recording.cpp
+  MainComponent_Repair.cpp
   MainComponent_TimeSelection.cpp
   MainComponent_Tracks.cpp
   MainComponent_Transport.cpp

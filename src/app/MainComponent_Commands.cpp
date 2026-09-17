@@ -339,6 +339,10 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::fadeOut:         fadeOutAudioSelection(); break;
         case commands::reverseAudio:    reverseAudioSelection(); break;
         case commands::studioFadeOut:   studioFadeOutAudioSelection(); break;
+        case commands::repairAudio:     repairAudioSelection(); break;
+        case commands::clickRemoval:    showClickRemovalDialog(); break;
+        case commands::clipFix:         showClipFixDialog(); break;
+        case commands::humRemoval:      showHumRemovalDialog(); break;
         case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
         case commands::applyEffects:    showApplyEffectsDialog(); break;
         case commands::copyClip:        copyClip(); break;
@@ -571,6 +575,12 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::studioFadeOut);
         add(commands::reverseAudio);
         add(commands::applyEffects);
+        menu.addSeparator();
+        add(commands::repairAudio);
+        add(commands::clickRemoval);
+        add(commands::clipFix);
+        add(commands::humRemoval);
+        menu.addSeparator();
         add(commands::normalizeLoudness);
         menu.addSeparator();
         add(commands::copyClip);

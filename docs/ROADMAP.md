@@ -151,8 +151,8 @@ unlimited bands** and a drawable curve (Audacity Filter Curve, REAPER ReaEQ) · 
 (`ShelfPeakFilter` exists) · ⬜ **Match EQ** (fit one clip's spectrum to another's)
 
 **Noise removal and repair** (Audacity *and* Audition)
-✅ Noise reduction · ⬜ **Click/pop removal** · ⬜ **Clip fix / DeClipper** · ⬜ Repair (interpolate a short
-region) · ⬜ **DeHummer** (50/60 Hz and harmonics) · ⬜ **Adaptive noise reduction** (no noise print
+✅ Noise reduction · ✅ **Click/pop removal** · ✅ **Clip fix / DeClipper** · ✅ Repair (interpolate a short
+region) · ✅ **DeHummer** (50/60 Hz and harmonics) (Edit menu, on the audio editor's selection; `src/engine/Repair.h`) · ⬜ **Adaptive noise reduction** (no noise print
 needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 
 **Delay, reverb and modulation**

@@ -328,6 +328,18 @@ private:
     void                   fadeOutAudioSelection();
     void                   reverseAudioSelection();
     void                   studioFadeOutAudioSelection();
+
+    // Restoration — see MainComponent_Repair.cpp.
+    bool                   editSelectionInContext(
+        const juce::String& label, int contextFrames,
+        const std::function<bool(std::vector<std::vector<float>>&, int from, int to, double sampleRate)>& transform);
+    void                   repairAudioSelection();
+    void                   showClickRemovalDialog();
+    void                   removeClicksInSelection(double sensitivity, double maxWidthMs);
+    void                   showClipFixDialog();
+    void                   fixClippingInSelection(double thresholdPercent, double reduceDb);
+    void                   showHumRemovalDialog();
+    void                   removeHumInSelection(double fundamentalHz, int harmonics, double q);
     void                   crossfadeClipsInSelection();
 
     void                   showApplyEffectsDialog();
