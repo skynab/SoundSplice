@@ -24,6 +24,7 @@
 #include "engine/ReverbEffect.h"
 #include "engine/EngineCommand.h"
 #include "engine/InstrumentTrack.h"
+#include "engine/Varispeed.h"
 #include "engine/MasterBusNode.h"
 #include "engine/MasteringProcessor.h"
 #include "engine/Metronome.h"
@@ -453,6 +454,12 @@ public:
 
     // ---- lock-free UI readouts ----
     bool    isPlaying() const noexcept       { return transport_.playingForUI(); }
+
+    /** Play-at-speed: how fast the song plays, 1 being normal, kept to
+        Varispeed's range. Pitch follows, as on tape. Ignored while recording
+        or counting in, where what's heard must be what's captured. Any thread. */
+    void   setPlaySpeed(double speed) noexcept { playSpeed_.store(Varispeed::clampSpeed(speed), std::memory_order_relaxed); }
+    double playSpeed() const noexcept          { return playSpeed_.load(std::memory_order_relaxed); }
     int64_t playheadSamples() const noexcept { return transport_.playheadForUI(); }
     double  sampleRate() const noexcept      { return sampleRate_.load(std::memory_order_relaxed); }
     float   masterPeak(int channel) const noexcept { return master_.peak(channel); }
@@ -628,6 +635,18 @@ private:
     PluginHost                                         pluginHost_;
     std::array<EffectChain*, kMaxTracks>                submittedChain_ {};
     int                                                 currentBlockSize_ = 512;
+
+    // Play-at-speed (see setPlaySpeed and renderAtSpeed). The buffers are
+    // sized in prepareAll; the audio thread only reads and writes them.
+    std::atomic<double>      playSpeed_ { 1.0 };
+    Varispeed                varispeed_;
+    juce::AudioBuffer<float> varispeedScratch_;
+    juce::MidiBuffer         varispeedMidi_;
+    bool                     varispeedActive_ = false; // audio thread only
+
+    /** Renders the song at playSpeed_ into @p output, through varispeed_.
+        Audio thread. */
+    void renderAtSpeed(juce::AudioBuffer<float>& output, double speed, int numSamples) noexcept;
 
     juce::String loadedClipName_;
     double       loadedClipSeconds_ = 0.0;

@@ -114,6 +114,18 @@ void MainComponent::seekToBeat(double beat)
     post(Cmd::Seek, (double) uiTempoMap_.samplesFromPpq(juce::jmax(0.0, beat)));
 }
 
+void MainComponent::setPlaySpeed(double speed)
+{
+    speed = engine::Varispeed::clampSpeed(speed);
+    engine_.setPlaySpeed(speed);
+
+    if (std::abs(speed - 1.0) < 1.0e-6)
+        showStatus("Playing at normal speed");
+    else
+        showStatus("Playing at " + juce::String(speed, 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".")
+                   + "x speed (not while recording)");
+}
+
 /** Steps the playhead by whole bars — what "previous/next frame" means in a
     DAW, where the musical unit is a bar rather than a video frame. */
 void MainComponent::stepByBars(int bars)

@@ -100,7 +100,9 @@ all three.
   remove; `src/engine/ClipEnvelope.h`) and **draw tool** ✅ (redraw samples when zoomed to sample
   level, to fix clicks by hand: Alt-drag in the audio editor once the samples show as a line;
   `src/app/SampleDraw.h`)
-- 🟡 **Scrub and seek** playback ⬜, **play-at-speed** (transport varispeed) ⬜, and **loop the selection** ✅
+- ✅ **Scrub and seek** playback ✅ (drag along the ruler: it plays from under the mouse while held,
+  and seeks while playing), **play-at-speed** (transport varispeed) ✅ (Transport > Play Faster / Slower,
+  0.25x to 4x with the pitch, as on tape; `src/engine/Varispeed.h`), and **loop the selection** ✅
   (Loop plays the time selection when there is one)
 - 🟡 Zoom: to selection ✅ (Ctrl+E), fit project ✅ (Ctrl+F; View menu, `src/app/TimelineZoom.h`),
   fit vertically ✅ (Ctrl+Shift+F), sample-level zoom ✅ (zoomed in past the

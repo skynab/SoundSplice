@@ -15,6 +15,7 @@ add_executable(soundsplice_tests
   engine/MidiCaptureTests.cpp
   engine/MidiRecorderTests.cpp
   engine/RawPcmTests.cpp
+  engine/VarispeedTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp

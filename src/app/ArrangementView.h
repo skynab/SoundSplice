@@ -78,6 +78,12 @@ public:
     }
 
     std::function<void(double)> onSeek; // beat position clicked
+
+    /** Fired when a drag along the ruler starts moving, and when it's let go:
+        the owner plays while the ruler is scrubbed, so what's under the mouse
+        can be heard. A click without a drag fires neither. */
+    std::function<void()> onScrubStarted;
+    std::function<void()> onScrubEnded;
     std::function<void(int trackIndex, int clipIndex, double newStartBeats)> onClipMoved;
     std::function<void(int trackIndex, int clipIndex, double newLengthBeats)> onClipResized;
 
@@ -919,7 +925,9 @@ private:
                 }
             }
 
-            scrubbing_ = true;
+            scrubbing_      = true;
+            scrubAudible_   = false;
+            scrubPressX_    = e.position.x;
             scrubTo(e.position.x);
             return;
         }
@@ -1091,6 +1099,12 @@ private:
             // started, dragging down into the lanes or off the edge should
             // keep scrubbing rather than stopping the moment the mouse
             // strays, which is how every transport scrub bar behaves.
+            if (! scrubAudible_ && std::abs(e.position.x - scrubPressX_) >= kScrubDragPixels)
+            {
+                scrubAudible_ = true;
+                if (onScrubStarted)
+                    onScrubStarted();
+            }
             scrubTo(e.position.x);
             return;
         }
@@ -1252,6 +1266,12 @@ private:
         if (scrubbing_)
         {
             scrubbing_ = false;
+            if (scrubAudible_)
+            {
+                scrubAudible_ = false;
+                if (onScrubEnded)
+                    onScrubEnded();
+            }
             return;
         }
 
@@ -1824,6 +1844,10 @@ private:
     {
         return from == to && from != model::TrackType::Audio;
     }
+
+    bool   scrubAudible_      = false; // a ruler drag that has moved far enough to play
+    float  scrubPressX_       = 0.0f;
+    static constexpr float kScrubDragPixels = 3.0f;
 
     bool   dragging_          = false;
     bool   resizing_          = false;

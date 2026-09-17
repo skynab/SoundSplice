@@ -611,6 +611,21 @@ MainComponent::MainComponent()
         post(Cmd::Seek, (double) uiTempoMap_.samplesFromPpq(juce::jmax(0.0, beat)));
     };
 
+    // Scrubbing the ruler while stopped plays from under the mouse, and stops
+    // again when it's let go; while playing, it just moves the playhead.
+    arrangementView_.onScrubStarted = [this]
+    {
+        if (engine_.isPlaying() || awaitingRecordedTake_)
+            return;
+        scrubStartedPlayback_ = true;
+        post(Cmd::SetPlaying, 1.0);
+    };
+    arrangementView_.onScrubEnded = [this]
+    {
+        if (std::exchange(scrubStartedPlayback_, false))
+            post(Cmd::SetPlaying, 0.0);
+    };
+
     // Muting from the tracks pane goes through the same setTrackMuted the
     // mixer strip uses, so the two views can't disagree about a track's state.
     arrangementView_.onTrackMuteToggled = [this](int trackIndex)

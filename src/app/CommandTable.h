@@ -100,6 +100,9 @@ enum Id : int
 
     // Transport
     playPause,
+    playFaster,
+    playSlower,
+    playNormalSpeed,
     goToStart,
     goToEnd,
     backOneBar,
@@ -207,6 +210,9 @@ inline const std::vector<Definition>& all()
         { swingHeavy,       "Swing - Heavy",        "Edit", "Quantize with a heavy swing.", {} },
 
         { playPause,        "Play / Pause",         "Transport", "Start or pause playback.", { keys::playPause } },
+        { playFaster,       "Play Faster",          "Transport", "Play the song faster, higher in pitch, as a tape would.", {} },
+        { playSlower,       "Play Slower",          "Transport", "Play the song slower, lower in pitch, as a tape would.", {} },
+        { playNormalSpeed,  "Play at Normal Speed", "Transport", "Play the song at its own speed again.", {} },
         { goToStart,        "Go to Start",          "Transport", "Move the playhead to the start.", { keys::toStart } },
         { goToEnd,          "Go to End",            "Transport", "Move the playhead to the end of the arrangement.", { keys::toEnd } },
         { backOneBar,       "Back One Bar",         "Transport", "Move the playhead back a bar.", { keys::backOneBar } },

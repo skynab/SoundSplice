@@ -674,7 +674,7 @@ void AudioEngine::drainCommandQueue() noexcept
         {
             case EngineCommand::Type::SetPlaying:      transport_.setPlaying(command.a != 0.0); break;
             case EngineCommand::Type::SetLooping:      transport_.setLooping(command.a != 0.0); break;
-            case EngineCommand::Type::Seek:            transport_.seek((int64_t) command.a); break;
+            case EngineCommand::Type::Seek:            transport_.seek((int64_t) command.a); varispeed_.reset(); break;
             case EngineCommand::Type::SetTempo:        transport_.setTempo(command.a); break;
             case EngineCommand::Type::SetLoopRegion:   transport_.setLoopRegion((int64_t) command.a, (int64_t) command.b); break;
             case EngineCommand::Type::SetMasterGainDb: master_.setGainDb((float) command.a); break;
@@ -721,7 +721,26 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     // same buffer, so it records too.
     captureMidi(incomingMidi_, context);
 
-    processBlock(output, incomingMidi_, context);
+    // Play-at-speed renders the song in blocks of its own; everything below
+    // that isn't the song (monitoring, preview, click) stays at the device's.
+    const double speed    = playSpeed_.load(std::memory_order_relaxed);
+    const bool   atSpeed  = context.transport.playing && std::abs(speed - 1.0) > 1.0e-6
+                         && ! recorder_.isArmed() && ! midiRecorder_.isArmed() && ! isCountingIn()
+                         && varispeed_.isPrepared() && numSamples <= varispeed_.maxOutputFrames();
+
+    if (atSpeed)
+    {
+        renderAtSpeed(output, speed, numSamples);
+    }
+    else
+    {
+        if (varispeedActive_)
+        {
+            varispeed_.reset();
+            varispeedActive_ = false;
+        }
+        processBlock(output, incomingMidi_, context);
+    }
 
     // Dry input monitoring, mixed in *after* the master bus for the same
     // reasons the metronome is: it stays out of the meter, out of the master
@@ -738,7 +757,41 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     // effects and gain, stays off the meter, and can never be exported (it
     // sits outside processBlock, which is what renderOffline renders).
     // `force` sounds it through a count-in even when it's otherwise off.
-    metronome_.process(output, context, isCountingIn());
+    // The click follows the song's beats, which at another speed are not the
+    // device's: rather than a click in the wrong place, none.
+    if (! atSpeed)
+        metronome_.process(output, context, isCountingIn());
+}
+
+void AudioEngine::renderAtSpeed(juce::AudioBuffer<float>& output, double speed, int numSamples) noexcept
+{
+    varispeedActive_ = true;
+
+    const int blockSize = varispeedScratch_.getNumSamples();
+    const double rate   = sampleRate_.load(std::memory_order_relaxed);
+
+    for (int need = varispeed_.framesNeeded(numSamples, speed); need > 0;)
+    {
+        const int n = juce::jmin(need, blockSize);
+
+        juce::AudioBuffer<float> block(varispeedScratch_.getArrayOfWritePointers(),
+                                       varispeedScratch_.getNumChannels(), n);
+        block.clear();
+        varispeedMidi_.clear();
+
+        ProcessContext context;
+        context.sampleRate  = rate;
+        context.numSamples  = n;
+        context.transport   = transport_.snapshot(n);
+        context.streamEpoch = streamer_.beginBlock();
+
+        processBlock(block, varispeedMidi_, context);
+
+        varispeed_.push(block.getArrayOfReadPointers(), block.getNumChannels(), n);
+        need -= n;
+    }
+
+    varispeed_.pull(output.getArrayOfWritePointers(), output.getNumChannels(), numSamples, speed);
 }
 
 void AudioEngine::captureMidi(const juce::MidiBuffer& midi, const ProcessContext& context) noexcept
@@ -1024,6 +1077,11 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
     transport_.prepare(sampleRate);
 
     currentBlockSize_ = blockSize;
+
+    // Room for a device that hands over up to twice the block it promised.
+    varispeedScratch_.setSize(2, juce::jmax(1, blockSize));
+    varispeedMidi_.ensureSize(2048);
+    varispeed_.prepare(2, juce::jmax(1, blockSize) * 2, juce::jmax(1, blockSize));
 
     for (auto& track : tracks_)
         track.prepare(sampleRate, blockSize);

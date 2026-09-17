@@ -330,6 +330,9 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         // visibly reacts, where pressing space and seeing nothing move on
         // screen reads as a dropped keystroke.
         case commands::playPause:     playPauseButton.triggerClick(); break;
+        case commands::playFaster:      setPlaySpeed(engine::Varispeed::steppedSpeed(engine_.playSpeed(), 1)); break;
+        case commands::playSlower:      setPlaySpeed(engine::Varispeed::steppedSpeed(engine_.playSpeed(), -1)); break;
+        case commands::playNormalSpeed: setPlaySpeed(1.0); break;
         case commands::goToStart:     firstFrameButton.triggerClick(); break;
         case commands::goToEnd:       lastFrameButton.triggerClick(); break;
         case commands::backOneBar:    previousFrameButton.triggerClick(); break;
@@ -448,7 +451,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View", "Markers" };
+    return { "File", "Edit", "View", "Markers", "Transport" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String&)
@@ -586,6 +589,21 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::exportMarkers);
         menu.addSeparator();
         add(commands::deleteAllMarkers);
+    }
+    else if (topLevelMenuIndex == 4) // Transport
+    {
+        add(commands::playPause);
+        add(commands::loop);
+        add(commands::record);
+        menu.addSeparator();
+        add(commands::goToStart);
+        add(commands::goToEnd);
+        add(commands::backOneBar);
+        add(commands::forwardOneBar);
+        menu.addSeparator();
+        add(commands::playFaster);
+        add(commands::playSlower);
+        add(commands::playNormalSpeed);
     }
 
     return menu;

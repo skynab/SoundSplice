@@ -121,6 +121,9 @@ private:
     double loopEndBeats() const;
     void stopAtEndOfArrangement();
     void seekToBeat(double beat);
+    /** Play-at-speed: sets how fast the song plays and says so. */
+    void setPlaySpeed(double speed);
+    bool scrubStartedPlayback_ = false; // a ruler scrub started the transport, so stops it
     void stepByBars(int bars);
     double songEndBeats() const;
     double playheadBeat() const;
