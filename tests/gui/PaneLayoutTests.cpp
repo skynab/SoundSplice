@@ -7,6 +7,7 @@
 #include <app/EffectChainPanel.h>
 #include <app/FileBrowserPanel.h>
 #include <app/MixerStrip.h>
+#include <app/OpenFilesPane.h>
 #include <app/SessionView.h>
 
 using namespace soundsplice;
@@ -228,6 +229,29 @@ TEST_CASE("The file browser lays out usably at every size", "[gui][panes]")
         panel.resized();
 
         paneaudit::requireUsable(panel, "FileBrowserPanel at " + size.toString());
+    }
+}
+
+TEST_CASE("The open files pane lays out usably at every size, empty or not", "[gui][panes]")
+{
+    JuceFixture fixture;
+
+    std::vector<OpenFilesPane::Entry> entries;
+    for (int i = 1; i <= 12; ++i)
+        entries.push_back({ i, "Take " + juce::String(i), "Vox  |  0:12.5", juce::Colours::orange });
+
+    for (const auto& size : kSizes)
+    {
+        for (bool empty : { true, false })
+        {
+            OpenFilesPane pane;
+            pane.setEntries(empty ? std::vector<OpenFilesPane::Entry> {} : entries, empty ? 0 : 5);
+            pane.setVisible(true);
+            pane.setBounds(size);
+            pane.resized();
+
+            paneaudit::requireUsable(pane, "OpenFilesPane at " + size.toString() + (empty ? " (empty)" : ""));
+        }
     }
 }
 

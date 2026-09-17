@@ -112,6 +112,12 @@ inline const juce::KeyPress addMarker      = detail::with('M', detail::noMods);
 inline const juce::KeyPress previousMarker = detail::with(juce::KeyPress::leftKey, detail::alt);
 inline const juce::KeyPress nextMarker     = detail::with(juce::KeyPress::rightKey, detail::alt);
 
+// Open files: page keys step through them, as tabs do in most editors, and
+// cmd+W closes the one showing.
+inline const juce::KeyPress nextOpenFile     = detail::with(juce::KeyPress::pageDownKey, detail::cmd);
+inline const juce::KeyPress previousOpenFile = detail::with(juce::KeyPress::pageUpKey, detail::cmd);
+inline const juce::KeyPress closeOpenFile    = detail::with('W', detail::cmd);
+
 inline const juce::KeyPress zoomIn  = detail::with('=', detail::cmd);
 inline const juce::KeyPress zoomOut = detail::with('-', detail::cmd);
 
@@ -172,6 +178,10 @@ inline std::vector<NamedShortcut> all()
         { "Add Marker",      addMarker },
         { "Previous Marker", previousMarker },
         { "Next Marker",     nextMarker },
+
+        { "Next Open File",     nextOpenFile },
+        { "Previous Open File", previousOpenFile },
+        { "Close File",         closeOpenFile },
 
         { "Zoom In",         zoomIn },
         { "Zoom Out",        zoomOut },

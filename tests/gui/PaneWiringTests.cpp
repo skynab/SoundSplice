@@ -7,6 +7,7 @@
 #include <app/EffectChainPanel.h>
 #include <app/FileBrowserPanel.h>
 #include <app/MixerStrip.h>
+#include <app/OpenFilesPane.h>
 #include <app/SessionView.h>
 
 using namespace soundsplice;
@@ -66,6 +67,35 @@ TEST_CASE("Every pane's controls have something listening to them", "[gui][wirin
 
     AnalyserPane analyser;
     paneaudit::requireWired(analyser, "AnalyserPane");
+
+    OpenFilesPane openFiles;
+    openFiles.setEntries({ { 1, "Take", "Vox", juce::Colours::orange } }, 1);
+    paneaudit::requireWired(openFiles, "OpenFilesPane");
+}
+
+TEST_CASE("The open files pane reports choosing and closing", "[gui][wiring]")
+{
+    JuceFixture fixture;
+
+    OpenFilesPane pane;
+    pane.setEntries({ { 4, "Take", "Vox", juce::Colours::orange }, { 9, "Room", "Vox", juce::Colours::orange } }, 9);
+    pane.setVisible(true);
+    pane.setBounds(0, 0, 300, 300);
+    pane.resized();
+
+    int  closed    = 0;
+    bool closedAll = false;
+    pane.onClosed   = [&closed](int id) { closed = id; };
+    pane.onCloseAll = [&closedAll] { closedAll = true; };
+
+    // Close means the one showing.
+    for (auto* child : pane.getChildren())
+        if (auto* button = dynamic_cast<juce::TextButton*>(child))
+            button->triggerClick();
+    pump();
+
+    REQUIRE(closed == 9);
+    REQUIRE(closedAll);
 }
 
 TEST_CASE("A mixer strip reports every move the user makes", "[gui][wiring]")

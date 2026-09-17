@@ -29,6 +29,12 @@ const model::Clip* MainComponent::selectedAudioClip() const
 void MainComponent::refreshAudioEditorForSelected()
 {
     const auto* clip = selectedAudioClip();
+
+    // Whatever the editor shows is open, however it got there.
+    if (clip != nullptr)
+        openFiles_.open(clip->id);
+    updateOpenFilesPane();
+
     if (clip == nullptr)
     {
         audioEditor_.setNoAudioClipSelected();
@@ -82,6 +88,90 @@ void MainComponent::refreshAudioEditorForSelected()
     }
 
     audioEditor_.setWaveform(waveformPeaks_, waveformPeaksSampleRate_);
+}
+
+void MainComponent::updateOpenFilesPane()
+{
+    const auto& song = history_.current();
+    openFiles_.prune(song);
+
+    std::vector<OpenFilesPane::Entry> entries;
+    for (int id : openFiles_.clipIds())
+    {
+        const auto  where = app::OpenFiles::locate(song, id);
+        const auto& track = song.tracks[(size_t) where.track];
+        const auto& clip  = track.clips[(size_t) where.clip];
+
+        // The clip's length in the arrangement: probing the file here would
+        // open every one of them on each refresh.
+        const double seconds = song.bpm > 0.0 ? clip.lengthBeats * 60.0 / song.bpm : 0.0;
+        const int    minutes = (int) (seconds / 60.0);
+
+        OpenFilesPane::Entry entry;
+        entry.clipId = id;
+        entry.name   = juce::File(clip.audioFile).getFileNameWithoutExtension();
+        entry.detail = juce::String(track.name.empty() ? "Track" : track.name) + "  |  " + juce::String(minutes)
+                     + ":" + juce::String(seconds - minutes * 60.0, 1).paddedLeft('0', 4);
+        entry.colour = track.colour != 0 ? juce::Colour(track.colour) : juce::Colour(0xff5a6a80);
+        entries.push_back(std::move(entry));
+    }
+
+    const auto* showing = selectedAudioClip();
+    openFilesPane_.setEntries(std::move(entries), showing != nullptr ? showing->id : 0);
+}
+
+void MainComponent::showOpenFile(int clipId)
+{
+    const auto where = app::OpenFiles::locate(history_.current(), clipId);
+    if (! where.isValid())
+    {
+        updateOpenFilesPane();
+        return;
+    }
+
+    selectTrackAndClip(where.track, where.clip);
+    if (workspace_.isPanelOpen("Audio"))
+        workspace_.revealPanel("Audio");
+}
+
+void MainComponent::closeOpenFile(int clipId)
+{
+    const auto* showing = selectedAudioClip();
+    const bool  wasShowing = showing != nullptr && showing->id == clipId;
+    const int   next       = openFiles_.close(clipId);
+
+    if (! wasShowing)
+    {
+        updateOpenFilesPane();
+        return;
+    }
+
+    if (next != 0)
+    {
+        showOpenFile(next);
+        return;
+    }
+
+    // Nothing left open: the editor shows nothing rather than reopening the
+    // clip that was just closed.
+    selectTrackAndClip(selectedTrackIndex_, -1);
+}
+
+void MainComponent::closeAllOpenFiles()
+{
+    openFiles_.closeAll();
+    if (selectedAudioClip() != nullptr)
+        selectTrackAndClip(selectedTrackIndex_, -1);
+    else
+        updateOpenFilesPane();
+}
+
+void MainComponent::stepOpenFile(int direction)
+{
+    const auto* showing = selectedAudioClip();
+    const int   next    = openFiles_.neighbour(showing != nullptr ? showing->id : 0, direction);
+    if (next != 0)
+        showOpenFile(next);
 }
 
 /** A clip's volume curve as drawn in the arrangement: one undo step per

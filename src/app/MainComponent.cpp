@@ -745,6 +745,10 @@ MainComponent::MainComponent()
     audioEditor_.onSpeedPitchRequested   = [this] { showSpeedPitchDialog(); };
     analyserPane_.onAnalyseRequested     = [this] { analyseSelection(); };
 
+    openFilesPane_.onChosen   = [this](int clipId) { showOpenFile(clipId); };
+    openFilesPane_.onClosed   = [this](int clipId) { closeOpenFile(clipId); };
+    openFilesPane_.onCloseAll = [this] { closeAllOpenFiles(); };
+
     automationPane_.onLaneEdited = [this](model::TrackParam param, const model::AutomationLane& lane)
     {
         applyEditedAutomationLane(param, lane);
@@ -828,6 +832,7 @@ MainComponent::MainComponent()
     workspace_.registerPanel("Tracks", arrangeTab_);
     workspace_.registerPanel("Keys", editTab_);
     workspace_.registerPanel("Audio", audioEditor_);
+    workspace_.registerPanel("Open Files", openFilesPane_);
     workspace_.registerPanel("Mastering", masteringPane_);
     workspace_.registerPanel("Analyser", analyserPane_);
     workspace_.registerPanel("Automation", automationPane_);

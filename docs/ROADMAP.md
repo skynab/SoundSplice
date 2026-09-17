@@ -116,7 +116,9 @@ all three.
   (the tracks' pre-master mix over the time selection, on the render thread), and per-track **resample** ✅
   (Edit > Resample Track: a windowed-sinc copy of each file at the new rate, clips keep their timing;
   `src/engine/Resample.h`)
-- ⬜ **Multiple open files** in the editor, as tabs (REAPER project tabs, Audition's file list)
+- ✅ **Multiple open files** in the editor, as a list (Audition's Files panel): every audio clip shown in the
+  Audio editor joins the Open Files pane; click one to edit it, close one or all, and step through them with
+  Ctrl+PageUp/PageDown and Ctrl+W (View menu; `src/app/OpenFiles.h`, `src/app/OpenFilesPane.h`)
 - 🟡 Import: **Opus** ✅ and **WavPack** ✅ (BSD-licensed opusfile and libwavpack; `cmake/codecs.cmake`,
   `src/engine/AudioFormats.cpp`), **CAF** ✅ (PCM, U-law and A-law; AAC and ALAC inside CAF read on macOS only),
   **RF64/BW64 and W64** ✅ (`src/engine/PcmContainers.h`), **M4A/AAC** ⬜ (no BSD-licensed decoder: needs a licensing decision), **raw PCM** ✅ (File > Import Raw Data: 8/16/24/32-bit,

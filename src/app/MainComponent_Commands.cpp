@@ -233,6 +233,22 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(audioEditor_.showsDbScale());
             break;
 
+        case commands::nextOpenFile:
+        case commands::previousOpenFile:
+            info.setActive(! openFiles_.isEmpty());
+            break;
+
+        case commands::closeOpenFile:
+        {
+            const auto* clip = selectedAudioClip();
+            info.setActive(clip != nullptr && openFiles_.contains(clip->id));
+            break;
+        }
+
+        case commands::closeAllOpenFiles:
+            info.setActive(! openFiles_.isEmpty());
+            break;
+
         default:
             break;
     }
@@ -435,6 +451,14 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
+        case commands::nextOpenFile:      stepOpenFile(1); break;
+        case commands::previousOpenFile:  stepOpenFile(-1); break;
+        case commands::closeOpenFile:
+            if (const auto* clip = selectedAudioClip())
+                closeOpenFile(clip->id);
+            break;
+        case commands::closeAllOpenFiles: closeAllOpenFiles(); break;
+
         case commands::waveformDbScale:
         {
             const bool db = ! audioEditor_.showsDbScale();
@@ -582,6 +606,12 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fitVertically);
         add(commands::showClipEnvelopes);
         add(commands::waveformDbScale);
+        menu.addSeparator();
+        add(commands::nextOpenFile);
+        add(commands::previousOpenFile);
+        add(commands::closeOpenFile);
+        add(commands::closeAllOpenFiles);
+        menu.addSeparator();
         add(commands::snapToGrid);
         add(commands::snapToMarkers);
         add(commands::snapToClipEdges);

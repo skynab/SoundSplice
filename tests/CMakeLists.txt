@@ -77,7 +77,8 @@ add_executable(soundsplice_tests
   app/TimelineZoomTests.cpp
   app/AutosaveTests.cpp
   app/TimeFormatTests.cpp
-  app/SnapTargetsTests.cpp)
+  app/SnapTargetsTests.cpp
+  app/OpenFilesTests.cpp)
 
 target_link_libraries(soundsplice_tests
   PRIVATE

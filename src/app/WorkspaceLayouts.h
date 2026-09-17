@@ -93,7 +93,7 @@ inline std::unique_ptr<DockLayoutNode> buildWorkspaceLayout(Workspace workspace)
         // without switching away, and the mastering rack sits down the right
         // where its curve and meter are readable at a glance.
         return beside(0.16,
-                      leaf({ "Files" }),
+                      leaf({ "Open Files", "Files" }, "Open Files"),
                       beside(0.70,
                              above(0.25,
                                    leaf({ "Tracks" }),

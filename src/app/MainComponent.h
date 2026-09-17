@@ -39,6 +39,8 @@
 #include "FileBrowserPanel.h"
 #include "LevelMeter.h"
 #include "MixerStrip.h"
+#include "OpenFiles.h"
+#include "OpenFilesPane.h"
 #include "PianoRoll.h"
 #include "PluginEditorWindow.h"
 #include "ApplyEffectsDialog.h"
@@ -243,6 +245,17 @@ private:
     void                   syncEngineTracks();
     void                   refreshPianoRollForSelected();
     void                   refreshAudioEditorForSelected();
+
+    // The Open Files list — see app/OpenFiles.h.
+    /** Prunes the list and redraws the pane. */
+    void                   updateOpenFilesPane();
+    /** Selects open file @p clipId, so the Audio editor shows it. */
+    void                   showOpenFile(int clipId);
+    /** Removes @p clipId from the list; if it was showing, the editor moves to
+        the next open file, or to nothing. */
+    void                   closeOpenFile(int clipId);
+    void                   closeAllOpenFiles();
+    void                   stepOpenFile(int direction);
     void                   updateMasteringControls();
     void                   setMasteringSettings(const model::MasteringSettings& settings);
     void                   beginMasteringDrag();
@@ -662,6 +675,8 @@ private:
     AudioEditorPane                    audioEditor_; // its own dock panel — see refreshAudioEditorForSelected
     MasteringPane                      masteringPane_; // ditto — see updateMasteringControls
     AnalyserPane                       analyserPane_;
+    app::OpenFiles                     openFiles_;
+    OpenFilesPane                      openFilesPane_;
     AutomationPane                     automationPane_;
     bool                               masteringDragging_ = false;
     model::MasteringSettings           masteringDragFrom_;
