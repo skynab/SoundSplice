@@ -269,6 +269,28 @@ void MainComponent::removeHumInSelection(double fundamentalHz, int harmonics, do
     only its frequencies. */
 void MainComponent::scaleSpectralSelection(const juce::String& label, float gain)
 {
+    // A painted or lassoed shape: each bin by how far it's inside.
+    if (const auto brush = audioEditor_.spectralBrush())
+    {
+        const double selectionStart = audioEditor_.selection().startSeconds;
+        bool         tooShort       = false;
+        const bool   edited = editSelection(label, false,
+            [&](std::vector<std::vector<float>>& channels, double rate)
+            {
+                const auto maskAt = [&](double sample, double hz)
+                { return brush->amountAt(selectionStart + sample / rate, hz); };
+                for (auto& channel : channels)
+                    if (! engine::spectral::scaleMask(channel, 0, (int) channel.size(), rate, gain, maskAt))
+                        tooShort = true;
+            });
+
+        if (tooShort)
+            showStatus("Part of that was too short to edit: paint over at least a few milliseconds");
+        else if (edited)
+            showStatus(label + " on what was " + (brush->isLasso() ? "lassoed" : "painted"));
+        return;
+    }
+
     const auto band = audioEditor_.frequencyBand();
     if (! band)
     {

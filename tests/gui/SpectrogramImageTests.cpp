@@ -129,3 +129,50 @@ TEST_CASE("The spectrogram's gain and range set how levels are coloured", "[gui]
     REQUIRE(brightness(spectrogramimage::colourFor(-50.0f, narrow)) < 0.1f);
     REQUIRE(spectrogramimage::colourFor(-25.0f, narrow) == spectrogramimage::colourFor(-50.0f));
 }
+
+TEST_CASE("The lasso covers what's inside its outline", "[gui][spectrogram]")
+{
+    spectrogramimage::Brush lasso;
+    lasso.radiusSeconds    = 0.01;
+    lasso.radiusProportion = 0.01;
+    lasso.nyquist          = 24000.0;
+    lasso.scale            = spectrogramimage::Scale::Linear;
+
+    // A square from 1 to 2 seconds, 0.25 to 0.5 of the way up (6 - 12 kHz).
+    lasso.outline = { { 1.0, 0.25 }, { 2.0, 0.25 }, { 2.0, 0.5 }, { 1.0, 0.5 } };
+    REQUIRE(lasso.isLasso());
+
+    REQUIRE(lasso.amountAt(1.5, 9000.0) == 1.0f);
+    REQUIRE(lasso.amountAt(0.9, 9000.0) == 0.0f);
+    REQUIRE(lasso.amountAt(1.5, 3000.0) == 0.0f);
+    REQUIRE(lasso.amountAt(1.5, 13000.0) == 0.0f);
+    const float edge = lasso.amountAt(1.001, 9000.0); // a tenth of the ramp in
+    REQUIRE(edge > 0.0f);
+    REQUIRE(edge < 1.0f);
+
+    const auto [from, to] = lasso.timeSpan();
+    REQUIRE_THAT(from, WithinAbs(1.0, 1e-12));
+    REQUIRE_THAT(to, WithinAbs(2.0, 1e-12));
+}
+
+TEST_CASE("The harmonic brush covers the overtones of what it paints", "[gui][spectrogram]")
+{
+    spectrogramimage::Brush brush;
+    brush.radiusSeconds    = 0.05;
+    brush.radiusProportion = 0.02;
+    brush.nyquist          = 24000.0;
+    brush.scale            = spectrogramimage::Scale::Logarithmic;
+    brush.dabs.push_back({ 1.0, spectrogramimage::proportionOf(220.0, brush.nyquist, brush.scale) });
+
+    REQUIRE(brush.amountAt(1.0, 220.0) == 1.0f);
+    REQUIRE(brush.amountAt(1.0, 660.0) == 0.0f);   // one brush, one pitch
+
+    brush.harmonics = spectrogramimage::Brush::kHarmonics;
+    for (int n = 1; n <= spectrogramimage::Brush::kHarmonics; ++n)
+    {
+        INFO(n);
+        REQUIRE(brush.amountAt(1.0, 220.0 * n) == 1.0f);
+    }
+    REQUIRE(brush.amountAt(1.0, 220.0 * 2.5) == 0.0f);  // between them, nothing
+    REQUIRE(brush.amountAt(1.2, 440.0) == 0.0f);        // nor after the stroke
+}

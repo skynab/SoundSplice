@@ -116,46 +116,96 @@ namespace spectrogramimage
             double proportion = 0.0; // up the view, 0 bottom to 1 top
         };
 
+        static constexpr int kHarmonics = 12;
+
         std::vector<Dab> dabs;
-        double           radiusSeconds    = 0.05;
+        std::vector<Dab> outline;        // a lasso: the closed shape's edge, in place of dabs
+        int              harmonics        = 1; // the harmonic brush: multiples of what's painted
+        double           radiusSeconds    = 0.05;  // also a lasso's soft edge, as a brush's radius
         double           radiusProportion = 0.03;
         Scale            scale            = Scale::Logarithmic;
         double           nyquist          = 24000.0;
 
-        bool isEmpty() const noexcept { return dabs.empty(); }
+        bool isLasso() const noexcept { return outline.size() >= 3; }
+        bool isEmpty() const noexcept { return dabs.empty() && ! isLasso(); }
+
+        void clear()
+        {
+            dabs.clear();
+            outline.clear();
+        }
 
         /** How much of the point @p seconds into the clip, at @p hz, is
-            painted: 1 well inside a dab, falling to 0 over its outer edge so
-            the repair has no hard boundary. */
+            covered: 1 well inside, falling to 0 over the outer edge so an
+            edit has no hard boundary. The harmonic brush covers each
+            multiple of what was painted as well, as a note's overtones follow
+            its fundamental. */
         float amountAt(double seconds, double hz) const
         {
-            const double p      = proportionOf(hz, nyquist, scale);
-            float        amount = 0.0f;
-            for (const auto& dab : dabs)
+            if (isLasso())
+                return lassoAmountAt(seconds, hz);
+
+            float amount = 0.0f;
+            for (int n = 1; n <= std::max(1, harmonics) && amount < 1.0f; ++n)
             {
-                const double dt = (seconds - dab.seconds) / radiusSeconds;
-                if (dt < -1.0 || dt > 1.0)
-                    continue;
-                const double dp       = (p - dab.proportion) / radiusProportion;
-                const double distance = std::sqrt(dt * dt + dp * dp);
-                if (distance < 1.0)
-                    amount = std::max(amount, (float) std::clamp((1.0 - distance) / 0.3, 0.0, 1.0));
-                if (amount >= 1.0f)
+                if (n > 1 && hz / n < kLowestHz)
                     break;
+                const double p = proportionOf(hz / n, nyquist, scale);
+                for (const auto& dab : dabs)
+                {
+                    const double dt = (seconds - dab.seconds) / radiusSeconds;
+                    if (dt < -1.0 || dt > 1.0)
+                        continue;
+                    const double dp       = (p - dab.proportion) / radiusProportion;
+                    const double distance = std::sqrt(dt * dt + dp * dp);
+                    if (distance < 1.0)
+                        amount = std::max(amount, (float) std::clamp((1.0 - distance) / 0.3, 0.0, 1.0));
+                    if (amount >= 1.0f)
+                        break;
+                }
             }
             return amount;
         }
 
-        /** The seconds the painting spans, dabs' edges included. */
+        /** The seconds the painting spans, a brush's edges included. */
         std::pair<double, double> timeSpan() const
         {
-            double from = dabs.empty() ? 0.0 : dabs.front().seconds, to = from;
-            for (const auto& dab : dabs)
+            const auto& points = isLasso() ? outline : dabs;
+            const double pad    = isLasso() ? 0.0 : radiusSeconds;
+            double from = points.empty() ? 0.0 : points.front().seconds, to = from;
+            for (const auto& point : points)
             {
-                from = std::min(from, dab.seconds);
-                to   = std::max(to, dab.seconds);
+                from = std::min(from, point.seconds);
+                to   = std::max(to, point.seconds);
             }
-            return { from - radiusSeconds, to + radiusSeconds };
+            return { from - pad, to + pad };
+        }
+
+    private:
+        /** Inside the outline, ramping up from its edge over 0.3 of the
+            brush's radius; the view's units scaled by that radius, so the
+            ramp is as wide across as up. */
+        float lassoAmountAt(double seconds, double hz) const
+        {
+            const double u = seconds / radiusSeconds;
+            const double v = proportionOf(hz, nyquist, scale) / radiusProportion;
+
+            bool   inside  = false;
+            double nearest = 1.0e30;
+            for (size_t i = 0, j = outline.size() - 1; i < outline.size(); j = i++)
+            {
+                const double ax = outline[j].seconds / radiusSeconds, ay = outline[j].proportion / radiusProportion;
+                const double bx = outline[i].seconds / radiusSeconds, by = outline[i].proportion / radiusProportion;
+
+                if ((by > v) != (ay > v) && u < (ax - bx) * (v - by) / (ay - by) + bx)
+                    inside = ! inside;
+
+                const double dx = ax - bx, dy = ay - by;
+                const double length = dx * dx + dy * dy;
+                const double t      = length > 0.0 ? std::clamp(((u - bx) * dx + (v - by) * dy) / length, 0.0, 1.0) : 0.0;
+                nearest = std::min(nearest, std::hypot(u - (bx + t * dx), v - (by + t * dy)));
+            }
+            return inside ? (float) std::clamp(nearest / 0.3, 0.0, 1.0) : 0.0f;
         }
     };
 

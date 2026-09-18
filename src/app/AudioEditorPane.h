@@ -328,8 +328,9 @@ public:
         action fires rather than tracked separately. */
     AudioRange selection() const { return selection_; }
 
-    /** What the healing brush has painted on the spectrogram (Ctrl-drag, Cmd
-        on a Mac), if anything: the selection then spans its time. */
+    /** What's painted on the spectrogram, if anything: with the healing brush
+        (Ctrl-drag, Cmd on a Mac), the harmonic brush (with Alt too) or the
+        lasso (with Shift). The selection then spans its time. */
     std::optional<spectrogramimage::Brush> spectralBrush() const
     {
         if (! spectrogramView_ || brush_.isEmpty() || selection_.isEmpty())
@@ -571,11 +572,38 @@ public:
             g.setColour(juce::Colours::cyan.withAlpha(0.28f));
             const float rx = (float) (brush_.radiusSeconds / juce::jmax(1.0e-12, geometry_.secondsPerPixel));
             const float ry = (float) (brush_.radiusProportion * spectrogram.getHeight());
+            const auto yFor = [&](double proportion)
+            { return (float) spectrogram.getBottom() - (float) proportion * (float) spectrogram.getHeight(); };
+
             for (const auto& dab : brush_.dabs)
             {
-                const float x = geometry_.xForSeconds(dab.seconds);
-                const float y = (float) spectrogram.getBottom() - (float) dab.proportion * (float) spectrogram.getHeight();
-                g.fillEllipse(x - rx, y - ry, rx * 2.0f, ry * 2.0f);
+                const float  x    = geometry_.xForSeconds(dab.seconds);
+                const double hz   = spectrogramimage::frequencyAt(dab.proportion, brush_.nyquist, brush_.scale);
+                for (int n = 1; n <= brush_.harmonics && (n == 1 || n * hz < brush_.nyquist); ++n)
+                {
+                    const double p = n == 1 ? dab.proportion
+                                            : spectrogramimage::proportionOf(n * hz, brush_.nyquist, brush_.scale);
+                    const float y = yFor(p);
+                    g.fillEllipse(x - rx, y - ry, rx * 2.0f, ry * 2.0f);
+                }
+            }
+
+            if (! brush_.outline.empty())
+            {
+                juce::Path shape;
+                for (const auto& point : brush_.outline)
+                {
+                    const juce::Point<float> at(geometry_.xForSeconds(point.seconds), yFor(point.proportion));
+                    if (shape.isEmpty())
+                        shape.startNewSubPath(at);
+                    else
+                        shape.lineTo(at);
+                }
+                shape.closeSubPath();
+                if (brush_.isLasso())
+                    g.fillPath(shape);
+                g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+                g.strokePath(shape, juce::PathStrokeType(1.0f));
             }
         }
 
@@ -649,10 +677,19 @@ public:
 
     /** Starts a painting: the brush is sized from the view as it is now, so
         it covers on the spectrogram what it covers on screen. */
-    void beginBrush(juce::Point<float> position)
+    enum class Painting
+    {
+        Brush,
+        Harmonic,
+        Lasso
+    };
+
+    void beginBrush(juce::Point<float> position, Painting kind)
     {
         const auto area = spectrogramArea();
-        brush_.dabs.clear();
+        brush_.clear();
+        brush_.harmonics        = kind == Painting::Harmonic ? spectrogramimage::Brush::kHarmonics : 1;
+        lassoing_               = kind == Painting::Lasso;
         brush_.radiusSeconds    = kBrushRadiusPixels * juce::jmax(1.0e-9, geometry_.secondsPerPixel);
         brush_.radiusProportion = kBrushRadiusPixels / (double) juce::jmax(1, area.getHeight());
         brush_.scale            = spectrogramScale_;
@@ -668,6 +705,18 @@ public:
         stroke however fast the mouse moved. */
     void paintBrushTo(juce::Point<float> position)
     {
+        // A lasso only needs its edge, a point every few pixels.
+        if (lassoing_)
+        {
+            if (lastBrushPoint_.getDistanceFrom(position) >= 3.0f)
+            {
+                addDab(position);
+                lastBrushPoint_ = position;
+                repaint();
+            }
+            return;
+        }
+
         const float distance = lastBrushPoint_.getDistanceFrom(position);
         const int   steps    = juce::jmax(1, (int) std::ceil(distance / (kBrushRadiusPixels * 0.5f)));
         for (int i = 1; i <= steps; ++i)
@@ -682,7 +731,7 @@ public:
         spectrogramimage::Brush::Dab dab;
         dab.seconds    = geometry_.secondsForX(position.x);
         dab.proportion = juce::jlimit(0.0, 1.0, 1.0 - (double) (position.y - (float) area.getY()) / (double) juce::jmax(1, area.getHeight()));
-        brush_.dabs.push_back(dab);
+        (lassoing_ ? brush_.outline : brush_.dabs).push_back(dab);
     }
 
     /** The painting's time becomes the selection, which is what the edit
@@ -691,14 +740,18 @@ public:
     {
         painting_ = false;
         if (brush_.isEmpty())
+        {
+            brush_.clear(); // a lasso of fewer than three points
+            repaint();
             return;
+        }
 
         const auto [from, to] = brush_.timeSpan();
-        const auto dabs       = brush_.dabs;
+        const auto painted    = brush_;
         setSelection(AudioRange::fromDrag(from, to).clampedTo(geometry_.fileLengthSeconds));
-        brush_.dabs = dabs; // setSelection keeps it unless the range came out empty
+        brush_ = painted; // setSelection keeps it unless the range came out empty
         if (selection_.isEmpty())
-            brush_.dabs.clear();
+            brush_.clear();
         notifySelection();
         repaint();
     }
@@ -844,11 +897,13 @@ public:
         // Painting with the healing brush: Ctrl-drag on the spectrogram.
         if (e.mods.isCommandDown() && spectrogramArea().contains(e.getPosition()))
         {
-            beginBrush(e.position);
+            beginBrush(e.position, e.mods.isShiftDown() ? Painting::Lasso
+                                   : e.mods.isAltDown() ? Painting::Harmonic
+                                                        : Painting::Brush);
             return;
         }
 
-        brush_.dabs.clear();
+        brush_.clear();
 
         dragAnchorSeconds_ = geometry_.secondsForX((float) e.position.x);
         dragAnchorHz_      = hzForY(e.position.y);
@@ -1316,7 +1371,7 @@ private:
         if (selection_.isEmpty())
         {
             bandLowHz_ = bandHighHz_ = 0.0;
-            brush_.dabs.clear();
+            brush_.clear();
         }
         updateSelectionLabel();
         updateNoiseControls();
@@ -1355,7 +1410,7 @@ private:
             text << ",  " << juce::String((int) std::lround(band->first)) << " - "
                  << juce::String((int) std::lround(band->second)) << " Hz";
         else if (spectrogramView_ && ! brush_.isEmpty())
-            text << ",  painted";
+            text << (brush_.isLasso() ? ",  lassoed" : brush_.harmonics > 1 ? ",  painted with harmonics" : ",  painted");
         selectionLabel_.setText(text, juce::dontSendNotification);
     }
 
@@ -1570,6 +1625,7 @@ private:
     double           dragAnchorHz_    = 0.0;
     spectrogramimage::Brush brush_;
     bool             painting_        = false;
+    bool             lassoing_        = false;
     juce::Point<float> lastBrushPoint_;
     double           bandLowHz_       = 0.0; // a spectral selection's band; none when equal
     double           bandHighHz_      = 0.0;

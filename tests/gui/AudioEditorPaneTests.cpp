@@ -732,3 +732,40 @@ TEST_CASE("The split view keeps the waveform above the spectrogram, each with it
     REQUIRE(band->second < 24000.0 * 0.95);
     REQUIRE(band->first > 20.0);
 }
+
+TEST_CASE("Ctrl-Shift-drag on the spectrogram lassoes a shape", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto        pane = makeReadyPane(800, 400, 10.0);
+    pane->setSpectrogramView(true);
+
+    const auto area = pane->spectrogramArea();
+    const auto at   = [&](float across, float down)
+    {
+        return juce::Point<float>((float) area.getX() + (float) area.getWidth() * across,
+                                  (float) area.getY() + (float) area.getHeight() * down);
+    };
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+    const auto with = [&](juce::Point<float> position)
+    {
+        const auto source = juce::Desktop::getInstance().getMainMouseSource();
+        const auto now    = juce::Time::getCurrentTime();
+        return juce::MouseEvent(source, position, mods, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, pane.get(), pane.get(),
+                                now, at(0.2f, 0.2f), now, 1, false);
+    };
+
+    sendMouseDown(*pane, with(at(0.2f, 0.2f)));
+    for (auto point : { at(0.4f, 0.2f), at(0.4f, 0.6f), at(0.2f, 0.6f), at(0.2f, 0.25f) })
+        sendMouseDrag(*pane, with(point));
+    sendMouseUp(*pane, with(at(0.2f, 0.25f)));
+
+    const auto lasso = pane->spectralBrush();
+    REQUIRE(lasso.has_value());
+    REQUIRE(lasso->isLasso());
+    REQUIRE(lasso->dabs.empty());
+
+    // The selection is the lasso's time: from a fifth of the way across the
+    // view to two fifths, so it ends twice as far in as it starts.
+    REQUIRE(pane->selection().startSeconds > 0.5);
+    REQUIRE(std::abs(pane->selection().endSeconds / pane->selection().startSeconds - 2.0) < 0.05);
+}

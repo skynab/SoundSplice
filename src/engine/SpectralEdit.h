@@ -182,6 +182,37 @@ inline bool scaleBand(std::vector<float>& samples, int from, int to, double samp
                     });
 }
 
+/** Scales each bin over samples [@p from, @p to) by @p gain as far as
+    @p maskAt(the window's middle as a sample index into @p samples, the bin's
+    frequency in Hz) says, from 0 (left alone) to 1 (fully): Spectral Delete
+    and Spectral Gain for a painted or lassoed shape. */
+template <typename MaskAt>
+bool scaleMask(std::vector<float>& samples, int from, int to, double sampleRate, float gain, MaskAt&& maskAt)
+{
+    const int size = (int) samples.size();
+    from = std::clamp(from, 0, size);
+    to   = std::clamp(to, from, size);
+
+    const int    n     = windowFor(to - from);
+    const double binHz = sampleRate / n;
+    const int    hop   = n / 4;
+
+    return editBand(samples, from, to, sampleRate, 0.0, sampleRate,
+                    [&](int frame, int, std::vector<float>& re, std::vector<float>& im, const std::vector<float>& bins)
+                    {
+                        const double centre = (double) from + (double) frame * hop + n * 0.5;
+                        for (size_t k = 0; k < bins.size(); ++k)
+                        {
+                            const float amount = std::min(1.0f, (float) maskAt(centre, (double) k * binHz));
+                            if (amount <= 0.0f)
+                                continue;
+                            const float binGain = 1.0f + (gain - 1.0f) * amount;
+                            re[k] *= binGain;
+                            im[k] *= binGain;
+                        }
+                    });
+}
+
 /** Scales every bin over samples [@p from, @p to) by @p gainAt(its frequency
     in Hz), a linear gain: the shared step for shaped spectral edits. */
 template <typename GainAt>

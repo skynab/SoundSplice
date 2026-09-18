@@ -196,3 +196,39 @@ TEST_CASE("The healing brush rebuilds only what's painted", "[engine][spectral]"
     for (size_t i = 0; i < untouched.size(); ++i)
         REQUIRE(std::abs(untouched[i] - original[i]) < 1.0e-5f);
 }
+
+TEST_CASE("A masked spectral delete removes only what the mask covers", "[spectral]")
+{
+    constexpr double kRate = 48000.0;
+    std::vector<float> samples(48000);
+    for (size_t i = 0; i < samples.size(); ++i)
+        samples[i] = 0.3f * (float) std::sin(2.0 * 3.14159265358979 * 1000.0 * (double) i / kRate)
+                   + 0.3f * (float) std::sin(2.0 * 3.14159265358979 * 6000.0 * (double) i / kRate);
+
+    const auto levelAt = [&](const std::vector<float>& audio, double hz, int from, int to)
+    {
+        double re = 0.0, im = 0.0;
+        for (int i = from; i < to; ++i)
+        {
+            re += audio[(size_t) i] * std::cos(2.0 * 3.14159265358979 * hz * i / kRate);
+            im += audio[(size_t) i] * std::sin(2.0 * 3.14159265358979 * hz * i / kRate);
+        }
+        return 2.0 * std::hypot(re, im) / (to - from);
+    };
+
+    // Everything above 3 kHz, from sample 12000 to 36000.
+    auto edited = samples;
+    REQUIRE(spectral::scaleMask(edited, 0, 48000, kRate, 0.0f, [](double sample, double hz)
+    {
+        return sample >= 12000.0 && sample < 36000.0 && hz > 3000.0 ? 1.0f : 0.0f;
+    }));
+
+    REQUIRE(levelAt(edited, 6000.0, 16000, 32000) < 0.01);                          // gone where masked
+    REQUIRE_THAT(levelAt(edited, 1000.0, 16000, 32000), WithinAbs(0.3, 0.01));      // the rest kept
+    REQUIRE_THAT(levelAt(edited, 6000.0, 2000, 8000), WithinAbs(0.3, 0.01));        // and before it
+
+    auto untouched = samples;
+    REQUIRE(spectral::scaleMask(untouched, 0, 48000, kRate, 0.0f, [](double, double) { return 0.0f; }));
+    for (size_t i = 0; i < samples.size(); i += 97)
+        REQUIRE_THAT(untouched[i], WithinAbs(samples[i], 1e-5));
+}
