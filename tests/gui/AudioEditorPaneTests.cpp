@@ -687,3 +687,48 @@ TEST_CASE("Ctrl-drag on the spectrogram paints with the healing brush", "[gui][a
     sendMouseUp(*pane, eventAt(*pane, from, from));
     REQUIRE_FALSE(pane->spectralBrush().has_value());
 }
+
+TEST_CASE("The split view keeps the waveform above the spectrogram, each with its own gestures", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto        pane = makeReadyPane(800, 500, 10.0);
+
+    const auto whole = pane->samplesArea();
+    REQUIRE(pane->spectrogramArea().isEmpty());
+
+    pane->setSpectrogramView(true);
+    REQUIRE(pane->samplesArea().isEmpty());       // the spectrogram replaces it
+    REQUIRE(pane->spectrogramArea() == whole);
+
+    pane->setSplitView(true);
+    const auto samples     = pane->samplesArea();
+    const auto spectrogram = pane->spectrogramArea();
+    REQUIRE(samples.getY() == whole.getY());
+    REQUIRE(samples.getBottom() == spectrogram.getY());
+    REQUIRE(spectrogram.getBottom() == whole.getBottom());
+    REQUIRE(std::abs(samples.getHeight() - spectrogram.getHeight()) <= 1);
+
+    const auto at = [](juce::Rectangle<int> area, float across, float down)
+    {
+        return juce::Point<float>((float) area.getX() + (float) area.getWidth() * across,
+                                  (float) area.getY() + (float) area.getHeight() * down);
+    };
+    const auto drag = [&](juce::Point<float> from, juce::Point<float> to)
+    {
+        sendMouseDown(*pane, eventAt(*pane, from, from));
+        sendMouseDrag(*pane, eventAt(*pane, to, from));
+        sendMouseUp(*pane, eventAt(*pane, to, from));
+    };
+
+    // A diagonal drag on the waveform selects time only...
+    drag(at(samples, 0.2f, 0.2f), at(samples, 0.5f, 0.8f));
+    REQUIRE_FALSE(pane->selection().isEmpty());
+    REQUIRE_FALSE(pane->frequencyBand().has_value());
+
+    // ...and on the spectrogram a box, its frequencies from that half alone.
+    drag(at(spectrogram, 0.2f, 0.2f), at(spectrogram, 0.5f, 0.8f));
+    const auto band = pane->frequencyBand();
+    REQUIRE(band.has_value());
+    REQUIRE(band->second < 24000.0 * 0.95);
+    REQUIRE(band->first > 20.0);
+}

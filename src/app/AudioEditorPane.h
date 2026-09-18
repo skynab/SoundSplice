@@ -392,6 +392,43 @@ public:
 
     bool showsSpectrogram() const noexcept { return spectrogramView_; }
 
+    /** With the spectrogram on, shows the waveform above it rather than
+        replacing it (Audacity's "Multi-view"): the waveform for levels and
+        drawing, the spectrogram for frequency boxes and the healing brush. */
+    void setSplitView(bool on)
+    {
+        if (on == splitView_)
+            return;
+        splitView_ = on;
+        repaint();
+    }
+
+    bool showsSplitView() const noexcept { return splitView_; }
+
+    /** Where the waveform is drawn: all of the clip's area, its top half in
+        the split view, or nothing while the spectrogram replaces it. */
+    juce::Rectangle<int> samplesArea() const
+    {
+        if (! spectrogramView_)
+            return waveformArea();
+        if (! splitView_)
+            return {};
+        auto area = waveformArea();
+        return area.removeFromTop(area.getHeight() / 2);
+    }
+
+    /** Where the spectrogram is drawn, if it's shown: below the waveform in
+        the split view, otherwise all of the clip's area. */
+    juce::Rectangle<int> spectrogramArea() const
+    {
+        if (! spectrogramView_)
+            return {};
+        auto area = waveformArea();
+        if (splitView_)
+            area.removeFromTop(area.getHeight() / 2);
+        return area;
+    }
+
     /** How frequency is laid out up the spectrogram. The analysis is kept,
         so changing it redraws without reading the clip again. */
     void setSpectrogramScale(spectrogramimage::Scale scale)
@@ -502,19 +539,42 @@ public:
             g.fillRect(juce::Rectangle<float>(x1, (float) area.getY(), x2 - x1, (float) area.getHeight()));
         }
 
-        paintWaveform(g, area);
+        const auto samples     = samplesArea();
+        const auto spectrogram = spectrogramArea();
 
-        if (spectrogramView_ && ! brush_.isEmpty())
+        // In the split view the waveform still shows the time a box or a
+        // painting covers, faintly, so the two halves read as one selection.
+        if (! samples.isEmpty() && ! spectrogram.isEmpty() && (frequencyBand() || ! brush_.isEmpty()))
+        {
+            const float x1 = juce::jlimit((float) area.getX(), (float) area.getRight(),
+                                          geometry_.xForSeconds(selection_.startSeconds));
+            const float x2 = juce::jlimit((float) area.getX(), (float) area.getRight(),
+                                          geometry_.xForSeconds(selection_.endSeconds));
+            g.setColour(juce::Colours::cyan.withAlpha(0.1f));
+            g.fillRect(juce::Rectangle<float>(x1, (float) samples.getY(), x2 - x1, (float) samples.getHeight()));
+        }
+
+        if (! samples.isEmpty())
+            paintWaveform(g, samples);
+        if (! spectrogram.isEmpty())
+            paintSpectrogram(g, spectrogram);
+        if (! samples.isEmpty() && ! spectrogram.isEmpty())
+        {
+            g.setColour(juce::Colours::white.withAlpha(0.25f));
+            g.drawHorizontalLine(spectrogram.getY(), (float) area.getX(), (float) area.getRight());
+        }
+
+        if (! spectrogram.isEmpty() && ! brush_.isEmpty())
         {
             juce::Graphics::ScopedSaveState state(g);
-            g.reduceClipRegion(area);
+            g.reduceClipRegion(spectrogram);
             g.setColour(juce::Colours::cyan.withAlpha(0.28f));
             const float rx = (float) (brush_.radiusSeconds / juce::jmax(1.0e-12, geometry_.secondsPerPixel));
-            const float ry = (float) (brush_.radiusProportion * area.getHeight());
+            const float ry = (float) (brush_.radiusProportion * spectrogram.getHeight());
             for (const auto& dab : brush_.dabs)
             {
                 const float x = geometry_.xForSeconds(dab.seconds);
-                const float y = (float) area.getBottom() - (float) dab.proportion * (float) area.getHeight();
+                const float y = (float) spectrogram.getBottom() - (float) dab.proportion * (float) spectrogram.getHeight();
                 g.fillEllipse(x - rx, y - ry, rx * 2.0f, ry * 2.0f);
             }
         }
@@ -525,9 +585,9 @@ public:
         {
             const float x1 = geometry_.xForSeconds(selection_.startSeconds);
             const float x2 = geometry_.xForSeconds(selection_.endSeconds);
-            const float y1 = yForHz(band->second, area);
-            const float y2 = yForHz(band->first, area);
-            const auto  box = juce::Rectangle<float>(x1, y1, x2 - x1, y2 - y1).getIntersection(area.toFloat());
+            const float y1 = yForHz(band->second, spectrogram);
+            const float y2 = yForHz(band->first, spectrogram);
+            const auto  box = juce::Rectangle<float>(x1, y1, x2 - x1, y2 - y1).getIntersection(spectrogram.toFloat());
             g.setColour(juce::Colours::cyan.withAlpha(0.15f));
             g.fillRect(box);
             g.setColour(juce::Colours::cyan.withAlpha(0.9f));
@@ -563,12 +623,6 @@ public:
         original ghosted behind so the edit is legible as a change. */
     void paintWaveform(juce::Graphics& g, juce::Rectangle<int> area)
     {
-        if (spectrogramView_)
-        {
-            paintSpectrogram(g, area);
-            return;
-        }
-
         if (peaks_.isEmpty() || peaksSampleRate_ <= 0.0)
         {
             g.setColour(juce::Colours::white.withAlpha(0.35f));
@@ -597,7 +651,7 @@ public:
         it covers on the spectrogram what it covers on screen. */
     void beginBrush(juce::Point<float> position)
     {
-        const auto area = waveformArea();
+        const auto area = spectrogramArea();
         brush_.dabs.clear();
         brush_.radiusSeconds    = kBrushRadiusPixels * juce::jmax(1.0e-9, geometry_.secondsPerPixel);
         brush_.radiusProportion = kBrushRadiusPixels / (double) juce::jmax(1, area.getHeight());
@@ -624,7 +678,7 @@ public:
 
     void addDab(juce::Point<float> position)
     {
-        const auto area = waveformArea();
+        const auto area = spectrogramArea();
         spectrogramimage::Brush::Dab dab;
         dab.seconds    = geometry_.secondsForX(position.x);
         dab.proportion = juce::jlimit(0.0, 1.0, 1.0 - (double) (position.y - (float) area.getY()) / (double) juce::jmax(1, area.getHeight()));
@@ -652,7 +706,7 @@ public:
     /** The frequency at height @p y in the spectrogram's area. */
     double hzForY(float y) const
     {
-        const auto   area       = waveformArea();
+        const auto   area       = spectrogramArea();
         const double proportion = area.getHeight() > 0
                                     ? 1.0 - (double) (y - (float) area.getY()) / (double) area.getHeight()
                                     : 0.0;
@@ -781,14 +835,14 @@ public:
         if (! contentVisible_ || ! waveformArea().contains(e.getPosition()))
             return;
 
-        if (e.mods.isAltDown() && canDrawSamples())
+        if (e.mods.isAltDown() && canDrawSamples() && samplesArea().contains(e.getPosition()))
         {
             beginStroke(e.position);
             return;
         }
 
         // Painting with the healing brush: Ctrl-drag on the spectrogram.
-        if (spectrogramView_ && e.mods.isCommandDown())
+        if (e.mods.isCommandDown() && spectrogramArea().contains(e.getPosition()))
         {
             beginBrush(e.position);
             return;
@@ -836,7 +890,8 @@ public:
             // On the spectrogram a drag is a box, time across and frequency
             // up, unless it hardly moved vertically, which selects every
             // frequency as a drag over the waveform does.
-            if (spectrogramView_ && std::abs(e.getDistanceFromDragStartY()) > kDragThresholdPixels)
+            if (spectrogramArea().contains(e.getMouseDownPosition())
+                && std::abs(e.getDistanceFromDragStartY()) > kDragThresholdPixels)
             {
                 const double hz = hzForY(e.position.y);
                 bandLowHz_      = std::min(dragAnchorHz_, hz);
@@ -900,7 +955,7 @@ public:
         stroke lands on the samples the eye is placing it on. */
     bool canDrawSamples() const
     {
-        const auto area = waveformArea();
+        const auto area = samplesArea();
         if (! contentVisible_ || area.isEmpty() || sampleDetail_.isEmpty())
             return false;
 
@@ -1311,7 +1366,7 @@ private:
 
     void updateDrawCursor(const juce::ModifierKeys& mods, juce::Point<int> position)
     {
-        const bool draw = mods.isAltDown() && waveformArea().contains(position) && canDrawSamples();
+        const bool draw = mods.isAltDown() && samplesArea().contains(position) && canDrawSamples();
         setMouseCursor(draw || drawing_ ? juce::MouseCursor::CrosshairCursor : juce::MouseCursor::NormalCursor);
     }
 
@@ -1320,7 +1375,7 @@ private:
         so the sample drawn is where the line shows it. */
     std::pair<long, float> strokePoint(juce::Point<float> position, int channel) const
     {
-        const auto  area  = waveformArea();
+        const auto  area  = samplesArea();
         const int   laneH = area.getHeight() / laneCount();
         const auto  lane  = area.withY(area.getY() + channel * laneH).withHeight(laneH);
         const float halfH = juce::jmax(1.0f, (float) lane.getHeight() * 0.5f);
@@ -1334,7 +1389,7 @@ private:
 
     void beginStroke(juce::Point<float> position)
     {
-        const auto area  = waveformArea();
+        const auto area  = samplesArea();
         const int  laneH = juce::jmax(1, area.getHeight() / laneCount());
 
         drawChannel_ = juce::jlimit(0, (int) sampleDetail_.channels.size() - 1,
@@ -1511,6 +1566,7 @@ private:
     double           peaksSampleRate_ = 0.0;
     bool             dbScale_         = false;
     bool             spectrogramView_ = false;
+    bool             splitView_       = false;
     double           dragAnchorHz_    = 0.0;
     spectrogramimage::Brush brush_;
     bool             painting_        = false;

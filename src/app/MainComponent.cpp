@@ -134,6 +134,7 @@ MainComponent::MainComponent()
     arrangementView_.setShowEnvelopes(settings_.getValue("showClipEnvelopes", "0") == "1");
     audioEditor_.setDbScale(settings_.getValue("waveformDbScale", "0") == "1");
     audioEditor_.setSpectrogramView(settings_.getValue("spectrogramView", "0") == "1");
+    audioEditor_.setSplitView(settings_.getValue("spectrogramSplit", "0") == "1");
     audioEditor_.setSpectrogramScale((spectrogramimage::Scale) juce::jlimit(0, 2, settings_.getIntValue("spectrogramScale", 0)));
     loadSpectrogramSettings();
     {

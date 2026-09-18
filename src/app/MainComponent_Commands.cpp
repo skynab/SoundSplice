@@ -258,7 +258,11 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
 
         case commands::spectrogramView:
-            info.setTicked(audioEditor_.showsSpectrogram());
+            info.setTicked(audioEditor_.showsSpectrogram() && ! audioEditor_.showsSplitView());
+            break;
+
+        case commands::spectrogramSplit:
+            info.setTicked(audioEditor_.showsSpectrogram() && audioEditor_.showsSplitView());
             break;
 
         case commands::spectrogramLog:
@@ -554,10 +558,18 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
 
         case commands::spectrogramView:
+        case commands::spectrogramSplit:
         {
-            const bool on = ! audioEditor_.showsSpectrogram();
+            // Each is a view of its own: choosing the one showing goes back
+            // to the waveform alone, choosing the other switches to it.
+            const bool split   = invocation.commandID == commands::spectrogramSplit;
+            const bool showing = audioEditor_.showsSpectrogram() && audioEditor_.showsSplitView() == split;
+            const bool on      = ! showing;
             audioEditor_.setSpectrogramView(on);
+            if (on)
+                audioEditor_.setSplitView(split);
             settings_.setValue("spectrogramView", on ? "1" : "0");
+            settings_.setValue("spectrogramSplit", audioEditor_.showsSplitView() ? "1" : "0");
             settings_.saveIfNeeded();
             refreshAudioEditorForSelected(); // builds it for the clip on show
             break;
@@ -733,6 +745,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::showClipEnvelopes);
         add(commands::waveformDbScale);
         add(commands::spectrogramView);
+        add(commands::spectrogramSplit);
         {
             juce::PopupMenu scaleMenu;
             for (auto id : { commands::spectrogramLog, commands::spectrogramLinear, commands::spectrogramMel })
