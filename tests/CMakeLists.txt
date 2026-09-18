@@ -131,6 +131,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/AudioFormatsTests.cpp
     gui/MasterLoudnessTests.cpp
     gui/SpectrogramImageTests.cpp
+    gui/SpectrogramCacheTests.cpp
     gui/UtilityEffectsTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)

@@ -253,6 +253,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(arrangementView_.showsEnvelopes());
             break;
 
+        case commands::trackSpectrograms:
+            info.setTicked(arrangementView_.showsSpectrograms());
+            break;
+
         case commands::waveformDbScale:
             info.setTicked(audioEditor_.showsDbScale());
             break;
@@ -521,6 +525,15 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
         // A view preference, like the snap settings: saved with the app, not
         // the project, and not undoable.
+        case commands::trackSpectrograms:
+        {
+            const bool show = ! arrangementView_.showsSpectrograms();
+            arrangementView_.setShowSpectrograms(show);
+            settings_.setValue("trackSpectrograms", show ? "1" : "0");
+            settings_.saveIfNeeded();
+            break;
+        }
+
         case commands::showClipEnvelopes:
         {
             const bool show = ! arrangementView_.showsEnvelopes();
@@ -548,6 +561,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
                              : invocation.commandID == commands::spectrogramMel    ? spectrogramimage::Scale::Mel
                                                                               : spectrogramimage::Scale::Logarithmic;
             audioEditor_.setSpectrogramScale(scale);
+            arrangementView_.setSpectrogramStyle(scale, audioEditor_.spectrogramDisplay());
             settings_.setValue("spectrogramScale", (int) scale);
             settings_.saveIfNeeded();
             break;
@@ -753,6 +767,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
             menu.addSubMenu("Spectrogram Scale", scaleMenu);
         }
         add(commands::spectrogramSettings);
+        add(commands::trackSpectrograms);
         menu.addSeparator();
         add(commands::nextOpenFile);
         add(commands::previousOpenFile);

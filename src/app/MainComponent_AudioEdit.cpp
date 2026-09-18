@@ -1639,6 +1639,7 @@ void MainComponent::loadSpectrogramSettings()
     display.rangeDb = (float) juce::jlimit(20.0, 150.0, settings_.getDoubleValue("spectrogram.rangeDb", display.rangeDb));
     display.gainDb  = (float) juce::jlimit(-40.0, 60.0, settings_.getDoubleValue("spectrogram.gainDb", display.gainDb));
     audioEditor_.setSpectrogramDisplay(display);
+    arrangementView_.setSpectrogramStyle(audioEditor_.spectrogramScale(), display);
 }
 
 /** Audacity's spectrogram settings: the window it's measured through, and

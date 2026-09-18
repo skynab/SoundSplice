@@ -177,10 +177,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 ### Phase 3 — Spectral editing
 
-- 🟡 **Spectrogram track view**: the audio editor as a spectrogram ✅ (View > Spectrogram: log frequency
+- ✅ **Spectrogram track view**: the audio editor as a spectrogram ✅ (View > Spectrogram: log frequency
   scale, 2048-point Hann window, built with the waveform's peaks a chunk at a time;
   `src/engine/Spectrogram.h`, `src/app/SpectrogramImage.h`); linear and mel scales ✅ (View > Spectrogram Scale), a configurable window ✅ (View > Spectrogram Settings: 256–16384 points; Hann, Hamming, Blackman-Harris or rectangular; display gain and range), a
-  split waveform/spectrogram view ✅ (View > Waveform and Spectrogram: each half keeps its own gestures), spectrograms in the arrangement's lanes ⬜
+  split waveform/spectrogram view ✅ (View > Waveform and Spectrogram: each half keeps its own gestures), spectrograms in the arrangement's lanes ✅ (View > Spectrograms in Tracks; analysed in the background, `src/app/SpectrogramCache.h`)
 - ✅ **Spectral selection**: a time × frequency box ✅ (drag diagonally on the spectrogram); lasso ✅ (Ctrl+Shift-drag) and a harmonic brush ✅ (Ctrl+Alt-drag: paints a note and its overtones) as in Audition; Spectral Delete, Gain and Repair work on any of them
 - 🟡 Spectral delete ✅ · spectral gain ✅ (Edit menu, on the box; `src/engine/SpectralEdit.h`) · spectral parametric EQ ✅ · spectral shelves ✅ (Audacity; Edit > Spectral EQ / Spectral Shelf)
 - ✅ **Spot healing brush**: paint over a cough, click or phone ring and have it inpainted from the

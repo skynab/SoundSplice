@@ -132,6 +132,7 @@ MainComponent::MainComponent()
     arrangementView_.setSnapToMarkers(settings_.getValue("snapToMarkers", "1") != "0");
     arrangementView_.setSnapToClipEdges(settings_.getValue("snapToClipEdges", "1") != "0");
     arrangementView_.setShowEnvelopes(settings_.getValue("showClipEnvelopes", "0") == "1");
+    arrangementView_.setShowSpectrograms(settings_.getValue("trackSpectrograms", "0") == "1");
     audioEditor_.setDbScale(settings_.getValue("waveformDbScale", "0") == "1");
     audioEditor_.setSpectrogramView(settings_.getValue("spectrogramView", "0") == "1");
     audioEditor_.setSplitView(settings_.getValue("spectrogramSplit", "0") == "1");

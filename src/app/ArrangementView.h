@@ -17,6 +17,7 @@
 #include "TimeFormat.h"
 #include "model/Markers.h"
 #include "model/TimeSelection.h"
+#include "SpectrogramCache.h"
 #include "WaveformCache.h"
 #include "TrackColours.h"
 #include "TimelineGeometry.h"
@@ -71,6 +72,7 @@ public:
         // frames after it's added. Without this it would stay blank until
         // something else happened to invalidate the view.
         waveforms_.onUpdated = [this] { repaint(); };
+        spectrograms_.onUpdated = [this] { repaint(); };
 
         // The gutter carries a colour stripe, a type tag, the name, and two
         // buttons. 110px fitted a name alone.
@@ -157,6 +159,7 @@ public:
             for (const auto& clip : track.clips)
                 if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty())
                     waveforms_.ensure(juce::File(clip.audioFile));
+        ensureSpectrograms();
 
         updateContentSize();
         repaint();
@@ -237,6 +240,29 @@ public:
     /** Whether audio clips show their volume curves, and clicks on them edit
         the curve rather than moving the clip: click to add a point, drag to
         move one, Alt-click to remove one. */
+    /** Draws audio clips as spectrograms rather than waveforms (Audacity's
+        spectrogram track view), each file analysed in the background. */
+    void setShowSpectrograms(bool show)
+    {
+        if (show == showSpectrograms_)
+            return;
+        showSpectrograms_ = show;
+        ensureSpectrograms();
+        repaint();
+    }
+
+    bool showsSpectrograms() const noexcept { return showSpectrograms_; }
+
+    /** The scale and colouring the audio editor's spectrogram uses, so the
+        two views of a clip agree. */
+    void setSpectrogramStyle(spectrogramimage::Scale scale, spectrogramimage::Display display)
+    {
+        spectrograms_.setStyle(scale, display);
+        repaint();
+    }
+
+    const SpectrogramCache& spectrogramCache() const noexcept { return spectrograms_; }
+
     void setShowEnvelopes(bool show)
     {
         if (show == showEnvelopes_)
@@ -622,6 +648,28 @@ private:
         area.setWidth((float) (area.getWidth() * fraction));
         if (area.getWidth() < 1.0f || area.getHeight() < 1.0f)
             return;
+
+        // As a spectrogram once its picture is ready (the waveform until
+        // then): the columns for the part of the file the clip plays,
+        // stretched over it. A column sits at the middle of its window.
+        if (showSpectrograms_)
+            if (const auto* picture = spectrograms_.find(juce::File(clip.audioFile)); picture != nullptr && picture->isReady())
+            {
+                const double firstAt    = picture->windowSeconds * 0.5;
+                const double columnFrom = (clip.sourceOffsetSeconds - firstAt) / picture->secondsPerColumn;
+                const double columnTo   = (clip.sourceOffsetSeconds + seconds - firstAt) / picture->secondsPerColumn;
+                const auto   source     = juce::Rectangle<float>((float) columnFrom, 0.0f, (float) (columnTo - columnFrom),
+                                                                 (float) picture->image.getHeight());
+
+                juce::Graphics::ScopedSaveState state(g);
+                g.reduceClipRegion(area.toNearestInt());
+                g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+                g.drawImageTransformed(picture->image,
+                                       juce::AffineTransform::translation(-source.getX(), 0.0f)
+                                           .scaled(area.getWidth() / source.getWidth(), area.getHeight() / source.getHeight())
+                                           .translated(area.getX(), area.getY()));
+                return;
+            }
 
         // Scaled by the clip's own gain, so a normalised or turned-down clip
         // looks different on the timeline too. Drawing at a fixed 1.0 meant
@@ -1735,6 +1783,26 @@ private:
     }
 
     WaveformCache waveforms_;
+    SpectrogramCache spectrograms_;
+    bool             showSpectrograms_ = false;
+
+    /** Asks for a picture of every audio file in the song while the lanes
+        show spectrograms, and forgets those no longer in it. */
+    void ensureSpectrograms()
+    {
+        if (! showSpectrograms_)
+            return;
+
+        std::set<juce::String> files;
+        for (const auto& track : song_.tracks)
+            for (const auto& clip : track.clips)
+                if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty())
+                {
+                    spectrograms_.ensure(juce::File(clip.audioFile));
+                    files.insert(juce::File(clip.audioFile).getFullPathName());
+                }
+        spectrograms_.keepOnly(files);
+    }
 
     std::unique_ptr<juce::Drawable> unmutedIcon_, mutedIcon_, gearIcon_;
     int  hoveredMuteTrack_    = -1;
