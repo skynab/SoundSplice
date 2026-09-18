@@ -308,7 +308,20 @@ inline std::string serialize(const Song& song)
                 << slot.echo.taps << " "
                 << detail::num((double) slot.echo.decay) << " "
                 << detail::num((double) slot.echo.mix) << " "
-                << (slot.echo.pingPong ? 1 : 0) << "\n";
+                << (slot.echo.pingPong ? 1 : 0) << " "
+                << detail::num((double) slot.multiband.lowHz) << " "
+                << detail::num((double) slot.multiband.highHz) << " "
+                << detail::num((double) slot.multiband.lowThresholdDb) << " "
+                << detail::num((double) slot.multiband.lowRatio) << " "
+                << detail::num((double) slot.multiband.lowMakeUpDb) << " "
+                << detail::num((double) slot.multiband.midThresholdDb) << " "
+                << detail::num((double) slot.multiband.midRatio) << " "
+                << detail::num((double) slot.multiband.midMakeUpDb) << " "
+                << detail::num((double) slot.multiband.highThresholdDb) << " "
+                << detail::num((double) slot.multiband.highRatio) << " "
+                << detail::num((double) slot.multiband.highMakeUpDb) << " "
+                << detail::num((double) slot.multiband.attackMs) << " "
+                << detail::num((double) slot.multiband.releaseMs) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -813,6 +826,17 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double wahResonance = defaults.wah.resonance, wahMix = defaults.wah.mix;
                 double echoTime = defaults.echo.timeMs, echoDecay = defaults.echo.decay, echoMix = defaults.echo.mix;
                 int    echoTaps = defaults.echo.taps, echoPingPong = defaults.echo.pingPong ? 1 : 0;
+                double mbLowHz = defaults.multiband.lowHz, mbHighHz = defaults.multiband.highHz;
+                double mbLowThreshold = defaults.multiband.lowThresholdDb;
+                double mbLowRatio = defaults.multiband.lowRatio;
+                double mbLowMakeUp = defaults.multiband.lowMakeUpDb;
+                double mbMidThreshold = defaults.multiband.midThresholdDb;
+                double mbMidRatio = defaults.multiband.midRatio;
+                double mbMidMakeUp = defaults.multiband.midMakeUpDb;
+                double mbHighThreshold = defaults.multiband.highThresholdDb;
+                double mbHighRatio = defaults.multiband.highRatio;
+                double mbHighMakeUp = defaults.multiband.highMakeUpDb;
+                double mbAttack = defaults.multiband.attackMs, mbRelease = defaults.multiband.releaseMs;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
                    >> delayTime >> delayFeedback >> delayMix >> room >> damping >> reverbMix
@@ -835,7 +859,10 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> expThreshold >> expRatio >> expRange >> expAttack >> expRelease
                    >> ringFrequency >> ringMix
                    >> wahRate >> wahDepth >> wahResonance >> wahMix
-                   >> echoTime >> echoTaps >> echoDecay >> echoMix >> echoPingPong;
+                   >> echoTime >> echoTaps >> echoDecay >> echoMix >> echoPingPong
+                   >> mbLowHz >> mbHighHz
+                   >> mbLowThreshold >> mbLowRatio >> mbLowMakeUp >> mbMidThreshold >> mbMidRatio >> mbMidMakeUp >> mbHighThreshold >> mbHighRatio >> mbHighMakeUp
+                   >> mbAttack >> mbRelease;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -961,6 +988,20 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.echo.decay             = (float) echoDecay;
                 slot.echo.mix               = (float) echoMix;
                 slot.echo.pingPong          = echoPingPong != 0;
+                slot.multiband.enabled      = slot.enabled && slot.kind == EffectKind::Multiband;
+                slot.multiband.lowHz        = (float) mbLowHz;
+                slot.multiband.highHz       = (float) mbHighHz;
+                slot.multiband.lowThresholdDb = (float) mbLowThreshold;
+                slot.multiband.lowRatio       = (float) mbLowRatio;
+                slot.multiband.lowMakeUpDb    = (float) mbLowMakeUp;
+                slot.multiband.midThresholdDb = (float) mbMidThreshold;
+                slot.multiband.midRatio       = (float) mbMidRatio;
+                slot.multiband.midMakeUpDb    = (float) mbMidMakeUp;
+                slot.multiband.highThresholdDb = (float) mbHighThreshold;
+                slot.multiband.highRatio       = (float) mbHighRatio;
+                slot.multiband.highMakeUpDb    = (float) mbHighMakeUp;
+                slot.multiband.attackMs     = (float) mbAttack;
+                slot.multiband.releaseMs    = (float) mbRelease;
 
                 if (slot.kind == EffectKind::Plugin)
                 {

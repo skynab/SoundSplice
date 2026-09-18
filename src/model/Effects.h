@@ -168,7 +168,8 @@ enum class EffectKind
     Expander   = 21,
     RingMod    = 22,
     Wah        = 23,
-    Echo       = 24
+    Echo       = 24,
+    Multiband  = 25
 };
 
 /**
@@ -483,6 +484,28 @@ struct EchoSettings
     bool operator==(const EchoSettings&) const = default;
 };
 
+/** A three-band compressor: two crossovers, and a threshold, ratio and
+    make-up gain for each band. */
+struct MultibandSettings
+{
+    bool  enabled   = false;
+    float lowHz     = 200.0f;
+    float highHz    = 3000.0f;
+    float lowThresholdDb = -20.0f;
+    float lowRatio       = 3.0f;
+    float lowMakeUpDb    = 0.0f;
+    float midThresholdDb = -20.0f;
+    float midRatio       = 3.0f;
+    float midMakeUpDb    = 0.0f;
+    float highThresholdDb = -20.0f;
+    float highRatio       = 3.0f;
+    float highMakeUpDb    = 0.0f;
+    float attackMs  = 10.0f;
+    float releaseMs = 150.0f;
+
+    bool operator==(const MultibandSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -512,6 +535,7 @@ struct EffectSlot
     RingModSettings    ringMod;
     WahSettings        wah;
     EchoSettings       echo;
+    MultibandSettings  multiband;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

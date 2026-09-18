@@ -405,6 +405,39 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
                 .access = fieldAccess<&S::wah, &WahSettings::mix> } } },
 
+        { .kind = EffectKind::Multiband, .id = "multiband", .name = "Multiband Compressor", .group = "Dynamics",
+          .params = {
+              { .id = "lowCrossover", .name = "Low/Mid At", .min = 30, .max = 2000, .step = 1, .unit = " Hz",
+                .skewMidpoint = 250, .access = fieldAccess<&S::multiband, &MultibandSettings::lowHz> },
+              { .id = "highCrossover", .name = "Mid/High At", .min = 500, .max = 16000, .step = 10, .unit = " Hz",
+                .skewMidpoint = 3000, .access = fieldAccess<&S::multiband, &MultibandSettings::highHz> },
+
+              { .id = "lowThreshold", .name = "Low Threshold", .min = -60, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::lowThresholdDb> },
+              { .id = "lowRatio", .name = "Low Ratio", .min = 1, .max = 20, .step = 0.1, .unit = " :1",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::lowRatio> },
+              { .id = "lowMakeUp", .name = "Low Make-up", .min = -12, .max = 24, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::lowMakeUpDb> },
+
+              { .id = "midThreshold", .name = "Mid Threshold", .min = -60, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::midThresholdDb> },
+              { .id = "midRatio", .name = "Mid Ratio", .min = 1, .max = 20, .step = 0.1, .unit = " :1",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::midRatio> },
+              { .id = "midMakeUp", .name = "Mid Make-up", .min = -12, .max = 24, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::midMakeUpDb> },
+
+              { .id = "highThreshold", .name = "High Threshold", .min = -60, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::highThresholdDb> },
+              { .id = "highRatio", .name = "High Ratio", .min = 1, .max = 20, .step = 0.1, .unit = " :1",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::highRatio> },
+              { .id = "highMakeUp", .name = "High Make-up", .min = -12, .max = 24, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::highMakeUpDb> },
+
+              { .id = "attack", .name = "Attack", .min = 0.5, .max = 200, .step = 0.5, .unit = " ms",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::attackMs> },
+              { .id = "release", .name = "Release", .min = 10, .max = 1000, .step = 1, .unit = " ms",
+                .access = fieldAccess<&S::multiband, &MultibandSettings::releaseMs> } } },
+
         { .kind = EffectKind::Echo, .id = "echo", .name = "Echo", .group = "",
           .params = {
               { .id = "time", .name = "Time", .min = 1, .max = 2000, .step = 1, .unit = " ms",
@@ -489,6 +522,7 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.ringMod.enabled    = kind == EffectKind::RingMod;
     slot.wah.enabled        = kind == EffectKind::Wah;
     slot.echo.enabled       = kind == EffectKind::Echo;
+    slot.multiband.enabled  = kind == EffectKind::Multiband;
     return slot;
 }
 

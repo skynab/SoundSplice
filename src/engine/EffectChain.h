@@ -47,7 +47,8 @@ enum class EffectNodeKind
     Expander   = 21,
     RingMod    = 22,
     Wah        = 23,
-    Echo       = 24
+    Echo       = 24,
+    Multiband  = 25
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -179,6 +180,14 @@ struct EffectSlotParams
     float echoDecay        = 0.5f;
     float echoMix          = 0.35f;
     bool  echoPingPong     = false;
+
+    float mbLowHz          = 200.0f;
+    float mbHighHz         = 3000.0f;
+    float mbThresholdDb[3] { -20.0f, -20.0f, -20.0f };
+    float mbRatio[3]       { 3.0f, 3.0f, 3.0f };
+    float mbMakeUpDb[3]    {};
+    float mbAttackMs       = 10.0f;
+    float mbReleaseMs      = 150.0f;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -438,6 +447,16 @@ struct EchoNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct MultibandNode final : EffectProcessor
+{
+    MultibandEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Multiband; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct ReverbNode final : EffectProcessor
 {
     ReverbEffect effect;
@@ -620,6 +639,16 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             echo->effect.setDecay(params.echoDecay);
             echo->effect.setMix(params.echoMix);
             echo->effect.setPingPong(params.echoPingPong);
+        }
+        else if (auto* multiband = dynamic_cast<MultibandNode*>(&node))
+        {
+            multiband->effect.setLowHz(params.mbLowHz);
+            multiband->effect.setHighHz(params.mbHighHz);
+            multiband->effect.setAttackMs(params.mbAttackMs);
+            multiband->effect.setReleaseMs(params.mbReleaseMs);
+            for (int band = 0; band < 3; ++band)
+                multiband->effect.setBand(band, params.mbThresholdDb[band], params.mbRatio[band],
+                                          params.mbMakeUpDb[band]);
         }
 }
 

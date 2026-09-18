@@ -164,6 +164,23 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
             { "Wider",        { { "width", 1.4 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } },
             { "Narrower",     { { "width", 0.6 }, { "balance", 0 }, { "mono", 0 }, { "swap", 0 } } } } },
 
+        { EffectKind::Multiband, {
+            { "Podcast Glue",  { { "lowCrossover", 180 }, { "highCrossover", 3000 },
+                                 { "lowThreshold", -24 }, { "lowRatio", 3 },   { "lowMakeUp", 2 },
+                                 { "midThreshold", -20 }, { "midRatio", 2.5 }, { "midMakeUp", 2 },
+                                 { "highThreshold", -22 }, { "highRatio", 3 },  { "highMakeUp", 1 },
+                                 { "attack", 15 }, { "release", 200 } } },
+            { "Tame the Bass", { { "lowCrossover", 120 }, { "highCrossover", 5000 },
+                                 { "lowThreshold", -28 }, { "lowRatio", 6 },   { "lowMakeUp", 3 },
+                                 { "midThreshold", 0 },   { "midRatio", 1 },   { "midMakeUp", 0 },
+                                 { "highThreshold", 0 },  { "highRatio", 1 },  { "highMakeUp", 0 },
+                                 { "attack", 5 }, { "release", 120 } } },
+            { "Master Polish", { { "lowCrossover", 250 }, { "highCrossover", 4000 },
+                                 { "lowThreshold", -16 }, { "lowRatio", 2 },   { "lowMakeUp", 1 },
+                                 { "midThreshold", -14 }, { "midRatio", 1.8 }, { "midMakeUp", 1 },
+                                 { "highThreshold", -16 }, { "highRatio", 2 },  { "highMakeUp", 1 },
+                                 { "attack", 30 }, { "release", 250 } } } } },
+
         { EffectKind::Echo, {
             { "Slapback",   { { "time", 110 }, { "taps", 1 }, { "decay", 0.5 },  { "mix", 0.3 }, { "pingPong", 0 } } },
             { "Tape Echo",  { { "time", 320 }, { "taps", 4 }, { "decay", 0.55 }, { "mix", 0.35 }, { "pingPong", 0 } } },

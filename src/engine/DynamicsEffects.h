@@ -242,4 +242,54 @@ private:
     std::atomic<bool>  pingPong_ { false };
 };
 
+class MultibandEffect
+{
+public:
+    void prepare(double sampleRate, int) { multiband_.prepare(sampleRate); }
+
+    void setEnabled(bool enabled)   { enabled_.store(enabled, std::memory_order_relaxed); }
+    void setLowHz(float hz)         { lowHz_.store(hz, std::memory_order_relaxed); }
+    void setHighHz(float hz)        { highHz_.store(hz, std::memory_order_relaxed); }
+    void setAttackMs(float ms)      { attackMs_.store(ms, std::memory_order_relaxed); }
+    void setReleaseMs(float ms)     { releaseMs_.store(ms, std::memory_order_relaxed); }
+
+    void setBand(int band, float thresholdDb, float ratio, float makeUpDb)
+    {
+        if (band < 0 || band >= MultibandCompressor::kBands)
+            return;
+        thresholds_[(size_t) band].store(thresholdDb, std::memory_order_relaxed);
+        ratios_[(size_t) band].store(ratio, std::memory_order_relaxed);
+        makeUps_[(size_t) band].store(makeUpDb, std::memory_order_relaxed);
+    }
+
+    void process(juce::AudioBuffer<float>& buffer)
+    {
+        if (! enabled_.load(std::memory_order_relaxed))
+            return;
+
+        multiband_.setCrossovers(lowHz_.load(std::memory_order_relaxed), highHz_.load(std::memory_order_relaxed));
+        multiband_.setAttackMs(attackMs_.load(std::memory_order_relaxed));
+        multiband_.setReleaseMs(releaseMs_.load(std::memory_order_relaxed));
+        for (int b = 0; b < MultibandCompressor::kBands; ++b)
+            multiband_.setBand(b, thresholds_[(size_t) b].load(std::memory_order_relaxed),
+                               ratios_[(size_t) b].load(std::memory_order_relaxed),
+                               makeUps_[(size_t) b].load(std::memory_order_relaxed));
+
+        processFrames(multiband_, buffer);
+    }
+
+private:
+    static constexpr int kBands = MultibandCompressor::kBands;
+
+    MultibandCompressor                  multiband_;
+    std::atomic<bool>                    enabled_ { false };
+    std::atomic<float>                   lowHz_ { 200.0f };
+    std::atomic<float>                   highHz_ { 3000.0f };
+    std::atomic<float>                   attackMs_ { 10.0f };
+    std::atomic<float>                   releaseMs_ { 150.0f };
+    std::array<std::atomic<float>, kBands> thresholds_ { -20.0f, -20.0f, -20.0f };
+    std::array<std::atomic<float>, kBands> ratios_ { 3.0f, 3.0f, 3.0f };
+    std::array<std::atomic<float>, kBands> makeUps_ {};
+};
+
 } // namespace soundsplice::engine

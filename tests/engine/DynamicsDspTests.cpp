@@ -142,3 +142,34 @@ TEST_CASE("The wah passes its band and cuts far from it", "[engine][dynamics]")
     REQUIRE_THAT(held(350.0), WithinAbs(0.0, 0.3));
     REQUIRE(held(5000.0) < -20.0);
 }
+
+TEST_CASE("The multiband compressor squashes the band it's set for and leaves the others", "[engine][dynamics]")
+{
+    // A loud bass tone and a quiet high one, together.
+    const auto level = [](double hz, bool compressBass)
+    {
+        MultibandCompressor multiband;
+        multiband.prepare(kRate);
+        multiband.setCrossovers(300.0f, 3000.0f);
+        multiband.setAttackMs(5.0f);
+        multiband.setReleaseMs(80.0f);
+        multiband.setBand(0, compressBass ? -30.0f : 0.0f, compressBass ? 8.0f : 1.0f, 0.0f);
+        multiband.setBand(1, 0.0f, 1.0f, 0.0f);
+        multiband.setBand(2, 0.0f, 1.0f, 0.0f);
+
+        return settledLevelDb(hz, 0.5, [&](float x)
+        {
+            float frame[1] { x };
+            multiband.processFrame(frame, 1);
+            return frame[0];
+        });
+    };
+
+    // 100 Hz sits in the low band: over its threshold, it's pulled down.
+    REQUIRE(level(100.0, true) < -12.0);
+    // 8 kHz sits in the high band, whose threshold nothing reaches.
+    REQUIRE_THAT(level(8000.0, true), WithinAbs(0.0, 0.5));
+    // With every band at 1:1 the compressor is (to the ear) not there.
+    REQUIRE_THAT(level(100.0, false), WithinAbs(0.0, 0.5));
+    REQUIRE_THAT(level(1000.0, false), WithinAbs(0.0, 0.5));
+}

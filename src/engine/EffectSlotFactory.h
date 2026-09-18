@@ -53,6 +53,7 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::RingMod:    return std::make_unique<RingModNode>();
         case model::EffectKind::Wah:        return std::make_unique<WahNode>();
         case model::EffectKind::Echo:       return std::make_unique<EchoNode>();
+        case model::EffectKind::Multiband:  return std::make_unique<MultibandNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -160,6 +161,19 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.echoDecay        = slot.echo.decay;
     params.echoMix          = slot.echo.mix;
     params.echoPingPong     = slot.echo.pingPong;
+    params.mbLowHz          = slot.multiband.lowHz;
+    params.mbHighHz         = slot.multiband.highHz;
+    params.mbThresholdDb[0] = slot.multiband.lowThresholdDb;
+    params.mbRatio[0]       = slot.multiband.lowRatio;
+    params.mbMakeUpDb[0]    = slot.multiband.lowMakeUpDb;
+    params.mbThresholdDb[1] = slot.multiband.midThresholdDb;
+    params.mbRatio[1]       = slot.multiband.midRatio;
+    params.mbMakeUpDb[1]    = slot.multiband.midMakeUpDb;
+    params.mbThresholdDb[2] = slot.multiband.highThresholdDb;
+    params.mbRatio[2]       = slot.multiband.highRatio;
+    params.mbMakeUpDb[2]    = slot.multiband.highMakeUpDb;
+    params.mbAttackMs       = slot.multiband.attackMs;
+    params.mbReleaseMs      = slot.multiband.releaseMs;
     return params;
 }
 

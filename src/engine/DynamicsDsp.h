@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "engine/DelayLine.h"
+#include "engine/PedalDsp.h"
 #include "engine/ShelfPeakFilter.h"
 #include "engine/StateVariableFilter.h"
 
@@ -374,6 +375,140 @@ private:
     float  decay_      = 0.5f;
     float  mix_        = 0.35f;
     bool   pingPong_   = false;
+};
+
+/**
+    A three-band compressor: the audio is split at two crossover frequencies,
+    each band compressed on its own, and the three added back. Bass that
+    pumps the whole mix down, or a harsh upper-middle, is handled where it is
+    rather than by squashing everything.
+
+    The splits are fourth-order Linkwitz-Riley, whose bands add back flat, so
+    with nothing over its threshold the compressor is (to the ear) not there.
+    Each band has one detector across both channels, as every other dynamics
+    processor here does, so the stereo image doesn't move.
+*/
+class MultibandCompressor
+{
+public:
+    static constexpr int kBands = 3;
+
+    void prepare(double sampleRate)
+    {
+        sampleRate_ = sampleRate > 0.0 ? sampleRate : 48000.0;
+
+        for (auto& channel : splits_)
+            for (auto& stage : channel)
+            {
+                stage.prepare(sampleRate_);
+                stage.setResonance(0.707f); // two Butterworths make a Linkwitz-Riley
+            }
+
+        for (auto& band : compressors_)
+            band.prepare(sampleRate_);
+
+        setCrossovers(lowHz_, highHz_);
+    }
+
+    void setCrossovers(float lowHz, float highHz)
+    {
+        lowHz_  = std::clamp(lowHz, 30.0f, 2000.0f);
+        highHz_ = std::clamp(highHz, lowHz_ * 1.2f, (float) (sampleRate_ * 0.45));
+
+        for (auto& channel : splits_)
+        {
+            channel[0].setMode(StateVariableFilter::Mode::LowPass);
+            channel[1].setMode(StateVariableFilter::Mode::LowPass);
+            channel[2].setMode(StateVariableFilter::Mode::HighPass);
+            channel[3].setMode(StateVariableFilter::Mode::HighPass);
+            channel[4].setMode(StateVariableFilter::Mode::LowPass);
+            channel[5].setMode(StateVariableFilter::Mode::LowPass);
+            channel[6].setMode(StateVariableFilter::Mode::HighPass);
+            channel[7].setMode(StateVariableFilter::Mode::HighPass);
+
+            for (int i = 0; i < 4; ++i)
+                channel[(size_t) i].setCutoff(lowHz_);
+            for (int i = 4; i < 8; ++i)
+                channel[(size_t) i].setCutoff(highHz_);
+        }
+    }
+
+    void setBand(int band, float thresholdDb, float ratio, float makeUpDb)
+    {
+        if (band < 0 || band >= kBands)
+            return;
+
+        compressors_[(size_t) band].setThresholdDb(thresholdDb);
+        compressors_[(size_t) band].setRatio(ratio);
+        makeUp_[(size_t) band] = dsp::toGain(makeUpDb);
+    }
+
+    void setAttackMs(float ms)
+    {
+        for (auto& band : compressors_)
+            band.setAttackMs(ms);
+    }
+
+    void setReleaseMs(float ms)
+    {
+        for (auto& band : compressors_)
+            band.setReleaseMs(ms);
+    }
+
+    /** How far band @p band is pulling down right now, in dB. */
+    float bandReductionDb(int band) const noexcept
+    {
+        return band >= 0 && band < kBands ? compressors_[(size_t) band].currentReductionDb() : 0.0f;
+    }
+
+    void processFrame(float* samples, int channels) noexcept
+    {
+        channels = std::clamp(channels, 0, 2);
+        if (channels == 0)
+            return;
+
+        float bands[kBands][2] {};
+        float detector[kBands] {};
+
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            auto& stages = splits_[(size_t) ch];
+
+            const float low   = stages[1].processSample(stages[0].processSample(samples[ch]));
+            const float rest  = stages[3].processSample(stages[2].processSample(samples[ch]));
+            const float mid   = stages[5].processSample(stages[4].processSample(rest));
+            const float high  = stages[7].processSample(stages[6].processSample(rest));
+
+            bands[0][ch] = low;
+            bands[1][ch] = mid;
+            bands[2][ch] = high;
+
+            for (int b = 0; b < kBands; ++b)
+                detector[b] = std::max(detector[b], std::abs(bands[b][ch]));
+        }
+
+        float gains[kBands];
+        for (int b = 0; b < kBands; ++b)
+            gains[b] = compressors_[(size_t) b].gainFor(detector[b]) * makeUp_[(size_t) b];
+
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            float sum = 0.0f;
+            for (int b = 0; b < kBands; ++b)
+                sum += bands[b][ch] * gains[b];
+            samples[ch] = sum;
+        }
+    }
+
+private:
+    // Per channel: two low and two high at the lower crossover, then two low
+    // and two high at the upper one, which split what the first left.
+    std::array<std::array<StateVariableFilter, 8>, 2> splits_;
+    std::array<Compressor, kBands>                    compressors_;
+    std::array<float, kBands>                         makeUp_ { 1.0f, 1.0f, 1.0f };
+    double                                            sampleRate_ = 48000.0;
+    float                                             lowHz_      = 200.0f;
+    float                                             highHz_     = 3000.0f;
 };
 
 } // namespace soundsplice::engine
