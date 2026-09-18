@@ -9,15 +9,16 @@
 namespace soundsplice::engine::spectral
 {
 /**
-    Spectral editing: changing the level of one band of frequencies over one
-    stretch of time and leaving everything else, as Audacity's Spectral Delete
-    and Audition's spectral selection do. A cough over a sustained note, a
-    phone's ring behind speech, one whistle in a field recording.
+    Spectral editing: changing one band of frequencies over one stretch of
+    time and leaving everything else, as Audacity's Spectral Delete and
+    Audition's spectral selection and spot healing do. A cough over a
+    sustained note, a phone's ring behind speech, one whistle in a field
+    recording.
 
     The audio is taken apart into short overlapping windows, each window's
-    bins inside the band are scaled, and the windows are added back
+    bins inside the band are changed, and the windows are added back
     (weighted overlap-add with a Hann window both ways, at a quarter-window
-    hop, which reconstructs the input exactly when nothing is scaled). Only
+    hop, which reconstructs the input exactly when nothing is changed). Only
     windows lying wholly inside [from, to) are changed, so nothing outside the
     selection moves at all, and the change fades in and out over the first and
     last window's length rather than starting with a click.
@@ -35,12 +36,74 @@ inline int windowFor(int frames)
     return size;
 }
 
-/** Scales the bins between @p lowHz and @p highHz by @p gain over samples
-    [@p from, @p to) of @p samples. A band bin is scaled fully; one at the
-    band's edge, partly, so the band has no hard edge to ring. Returns false,
-    changing nothing, if the selection is too short to hold a window. */
-inline bool scaleBand(std::vector<float>& samples, int from, int to, double sampleRate, double lowHz, double highHz,
-                      float gain)
+namespace detail
+{
+    inline std::vector<float> hann(int n)
+    {
+        std::vector<float> window((size_t) n);
+        for (int i = 0; i < n; ++i)
+            window[(size_t) i] = (float) (0.5 - 0.5 * std::cos(2.0 * fft::kPi * i / n)); // periodic
+        return window;
+    }
+
+    /** How much of each bin of an @p n-point transform is inside the band:
+        1 inside, 0 outside, a one-bin ramp at each edge so the band has no
+        hard edge to ring. */
+    inline std::vector<float> bandAmounts(int n, double sampleRate, double lowHz, double highHz)
+    {
+        const int          bins  = n / 2 + 1;
+        const double       binHz = sampleRate / n;
+        std::vector<float> amounts((size_t) bins);
+        for (int k = 0; k < bins; ++k)
+        {
+            const double hz     = k * binHz;
+            const double inside = std::min(hz - lowHz, highHz - hz) / binHz;
+            amounts[(size_t) k] = (float) std::clamp(inside + 0.5, 0.0, 1.0);
+        }
+        return amounts;
+    }
+
+    /** The mean magnitude of each bin over the windows lying wholly in
+        [@p from, @p to) of @p samples; empty if none fits. */
+    inline std::vector<double> meanMagnitudes(const std::vector<float>& samples, int from, int to, int n,
+                                              const std::vector<float>& window)
+    {
+        const int           bins = n / 2 + 1;
+        std::vector<double> sum((size_t) bins, 0.0);
+        std::vector<float>  re((size_t) n), im((size_t) n);
+        int                 count = 0;
+
+        for (int start = from; start + n <= to; start += n / 4, ++count)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                re[(size_t) i] = samples[(size_t) (start + i)] * window[(size_t) i];
+                im[(size_t) i] = 0.0f;
+            }
+            fft::transform(re, im, false);
+            for (int k = 0; k < bins; ++k)
+                sum[(size_t) k] += std::hypot((double) re[(size_t) k], (double) im[(size_t) k]);
+        }
+
+        if (count == 0)
+            return {};
+        for (auto& value : sum)
+            value /= count;
+        return sum;
+    }
+}
+
+/**
+    The frame-by-frame machinery the edits share: every window wholly inside
+    [@p from, @p to) is transformed and handed to @p edit, which changes bins
+    0..n/2 of it in place (the mirror half is filled in after), as
+    edit(frame, frames, re, im, bandAmounts). Everything else is reconstructed
+    as it was. False, changing nothing, if the selection is too short to hold
+    a window.
+*/
+template <typename EditFrame>
+bool editBand(std::vector<float>& samples, int from, int to, double sampleRate, double lowHz, double highHz,
+              EditFrame&& edit)
 {
     const int size = (int) samples.size();
     from = std::clamp(from, 0, size);
@@ -51,33 +114,19 @@ inline bool scaleBand(std::vector<float>& samples, int from, int to, double samp
     if (to - from < n || sampleRate <= 0.0 || highHz <= lowHz)
         return false;
 
-    std::vector<float> window((size_t) n);
-    for (int i = 0; i < n; ++i)
-        window[(size_t) i] = (float) (0.5 - 0.5 * std::cos(2.0 * fft::kPi * i / n)); // periodic Hann
-
-    // Per-bin gain: full inside the band, a one-bin ramp at each edge.
-    const int          bins     = n / 2 + 1;
-    const double       binHz    = sampleRate / n;
-    std::vector<float> binGains((size_t) bins, 1.0f);
-    for (int k = 0; k < bins; ++k)
-    {
-        const double hz     = k * binHz;
-        const double inside = std::min(hz - lowHz, highHz - hz) / binHz; // bins inside the band's edge
-        const double amount = std::clamp(inside + 0.5, 0.0, 1.0);
-        binGains[(size_t) k] = (float) (1.0 + (gain - 1.0) * amount);
-    }
+    const auto window  = detail::hann(n);
+    const auto amounts = detail::bandAmounts(n, sampleRate, lowHz, highHz);
+    const int  bins    = n / 2 + 1;
+    const int  frames  = (to - from - n) / hop + 1; // those wholly inside
 
     // Windows over the whole of [from, to), starting a window early and
     // ending one late so every sample in the range is covered by the same
     // number of windows; only those wholly inside the range are changed.
-    const int first = from - n;
-    const int last  = to;
-
     std::vector<double> output((size_t) (to - from), 0.0);
     std::vector<double> weight((size_t) (to - from), 0.0);
     std::vector<float>  re((size_t) n), im((size_t) n);
 
-    for (int start = first; start <= last; start += hop)
+    for (int start = from - n; start <= to; start += hop)
     {
         for (int i = 0; i < n; ++i)
         {
@@ -89,15 +138,11 @@ inline bool scaleBand(std::vector<float>& samples, int from, int to, double samp
         if (start >= from && start + n <= to)
         {
             fft::transform(re, im, false);
-            for (int k = 0; k < bins; ++k)
+            edit((start - from) / hop, frames, re, im, amounts);
+            for (int k = 1; k < bins && k < n - k; ++k)
             {
-                re[(size_t) k] *= binGains[(size_t) k];
-                im[(size_t) k] *= binGains[(size_t) k];
-                if (k > 0 && k < n - k)
-                {
-                    re[(size_t) (n - k)] = re[(size_t) k];
-                    im[(size_t) (n - k)] = -im[(size_t) k];
-                }
+                re[(size_t) (n - k)] = re[(size_t) k];
+                im[(size_t) (n - k)] = -im[(size_t) k];
             }
             fft::transform(re, im, true);
         }
@@ -117,6 +162,80 @@ inline bool scaleBand(std::vector<float>& samples, int from, int to, double samp
             samples[(size_t) (from + i)] = (float) (output[(size_t) i] / weight[(size_t) i]);
 
     return true;
+}
+
+/** Scales the bins between @p lowHz and @p highHz by @p gain over samples
+    [@p from, @p to) of @p samples: Spectral Delete at 0, Spectral Gain
+    otherwise. */
+inline bool scaleBand(std::vector<float>& samples, int from, int to, double sampleRate, double lowHz, double highHz,
+                      float gain)
+{
+    return editBand(samples, from, to, sampleRate, lowHz, highHz,
+                    [gain](int, int, std::vector<float>& re, std::vector<float>& im, const std::vector<float>& amounts)
+                    {
+                        for (size_t k = 0; k < amounts.size(); ++k)
+                        {
+                            const float binGain = 1.0f + (gain - 1.0f) * amounts[k];
+                            re[k] *= binGain;
+                            im[k] *= binGain;
+                        }
+                    });
+}
+
+/**
+    Spectral repair, the spot-healing of Audition and Audacity's spectral
+    tools: the band over [@p from, @p to) is rebuilt from what the same
+    frequencies do just before and just after it, so a cough over a held note
+    is replaced by the note going on. Each bin's level is drawn across the
+    gap from its average over the @p contextFrames before to its average over
+    those after (either alone if only one side has audio), and the phase of
+    what was there is kept, so the result joins its surroundings.
+
+    @p samples must hold that context either side of the selection. False,
+    changing nothing, if the selection is too short or there's no context.
+*/
+inline bool healBand(std::vector<float>& samples, int from, int to, double sampleRate, double lowHz, double highHz,
+                     int contextFrames)
+{
+    const int size = (int) samples.size();
+    from = std::clamp(from, 0, size);
+    to   = std::clamp(to, from, size);
+
+    const int  n      = windowFor(to - from);
+    const auto window = detail::hann(n);
+    const auto before = detail::meanMagnitudes(samples, std::max(0, from - contextFrames), from, n, window);
+    const auto after  = detail::meanMagnitudes(samples, to, std::min(size, to + contextFrames), n, window);
+    if (before.empty() && after.empty())
+        return false;
+
+    return editBand(samples, from, to, sampleRate, lowHz, highHz,
+                    [&before, &after](int frame, int frames, std::vector<float>& re, std::vector<float>& im,
+                                      const std::vector<float>& amounts)
+                    {
+                        const double t = frames > 1 ? (double) frame / (double) (frames - 1) : 0.5;
+                        for (size_t k = 0; k < amounts.size(); ++k)
+                        {
+                            if (amounts[k] <= 0.0f)
+                                continue;
+
+                            const double target = before.empty() ? after[k]
+                                                : after.empty()  ? before[k]
+                                                                 : before[k] * (1.0 - t) + after[k] * t;
+                            const double current = std::hypot((double) re[k], (double) im[k]);
+                            const double wanted  = current + (target - current) * amounts[k];
+
+                            if (current > 1.0e-12)
+                            {
+                                re[k] = (float) (re[k] * wanted / current);
+                                im[k] = (float) (im[k] * wanted / current);
+                            }
+                            else
+                            {
+                                re[k] = (float) wanted;
+                                im[k] = 0.0f;
+                            }
+                        }
+                    });
 }
 
 } // namespace soundsplice::engine::spectral

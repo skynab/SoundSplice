@@ -354,6 +354,7 @@ private:
     void                   removeHumInSelection(double fundamentalHz, int harmonics, double q);
     void                   scaleSpectralSelection(const juce::String& label, float gain);
     void                   showSpectralGainDialog();
+    void                   repairSpectralSelection();
     void                   crossfadeClipsInSelection();
 
     void                   showApplyEffectsDialog();

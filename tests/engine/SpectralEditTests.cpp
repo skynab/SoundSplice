@@ -82,3 +82,35 @@ TEST_CASE("Spectral gain can raise a band, and refuses a selection too short to 
     REQUIRE(tiny == twoTones(1000));
     REQUIRE_FALSE(spectral::scaleBand(tiny, 0, 1000, kRate, 6000.0, 4000.0, 0.0f)); // no band
 }
+
+TEST_CASE("Spectral repair rebuilds a band from what surrounds it", "[engine][spectral]")
+{
+    // A steady 5 kHz note at 0.2 over a second, with a loud 1 kHz tone as the
+    // background, and a burst in the middle where the 5 kHz jumps to 0.8, as
+    // a cough or a clunk would.
+    std::vector<float> audio(48000);
+    for (int n = 0; n < 48000; ++n)
+    {
+        const double burst = n >= 20000 && n < 28000 ? 0.8 : 0.2;
+        audio[(size_t) n] = (float) (burst * std::sin(2.0 * kPi * 5000.0 * n / kRate)
+                                   + 0.3 * std::sin(2.0 * kPi * 1000.0 * n / kRate));
+    }
+    const auto original = audio;
+
+    REQUIRE(spectral::healBand(audio, 19000, 29000, kRate, 4000.0, 6000.0, 8192));
+
+    // The note goes on through the gap at its level either side, and the
+    // background is untouched.
+    REQUIRE_THAT(levelAt(audio, 21000, 27000, 5000.0), WithinAbs(0.2, 0.03));
+    REQUIRE_THAT(levelAt(audio, 21000, 27000, 1000.0), WithinAbs(0.3, 0.01));
+
+    // Nothing outside the selection moves.
+    for (int i = 0; i < 19000; ++i)
+        REQUIRE(audio[(size_t) i] == original[(size_t) i]);
+    for (int i = 29000; i < 48000; ++i)
+        REQUIRE(audio[(size_t) i] == original[(size_t) i]);
+
+    // Without any audio either side to learn from, it refuses.
+    auto alone = twoTones(4096);
+    REQUIRE_FALSE(spectral::healBand(alone, 0, 4096, kRate, 4000.0, 6000.0, 8192));
+}

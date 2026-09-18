@@ -292,6 +292,38 @@ void MainComponent::scaleSpectralSelection(const juce::String& label, float gain
                    + juce::String((int) std::lround(band->second)) + " Hz");
 }
 
+/** Spectral repair, as Audition's spot healing does it for a box: the box's
+    frequencies over its time rebuilt from what they do either side of it. */
+void MainComponent::repairSpectralSelection()
+{
+    const auto band = audioEditor_.frequencyBand();
+    if (! band)
+    {
+        showError("Drag a box on the spectrogram over the sound to remove first (View > Spectrogram)");
+        return;
+    }
+
+    // Half a second either side to learn from: long enough to average over,
+    // short enough to still be the same sound.
+    const int context = (int) std::lround((engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0) * 0.5);
+    bool      refused = false;
+
+    const bool edited = editSelectionInContext("Spectral repair", context,
+        [band, context, &refused](std::vector<std::vector<float>>& channels, int from, int to, double rate)
+        {
+            for (auto& channel : channels)
+                if (! engine::spectral::healBand(channel, from, to, rate, band->first, band->second, context))
+                    refused = true;
+            return ! refused;
+        });
+
+    if (refused)
+        showError("Spectral repair needs the box to be at least a few milliseconds long, with audio either side of it");
+    else if (edited)
+        showStatus("Repaired " + juce::String((int) std::lround(band->first)) + " - "
+                   + juce::String((int) std::lround(band->second)) + " Hz");
+}
+
 void MainComponent::showSpectralGainDialog()
 {
     if (! audioEditor_.frequencyBand())
