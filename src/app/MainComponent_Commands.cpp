@@ -644,11 +644,14 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::clickRemoval);
         add(commands::clipFix);
         add(commands::humRemoval);
-        add(commands::spectralDelete);
-        add(commands::spectralGain);
-        add(commands::spectralRepair);
-        add(commands::spectralEq);
-        add(commands::spectralShelf);
+        {
+            // All of these act on a box dragged on the spectrogram.
+            juce::PopupMenu spectral;
+            for (auto id : { commands::spectralRepair, commands::spectralDelete, commands::spectralGain,
+                             commands::spectralEq, commands::spectralShelf })
+                spectral.addCommandItem(&commandManager_, id);
+            menu.addSubMenu("Spectral", spectral);
+        }
         menu.addSeparator();
         add(commands::normalizeLoudness);
         menu.addSeparator();
