@@ -383,9 +383,24 @@ public:
 
     bool showsSpectrogram() const noexcept { return spectrogramView_; }
 
+    /** How frequency is laid out up the spectrogram. The analysis is kept,
+        so changing it redraws without reading the clip again. */
+    void setSpectrogramScale(spectrogramimage::Scale scale)
+    {
+        if (scale == spectrogramScale_)
+            return;
+        spectrogramScale_ = scale;
+        if (! spectrogramData_.isEmpty())
+            spectrogram_ = spectrogramimage::imageOf(spectrogramData_, 256, spectrogramScale_);
+        repaint();
+    }
+
+    spectrogramimage::Scale spectrogramScale() const noexcept { return spectrogramScale_; }
+
     void setSpectrogram(const engine::SpectrogramData& data)
     {
-        spectrogram_         = spectrogramimage::imageOf(data);
+        spectrogramData_     = data;
+        spectrogram_         = spectrogramimage::imageOf(data, 256, spectrogramScale_);
         spectrogramColumns_  = data.columns;
         spectrogramSeconds_  = data.secondsPerColumn;
         spectrogramWindow_   = data.windowSeconds;
@@ -395,7 +410,8 @@ public:
 
     void clearSpectrogram()
     {
-        spectrogram_ = {};
+        spectrogram_     = {};
+        spectrogramData_ = {};
         repaint();
     }
 
@@ -545,13 +561,13 @@ public:
         const double proportion = area.getHeight() > 0
                                     ? 1.0 - (double) (y - (float) area.getY()) / (double) area.getHeight()
                                     : 0.0;
-        return spectrogramimage::frequencyAt(proportion, spectrogramNyquist_);
+        return spectrogramimage::frequencyAt(proportion, spectrogramNyquist_, spectrogramScale_);
     }
 
     float yForHz(double hz, juce::Rectangle<int> area) const
     {
         return (float) area.getBottom()
-             - (float) spectrogramimage::proportionOf(hz, spectrogramNyquist_) * (float) area.getHeight();
+             - (float) spectrogramimage::proportionOf(hz, spectrogramNyquist_, spectrogramScale_) * (float) area.getHeight();
     }
 
     void paintSpectrogram(juce::Graphics& g, juce::Rectangle<int> area)
@@ -585,12 +601,14 @@ public:
         }
 
         g.setFont(juce::FontOptions(10.0f));
-        for (double hz : { 100.0, 1000.0, 10000.0 })
+        const auto marks = spectrogramScale_ == spectrogramimage::Scale::Logarithmic
+                             ? std::vector<double> { 100.0, 1000.0, 10000.0 }
+                             : std::vector<double> { 1000.0, 2000.0, 5000.0, 10000.0, 15000.0 };
+        for (double hz : marks)
         {
             if (hz >= spectrogramNyquist_)
                 continue;
-            const float y = (float) area.getBottom()
-                          - (float) spectrogramimage::proportionOf(hz, spectrogramNyquist_) * (float) area.getHeight();
+            const float y = yForHz(hz, area);
             g.setColour(juce::Colours::white.withAlpha(0.18f));
             g.drawHorizontalLine((int) y, (float) area.getX(), (float) area.getRight());
             g.setColour(juce::Colours::white.withAlpha(0.6f));
@@ -1376,6 +1394,8 @@ private:
     double           bandLowHz_       = 0.0; // a spectral selection's band; none when equal
     double           bandHighHz_      = 0.0;
     juce::Image      spectrogram_;
+    engine::SpectrogramData  spectrogramData_;
+    spectrogramimage::Scale  spectrogramScale_ = spectrogramimage::Scale::Logarithmic;
     int              spectrogramColumns_ = 0;
     double           spectrogramSeconds_ = 0.0;
     double           spectrogramWindow_  = 0.0;

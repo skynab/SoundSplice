@@ -179,7 +179,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 - 🟡 **Spectrogram track view**: the audio editor as a spectrogram ✅ (View > Spectrogram: log frequency
   scale, 2048-point Hann window, built with the waveform's peaks a chunk at a time;
-  `src/engine/Spectrogram.h`, `src/app/SpectrogramImage.h`); linear/mel scales ⬜, a configurable window ⬜, a
+  `src/engine/Spectrogram.h`, `src/app/SpectrogramImage.h`); linear and mel scales ✅ (View > Spectrogram Scale), a configurable window ⬜, a
   split waveform/spectrogram view ⬜, spectrograms in the arrangement's lanes ⬜
 - 🟡 **Spectral selection**: a time × frequency box ✅ (drag diagonally on the spectrogram); lasso ⬜ and a harmonic brush ⬜ as in Audition
 - 🟡 Spectral delete ✅ · spectral gain ✅ (Edit menu, on the box; `src/engine/SpectralEdit.h`) · spectral parametric EQ ⬜ · spectral shelves ⬜ (Audacity)

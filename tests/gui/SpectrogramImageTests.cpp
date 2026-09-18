@@ -61,3 +61,26 @@ TEST_CASE("A spectrogram image puts a tone on the row for its frequency", "[gui]
     REQUIRE(spectrogramimage::colourFor(-200.0f) == spectrogramimage::colourFor(spectrogramimage::kFloorDb));
     REQUIRE(spectrogramimage::colourFor(0.0f).getBrightness() > spectrogramimage::colourFor(-60.0f).getBrightness());
 }
+
+TEST_CASE("The spectrogram's linear and mel scales map frequencies both ways", "[gui][spectrogram]")
+{
+    using spectrogramimage::Scale;
+    const double nyquist = 24000.0;
+
+    REQUIRE_THAT(spectrogramimage::frequencyAt(0.5, nyquist, Scale::Linear), WithinAbs(12000.0, 1e-9));
+    REQUIRE_THAT(spectrogramimage::proportionOf(6000.0, nyquist, Scale::Linear), WithinAbs(0.25, 1e-12));
+
+    // Mel puts far more of the view below a few kilohertz than linear does,
+    // and less than the octave scale does.
+    const double mel = spectrogramimage::proportionOf(1000.0, nyquist, Scale::Mel);
+    REQUIRE(mel > spectrogramimage::proportionOf(1000.0, nyquist, Scale::Linear));
+    REQUIRE(mel < spectrogramimage::proportionOf(1000.0, nyquist, Scale::Logarithmic));
+
+    for (auto scale : { Scale::Linear, Scale::Mel, Scale::Logarithmic })
+        for (double hz : { 100.0, 1000.0, 7000.0, 20000.0 })
+        {
+            INFO((int) scale << " at " << hz);
+            const double back = spectrogramimage::frequencyAt(spectrogramimage::proportionOf(hz, nyquist, scale), nyquist, scale);
+            REQUIRE_THAT(back, WithinAbs(hz, hz * 1e-9));
+        }
+}

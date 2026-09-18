@@ -261,6 +261,16 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(audioEditor_.showsSpectrogram());
             break;
 
+        case commands::spectrogramLog:
+            info.setTicked(audioEditor_.spectrogramScale() == spectrogramimage::Scale::Logarithmic);
+            break;
+        case commands::spectrogramLinear:
+            info.setTicked(audioEditor_.spectrogramScale() == spectrogramimage::Scale::Linear);
+            break;
+        case commands::spectrogramMel:
+            info.setTicked(audioEditor_.spectrogramScale() == spectrogramimage::Scale::Mel);
+            break;
+
         case commands::spectralDelete:
         case commands::spectralGain:
         case commands::spectralRepair:
@@ -519,6 +529,19 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         case commands::closeAllOpenFiles: closeAllOpenFiles(); break;
 
+        case commands::spectrogramLog:
+        case commands::spectrogramLinear:
+        case commands::spectrogramMel:
+        {
+            const auto scale = invocation.commandID == commands::spectrogramLinear ? spectrogramimage::Scale::Linear
+                             : invocation.commandID == commands::spectrogramMel    ? spectrogramimage::Scale::Mel
+                                                                              : spectrogramimage::Scale::Logarithmic;
+            audioEditor_.setSpectrogramScale(scale);
+            settings_.setValue("spectrogramScale", (int) scale);
+            settings_.saveIfNeeded();
+            break;
+        }
+
         case commands::spectrogramView:
         {
             const bool on = ! audioEditor_.showsSpectrogram();
@@ -694,6 +717,12 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::showClipEnvelopes);
         add(commands::waveformDbScale);
         add(commands::spectrogramView);
+        {
+            juce::PopupMenu scaleMenu;
+            for (auto id : { commands::spectrogramLog, commands::spectrogramLinear, commands::spectrogramMel })
+                scaleMenu.addCommandItem(&commandManager_, id);
+            menu.addSubMenu("Spectrogram Scale", scaleMenu);
+        }
         menu.addSeparator();
         add(commands::nextOpenFile);
         add(commands::previousOpenFile);
