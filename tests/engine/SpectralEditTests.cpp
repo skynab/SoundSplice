@@ -114,3 +114,47 @@ TEST_CASE("Spectral repair rebuilds a band from what surrounds it", "[engine][sp
     auto alone = twoTones(4096);
     REQUIRE_FALSE(spectral::healBand(alone, 0, 4096, kRate, 4000.0, 6000.0, 8192));
 }
+
+namespace
+{
+    /** One tone per frequency in @p hz, each at 0.2, over a second. */
+    std::vector<float> tones(std::initializer_list<double> hz)
+    {
+        std::vector<float> x(48000, 0.0f);
+        for (double f : hz)
+            for (int n = 0; n < 48000; ++n)
+                x[(size_t) n] += (float) (0.2 * std::sin(2.0 * kPi * f * n / kRate));
+        return x;
+    }
+}
+
+TEST_CASE("Spectral EQ is a bell across the band, deepest at its middle", "[engine][spectral]")
+{
+    // A band from 2 kHz to 8 kHz, whose middle by octave is 4 kHz.
+    auto audio = tones({ 500.0, 4000.0 });
+    REQUIRE(spectral::bellBand(audio, 0, 48000, kRate, 2000.0, 8000.0, -12.0f));
+
+    const double cut = 0.2 * std::pow(10.0, -12.0 / 20.0);
+    REQUIRE_THAT(levelAt(audio, 12000, 36000, 4000.0), WithinAbs(cut, 0.004)); // the full 12 dB
+    REQUIRE_THAT(levelAt(audio, 12000, 36000, 500.0), WithinAbs(0.2, 0.002));  // outside: untouched
+
+    // Halfway between the middle and an edge, half the cut in dB.
+    auto half = tones({ 2828.4 }); // half an octave above 2 kHz: a quarter of the way up the band
+    REQUIRE(spectral::bellBand(half, 0, 48000, kRate, 2000.0, 8000.0, -12.0f));
+    REQUIRE_THAT(20.0 * std::log10(levelAt(half, 12000, 36000, 2828.4) / 0.2), WithinAbs(-6.0, 0.5));
+}
+
+TEST_CASE("Spectral shelves ramp across the band and hold beyond it", "[engine][spectral]")
+{
+    const double cut = 0.2 * std::pow(10.0, -12.0 / 20.0);
+
+    auto high = tones({ 500.0, 12000.0 });
+    REQUIRE(spectral::shelfBand(high, 0, 48000, kRate, 2000.0, 4000.0, -12.0f, true));
+    REQUIRE_THAT(levelAt(high, 12000, 36000, 12000.0), WithinAbs(cut, 0.004)); // above: the full cut
+    REQUIRE_THAT(levelAt(high, 12000, 36000, 500.0), WithinAbs(0.2, 0.002));   // below: untouched
+
+    auto low = tones({ 500.0, 12000.0 });
+    REQUIRE(spectral::shelfBand(low, 0, 48000, kRate, 2000.0, 4000.0, -12.0f, false));
+    REQUIRE_THAT(levelAt(low, 12000, 36000, 500.0), WithinAbs(cut, 0.004));
+    REQUIRE_THAT(levelAt(low, 12000, 36000, 12000.0), WithinAbs(0.2, 0.002));
+}

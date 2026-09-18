@@ -324,6 +324,100 @@ void MainComponent::repairSpectralSelection()
                    + juce::String((int) std::lround(band->second)) + " Hz");
 }
 
+/** Runs @p edit, a spectral edit of one channel over the whole of what it's
+    given, on the spectral selection: the box's time, shaped by its band. */
+void MainComponent::applySpectralEdit(const juce::String& label,
+                                      const std::function<bool(std::vector<float>&, double rate, double lowHz,
+                                                               double highHz)>& edit)
+{
+    const auto band = audioEditor_.frequencyBand();
+    if (! band)
+    {
+        showError("Drag a box on the spectrogram first (View > Spectrogram)");
+        return;
+    }
+
+    bool tooShort = false;
+    const bool edited = editSelection(label, false,
+        [&](std::vector<std::vector<float>>& channels, double rate)
+        {
+            for (auto& channel : channels)
+                if (! edit(channel, rate, band->first, band->second))
+                    tooShort = true;
+        });
+
+    if (tooShort)
+        showStatus("Part of that was too short to edit: select at least a few milliseconds");
+    else if (edited)
+        showStatus(label + " applied");
+}
+
+void MainComponent::showSpectralEqDialog()
+{
+    if (! audioEditor_.frequencyBand())
+    {
+        showError("Drag a box on the spectrogram first (View > Spectrogram)");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Spectral EQ",
+                                         "A bell across the selected band, strongest at its middle, over the selected time.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("gain", juce::String(settings_.getDoubleValue("spectralEq.db", -9.0)), "Gain at the middle (dB):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const auto db = (float) juce::jlimit(-60.0, 24.0, window->getTextEditorContents("gain").getDoubleValue());
+            self->settings_.setValue("spectralEq.db", db);
+            self->applySpectralEdit("Spectral EQ", [db](std::vector<float>& channel, double rate, double low, double high)
+            {
+                return engine::spectral::bellBand(channel, 0, (int) channel.size(), rate, low, high, db);
+            });
+        }));
+}
+
+void MainComponent::showSpectralShelfDialog()
+{
+    if (! audioEditor_.frequencyBand())
+    {
+        showError("Drag a box on the spectrogram first (View > Spectrogram)");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Spectral Shelf",
+                                         "Ramps across the selected band and holds beyond it, over the selected time.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addComboBox("side", { "High shelf (above the band)", "Low shelf (below the band)" }, "Shelf:");
+    window->getComboBoxComponent("side")->setSelectedItemIndex(settings_.getIntValue("spectralShelf.side", 0));
+    window->addTextEditor("gain", juce::String(settings_.getDoubleValue("spectralShelf.db", -6.0)), "Gain (dB):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const int  side = juce::jlimit(0, 1, window->getComboBoxComponent("side")->getSelectedItemIndex());
+            const auto db   = (float) juce::jlimit(-60.0, 24.0, window->getTextEditorContents("gain").getDoubleValue());
+            self->settings_.setValue("spectralShelf.side", side);
+            self->settings_.setValue("spectralShelf.db", db);
+            self->applySpectralEdit("Spectral shelf", [db, side](std::vector<float>& channel, double rate, double low, double high)
+            {
+                return engine::spectral::shelfBand(channel, 0, (int) channel.size(), rate, low, high, db, side == 0);
+            });
+        }));
+}
+
 void MainComponent::showSpectralGainDialog()
 {
     if (! audioEditor_.frequencyBand())

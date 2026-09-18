@@ -182,6 +182,75 @@ inline bool scaleBand(std::vector<float>& samples, int from, int to, double samp
                     });
 }
 
+/** Scales every bin over samples [@p from, @p to) by @p gainAt(its frequency
+    in Hz), a linear gain: the shared step for shaped spectral edits. */
+template <typename GainAt>
+bool scaleByCurve(std::vector<float>& samples, int from, int to, double sampleRate, GainAt&& gainAt)
+{
+    std::vector<float> gains;
+    return editBand(samples, from, to, sampleRate, 0.0, sampleRate,
+                    [&](int, int, std::vector<float>& re, std::vector<float>& im, const std::vector<float>& amounts)
+                    {
+                        if (gains.empty())
+                        {
+                            const int n = (int) re.size();
+                            gains.resize(amounts.size());
+                            for (size_t k = 0; k < gains.size(); ++k)
+                                gains[k] = (float) gainAt((double) k * sampleRate / n);
+                        }
+                        for (size_t k = 0; k < gains.size(); ++k)
+                        {
+                            re[k] *= gains[k];
+                            im[k] *= gains[k];
+                        }
+                    });
+}
+
+/** Where @p hz sits across [@p lowHz, @p highHz] by octave, 0 to 1 (clamped). */
+inline double octavePosition(double hz, double lowHz, double highHz)
+{
+    if (hz <= lowHz || highHz <= lowHz || lowHz <= 0.0)
+        return hz <= lowHz ? 0.0 : 1.0;
+    return std::clamp(std::log(hz / lowHz) / std::log(highHz / lowHz), 0.0, 1.0);
+}
+
+/** Spectral EQ, Audacity's spectral parametric EQ: a bell across the band by
+    octave, @p gainDb at its middle (the band's geometric centre) and none at
+    its edges. */
+inline bool bellBand(std::vector<float>& samples, int from, int to, double sampleRate, double lowHz, double highHz,
+                     float gainDb)
+{
+    if (highHz <= lowHz)
+        return false;
+
+    const double low = std::max(lowHz, 1.0);
+    return scaleByCurve(samples, from, to, sampleRate, [low, highHz, gainDb](double hz)
+    {
+        if (hz <= low || hz >= highHz)
+            return 1.0;
+        const double shape = 0.5 - 0.5 * std::cos(2.0 * fft::kPi * octavePosition(hz, low, highHz));
+        return std::pow(10.0, gainDb * shape / 20.0);
+    });
+}
+
+/** Spectral shelf, Audacity's spectral shelves: @p gainDb reached across the
+    band by octave and held beyond it, above the band for a high shelf and
+    below it for a low one. */
+inline bool shelfBand(std::vector<float>& samples, int from, int to, double sampleRate, double lowHz, double highHz,
+                      float gainDb, bool highShelf)
+{
+    if (highHz <= lowHz)
+        return false;
+
+    const double low = std::max(lowHz, 1.0);
+    return scaleByCurve(samples, from, to, sampleRate, [low, highHz, gainDb, highShelf](double hz)
+    {
+        const double across = octavePosition(hz, low, highHz);
+        const double shape  = 0.5 - 0.5 * std::cos(fft::kPi * (highShelf ? across : 1.0 - across));
+        return std::pow(10.0, gainDb * shape / 20.0);
+    });
+}
+
 /**
     Spectral repair, the spot-healing of Audition and Audacity's spectral
     tools: the band over [@p from, @p to) is rebuilt from what the same

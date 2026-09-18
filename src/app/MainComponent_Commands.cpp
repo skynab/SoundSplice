@@ -274,6 +274,8 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::spectralDelete:
         case commands::spectralGain:
         case commands::spectralRepair:
+        case commands::spectralEq:
+        case commands::spectralShelf:
             info.setActive(audioEditor_.frequencyBand().has_value());
             break;
 
@@ -372,6 +374,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::spectralDelete:  scaleSpectralSelection("Spectral delete", 0.0f); break;
         case commands::spectralGain:    showSpectralGainDialog(); break;
         case commands::spectralRepair:  repairSpectralSelection(); break;
+        case commands::spectralEq:      showSpectralEqDialog(); break;
+        case commands::spectralShelf:   showSpectralShelfDialog(); break;
         case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
         case commands::truncateSilence: showTruncateSilenceDialog(); break;
         case commands::autoDuck:        showAutoDuckDialog(); break;
@@ -643,6 +647,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::spectralDelete);
         add(commands::spectralGain);
         add(commands::spectralRepair);
+        add(commands::spectralEq);
+        add(commands::spectralShelf);
         menu.addSeparator();
         add(commands::normalizeLoudness);
         menu.addSeparator();
