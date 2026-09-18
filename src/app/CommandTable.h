@@ -227,7 +227,7 @@ inline const std::vector<Definition>& all()
         { humRemoval,       "Hum Removal...",       "Edit", "Notch out 50 or 60 Hz mains hum and its harmonics from the audio editor's selection.", {} },
         { spectralDelete,   "Spectral Delete",      "Edit", "Remove the frequencies in a box dragged on the spectrogram, over its time.", {} },
         { spectralGain,     "Spectral Gain...",     "Edit", "Turn the frequencies in a box dragged on the spectrogram up or down, over its time.", {} },
-        { spectralRepair,   "Spectral Repair",      "Edit", "Rebuild the frequencies in a box dragged on the spectrogram from what they do either side of it, to paint out a cough or a clunk.", {} },
+        { spectralRepair,   "Spectral Repair",      "Edit", "Rebuild what's painted on the spectrogram (Ctrl-drag), or a box dragged on it, from what those frequencies do either side, to heal a cough or a clunk.", {} },
         { spectralEq,       "Spectral EQ...",       "Edit", "A bell of gain across the frequencies in a box dragged on the spectrogram, strongest at its middle.", {} },
         { spectralShelf,    "Spectral Shelf...",    "Edit", "A shelf of gain ramping across a box dragged on the spectrogram and holding above or below it.", {} },
         { studioFadeOut,    "Studio Fade Out",      "Edit", "Fade the audio editor's selection out while a low-pass filter darkens it, as a mixed fade sounds.", {} },

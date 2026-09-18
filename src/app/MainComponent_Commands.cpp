@@ -274,6 +274,9 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::spectralDelete:
         case commands::spectralGain:
         case commands::spectralRepair:
+            info.setActive(audioEditor_.frequencyBand().has_value() || audioEditor_.spectralBrush().has_value());
+            break;
+
         case commands::spectralEq:
         case commands::spectralShelf:
             info.setActive(audioEditor_.frequencyBand().has_value());

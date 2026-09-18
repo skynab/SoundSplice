@@ -263,8 +263,32 @@ inline bool shelfBand(std::vector<float>& samples, int from, int to, double samp
     @p samples must hold that context either side of the selection. False,
     changing nothing, if the selection is too short or there's no context.
 */
+template <typename MaskAt>
+bool healMask(std::vector<float>& samples, int from, int to, double sampleRate, int contextFrames, MaskAt&& maskAt);
+
 inline bool healBand(std::vector<float>& samples, int from, int to, double sampleRate, double lowHz, double highHz,
                      int contextFrames)
+{
+    if (highHz <= lowHz || sampleRate <= 0.0)
+        return false;
+
+    // The box: every window, and each bin by how far it's inside the band,
+    // with a one-bin ramp at each edge.
+    const double binHz = sampleRate / windowFor(std::clamp(to, 0, (int) samples.size()) - std::max(from, 0));
+    return healMask(samples, from, to, sampleRate, contextFrames, [lowHz, highHz, binHz](double, double hz)
+    {
+        return (float) std::clamp(std::min(hz - lowHz, highHz - hz) / binHz + 0.5, 0.0, 1.0);
+    });
+}
+
+/**
+    Spectral repair of any shape, for the healing brush: as healBand, but how
+    much of each window's bin is rebuilt is @p maskAt(the window's middle as a
+    sample index into @p samples, the bin's frequency in Hz), from 0 (left as
+    it is) to 1 (rebuilt). Where the mask is 0 throughout, nothing changes.
+*/
+template <typename MaskAt>
+bool healMask(std::vector<float>& samples, int from, int to, double sampleRate, int contextFrames, MaskAt&& maskAt)
 {
     const int size = (int) samples.size();
     from = std::clamp(from, 0, size);
@@ -277,21 +301,27 @@ inline bool healBand(std::vector<float>& samples, int from, int to, double sampl
     if (before.empty() && after.empty())
         return false;
 
-    return editBand(samples, from, to, sampleRate, lowHz, highHz,
-                    [&before, &after](int frame, int frames, std::vector<float>& re, std::vector<float>& im,
-                                      const std::vector<float>& amounts)
+    const double binHz = sampleRate / n;
+    const int    hop   = n / 4;
+
+    return editBand(samples, from, to, sampleRate, 0.0, sampleRate,
+                    [&](int frame, int frames, std::vector<float>& re, std::vector<float>& im,
+                        const std::vector<float>& bins)
                     {
-                        const double t = frames > 1 ? (double) frame / (double) (frames - 1) : 0.5;
-                        for (size_t k = 0; k < amounts.size(); ++k)
+                        const double t      = frames > 1 ? (double) frame / (double) (frames - 1) : 0.5;
+                        const double centre = (double) from + (double) frame * hop + n * 0.5;
+
+                        for (size_t k = 0; k < bins.size(); ++k)
                         {
-                            if (amounts[k] <= 0.0f)
+                            const float amount = maskAt(centre, (double) k * binHz);
+                            if (amount <= 0.0f)
                                 continue;
 
                             const double target = before.empty() ? after[k]
                                                 : after.empty()  ? before[k]
                                                                  : before[k] * (1.0 - t) + after[k] * t;
                             const double current = std::hypot((double) re[k], (double) im[k]);
-                            const double wanted  = current + (target - current) * amounts[k];
+                            const double wanted  = current + (target - current) * std::min(1.0f, amount);
 
                             if (current > 1.0e-12)
                             {

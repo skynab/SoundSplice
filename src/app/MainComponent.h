@@ -355,6 +355,7 @@ private:
     void                   scaleSpectralSelection(const juce::String& label, float gain);
     void                   showSpectralGainDialog();
     void                   repairSpectralSelection();
+    void                   repairPaintedSpectrum(const spectrogramimage::Brush& brush);
     void                   applySpectralEdit(const juce::String& label,
                                              const std::function<bool(std::vector<float>&, double rate, double lowHz,
                                                                       double highHz)>& edit);

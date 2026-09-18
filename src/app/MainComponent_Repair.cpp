@@ -296,6 +296,12 @@ void MainComponent::scaleSpectralSelection(const juce::String& label, float gain
     frequencies over its time rebuilt from what they do either side of it. */
 void MainComponent::repairSpectralSelection()
 {
+    if (const auto brush = audioEditor_.spectralBrush())
+    {
+        repairPaintedSpectrum(*brush);
+        return;
+    }
+
     const auto band = audioEditor_.frequencyBand();
     if (! band)
     {
@@ -416,6 +422,38 @@ void MainComponent::showSpectralShelfDialog()
                 return engine::spectral::shelfBand(channel, 0, (int) channel.size(), rate, low, high, db, side == 0);
             });
         }));
+}
+
+/** The healing brush: what's painted on the spectrogram is rebuilt from what
+    its frequencies do either side of the painting, and nothing else is. */
+void MainComponent::repairPaintedSpectrum(const spectrogramimage::Brush& brush)
+{
+    const double selectionStart = audioEditor_.selection().startSeconds;
+    const int    context = (int) std::lround((engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0) * 0.5);
+    bool         refused = false;
+
+    showBusy("Healing...");
+
+    const bool edited = editSelectionInContext("Spectral repair", context,
+        [&](std::vector<std::vector<float>>& channels, int from, int to, double rate)
+        {
+            // A window's middle, as a sample of what was read, back to seconds
+            // into the clip, where the brush was painted.
+            const auto maskAt = [&](double sample, double hz)
+            {
+                return brush.amountAt(selectionStart + (sample - from) / rate, hz);
+            };
+
+            for (auto& channel : channels)
+                if (! engine::spectral::healMask(channel, from, to, rate, context, maskAt))
+                    refused = true;
+            return ! refused;
+        });
+
+    if (refused)
+        showError("The healing brush needs a stroke at least a few milliseconds long, with audio either side of it");
+    else if (edited)
+        showStatus("Healed what was painted");
 }
 
 void MainComponent::showSpectralGainDialog()

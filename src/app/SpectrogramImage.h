@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <utility>
+#include <vector>
 
 #include <juce_graphics/juce_graphics.h>
 
@@ -85,6 +87,62 @@ namespace spectrogramimage
         const int   lower    = std::min((int) t, kStops - 2);
         return stops[lower].interpolatedWith(stops[lower + 1], t - (float) lower);
     }
+
+    /** What the healing brush has painted: round dabs on the spectrogram,
+        each as wide in seconds and as tall in the view as the brush was on
+        screen when it was painted. Kept in the view's own units (a fraction
+        of its height, under the scale showing) so a dab covers the same
+        frequencies the eye saw it cover. */
+    struct Brush
+    {
+        struct Dab
+        {
+            double seconds    = 0.0;
+            double proportion = 0.0; // up the view, 0 bottom to 1 top
+        };
+
+        std::vector<Dab> dabs;
+        double           radiusSeconds    = 0.05;
+        double           radiusProportion = 0.03;
+        Scale            scale            = Scale::Logarithmic;
+        double           nyquist          = 24000.0;
+
+        bool isEmpty() const noexcept { return dabs.empty(); }
+
+        /** How much of the point @p seconds into the clip, at @p hz, is
+            painted: 1 well inside a dab, falling to 0 over its outer edge so
+            the repair has no hard boundary. */
+        float amountAt(double seconds, double hz) const
+        {
+            const double p      = proportionOf(hz, nyquist, scale);
+            float        amount = 0.0f;
+            for (const auto& dab : dabs)
+            {
+                const double dt = (seconds - dab.seconds) / radiusSeconds;
+                if (dt < -1.0 || dt > 1.0)
+                    continue;
+                const double dp       = (p - dab.proportion) / radiusProportion;
+                const double distance = std::sqrt(dt * dt + dp * dp);
+                if (distance < 1.0)
+                    amount = std::max(amount, (float) std::clamp((1.0 - distance) / 0.3, 0.0, 1.0));
+                if (amount >= 1.0f)
+                    break;
+            }
+            return amount;
+        }
+
+        /** The seconds the painting spans, dabs' edges included. */
+        std::pair<double, double> timeSpan() const
+        {
+            double from = dabs.empty() ? 0.0 : dabs.front().seconds, to = from;
+            for (const auto& dab : dabs)
+            {
+                from = std::min(from, dab.seconds);
+                to   = std::max(to, dab.seconds);
+            }
+            return { from - radiusSeconds, to + radiusSeconds };
+        }
+    };
 
     /** @p data as an image a column per column and @p rows high, row 0 at the
         top (the highest frequency). Each row shows the loudest bin it spans,

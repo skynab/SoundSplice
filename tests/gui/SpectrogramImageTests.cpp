@@ -84,3 +84,28 @@ TEST_CASE("The spectrogram's linear and mel scales map frequencies both ways", "
             REQUIRE_THAT(back, WithinAbs(hz, hz * 1e-9));
         }
 }
+
+TEST_CASE("The healing brush covers what was painted, softly at its edges", "[gui][spectrogram]")
+{
+    spectrogramimage::Brush brush;
+    brush.radiusSeconds    = 0.1;
+    brush.radiusProportion = 0.05;
+    brush.nyquist          = 24000.0;
+    brush.scale            = spectrogramimage::Scale::Logarithmic;
+
+    const double oneK = spectrogramimage::proportionOf(1000.0, brush.nyquist, brush.scale);
+    brush.dabs.push_back({ 2.0, oneK });
+    brush.dabs.push_back({ 2.05, oneK });
+
+    REQUIRE(brush.amountAt(2.0, 1000.0) == 1.0f);         // under a dab
+    REQUIRE(brush.amountAt(2.02, 1000.0) == 1.0f);        // between two that overlap
+    REQUIRE(brush.amountAt(2.5, 1000.0) == 0.0f);         // well after
+    REQUIRE(brush.amountAt(2.0, 8000.0) == 0.0f);         // well above
+    const float edge = brush.amountAt(2.0 - 0.1 * 0.85, 1000.0); // the side away from the second dab
+    REQUIRE(edge > 0.0f);                                  // the soft edge
+    REQUIRE(edge < 1.0f);
+
+    const auto [from, to] = brush.timeSpan();
+    REQUIRE_THAT(from, WithinAbs(1.9, 1e-9));
+    REQUIRE_THAT(to, WithinAbs(2.15, 1e-9));
+}

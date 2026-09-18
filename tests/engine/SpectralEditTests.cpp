@@ -158,3 +158,41 @@ TEST_CASE("Spectral shelves ramp across the band and hold beyond it", "[engine][
     REQUIRE_THAT(levelAt(low, 12000, 36000, 500.0), WithinAbs(cut, 0.004));
     REQUIRE_THAT(levelAt(low, 12000, 36000, 12000.0), WithinAbs(0.2, 0.002));
 }
+
+TEST_CASE("The healing brush rebuilds only what's painted", "[engine][spectral]")
+{
+    // The steady 5 kHz note with a burst on it, as for spectral repair, over
+    // two seconds, with the selection much wider than the burst.
+    std::vector<float> audio(96000);
+    for (int n = 0; n < 96000; ++n)
+    {
+        const double burst = n >= 44000 && n < 52000 ? 0.8 : 0.2;
+        audio[(size_t) n] = (float) (burst * std::sin(2.0 * kPi * 5000.0 * n / kRate)
+                                   + 0.3 * std::sin(2.0 * kPi * 1000.0 * n / kRate));
+    }
+    const auto original = audio;
+
+    // Painted over the burst alone: its time and a band around 5 kHz.
+    const auto painted = [](double sample, double hz)
+    {
+        return sample >= 43000.0 && sample <= 53000.0 && hz >= 4000.0 && hz <= 6000.0 ? 1.0f : 0.0f;
+    };
+
+    auto healed = audio;
+    REQUIRE(spectral::healMask(healed, 30000, 66000, kRate, 24000, painted));
+
+    REQUIRE_THAT(levelAt(healed, 45000, 51000, 5000.0), WithinAbs(0.2, 0.03));
+    REQUIRE_THAT(levelAt(healed, 45000, 51000, 1000.0), WithinAbs(0.3, 0.01));
+
+    // Inside the selection but away from the paint, the audio is as it was.
+    float worst = 0.0f;
+    for (int i = 30000; i < 40000; ++i)
+        worst = std::max(worst, std::abs(healed[(size_t) i] - original[(size_t) i]));
+    REQUIRE(worst < 1.0e-5f);
+
+    // Nothing painted, nothing changed.
+    auto untouched = audio;
+    REQUIRE(spectral::healMask(untouched, 30000, 66000, kRate, 24000, [](double, double) { return 0.0f; }));
+    for (size_t i = 0; i < untouched.size(); ++i)
+        REQUIRE(std::abs(untouched[i] - original[i]) < 1.0e-5f);
+}

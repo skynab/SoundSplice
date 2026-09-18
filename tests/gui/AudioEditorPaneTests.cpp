@@ -648,3 +648,42 @@ TEST_CASE("On the spectrogram a diagonal drag selects a box of frequencies too",
     sendMouseUp(*pane, eventAt(*pane, centre, centre));
     REQUIRE_FALSE(pane->frequencyBand().has_value());
 }
+
+TEST_CASE("Ctrl-drag on the spectrogram paints with the healing brush", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto        pane = makeReadyPane(800, 400, 10.0);
+    pane->setSpectrogramView(true);
+
+    const auto from = waveformPoint(*pane, 0.3f);
+    const auto to   = waveformPoint(*pane, 0.4f).translated(0.0f, -20.0f);
+    const auto ctrl = juce::ModifierKeys(juce::ModifierKeys::commandModifier);
+
+    const auto withMods = [&](juce::Point<float> position)
+    {
+        const auto source = juce::Desktop::getInstance().getMainMouseSource();
+        const auto now    = juce::Time::getCurrentTime();
+        return juce::MouseEvent(source, position, ctrl, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, pane.get(), pane.get(),
+                                now, from, now, 1, false);
+    };
+
+    sendMouseDown(*pane, withMods(from));
+    sendMouseDrag(*pane, withMods(to));
+    sendMouseUp(*pane, withMods(to));
+
+    const auto brush = pane->spectralBrush();
+    REQUIRE(brush.has_value());
+    REQUIRE(brush->dabs.size() > 2);          // a solid stroke, not just its ends
+    REQUIRE_FALSE(pane->frequencyBand().has_value());
+
+    // The selection spans the stroke's time, so the edit covers it.
+    REQUIRE_FALSE(pane->selection().isEmpty());
+    const auto [start, end] = brush->timeSpan();
+    REQUIRE(pane->selection().startSeconds <= start + 1e-9);
+    REQUIRE(pane->selection().endSeconds >= std::min(end, 10.0) - 1e-9);
+
+    // A plain click clears the painting.
+    sendMouseDown(*pane, eventAt(*pane, from, from));
+    sendMouseUp(*pane, eventAt(*pane, from, from));
+    REQUIRE_FALSE(pane->spectralBrush().has_value());
+}

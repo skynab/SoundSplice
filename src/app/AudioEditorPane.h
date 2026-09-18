@@ -328,12 +328,21 @@ public:
         action fires rather than tracked separately. */
     AudioRange selection() const { return selection_; }
 
+    /** What the healing brush has painted on the spectrogram (Ctrl-drag, Cmd
+        on a Mac), if anything: the selection then spans its time. */
+    std::optional<spectrogramimage::Brush> spectralBrush() const
+    {
+        if (! spectrogramView_ || brush_.isEmpty() || selection_.isEmpty())
+            return std::nullopt;
+        return brush_;
+    }
+
     /** The frequencies the selection covers, lowest first, when it was made
         as a box on the spectrogram: a spectral selection. Nothing for a
         selection of every frequency. */
     std::optional<std::pair<double, double>> frequencyBand() const
     {
-        if (! spectrogramView_ || selection_.isEmpty() || bandHighHz_ <= bandLowHz_)
+        if (! spectrogramView_ || selection_.isEmpty() || bandHighHz_ <= bandLowHz_ || ! brush_.isEmpty())
             return std::nullopt;
         return std::pair { bandLowHz_, bandHighHz_ };
     }
@@ -482,6 +491,21 @@ public:
 
         paintWaveform(g, area);
 
+        if (spectrogramView_ && ! brush_.isEmpty())
+        {
+            juce::Graphics::ScopedSaveState state(g);
+            g.reduceClipRegion(area);
+            g.setColour(juce::Colours::cyan.withAlpha(0.28f));
+            const float rx = (float) (brush_.radiusSeconds / juce::jmax(1.0e-12, geometry_.secondsPerPixel));
+            const float ry = (float) (brush_.radiusProportion * area.getHeight());
+            for (const auto& dab : brush_.dabs)
+            {
+                const float x = geometry_.xForSeconds(dab.seconds);
+                const float y = (float) area.getBottom() - (float) dab.proportion * (float) area.getHeight();
+                g.fillEllipse(x - rx, y - ry, rx * 2.0f, ry * 2.0f);
+            }
+        }
+
         // A spectral selection is a box, drawn over the spectrogram since it
         // has no background to sit on as the waveform does.
         if (const auto band = frequencyBand())
@@ -554,6 +578,64 @@ public:
         placed at the middle of the window it was measured over, so a sound
         lines up with where the waveform would show it. Frequency is marked
         up the left. */
+    static constexpr float kBrushRadiusPixels = 9.0f;
+
+    /** Starts a painting: the brush is sized from the view as it is now, so
+        it covers on the spectrogram what it covers on screen. */
+    void beginBrush(juce::Point<float> position)
+    {
+        const auto area = waveformArea();
+        brush_.dabs.clear();
+        brush_.radiusSeconds    = kBrushRadiusPixels * juce::jmax(1.0e-9, geometry_.secondsPerPixel);
+        brush_.radiusProportion = kBrushRadiusPixels / (double) juce::jmax(1, area.getHeight());
+        brush_.scale            = spectrogramScale_;
+        brush_.nyquist          = spectrogramNyquist_;
+        bandLowHz_ = bandHighHz_ = 0.0;
+        painting_               = true;
+        lastBrushPoint_         = position;
+        addDab(position);
+        repaint();
+    }
+
+    /** Dabs along the way from the last point, close enough to make a solid
+        stroke however fast the mouse moved. */
+    void paintBrushTo(juce::Point<float> position)
+    {
+        const float distance = lastBrushPoint_.getDistanceFrom(position);
+        const int   steps    = juce::jmax(1, (int) std::ceil(distance / (kBrushRadiusPixels * 0.5f)));
+        for (int i = 1; i <= steps; ++i)
+            addDab(lastBrushPoint_ + (position - lastBrushPoint_) * ((float) i / (float) steps));
+        lastBrushPoint_ = position;
+        repaint();
+    }
+
+    void addDab(juce::Point<float> position)
+    {
+        const auto area = waveformArea();
+        spectrogramimage::Brush::Dab dab;
+        dab.seconds    = geometry_.secondsForX(position.x);
+        dab.proportion = juce::jlimit(0.0, 1.0, 1.0 - (double) (position.y - (float) area.getY()) / (double) juce::jmax(1, area.getHeight()));
+        brush_.dabs.push_back(dab);
+    }
+
+    /** The painting's time becomes the selection, which is what the edit
+        reads and writes; its frequencies are the brush's own. */
+    void endBrush()
+    {
+        painting_ = false;
+        if (brush_.isEmpty())
+            return;
+
+        const auto [from, to] = brush_.timeSpan();
+        const auto dabs       = brush_.dabs;
+        setSelection(AudioRange::fromDrag(from, to).clampedTo(geometry_.fileLengthSeconds));
+        brush_.dabs = dabs; // setSelection keeps it unless the range came out empty
+        if (selection_.isEmpty())
+            brush_.dabs.clear();
+        notifySelection();
+        repaint();
+    }
+
     /** The frequency at height @p y in the spectrogram's area. */
     double hzForY(float y) const
     {
@@ -692,6 +774,15 @@ public:
             return;
         }
 
+        // Painting with the healing brush: Ctrl-drag on the spectrogram.
+        if (spectrogramView_ && e.mods.isCommandDown())
+        {
+            beginBrush(e.position);
+            return;
+        }
+
+        brush_.dabs.clear();
+
         dragAnchorSeconds_ = geometry_.secondsForX((float) e.position.x);
         dragAnchorHz_      = hzForY(e.position.y);
         dragging_          = true;
@@ -709,6 +800,12 @@ public:
         if (drawing_)
         {
             continueStroke(e.position);
+            return;
+        }
+
+        if (painting_)
+        {
+            paintBrushTo(e.position);
             return;
         }
 
@@ -748,6 +845,12 @@ public:
         if (drawing_)
         {
             endStroke();
+            return;
+        }
+
+        if (painting_)
+        {
+            endBrush();
             return;
         }
 
@@ -1143,7 +1246,10 @@ private:
     {
         selection_ = range;
         if (selection_.isEmpty())
+        {
             bandLowHz_ = bandHighHz_ = 0.0;
+            brush_.dabs.clear();
+        }
         updateSelectionLabel();
         updateNoiseControls();
         repaint();
@@ -1180,6 +1286,8 @@ private:
         if (const auto band = frequencyBand())
             text << ",  " << juce::String((int) std::lround(band->first)) << " - "
                  << juce::String((int) std::lround(band->second)) << " Hz";
+        else if (spectrogramView_ && ! brush_.isEmpty())
+            text << ",  painted";
         selectionLabel_.setText(text, juce::dontSendNotification);
     }
 
@@ -1391,6 +1499,9 @@ private:
     bool             dbScale_         = false;
     bool             spectrogramView_ = false;
     double           dragAnchorHz_    = 0.0;
+    spectrogramimage::Brush brush_;
+    bool             painting_        = false;
+    juce::Point<float> lastBrushPoint_;
     double           bandLowHz_       = 0.0; // a spectral selection's band; none when equal
     double           bandHighHz_      = 0.0;
     juce::Image      spectrogram_;
