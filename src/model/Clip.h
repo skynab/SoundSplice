@@ -5,6 +5,7 @@
 #include "engine/ClipChannels.h"
 #include "engine/ClipEnvelope.h"
 #include "engine/ClipFade.h"
+#include "engine/ClipSpectralEdits.h"
 #include "engine/Pattern.h"
 
 namespace soundsplice::model
@@ -56,6 +57,13 @@ struct Clip
         Non-destructive, like the fades; see engine/ClipEnvelope.h. Audio
         clips only. */
     engine::ClipEnvelope envelope;
+
+    /** Spectral edits kept on the clip, boxes of time and frequency turned
+        up, down or out, in seconds into its file like the volume curve.
+        Non-destructive: what plays is the file with them applied, rendered
+        to a cache (app/SpectralRender.h), so any can be removed later.
+        Audio clips only. */
+    engine::SpectralRegions spectralEdits;
 
     bool operator==(const Clip&) const = default;
 };

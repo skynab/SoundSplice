@@ -355,6 +355,9 @@ private:
     void                   scaleSpectralSelection(const juce::String& label, float gain);
     void                   showSpectralGainDialog();
     void                   repairSpectralSelection();
+    void                   showSpectralClipEditDialog();
+    void                   addSpectralClipEdit(float gainDb);
+    void                   removeSpectralClipEdits();
     void                   showSpectrogramSettingsDialog();
     void                   loadSpectrogramSettings();
     void                   repairPaintedSpectrum(const spectrogramimage::Brush& brush);

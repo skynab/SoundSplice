@@ -1,5 +1,6 @@
 #include "MainComponentInternal.h"
 
+#include "SpectralRender.h"
 #include "engine/Resample.h"
 #include "model/TrackResample.h"
 
@@ -1538,7 +1539,9 @@ void MainComponent::syncEngineTracks()
                 continue;
 
             engine::AudioClipSpec spec;
-            spec.file        = juce::File(clip.audioFile);
+            // With spectral edits, the file with them applied: made once and
+            // cached, the original left as it is.
+            spec.file        = spectralrender::fileFor(juce::File(clip.audioFile), clip.spectralEdits);
             spec.startBeats  = clip.startBeats;
             spec.lengthBeats = clip.lengthBeats;
             spec.gainDb      = clip.gainDb;

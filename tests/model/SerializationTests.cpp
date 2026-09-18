@@ -599,3 +599,31 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
         REQUIRE(settingsOnly(slot.multiband) == defaults.multiband);
     }
 }
+
+TEST_CASE("A clip's spectral edits round-trip", "[model][serialization]")
+{
+    Song song;
+    Track track;
+    track.type = TrackType::Audio;
+    Clip clip;
+    clip.type      = ClipType::Audio;
+    clip.audioFile = "C:/audio/take 1.wav";
+
+    soundsplice::engine::SpectralRegion region;
+    region.startSeconds = 1.25;
+    region.endSeconds   = 2.5;
+    region.lowHz        = 3000.0;
+    region.highHz       = 7500.5;
+    region.gainDb       = -9.5f;
+    clip.spectralEdits.push_back(region);
+    region.gainDb = soundsplice::engine::SpectralRegion::kSilenceDb;
+    clip.spectralEdits.push_back(region);
+
+    track.clips.push_back(clip);
+    song.tracks.push_back(track);
+
+    Song back;
+    REQUIRE(deserialize(serialize(song), back));
+    REQUIRE(back.tracks.at(0).clips.at(0).spectralEdits == song.tracks[0].clips[0].spectralEdits);
+    REQUIRE(back.tracks.at(0).clips.at(0).audioFile == "C:/audio/take 1.wav");
+}

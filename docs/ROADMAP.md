@@ -186,7 +186,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ✅ **Spot healing brush**: paint over a cough, click or phone ring and have it inpainted from the
   surrounding time and frequency content (Audition). A box version ✅ (Edit > Spectral Repair: each bin's
   level drawn across the box from its average either side, the phase kept); a freehand brush ✅ (Ctrl-drag on the spectrogram, Cmd on a Mac, then Spectral Repair heals only what was painted)
-- ⬜ Non-destructive spectral edits stored on the clip (REAPER)
+- ✅ Non-destructive spectral edits stored on the clip (REAPER): Edit > Spectral > Add Clip Spectral Edit keeps a box's gain on the clip, outlined on the spectrogram; playback and export read the file with them applied, rendered once to a cache (`src/app/SpectralRender.h`); Remove Clip Spectral Edits takes them off
 
 ### Phase 4 — Recording parity
 

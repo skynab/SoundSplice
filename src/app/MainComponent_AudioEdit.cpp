@@ -56,6 +56,15 @@ void MainComponent::refreshAudioEditorForSelected()
     audioEditor_.setClip(file, clipSeconds, clip->gainDb, track.name, track.colour,
                          clip->sourceOffsetSeconds);
     audioEditor_.setNoisePrintCaptured(! noiseProfiles_.empty() && noiseProfileFile_ == file);
+    {
+        auto stored = clip->spectralEdits;
+        for (auto& region : stored)
+        {
+            region.startSeconds -= clip->sourceOffsetSeconds;
+            region.endSeconds   -= clip->sourceOffsetSeconds;
+        }
+        audioEditor_.setStoredSpectralEdits(std::move(stored));
+    }
 
     // Read once per window, not once per refresh. A destructive edit writes a
     // new file and a trim moves the window, so a changed key is exactly the

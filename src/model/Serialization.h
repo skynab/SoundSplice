@@ -83,6 +83,16 @@ namespace detail
                 out << " " << num(point.seconds) << " " << num((double) point.gain);
             out << "\n";
         }
+
+        // Likewise only when there are some.
+        if (! clip.spectralEdits.empty())
+        {
+            out << "CLIPSPEC " << clip.spectralEdits.size();
+            for (const auto& region : clip.spectralEdits)
+                out << " " << num(region.startSeconds) << " " << num(region.endSeconds) << " " << num(region.lowHz)
+                    << " " << num(region.highHz) << " " << num((double) region.gainDb);
+            out << "\n";
+        }
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
             out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
@@ -450,6 +460,24 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 if (! (es >> seconds >> gain))
                     break; // a truncated line keeps the points it has
                 clip.envelope.addPoint(seconds, (float) gain);
+            }
+        }
+
+        if (readTagged("CLIPSPEC", rest))
+        {
+            std::istringstream ss(rest);
+            ss.imbue(std::locale::classic());
+
+            int count = 0;
+            ss >> count;
+            for (int i = 0; i < count; ++i)
+            {
+                engine::SpectralRegion region;
+                double gainDb = 0.0;
+                if (! (ss >> region.startSeconds >> region.endSeconds >> region.lowHz >> region.highHz >> gainDb))
+                    break;
+                region.gainDb = (float) gainDb;
+                clip.spectralEdits.push_back(region);
             }
         }
 

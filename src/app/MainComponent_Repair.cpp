@@ -505,4 +505,109 @@ void MainComponent::showSpectralGainDialog()
         }));
 }
 
+/** Spectral edits kept on the clip (REAPER's): the box is stored, and what
+    plays is the file with it applied, so it can be removed at any time. */
+void MainComponent::showSpectralClipEditDialog()
+{
+    if (! audioEditor_.frequencyBand())
+    {
+        showError("Drag a box on the spectrogram first (View > Spectrogram)");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Add Clip Spectral Edit",
+                                         "Turns the box up or down as the clip plays, leaving its file as it is. "
+                                         "-96 dB or lower removes it.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("gain", juce::String(settings_.getDoubleValue("spectralClipEdit.db", -12.0)), "Gain (dB):");
+    window->addButton("Add", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double db = juce::jlimit(-120.0, 24.0, window->getTextEditorContents("gain").getDoubleValue());
+            self->settings_.setValue("spectralClipEdit.db", db);
+            self->addSpectralClipEdit((float) db);
+        }));
+}
+
+void MainComponent::addSpectralClipEdit(float gainDb)
+{
+    const auto* clip = selectedAudioClip();
+    const auto  band = audioEditor_.frequencyBand();
+    if (clip == nullptr || ! band)
+        return;
+
+    engine::SpectralRegion region;
+    region.startSeconds = clip->sourceOffsetSeconds + audioEditor_.selection().startSeconds;
+    region.endSeconds   = clip->sourceOffsetSeconds + audioEditor_.selection().endSeconds;
+    region.lowHz        = band->first;
+    region.highHz       = band->second;
+    region.gainDb       = gainDb;
+
+    const int trackIndex = selectedTrackIndex_, clipIndex = selectedClipIndex_;
+    history_.edit("Add clip spectral edit", [trackIndex, clipIndex, region](model::Song& s)
+    {
+        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
+            return;
+        auto& clips = s.tracks[(size_t) trackIndex].clips;
+        if (clipIndex >= 0 && clipIndex < (int) clips.size())
+            clips[(size_t) clipIndex].spectralEdits.push_back(region);
+    });
+
+    showBusy("Applying spectral edit...");
+    syncEngineTracks(); // renders the clip's file with its edits, once
+    arrangementView_.setSong(history_.current());
+    refreshAudioEditorForSelected();
+    showStatus("Spectral edit kept on the clip - Edit > Spectral > Remove Clip Spectral Edits takes it off");
+}
+
+/** Takes the clip's stored spectral edits off where the selection is, or all
+    of them with none. */
+void MainComponent::removeSpectralClipEdits()
+{
+    const auto* clip = selectedAudioClip();
+    if (clip == nullptr || clip->spectralEdits.empty())
+        return;
+
+    const auto   selection = audioEditor_.selection();
+    const bool   all       = selection.isEmpty();
+    const double from      = clip->sourceOffsetSeconds + selection.startSeconds;
+    const double to        = clip->sourceOffsetSeconds + selection.endSeconds;
+
+    int removed = 0;
+    for (const auto& region : clip->spectralEdits)
+        if (all || region.overlaps(from, to))
+            ++removed;
+    if (removed == 0)
+    {
+        showStatus("No clip spectral edits in the selection");
+        return;
+    }
+
+    const int trackIndex = selectedTrackIndex_, clipIndex = selectedClipIndex_;
+    history_.edit("Remove clip spectral edits", [trackIndex, clipIndex, all, from, to](model::Song& s)
+    {
+        if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
+            return;
+        auto& clips = s.tracks[(size_t) trackIndex].clips;
+        if (clipIndex < 0 || clipIndex >= (int) clips.size())
+            return;
+        auto& edits = clips[(size_t) clipIndex].spectralEdits;
+        edits.erase(std::remove_if(edits.begin(), edits.end(),
+                                   [&](const engine::SpectralRegion& region) { return all || region.overlaps(from, to); }),
+                    edits.end());
+    });
+
+    syncEngineTracks();
+    arrangementView_.setSong(history_.current());
+    refreshAudioEditorForSelected();
+    showStatus("Removed " + juce::String(removed) + (removed == 1 ? " clip spectral edit" : " clip spectral edits"));
+}
+
 } // namespace soundsplice

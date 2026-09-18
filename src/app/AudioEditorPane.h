@@ -7,6 +7,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "engine/ClipSpectralEdits.h"
 #include "model/Track.h"
 
 #include "AudioFileTypes.h"
@@ -406,6 +407,17 @@ public:
 
     bool showsSplitView() const noexcept { return splitView_; }
 
+    /** The clip's stored spectral edits, in seconds from the clip's start,
+        outlined on the spectrogram with their gain so they can be seen and
+        removed. */
+    void setStoredSpectralEdits(engine::SpectralRegions regions)
+    {
+        if (regions == storedEdits_)
+            return;
+        storedEdits_ = std::move(regions);
+        repaint();
+    }
+
     /** Where the waveform is drawn: all of the clip's area, its top half in
         the split view, or nothing while the spectrogram replaces it. */
     juce::Rectangle<int> samplesArea() const
@@ -604,6 +616,33 @@ public:
                     g.fillPath(shape);
                 g.setColour(juce::Colours::cyan.withAlpha(0.9f));
                 g.strokePath(shape, juce::PathStrokeType(1.0f));
+            }
+        }
+
+        if (! spectrogram.isEmpty() && ! storedEdits_.empty())
+        {
+            juce::Graphics::ScopedSaveState state(g);
+            g.reduceClipRegion(spectrogram);
+            g.setFont(juce::FontOptions(10.0f));
+            for (const auto& region : storedEdits_)
+            {
+                const float x1 = geometry_.xForSeconds(region.startSeconds);
+                const float x2 = geometry_.xForSeconds(region.endSeconds);
+                const float y1 = yForHz(region.highHz, spectrogram);
+                const float y2 = yForHz(region.lowHz, spectrogram);
+                const auto  box = juce::Rectangle<float>(x1, y1, x2 - x1, y2 - y1);
+
+                juce::Path outline;
+                outline.addRectangle(box);
+                juce::Path dashed;
+                const float dashes[] { 4.0f, 3.0f };
+                juce::PathStrokeType(1.0f).createDashedStroke(dashed, outline, dashes, 2);
+                g.setColour(juce::Colours::orange.withAlpha(0.9f));
+                g.fillPath(dashed);
+                g.drawText(region.gainDb <= engine::SpectralRegion::kSilenceDb
+                               ? juce::String("removed")
+                               : juce::String(region.gainDb, 1) + " dB",
+                           box.reduced(3.0f).withHeight(12.0f), juce::Justification::topLeft);
             }
         }
 
@@ -1622,6 +1661,7 @@ private:
     bool             dbScale_         = false;
     bool             spectrogramView_ = false;
     bool             splitView_       = false;
+    engine::SpectralRegions storedEdits_;
     double           dragAnchorHz_    = 0.0;
     spectrogramimage::Brush brush_;
     bool             painting_        = false;

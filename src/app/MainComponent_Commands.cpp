@@ -287,7 +287,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
         case commands::spectralEq:
         case commands::spectralShelf:
+        case commands::spectralClipEdit:
             info.setActive(audioEditor_.frequencyBand().has_value());
+            break;
+
+        case commands::spectralClipEditsRemove:
+            info.setActive(selectedAudioClip() != nullptr && ! selectedAudioClip()->spectralEdits.empty());
             break;
 
         case commands::nextOpenFile:
@@ -387,6 +392,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::spectralRepair:  repairSpectralSelection(); break;
         case commands::spectralEq:      showSpectralEqDialog(); break;
         case commands::spectralShelf:   showSpectralShelfDialog(); break;
+        case commands::spectralClipEdit:        showSpectralClipEditDialog(); break;
+        case commands::spectralClipEditsRemove: removeSpectralClipEdits(); break;
         case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
         case commands::truncateSilence: showTruncateSilenceDialog(); break;
         case commands::autoDuck:        showAutoDuckDialog(); break;
@@ -681,7 +688,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
             // All of these act on a box dragged on the spectrogram.
             juce::PopupMenu spectral;
             for (auto id : { commands::spectralRepair, commands::spectralDelete, commands::spectralGain,
-                             commands::spectralEq, commands::spectralShelf })
+                             commands::spectralEq, commands::spectralShelf, commands::spectralClipEdit,
+                             commands::spectralClipEditsRemove })
                 spectral.addCommandItem(&commandManager_, id);
             menu.addSubMenu("Spectral", spectral);
         }
