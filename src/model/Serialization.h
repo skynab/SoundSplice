@@ -331,7 +331,31 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.multiband.highRatio) << " "
                 << detail::num((double) slot.multiband.highMakeUpDb) << " "
                 << detail::num((double) slot.multiband.attackMs) << " "
-                << detail::num((double) slot.multiband.releaseMs) << "\n";
+                << detail::num((double) slot.multiband.releaseMs) << " "
+                << slot.parametricEq.band1Type << " "
+                << detail::num((double) slot.parametricEq.band1Hz) << " "
+                << detail::num((double) slot.parametricEq.band1GainDb) << " "
+                << detail::num((double) slot.parametricEq.band1Q) << " "
+                << slot.parametricEq.band2Type << " "
+                << detail::num((double) slot.parametricEq.band2Hz) << " "
+                << detail::num((double) slot.parametricEq.band2GainDb) << " "
+                << detail::num((double) slot.parametricEq.band2Q) << " "
+                << slot.parametricEq.band3Type << " "
+                << detail::num((double) slot.parametricEq.band3Hz) << " "
+                << detail::num((double) slot.parametricEq.band3GainDb) << " "
+                << detail::num((double) slot.parametricEq.band3Q) << " "
+                << slot.parametricEq.band4Type << " "
+                << detail::num((double) slot.parametricEq.band4Hz) << " "
+                << detail::num((double) slot.parametricEq.band4GainDb) << " "
+                << detail::num((double) slot.parametricEq.band4Q) << " "
+                << slot.parametricEq.band5Type << " "
+                << detail::num((double) slot.parametricEq.band5Hz) << " "
+                << detail::num((double) slot.parametricEq.band5GainDb) << " "
+                << detail::num((double) slot.parametricEq.band5Q) << " "
+                << slot.parametricEq.band6Type << " "
+                << detail::num((double) slot.parametricEq.band6Hz) << " "
+                << detail::num((double) slot.parametricEq.band6GainDb) << " "
+                << detail::num((double) slot.parametricEq.band6Q) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -865,6 +889,18 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double mbHighRatio = defaults.multiband.highRatio;
                 double mbHighMakeUp = defaults.multiband.highMakeUpDb;
                 double mbAttack = defaults.multiband.attackMs, mbRelease = defaults.multiband.releaseMs;
+                int    peqType1 = defaults.parametricEq.band1Type;
+                double peqHz1 = defaults.parametricEq.band1Hz, peqGain1 = defaults.parametricEq.band1GainDb, peqQ1 = defaults.parametricEq.band1Q;
+                int    peqType2 = defaults.parametricEq.band2Type;
+                double peqHz2 = defaults.parametricEq.band2Hz, peqGain2 = defaults.parametricEq.band2GainDb, peqQ2 = defaults.parametricEq.band2Q;
+                int    peqType3 = defaults.parametricEq.band3Type;
+                double peqHz3 = defaults.parametricEq.band3Hz, peqGain3 = defaults.parametricEq.band3GainDb, peqQ3 = defaults.parametricEq.band3Q;
+                int    peqType4 = defaults.parametricEq.band4Type;
+                double peqHz4 = defaults.parametricEq.band4Hz, peqGain4 = defaults.parametricEq.band4GainDb, peqQ4 = defaults.parametricEq.band4Q;
+                int    peqType5 = defaults.parametricEq.band5Type;
+                double peqHz5 = defaults.parametricEq.band5Hz, peqGain5 = defaults.parametricEq.band5GainDb, peqQ5 = defaults.parametricEq.band5Q;
+                int    peqType6 = defaults.parametricEq.band6Type;
+                double peqHz6 = defaults.parametricEq.band6Hz, peqGain6 = defaults.parametricEq.band6GainDb, peqQ6 = defaults.parametricEq.band6Q;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
                    >> delayTime >> delayFeedback >> delayMix >> room >> damping >> reverbMix
@@ -890,7 +926,13 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> echoTime >> echoTaps >> echoDecay >> echoMix >> echoPingPong
                    >> mbLowHz >> mbHighHz
                    >> mbLowThreshold >> mbLowRatio >> mbLowMakeUp >> mbMidThreshold >> mbMidRatio >> mbMidMakeUp >> mbHighThreshold >> mbHighRatio >> mbHighMakeUp
-                   >> mbAttack >> mbRelease;
+                   >> mbAttack >> mbRelease
+                   >> peqType1 >> peqHz1 >> peqGain1 >> peqQ1
+                   >> peqType2 >> peqHz2 >> peqGain2 >> peqQ2
+                   >> peqType3 >> peqHz3 >> peqGain3 >> peqQ3
+                   >> peqType4 >> peqHz4 >> peqGain4 >> peqQ4
+                   >> peqType5 >> peqHz5 >> peqGain5 >> peqQ5
+                   >> peqType6 >> peqHz6 >> peqGain6 >> peqQ6;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -1030,6 +1072,31 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.multiband.highMakeUpDb    = (float) mbHighMakeUp;
                 slot.multiband.attackMs     = (float) mbAttack;
                 slot.multiband.releaseMs    = (float) mbRelease;
+                slot.parametricEq.enabled   = slot.enabled && slot.kind == EffectKind::ParametricEq;
+                slot.parametricEq.band1Type   = std::clamp(peqType1, 0, 6);
+                slot.parametricEq.band1Hz     = (float) peqHz1;
+                slot.parametricEq.band1GainDb = (float) peqGain1;
+                slot.parametricEq.band1Q      = (float) peqQ1;
+                slot.parametricEq.band2Type   = std::clamp(peqType2, 0, 6);
+                slot.parametricEq.band2Hz     = (float) peqHz2;
+                slot.parametricEq.band2GainDb = (float) peqGain2;
+                slot.parametricEq.band2Q      = (float) peqQ2;
+                slot.parametricEq.band3Type   = std::clamp(peqType3, 0, 6);
+                slot.parametricEq.band3Hz     = (float) peqHz3;
+                slot.parametricEq.band3GainDb = (float) peqGain3;
+                slot.parametricEq.band3Q      = (float) peqQ3;
+                slot.parametricEq.band4Type   = std::clamp(peqType4, 0, 6);
+                slot.parametricEq.band4Hz     = (float) peqHz4;
+                slot.parametricEq.band4GainDb = (float) peqGain4;
+                slot.parametricEq.band4Q      = (float) peqQ4;
+                slot.parametricEq.band5Type   = std::clamp(peqType5, 0, 6);
+                slot.parametricEq.band5Hz     = (float) peqHz5;
+                slot.parametricEq.band5GainDb = (float) peqGain5;
+                slot.parametricEq.band5Q      = (float) peqQ5;
+                slot.parametricEq.band6Type   = std::clamp(peqType6, 0, 6);
+                slot.parametricEq.band6Hz     = (float) peqHz6;
+                slot.parametricEq.band6GainDb = (float) peqGain6;
+                slot.parametricEq.band6Q      = (float) peqQ6;
 
                 if (slot.kind == EffectKind::Plugin)
                 {

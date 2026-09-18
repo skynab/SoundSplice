@@ -4,6 +4,7 @@
 
 #include "engine/EffectChain.h"
 #include "model/Effects.h"
+#include "model/ParametricEqBands.h"
 
 namespace soundsplice::engine
 {
@@ -54,6 +55,7 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::Wah:        return std::make_unique<WahNode>();
         case model::EffectKind::Echo:       return std::make_unique<EchoNode>();
         case model::EffectKind::Multiband:  return std::make_unique<MultibandNode>();
+        case model::EffectKind::ParametricEq: return std::make_unique<ParametricEqNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -174,6 +176,7 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.mbMakeUpDb[2]    = slot.multiband.highMakeUpDb;
     params.mbAttackMs       = slot.multiband.attackMs;
     params.mbReleaseMs      = slot.multiband.releaseMs;
+    params.peqBands         = model::parametricBands(slot.parametricEq);
     return params;
 }
 

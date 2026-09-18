@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
 #include "engine/DynamicsEffects.h"
+#include "engine/ParametricEqEffect.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
@@ -48,7 +50,8 @@ enum class EffectNodeKind
     RingMod    = 22,
     Wah        = 23,
     Echo       = 24,
-    Multiband  = 25
+    Multiband  = 25,
+    ParametricEq = 26
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -188,6 +191,8 @@ struct EffectSlotParams
     float mbMakeUpDb[3]    {};
     float mbAttackMs       = 10.0f;
     float mbReleaseMs      = 150.0f;
+
+    std::array<ParametricBand, ParametricEq::kBands> peqBands {};
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -447,6 +452,16 @@ struct EchoNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct ParametricEqNode final : EffectProcessor
+{
+    ParametricEqEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::ParametricEq; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct MultibandNode final : EffectProcessor
 {
     MultibandEffect effect;
@@ -649,6 +664,11 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             for (int band = 0; band < 3; ++band)
                 multiband->effect.setBand(band, params.mbThresholdDb[band], params.mbRatio[band],
                                           params.mbMakeUpDb[band]);
+        }
+        else if (auto* parametric = dynamic_cast<ParametricEqNode*>(&node))
+        {
+            for (int band = 0; band < ParametricEq::kBands; ++band)
+                parametric->effect.setBand(band, params.peqBands[(size_t) band]);
         }
 }
 

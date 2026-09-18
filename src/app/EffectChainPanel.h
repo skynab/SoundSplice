@@ -7,10 +7,12 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "LayoutHelpers.h"
+#include "ParametricEqView.h"
 #include "engine/PluginHost.h"
 #include "model/EffectParams.h"
 #include "model/EffectPresets.h"
 #include "model/Effects.h"
+#include "model/ParametricEqBands.h"
 
 namespace soundsplice
 {
@@ -101,6 +103,23 @@ public:
         presetsButton_.setTooltip("Starting points for this effect, and settings you've saved");
         presetsButton_.onClick = [this] { showPresetsMenu(); };
         addChildComponent(presetsButton_);
+
+        // The parametric EQ's curve, edited by dragging its points; the
+        // numbers below it follow.
+        parametricView_.onChanged = [this](const ParametricEqView::Bands& bands)
+        {
+            if (! isValidSlot(selected_) || chain_[(size_t) selected_].kind != model::EffectKind::ParametricEq)
+                return;
+            auto slot = chain_[(size_t) selected_];
+            model::setParametricBands(slot.parametricEq, bands);
+            chain_[(size_t) selected_] = slot;
+            refreshParamControls();
+            if (onSlotParamsChanged)
+                onSlotParamsChanged(slot, selected_);
+        };
+        parametricView_.onDragStart = [this] { if (onSlotParamsDragStart) onSlotParamsDragStart(selected_); };
+        parametricView_.onDragEnd   = [this] { if (onSlotParamsDragEnd) onSlotParamsDragEnd(selected_); };
+        addChildComponent(parametricView_);
 
         setContentVisible(false);
     }
@@ -228,6 +247,9 @@ public:
         auto presetRow = area.removeFromTop(kRowHeight).reduced(2);
         setBoundsOrHide(presetsButton_, presetRow.removeFromLeft(juce::jmin(kPresetsButtonWidth, presetRow.getWidth())));
 
+        if (chain_[(size_t) selected_].kind == model::EffectKind::ParametricEq)
+            setBoundsOrHide(parametricView_, area.removeFromTop(kCurveHeight).reduced(2));
+
         // A kind with many rows in a short pane runs the last of them off the
         // bottom. setBoundsOrHide hides those rather than leaving them
         // zero-high and clickable against nothing.
@@ -248,6 +270,7 @@ private:
     static constexpr int kBypassWidth   = 26;
     static constexpr int kLabelWidth    = 90;
     static constexpr int kPresetsButtonWidth = 110;
+    static constexpr int kCurveHeight        = 150;
 
     /** One parameter's row: a label and the control its descriptor asks for.
         Exactly one of slider, toggle and choice is set. A toggle carries its
@@ -494,7 +517,7 @@ private:
         button: what setContentVisible hides. */
     std::vector<juce::Component*> paramControls()
     {
-        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_ };
+        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &parametricView_ };
         for (auto& row : rows_)
         {
             if (row.label != nullptr)
@@ -598,6 +621,7 @@ private:
     {
         editorButton_.setVisible(false);
         presetsButton_.setVisible(false);
+        parametricView_.setVisible(false);
 
         const auto* descriptor = isValidSlot(selected_) ? model::descriptorFor(chain_[(size_t) selected_].kind)
                                                         : nullptr;
@@ -619,6 +643,11 @@ private:
         presetsButton_.setVisible(true);
 
         const auto& slot = chain_[(size_t) selected_];
+        if (slot.kind == model::EffectKind::ParametricEq)
+        {
+            parametricView_.setBands(model::parametricBands(slot.parametricEq));
+            parametricView_.setVisible(true);
+        }
         updating_ = true;
 
         for (auto& row : rows_)
@@ -671,6 +700,8 @@ private:
         }
 
         chain_[(size_t) selected_] = slot;
+        if (slot.kind == model::EffectKind::ParametricEq)
+            parametricView_.setBands(model::parametricBands(slot.parametricEq));
         onSlotParamsChanged(slot, selected_);
     }
 
@@ -700,6 +731,7 @@ private:
 
     juce::Label      placeholder_;
     juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_, presetsButton_;
+    ParametricEqView parametricView_;
 
     std::vector<model::UserEffectPreset> userPresets_;
 

@@ -169,7 +169,8 @@ enum class EffectKind
     RingMod    = 22,
     Wah        = 23,
     Echo       = 24,
-    Multiband  = 25
+    Multiband  = 25,
+    ParametricEq = 26  // see engine/ParametricEq.h
 };
 
 /**
@@ -506,6 +507,40 @@ struct MultibandSettings
     bool operator==(const MultibandSettings&) const = default;
 };
 
+/** Six bands, each Off, a bell, a shelf, a notch or a cut (the values of
+    engine::ParametricBand::Type), at a frequency with a gain and a width.
+    Starts flat: a low shelf, three bells and a high shelf at 0 dB. */
+struct ParametricEqSettings
+{
+    bool  enabled = false;
+    int   band1Type   = 0;
+    float band1Hz     = 30.0f;
+    float band1GainDb = 0.0f;
+    float band1Q      = 0.71f;
+    int   band2Type   = 2;
+    float band2Hz     = 100.0f;
+    float band2GainDb = 0.0f;
+    float band2Q      = 0.71f;
+    int   band3Type   = 1;
+    float band3Hz     = 400.0f;
+    float band3GainDb = 0.0f;
+    float band3Q      = 1.0f;
+    int   band4Type   = 1;
+    float band4Hz     = 1500.0f;
+    float band4GainDb = 0.0f;
+    float band4Q      = 1.0f;
+    int   band5Type   = 1;
+    float band5Hz     = 5000.0f;
+    float band5GainDb = 0.0f;
+    float band5Q      = 1.0f;
+    int   band6Type   = 3;
+    float band6Hz     = 10000.0f;
+    float band6GainDb = 0.0f;
+    float band6Q      = 0.71f;
+
+    bool operator==(const ParametricEqSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -536,6 +571,7 @@ struct EffectSlot
     WahSettings        wah;
     EchoSettings       echo;
     MultibandSettings  multiband;
+    ParametricEqSettings parametricEq;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

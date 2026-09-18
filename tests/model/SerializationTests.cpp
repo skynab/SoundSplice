@@ -550,8 +550,13 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     multiband.multiband.lowHz          = 150.0f;
     multiband.multiband.highThresholdDb = -18.5f;
     multiband.multiband.midRatio       = 4.5f;
+    auto parametric                       = makeEffectSlot(EffectKind::ParametricEq);
+    parametric.parametricEq.band1Type     = 4;
+    parametric.parametricEq.band1Hz       = 60.0f;
+    parametric.parametricEq.band4GainDb   = -7.5f;
+    parametric.parametricEq.band6Q        = 2.25f;
     chain = { amplify, invert, dc, limiter, phaser, flanger, tone, stereo, graphic, deEss, expander, ring, wah, echo,
-              multiband };
+              multiband, parametric };
 
     Song restored;
     REQUIRE(deserialize(serialize(song), restored));
@@ -565,14 +570,14 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     {
         const auto lineEnd = text.find('\n', at);
         auto       cut     = lineEnd;
-        for (int field = 0; field < 7 + 17 + 24 + 5 + 15; ++field)
+        for (int field = 0; field < 7 + 17 + 24 + 5 + 15 + 24; ++field)
             cut = text.rfind(' ', cut - 1);
         text.erase(cut, lineEnd - cut);
     }
 
     Song old;
     REQUIRE(deserialize(text, old));
-    REQUIRE(old.tracks[0].effectChain.size() == 15);
+    REQUIRE(old.tracks[0].effectChain.size() == 16);
     REQUIRE(old.tracks[0].effectChain[3].kind == EffectKind::Limiter);
 
     const EffectSlot defaults;
@@ -597,6 +602,7 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
         REQUIRE(settingsOnly(slot.wah) == defaults.wah);
         REQUIRE(settingsOnly(slot.echo) == defaults.echo);
         REQUIRE(settingsOnly(slot.multiband) == defaults.multiband);
+        REQUIRE(settingsOnly(slot.parametricEq) == defaults.parametricEq);
     }
 }
 

@@ -146,9 +146,7 @@ pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercia
 (MIT) against the current phase vocoder · ⬜ Pitch correction / tuner (REAPER ReaTune)
 
 **EQ and filters**
-✅ LP/HP/BP · ✅ 3-band EQ · ✅ Bass and treble · 🟡 **Graphic EQ** (10 bands ✅; 31 ⬜) · ⬜ **Parametric EQ with
-unlimited bands** and a drawable curve (Audacity Filter Curve, REAPER ReaEQ) · ⬜ Notch · ⬜ Shelf
-(`ShelfPeakFilter` exists) · ⬜ **Match EQ** (fit one clip's spectrum to another's)
+✅ LP/HP/BP · ✅ 3-band EQ · ✅ Bass and treble · 🟡 **Graphic EQ** (10 bands ✅; 31 ⬜) · ✅ **Parametric EQ** with a drawable curve (Audacity Filter Curve, REAPER ReaEQ): six bands, each a bell, shelf, notch or cut; drag the points on its curve (`src/engine/ParametricEq.h`) · ✅ Notch · ✅ Shelf · ⬜ **Match EQ** (fit one clip's spectrum to another's)
 
 **Noise removal and repair** (Audacity *and* Audition)
 ✅ Noise reduction · ✅ **Click/pop removal** · ✅ **Clip fix / DeClipper** · ✅ Repair (interpolate a short

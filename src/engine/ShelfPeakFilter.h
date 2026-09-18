@@ -6,8 +6,8 @@
 namespace soundsplice::engine
 {
 /**
-    A single RBJ-cookbook biquad, in one of three shapes: low shelf, high
-    shelf, or peaking (bell). This is the DSP a graphic/mastering EQ needs
+    A single RBJ-cookbook biquad: low shelf, high shelf, peaking (bell), and,
+    for the parametric EQ, notch, high-pass and low-pass. This is the DSP a graphic/mastering EQ needs
     that StateVariableFilter can't do — a shelf or peak that boosts or cuts a
     band's *gain* rather than just picking a cutoff.
 
@@ -19,7 +19,7 @@ namespace soundsplice::engine
 class ShelfPeakFilter
 {
 public:
-    enum class Shape { LowShelf, HighShelf, Peaking };
+    enum class Shape { LowShelf, HighShelf, Peaking, Notch, HighPass, LowPass };
 
     void prepare(double sampleRate)
     {
@@ -86,7 +86,34 @@ private:
 
         double b0, b1, b2, a0, a1, a2;
 
-        if (shape_ == Shape::Peaking)
+        if (shape_ == Shape::Notch || shape_ == Shape::HighPass || shape_ == Shape::LowPass)
+        {
+            // The cookbook's notch and second-order cuts: Q is the notch's
+            // narrowness, or how much a cut peaks at its corner (0.707 none).
+            const double alpha = sinw0 / (2.0 * std::max(0.05, (double) q_));
+            a0 = 1.0 + alpha;
+            a1 = -2.0 * cosw0;
+            a2 = 1.0 - alpha;
+            if (shape_ == Shape::Notch)
+            {
+                b0 = 1.0;
+                b1 = -2.0 * cosw0;
+                b2 = 1.0;
+            }
+            else if (shape_ == Shape::HighPass)
+            {
+                b0 = (1.0 + cosw0) * 0.5;
+                b1 = -(1.0 + cosw0);
+                b2 = (1.0 + cosw0) * 0.5;
+            }
+            else
+            {
+                b0 = (1.0 - cosw0) * 0.5;
+                b1 = 1.0 - cosw0;
+                b2 = (1.0 - cosw0) * 0.5;
+            }
+        }
+        else if (shape_ == Shape::Peaking)
         {
             const double alpha = sinw0 / (2.0 * std::max(0.05, (double) q_));
             b0 =  1.0 + alpha * A;
