@@ -582,6 +582,7 @@ void AudioEngine::rebuildTrackEffectChain(int index)
             case EffectNodeKind::Echo:       chain->add(std::make_unique<EchoNode>());       break;
             case EffectNodeKind::Multiband:  chain->add(std::make_unique<MultibandNode>());  break;
             case EffectNodeKind::ParametricEq: chain->add(std::make_unique<ParametricEqNode>()); break;
+            case EffectNodeKind::Dynamics:     chain->add(std::make_unique<DynamicsNode>());     break;
 
             case EffectNodeKind::Plugin:
             {

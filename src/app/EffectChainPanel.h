@@ -8,11 +8,13 @@
 
 #include "LayoutHelpers.h"
 #include "ParametricEqView.h"
+#include "TransferCurveView.h"
 #include "engine/PluginHost.h"
 #include "model/EffectParams.h"
 #include "model/EffectPresets.h"
 #include "model/Effects.h"
 #include "model/ParametricEqBands.h"
+#include "model/DynamicsCurve.h"
 
 namespace soundsplice
 {
@@ -120,6 +122,21 @@ public:
         parametricView_.onDragStart = [this] { if (onSlotParamsDragStart) onSlotParamsDragStart(selected_); };
         parametricView_.onDragEnd   = [this] { if (onSlotParamsDragEnd) onSlotParamsDragEnd(selected_); };
         addChildComponent(parametricView_);
+
+        dynamicsView_.onChanged = [this](const engine::TransferCurve& curve)
+        {
+            if (! isValidSlot(selected_) || chain_[(size_t) selected_].kind != model::EffectKind::Dynamics)
+                return;
+            auto slot = chain_[(size_t) selected_];
+            model::setTransferCurve(slot.dynamics, curve);
+            chain_[(size_t) selected_] = slot;
+            refreshParamControls();
+            if (onSlotParamsChanged)
+                onSlotParamsChanged(slot, selected_);
+        };
+        dynamicsView_.onDragStart = [this] { if (onSlotParamsDragStart) onSlotParamsDragStart(selected_); };
+        dynamicsView_.onDragEnd   = [this] { if (onSlotParamsDragEnd) onSlotParamsDragEnd(selected_); };
+        addChildComponent(dynamicsView_);
 
         setContentVisible(false);
     }
@@ -249,6 +266,12 @@ public:
 
         if (chain_[(size_t) selected_].kind == model::EffectKind::ParametricEq)
             setBoundsOrHide(parametricView_, area.removeFromTop(kCurveHeight).reduced(2));
+        if (chain_[(size_t) selected_].kind == model::EffectKind::Dynamics)
+        {
+            // Square, as a transfer curve reads best: a dB in is a dB out.
+            auto curveArea = area.removeFromTop(juce::jmin(area.getWidth(), kCurveHeight + 60)).reduced(2);
+            setBoundsOrHide(dynamicsView_, curveArea.withSizeKeepingCentre(curveArea.getHeight(), curveArea.getHeight()));
+        }
 
         // A kind with many rows in a short pane runs the last of them off the
         // bottom. setBoundsOrHide hides those rather than leaving them
@@ -517,7 +540,7 @@ private:
         button: what setContentVisible hides. */
     std::vector<juce::Component*> paramControls()
     {
-        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &parametricView_ };
+        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &parametricView_, &dynamicsView_ };
         for (auto& row : rows_)
         {
             if (row.label != nullptr)
@@ -622,6 +645,7 @@ private:
         editorButton_.setVisible(false);
         presetsButton_.setVisible(false);
         parametricView_.setVisible(false);
+        dynamicsView_.setVisible(false);
 
         const auto* descriptor = isValidSlot(selected_) ? model::descriptorFor(chain_[(size_t) selected_].kind)
                                                         : nullptr;
@@ -647,6 +671,11 @@ private:
         {
             parametricView_.setBands(model::parametricBands(slot.parametricEq));
             parametricView_.setVisible(true);
+        }
+        if (slot.kind == model::EffectKind::Dynamics)
+        {
+            dynamicsView_.setCurve(model::transferCurve(slot.dynamics));
+            dynamicsView_.setVisible(true);
         }
         updating_ = true;
 
@@ -702,6 +731,8 @@ private:
         chain_[(size_t) selected_] = slot;
         if (slot.kind == model::EffectKind::ParametricEq)
             parametricView_.setBands(model::parametricBands(slot.parametricEq));
+        if (slot.kind == model::EffectKind::Dynamics)
+            dynamicsView_.setCurve(model::transferCurve(slot.dynamics));
         onSlotParamsChanged(slot, selected_);
     }
 
@@ -732,6 +763,7 @@ private:
     juce::Label      placeholder_;
     juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_, presetsButton_;
     ParametricEqView parametricView_;
+    TransferCurveView dynamicsView_;
 
     std::vector<model::UserEffectPreset> userPresets_;
 

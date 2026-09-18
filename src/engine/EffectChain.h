@@ -14,6 +14,7 @@
 #include "engine/ReverbEffect.h"
 #include "engine/DynamicsEffects.h"
 #include "engine/ParametricEqEffect.h"
+#include "engine/DynamicsProcessorEffect.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
@@ -51,7 +52,8 @@ enum class EffectNodeKind
     Wah        = 23,
     Echo       = 24,
     Multiband  = 25,
-    ParametricEq = 26
+    ParametricEq = 26,
+    Dynamics     = 27
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -193,6 +195,12 @@ struct EffectSlotParams
     float mbReleaseMs      = 150.0f;
 
     std::array<ParametricBand, ParametricEq::kBands> peqBands {};
+
+    TransferCurve dynCurve;
+    int           dynDetector  = 0;
+    float         dynAttackMs  = 5.0f;
+    float         dynReleaseMs = 150.0f;
+    float         dynMakeUpDb  = 0.0f;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -452,6 +460,16 @@ struct EchoNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct DynamicsNode final : EffectProcessor
+{
+    DynamicsProcessorEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Dynamics; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct ParametricEqNode final : EffectProcessor
 {
     ParametricEqEffect effect;
@@ -669,6 +687,14 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
         {
             for (int band = 0; band < ParametricEq::kBands; ++band)
                 parametric->effect.setBand(band, params.peqBands[(size_t) band]);
+        }
+        else if (auto* dynamics = dynamic_cast<DynamicsNode*>(&node))
+        {
+            dynamics->effect.setCurve(params.dynCurve);
+            dynamics->effect.setDetector((DynamicsProcessor::Detector) params.dynDetector);
+            dynamics->effect.setAttackMs(params.dynAttackMs);
+            dynamics->effect.setReleaseMs(params.dynReleaseMs);
+            dynamics->effect.setMakeUpDb(params.dynMakeUpDb);
         }
 }
 

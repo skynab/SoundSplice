@@ -355,7 +355,24 @@ inline std::string serialize(const Song& song)
                 << slot.parametricEq.band6Type << " "
                 << detail::num((double) slot.parametricEq.band6Hz) << " "
                 << detail::num((double) slot.parametricEq.band6GainDb) << " "
-                << detail::num((double) slot.parametricEq.band6Q) << "\n";
+                << detail::num((double) slot.parametricEq.band6Q) << " "
+                << slot.dynamics.points << " "
+                << detail::num((double) slot.dynamics.point1InDb) << " "
+                << detail::num((double) slot.dynamics.point1OutDb) << " "
+                << detail::num((double) slot.dynamics.point2InDb) << " "
+                << detail::num((double) slot.dynamics.point2OutDb) << " "
+                << detail::num((double) slot.dynamics.point3InDb) << " "
+                << detail::num((double) slot.dynamics.point3OutDb) << " "
+                << detail::num((double) slot.dynamics.point4InDb) << " "
+                << detail::num((double) slot.dynamics.point4OutDb) << " "
+                << detail::num((double) slot.dynamics.point5InDb) << " "
+                << detail::num((double) slot.dynamics.point5OutDb) << " "
+                << detail::num((double) slot.dynamics.point6InDb) << " "
+                << detail::num((double) slot.dynamics.point6OutDb) << " "
+                << slot.dynamics.detector << " "
+                << detail::num((double) slot.dynamics.attackMs) << " "
+                << detail::num((double) slot.dynamics.releaseMs) << " "
+                << detail::num((double) slot.dynamics.makeUpDb) << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -900,6 +917,23 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 int    peqType5 = defaults.parametricEq.band5Type;
                 double peqHz5 = defaults.parametricEq.band5Hz, peqGain5 = defaults.parametricEq.band5GainDb, peqQ5 = defaults.parametricEq.band5Q;
                 int    peqType6 = defaults.parametricEq.band6Type;
+                int    dyn_points = defaults.dynamics.points;
+                double dyn_point1InDb = defaults.dynamics.point1InDb;
+                double dyn_point1OutDb = defaults.dynamics.point1OutDb;
+                double dyn_point2InDb = defaults.dynamics.point2InDb;
+                double dyn_point2OutDb = defaults.dynamics.point2OutDb;
+                double dyn_point3InDb = defaults.dynamics.point3InDb;
+                double dyn_point3OutDb = defaults.dynamics.point3OutDb;
+                double dyn_point4InDb = defaults.dynamics.point4InDb;
+                double dyn_point4OutDb = defaults.dynamics.point4OutDb;
+                double dyn_point5InDb = defaults.dynamics.point5InDb;
+                double dyn_point5OutDb = defaults.dynamics.point5OutDb;
+                double dyn_point6InDb = defaults.dynamics.point6InDb;
+                double dyn_point6OutDb = defaults.dynamics.point6OutDb;
+                int    dyn_detector = defaults.dynamics.detector;
+                double dyn_attackMs = defaults.dynamics.attackMs;
+                double dyn_releaseMs = defaults.dynamics.releaseMs;
+                double dyn_makeUpDb = defaults.dynamics.makeUpDb;
                 double peqHz6 = defaults.parametricEq.band6Hz, peqGain6 = defaults.parametricEq.band6GainDb, peqQ6 = defaults.parametricEq.band6Q;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
@@ -932,7 +966,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> peqType3 >> peqHz3 >> peqGain3 >> peqQ3
                    >> peqType4 >> peqHz4 >> peqGain4 >> peqQ4
                    >> peqType5 >> peqHz5 >> peqGain5 >> peqQ5
-                   >> peqType6 >> peqHz6 >> peqGain6 >> peqQ6;
+                   >> peqType6 >> peqHz6 >> peqGain6 >> peqQ6
+                   >> dyn_points >> dyn_point1InDb >> dyn_point1OutDb >> dyn_point2InDb >> dyn_point2OutDb >> dyn_point3InDb >> dyn_point3OutDb >> dyn_point4InDb >> dyn_point4OutDb >> dyn_point5InDb >> dyn_point5OutDb >> dyn_point6InDb >> dyn_point6OutDb >> dyn_detector >> dyn_attackMs >> dyn_releaseMs >> dyn_makeUpDb;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -1073,6 +1108,24 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.multiband.attackMs     = (float) mbAttack;
                 slot.multiband.releaseMs    = (float) mbRelease;
                 slot.parametricEq.enabled   = slot.enabled && slot.kind == EffectKind::ParametricEq;
+                slot.dynamics.enabled       = slot.enabled && slot.kind == EffectKind::Dynamics;
+                slot.dynamics.points = std::clamp(dyn_points, 2, 6);
+                slot.dynamics.point1InDb = (float) dyn_point1InDb;
+                slot.dynamics.point1OutDb = (float) dyn_point1OutDb;
+                slot.dynamics.point2InDb = (float) dyn_point2InDb;
+                slot.dynamics.point2OutDb = (float) dyn_point2OutDb;
+                slot.dynamics.point3InDb = (float) dyn_point3InDb;
+                slot.dynamics.point3OutDb = (float) dyn_point3OutDb;
+                slot.dynamics.point4InDb = (float) dyn_point4InDb;
+                slot.dynamics.point4OutDb = (float) dyn_point4OutDb;
+                slot.dynamics.point5InDb = (float) dyn_point5InDb;
+                slot.dynamics.point5OutDb = (float) dyn_point5OutDb;
+                slot.dynamics.point6InDb = (float) dyn_point6InDb;
+                slot.dynamics.point6OutDb = (float) dyn_point6OutDb;
+                slot.dynamics.detector = std::clamp(dyn_detector, 0, 1);
+                slot.dynamics.attackMs = (float) dyn_attackMs;
+                slot.dynamics.releaseMs = (float) dyn_releaseMs;
+                slot.dynamics.makeUpDb = (float) dyn_makeUpDb;
                 slot.parametricEq.band1Type   = std::clamp(peqType1, 0, 6);
                 slot.parametricEq.band1Hz     = (float) peqHz1;
                 slot.parametricEq.band1GainDb = (float) peqGain1;

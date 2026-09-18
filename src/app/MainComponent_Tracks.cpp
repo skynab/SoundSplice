@@ -1637,6 +1637,7 @@ void MainComponent::syncEngineTracks()
                 case model::EffectKind::Echo:       spec.kind = engine::EffectNodeKind::Echo;       break;
                 case model::EffectKind::Multiband:  spec.kind = engine::EffectNodeKind::Multiband;  break;
                 case model::EffectKind::ParametricEq: spec.kind = engine::EffectNodeKind::ParametricEq; break;
+                case model::EffectKind::Dynamics:     spec.kind = engine::EffectNodeKind::Dynamics;     break;
                 case model::EffectKind::Plugin:
                     spec.kind             = engine::EffectNodeKind::Plugin;
                     spec.pluginFormat     = pluginFormatName(slot.plugin.format);

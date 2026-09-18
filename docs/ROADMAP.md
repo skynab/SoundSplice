@@ -132,8 +132,8 @@ offline apply and preview.
 
 **Volume and dynamics**
 ✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ✅ **Auto Duck** (Edit > Auto Duck: dips the selected tracks under the lowest selected one, as editable clip volume curves) · ✅ Expander ·
-✅ **Multiband compressor** (three bands, Linkwitz-Riley crossovers; `src/engine/DynamicsDsp.h`) · ✅ **De-esser** (split-band, Linkwitz-Riley crossover) · ⬜ Dynamics processor with a
-drawable transfer curve (Audition)
+✅ **Multiband compressor** (three bands, Linkwitz-Riley crossovers; `src/engine/DynamicsDsp.h`) · ✅ **De-esser** (split-band, Linkwitz-Riley crossover) · ✅ Dynamics processor with a
+drawable transfer curve (Audition): up to six points, peak or RMS detector, drag the curve in the effect panel (`src/engine/DynamicsProcessor.h`)
 
 **Fades**
 ✅ Fade in/out (linear) · ✅ Adjustable fade curves (clip fades: linear, equal power, S-curve, exponential, logarithmic) · ✅ **Studio fade out** ·

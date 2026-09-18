@@ -462,6 +462,44 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
                 .access = fieldAccess<&S::wah, &WahSettings::mix> } } },
 
+        { .kind = EffectKind::Dynamics, .id = "dynamics", .name = "Dynamics Processor", .group = "Dynamics",
+          .params = {
+              { .id = "points", .name = "Points", .control = ParamControl::Choice, .min = 2, .max = 6, .step = 1,
+                .choices = { "2", "3", "4", "5", "6" },
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::points> },
+              { .id = "point1In", .name = "Point 1 In", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point1InDb> },
+              { .id = "point1Out", .name = "Point 1 Out", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point1OutDb> },
+              { .id = "point2In", .name = "Point 2 In", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point2InDb> },
+              { .id = "point2Out", .name = "Point 2 Out", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point2OutDb> },
+              { .id = "point3In", .name = "Point 3 In", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point3InDb> },
+              { .id = "point3Out", .name = "Point 3 Out", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point3OutDb> },
+              { .id = "point4In", .name = "Point 4 In", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point4InDb> },
+              { .id = "point4Out", .name = "Point 4 Out", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point4OutDb> },
+              { .id = "point5In", .name = "Point 5 In", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point5InDb> },
+              { .id = "point5Out", .name = "Point 5 Out", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point5OutDb> },
+              { .id = "point6In", .name = "Point 6 In", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point6InDb> },
+              { .id = "point6Out", .name = "Point 6 Out", .min = -100, .max = 0, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::point6OutDb> },
+              { .id = "detector", .name = "Detector", .control = ParamControl::Choice, .min = 0, .max = 1, .step = 1,
+                .choices = { "Peak", "RMS" }, .access = fieldAccess<&S::dynamics, &DynamicsSettings::detector> },
+              { .id = "attack", .name = "Attack", .min = 0.1, .max = 200, .step = 0.1, .unit = " ms",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::attackMs> },
+              { .id = "release", .name = "Release", .min = 5, .max = 2000, .step = 1, .unit = " ms",
+                .skewMidpoint = 200, .access = fieldAccess<&S::dynamics, &DynamicsSettings::releaseMs> },
+              { .id = "makeUp", .name = "Make-up", .min = -24, .max = 24, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::dynamics, &DynamicsSettings::makeUpDb> } } },
+
         { .kind = EffectKind::Multiband, .id = "multiband", .name = "Multiband Compressor", .group = "Dynamics",
           .params = {
               { .id = "lowCrossover", .name = "Low/Mid At", .min = 30, .max = 2000, .step = 1, .unit = " Hz",
@@ -581,6 +619,7 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.echo.enabled       = kind == EffectKind::Echo;
     slot.multiband.enabled  = kind == EffectKind::Multiband;
     slot.parametricEq.enabled = kind == EffectKind::ParametricEq;
+    slot.dynamics.enabled     = kind == EffectKind::Dynamics;
     return slot;
 }
 

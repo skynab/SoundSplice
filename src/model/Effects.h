@@ -170,7 +170,8 @@ enum class EffectKind
     Wah        = 23,
     Echo       = 24,
     Multiband  = 25,
-    ParametricEq = 26  // see engine/ParametricEq.h
+    ParametricEq = 26, // see engine/ParametricEq.h
+    Dynamics     = 27  // see engine/DynamicsProcessor.h
 };
 
 /**
@@ -541,6 +542,33 @@ struct ParametricEqSettings
     bool operator==(const ParametricEqSettings&) const = default;
 };
 
+/** A transfer curve of up to six points, input level to output level in
+    dB (the first `points` of them in use), with the detector's timing and
+    make-up gain. Starts as a straight line: no change. */
+struct DynamicsSettings
+{
+    bool  enabled = false;
+    int   points  = 2;
+    float point1InDb  = -80.0f;
+    float point1OutDb = -80.0f;
+    float point2InDb  = 0.0f;
+    float point2OutDb = 0.0f;
+    float point3InDb  = -60.0f;
+    float point3OutDb = -60.0f;
+    float point4InDb  = -40.0f;
+    float point4OutDb = -40.0f;
+    float point5InDb  = -20.0f;
+    float point5OutDb = -20.0f;
+    float point6InDb  = -10.0f;
+    float point6OutDb = -10.0f;
+    int   detector  = 0; // 0 peak, 1 RMS
+    float attackMs  = 5.0f;
+    float releaseMs = 150.0f;
+    float makeUpDb  = 0.0f;
+
+    bool operator==(const DynamicsSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -572,6 +600,7 @@ struct EffectSlot
     EchoSettings       echo;
     MultibandSettings  multiband;
     ParametricEqSettings parametricEq;
+    DynamicsSettings     dynamics;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;
