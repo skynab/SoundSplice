@@ -606,3 +606,45 @@ TEST_CASE("The dB scale draws a quiet waveform taller", "[gui][audioeditor]")
     INFO(differingPixels(linear, decibels) << " pixels changed");
     REQUIRE(differingPixels(linear, decibels) > 1000);
 }
+
+TEST_CASE("On the spectrogram a diagonal drag selects a box of frequencies too", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto        pane = makeReadyPane(800, 400, 10.0);
+
+    // Over the waveform, a diagonal drag is only ever a time range.
+    const auto centre = waveformPoint(*pane, 0.25f);
+    const auto from   = centre.translated(0.0f, -30.0f);
+    const auto to     = waveformPoint(*pane, 0.6f).translated(0.0f, 30.0f);
+
+    sendMouseDown(*pane, eventAt(*pane, from, from));
+    sendMouseDrag(*pane, eventAt(*pane, to, from));
+    sendMouseUp(*pane, eventAt(*pane, to, from));
+    REQUIRE_FALSE(pane->selection().isEmpty());
+    REQUIRE_FALSE(pane->frequencyBand().has_value());
+
+    // On the spectrogram the same drag also takes the frequencies it spans,
+    // higher up the pane being higher in frequency.
+    pane->setSpectrogramView(true);
+    sendMouseDown(*pane, eventAt(*pane, from, from));
+    sendMouseDrag(*pane, eventAt(*pane, to, from));
+    sendMouseUp(*pane, eventAt(*pane, to, from));
+
+    const auto band = pane->frequencyBand();
+    REQUIRE(band.has_value());
+    REQUIRE(band->first < band->second);
+    REQUIRE(band->first > 20.0);
+
+    // A drag that stays level selects every frequency, as on the waveform.
+    const auto level = waveformPoint(*pane, 0.7f);
+    sendMouseDown(*pane, eventAt(*pane, centre, centre));
+    sendMouseDrag(*pane, eventAt(*pane, level, centre));
+    sendMouseUp(*pane, eventAt(*pane, level, centre));
+    REQUIRE_FALSE(pane->selection().isEmpty());
+    REQUIRE_FALSE(pane->frequencyBand().has_value());
+
+    // And a click clears it.
+    sendMouseDown(*pane, eventAt(*pane, centre, centre));
+    sendMouseUp(*pane, eventAt(*pane, centre, centre));
+    REQUIRE_FALSE(pane->frequencyBand().has_value());
+}

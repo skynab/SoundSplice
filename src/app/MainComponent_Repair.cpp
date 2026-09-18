@@ -1,10 +1,12 @@
 #include "MainComponentInternal.h"
 
 #include "engine/Repair.h"
+#include "engine/SpectralEdit.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
-// Restoration on the audio editor's selection: Repair, Click Removal, Clip Fix
-// and Hum Removal. The DSP is engine/Repair.h.
+// Restoration on the audio editor's selection: Repair, Click Removal, Clip Fix,
+// Hum Removal, and spectral delete and gain on a box dragged on the spectrogram.
+// The DSP is engine/Repair.h and engine/SpectralEdit.h.
 
 namespace soundsplice
 {
@@ -260,6 +262,61 @@ void MainComponent::removeHumInSelection(double fundamentalHz, int harmonics, do
 
     if (edited)
         showStatus("Removed " + juce::String((int) fundamentalHz) + " Hz hum");
+}
+
+/** Scales the spectral selection's band by @p gainDb (-inf deletes it), as
+    Audacity's Spectral Delete and spectral edits do: the selection's time,
+    only its frequencies. */
+void MainComponent::scaleSpectralSelection(const juce::String& label, float gain)
+{
+    const auto band = audioEditor_.frequencyBand();
+    if (! band)
+    {
+        showError("Drag a box on the spectrogram first (View > Spectrogram)");
+        return;
+    }
+
+    bool tooShort = false;
+    const bool edited = editSelection(label, false,
+        [band, gain, &tooShort](std::vector<std::vector<float>>& channels, double rate)
+        {
+            for (auto& channel : channels)
+                if (! engine::spectral::scaleBand(channel, 0, (int) channel.size(), rate, band->first, band->second, gain))
+                    tooShort = true;
+        });
+
+    if (tooShort)
+        showStatus("Part of that was too short to edit: select at least a few milliseconds");
+    else if (edited)
+        showStatus(label + ": " + juce::String((int) std::lround(band->first)) + " - "
+                   + juce::String((int) std::lround(band->second)) + " Hz");
+}
+
+void MainComponent::showSpectralGainDialog()
+{
+    if (! audioEditor_.frequencyBand())
+    {
+        showError("Drag a box on the spectrogram first (View > Spectrogram)");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Spectral Gain", "Turns the selected band up or down over the selected time.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("gain", juce::String(settings_.getDoubleValue("spectralGain.db", -12.0)), "Gain (dB):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double db = juce::jlimit(-96.0, 24.0, window->getTextEditorContents("gain").getDoubleValue());
+            self->settings_.setValue("spectralGain.db", db);
+            self->scaleSpectralSelection("Spectral gain", juce::Decibels::decibelsToGain((float) db, -96.0f));
+        }));
 }
 
 } // namespace soundsplice

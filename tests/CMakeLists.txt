@@ -1,5 +1,5 @@
 # Unit tests. The real-time primitives have no JUCE dependency, so this target
-# builds and runs fast — configure with -DSOUNDSPLICE_BUILD_APP=OFF for a quick
+# builds and runs fast â€” configure with -DSOUNDSPLICE_BUILD_APP=OFF for a quick
 # test-only loop that doesn't pull JUCE.
 add_executable(soundsplice_tests
   rt/SpscRingBufferTests.cpp
@@ -27,6 +27,7 @@ add_executable(soundsplice_tests
   engine/DynamicsDspTests.cpp
   engine/PaulstretchTests.cpp
   engine/SpectrogramTests.cpp
+  engine/SpectralEditTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp
@@ -102,7 +103,7 @@ include(Catch)
 catch_discover_tests(soundsplice_tests)
 
 # GUI smoke tests. Separate from soundsplice_tests because these link JUCE's GUI
-# module and construct real Components — the headless suite deliberately does
+# module and construct real Components â€” the headless suite deliberately does
 # not, so nothing in it can see a Component at all. That gap is how a pedal
 # shipped whose controls were laid out and shown while never being parented,
 # passing every check. These cover the things that go wrong on the way to the

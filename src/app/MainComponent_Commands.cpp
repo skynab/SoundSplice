@@ -261,6 +261,11 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(audioEditor_.showsSpectrogram());
             break;
 
+        case commands::spectralDelete:
+        case commands::spectralGain:
+            info.setActive(audioEditor_.frequencyBand().has_value());
+            break;
+
         case commands::nextOpenFile:
         case commands::previousOpenFile:
             info.setActive(! openFiles_.isEmpty());
@@ -353,6 +358,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::clickRemoval:    showClickRemovalDialog(); break;
         case commands::clipFix:         showClipFixDialog(); break;
         case commands::humRemoval:      showHumRemovalDialog(); break;
+        case commands::spectralDelete:  scaleSpectralSelection("Spectral delete", 0.0f); break;
+        case commands::spectralGain:    showSpectralGainDialog(); break;
         case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
         case commands::truncateSilence: showTruncateSilenceDialog(); break;
         case commands::autoDuck:        showAutoDuckDialog(); break;
@@ -608,6 +615,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::clickRemoval);
         add(commands::clipFix);
         add(commands::humRemoval);
+        add(commands::spectralDelete);
+        add(commands::spectralGain);
         menu.addSeparator();
         add(commands::normalizeLoudness);
         menu.addSeparator();

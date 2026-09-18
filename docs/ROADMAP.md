@@ -181,8 +181,8 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   scale, 2048-point Hann window, built with the waveform's peaks a chunk at a time;
   `src/engine/Spectrogram.h`, `src/app/SpectrogramImage.h`); linear/mel scales ⬜, a configurable window ⬜, a
   split waveform/spectrogram view ⬜, spectrograms in the arrangement's lanes ⬜
-- ⬜ **Spectral selection** (time × frequency box, lasso, and a harmonic brush as in Audition)
-- ⬜ Spectral delete · spectral parametric EQ · spectral shelves (Audacity)
+- 🟡 **Spectral selection**: a time × frequency box ✅ (drag diagonally on the spectrogram); lasso ⬜ and a harmonic brush ⬜ as in Audition
+- 🟡 Spectral delete ✅ · spectral gain ✅ (Edit menu, on the box; `src/engine/SpectralEdit.h`) · spectral parametric EQ ⬜ · spectral shelves ⬜ (Audacity)
 - ⬜ **Spot healing brush**: paint over a cough, click or phone ring and have it inpainted from the
   surrounding time and frequency content (Audition)
 - ⬜ Non-destructive spectral edits stored on the clip (REAPER)

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <optional>
+#include <utility>
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -326,6 +328,16 @@ public:
         action fires rather than tracked separately. */
     AudioRange selection() const { return selection_; }
 
+    /** The frequencies the selection covers, lowest first, when it was made
+        as a box on the spectrogram: a spectral selection. Nothing for a
+        selection of every frequency. */
+    std::optional<std::pair<double, double>> frequencyBand() const
+    {
+        if (! spectrogramView_ || selection_.isEmpty() || bandHighHz_ <= bandLowHz_)
+            return std::nullopt;
+        return std::pair { bandLowHz_, bandHighHz_ };
+    }
+
     /** Where the cursor sits, in seconds into the file. May be past the end
         of the file — that's how audio gets pasted after the recording. */
     double cursorSeconds() const { return playheadSeconds_; }
@@ -442,7 +454,7 @@ public:
         // The selection is painted under the waveform, so the waveform stays
         // fully legible inside it — a selection drawn on top dims exactly the
         // part the user is trying to look at.
-        if (! selection_.isEmpty())
+        if (! selection_.isEmpty() && ! frequencyBand())
         {
             const float x1 = juce::jlimit((float) area.getX(), (float) area.getRight(),
                                           geometry_.xForSeconds(selection_.startSeconds));
@@ -453,6 +465,21 @@ public:
         }
 
         paintWaveform(g, area);
+
+        // A spectral selection is a box, drawn over the spectrogram since it
+        // has no background to sit on as the waveform does.
+        if (const auto band = frequencyBand())
+        {
+            const float x1 = geometry_.xForSeconds(selection_.startSeconds);
+            const float x2 = geometry_.xForSeconds(selection_.endSeconds);
+            const float y1 = yForHz(band->second, area);
+            const float y2 = yForHz(band->first, area);
+            const auto  box = juce::Rectangle<float>(x1, y1, x2 - x1, y2 - y1).getIntersection(area.toFloat());
+            g.setColour(juce::Colours::cyan.withAlpha(0.15f));
+            g.fillRect(box);
+            g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+            g.drawRect(box, 1.0f);
+        }
 
         // Always drawn, not just while rolling: this is the edit cursor as
         // well as the playhead, and a cursor you can place but not see would
@@ -466,7 +493,7 @@ public:
             }
         }
 
-        if (! selection_.isEmpty())
+        if (! selection_.isEmpty() && ! frequencyBand())
         {
             g.setColour(juce::Colours::cyan.withAlpha(0.8f));
             for (double edge : { selection_.startSeconds, selection_.endSeconds })
@@ -511,6 +538,22 @@ public:
         placed at the middle of the window it was measured over, so a sound
         lines up with where the waveform would show it. Frequency is marked
         up the left. */
+    /** The frequency at height @p y in the spectrogram's area. */
+    double hzForY(float y) const
+    {
+        const auto   area       = waveformArea();
+        const double proportion = area.getHeight() > 0
+                                    ? 1.0 - (double) (y - (float) area.getY()) / (double) area.getHeight()
+                                    : 0.0;
+        return spectrogramimage::frequencyAt(proportion, spectrogramNyquist_);
+    }
+
+    float yForHz(double hz, juce::Rectangle<int> area) const
+    {
+        return (float) area.getBottom()
+             - (float) spectrogramimage::proportionOf(hz, spectrogramNyquist_) * (float) area.getHeight();
+    }
+
     void paintSpectrogram(juce::Graphics& g, juce::Rectangle<int> area)
     {
         if (! spectrogram_.isValid() || spectrogramSeconds_ <= 0.0)
@@ -632,6 +675,7 @@ public:
         }
 
         dragAnchorSeconds_ = geometry_.secondsForX((float) e.position.x);
+        dragAnchorHz_      = hzForY(e.position.y);
         dragging_          = true;
         draggedFar_        = false;
 
@@ -660,9 +704,25 @@ public:
             draggedFar_ = true;
 
         if (draggedFar_)
+        {
+            // On the spectrogram a drag is a box, time across and frequency
+            // up, unless it hardly moved vertically, which selects every
+            // frequency as a drag over the waveform does.
+            if (spectrogramView_ && std::abs(e.getDistanceFromDragStartY()) > kDragThresholdPixels)
+            {
+                const double hz = hzForY(e.position.y);
+                bandLowHz_      = std::min(dragAnchorHz_, hz);
+                bandHighHz_     = std::max(dragAnchorHz_, hz);
+            }
+            else
+            {
+                bandLowHz_ = bandHighHz_ = 0.0;
+            }
+
             setSelection(AudioRange::fromDrag(dragAnchorSeconds_,
                                               geometry_.secondsForX((float) e.position.x))
                              .clampedTo(geometry_.fileLengthSeconds));
+        }
     }
 
     void mouseUp(const juce::MouseEvent&) override
@@ -1064,6 +1124,8 @@ private:
     void setSelection(AudioRange range)
     {
         selection_ = range;
+        if (selection_.isEmpty())
+            bandLowHz_ = bandHighHz_ = 0.0;
         updateSelectionLabel();
         updateNoiseControls();
         repaint();
@@ -1095,10 +1157,12 @@ private:
             return;
         }
 
-        selectionLabel_.setText(juce::String(selection_.startSeconds, 3) + "s - "
-                                    + juce::String(selection_.endSeconds, 3) + "s  ("
-                                    + juce::String(selection_.lengthSeconds(), 3) + "s)",
-                                juce::dontSendNotification);
+        auto text = juce::String(selection_.startSeconds, 3) + "s - " + juce::String(selection_.endSeconds, 3)
+                  + "s  (" + juce::String(selection_.lengthSeconds(), 3) + "s)";
+        if (const auto band = frequencyBand())
+            text << ",  " << juce::String((int) std::lround(band->first)) << " - "
+                 << juce::String((int) std::lround(band->second)) << " Hz";
+        selectionLabel_.setText(text, juce::dontSendNotification);
     }
 
     int laneCount() const
@@ -1308,6 +1372,9 @@ private:
     double           peaksSampleRate_ = 0.0;
     bool             dbScale_         = false;
     bool             spectrogramView_ = false;
+    double           dragAnchorHz_    = 0.0;
+    double           bandLowHz_       = 0.0; // a spectral selection's band; none when equal
+    double           bandHighHz_      = 0.0;
     juce::Image      spectrogram_;
     int              spectrogramColumns_ = 0;
     double           spectrogramSeconds_ = 0.0;
