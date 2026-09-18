@@ -355,6 +355,8 @@ private:
     void                   scaleSpectralSelection(const juce::String& label, float gain);
     void                   showSpectralGainDialog();
     void                   repairSpectralSelection();
+    void                   showSpectrogramSettingsDialog();
+    void                   loadSpectrogramSettings();
     void                   repairPaintedSpectrum(const spectrogramimage::Brush& brush);
     void                   applySpectralEdit(const juce::String& label,
                                              const std::function<bool(std::vector<float>&, double rate, double lowHz,
@@ -786,6 +788,7 @@ private:
     // the file every time anything in the app changed.
     WaveformPeaks                      waveformPeaks_;
     juce::String                       waveformPeaksKey_;
+    engine::SpectrogramSettings        spectrogramSettings_;
     double                             waveformPeaksSampleRate_ = 0.0;
 
     // The user's saved effect presets (kept in the app settings, see

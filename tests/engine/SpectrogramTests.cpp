@@ -80,3 +80,64 @@ TEST_CASE("A spectrogram is the same however the audio arrives, and stays bounde
     REQUIRE(hour.columns > SpectrogramBuilder::kMaxColumns / 2);
     REQUIRE(hour.levelDb(10, 100) == SpectrogramBuilder::kFloorDb);
 }
+
+TEST_CASE("A spectrogram's window size and shape are chosen", "[spectrogram]")
+{
+    constexpr double kRate = 48000.0;
+
+    // Two tones 30 Hz apart: a 2048-point window (23 Hz bins, a Hann main
+    // lobe four bins wide) runs them together; 16384 points pulls them apart.
+    std::vector<float> mono((size_t) (kRate * 2.0));
+    for (size_t i = 0; i < mono.size(); ++i)
+        mono[i] = 0.25f * (float) (std::sin(2.0 * 3.14159265358979 * 1000.0 * (double) i / kRate)
+                                   + std::sin(2.0 * 3.14159265358979 * 1030.0 * (double) i / kRate));
+
+    const auto build = [&](SpectrogramSettings settings)
+    {
+        SpectrogramBuilder builder(kRate, (std::int64_t) mono.size(), settings);
+        const float*       channels[] { mono.data() };
+        builder.append(channels, 1, (int) mono.size());
+        return builder.finish();
+    };
+
+    const auto dipBetween = [](const SpectrogramData& data)
+    {
+        const int column = data.columns / 2;
+        const auto at    = [&](double hz) { return data.levelDb(column, (int) std::lround(data.binOfFrequency(hz))); };
+        return std::min(at(1000.0), at(1030.0)) - at(1015.0);
+    };
+
+    SpectrogramSettings wide;
+    wide.fftSize = 16384;
+    const auto fine   = build(wide);
+    const auto coarse = build({});
+
+    REQUIRE(fine.bins == 16384 / 2 + 1);
+    REQUIRE_THAT(fine.windowSeconds, Catch::Matchers::WithinAbs(16384.0 / kRate, 1e-12));
+    REQUIRE(dipBetween(fine) > 12.0f);   // two lines
+    REQUIRE(dipBetween(coarse) < 6.0f);  // one blur
+
+    // Every shape still reads a full-scale-ish tone near its level: -12 dB
+    // for each quarter-scale sine, within the shapes' scalloping.
+    for (auto shape : { SpectrogramWindow::Hann, SpectrogramWindow::Hamming, SpectrogramWindow::BlackmanHarris,
+                        SpectrogramWindow::Rectangular })
+    {
+        SpectrogramSettings settings;
+        settings.fftSize = 16384;
+        settings.window  = shape;
+        const auto data  = build(settings);
+        const int  column = data.columns / 2;
+        float      peak   = -200.0f;
+        for (int bin = (int) data.binOfFrequency(990.0); bin <= (int) data.binOfFrequency(1010.0); ++bin)
+            peak = std::max(peak, data.levelDb(column, bin));
+        INFO((int) shape);
+        REQUIRE_THAT(peak, Catch::Matchers::WithinAbs(-12.04, 4.0));
+    }
+
+    // Sizes are powers of two, in range.
+    REQUIRE(SpectrogramSettings::validFftSize(2048) == 2048);
+    REQUIRE(SpectrogramSettings::validFftSize(2800) == 2048);
+    REQUIRE(SpectrogramSettings::validFftSize(3100) == 4096);
+    REQUIRE(SpectrogramSettings::validFftSize(10) == 256);
+    REQUIRE(SpectrogramSettings::validFftSize(1 << 20) == 16384);
+}

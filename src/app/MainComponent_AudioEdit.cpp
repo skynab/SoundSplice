@@ -63,7 +63,11 @@ void MainComponent::refreshAudioEditorForSelected()
     // The spectrogram is only built while it's shown, so turning it on is a
     // change of key too.
     const auto peaksKey = file.getFullPathName() + "|" + juce::String(clip->sourceOffsetSeconds, 9)
-                        + "|" + juce::String(clipSeconds, 9) + (audioEditor_.showsSpectrogram() ? "|spectrogram" : "");
+                        + "|" + juce::String(clipSeconds, 9)
+                        + (audioEditor_.showsSpectrogram()
+                               ? "|spectrogram" + juce::String(spectrogramSettings_.fftSize) + "/"
+                                     + juce::String((int) spectrogramSettings_.window)
+                               : juce::String());
     if (peaksKey != waveformPeaksKey_)
     {
         waveformPeaks_.clear();
@@ -81,7 +85,7 @@ void MainComponent::refreshAudioEditorForSelected()
 
             std::optional<engine::SpectrogramBuilder> spectrogram;
             if (audioEditor_.showsSpectrogram())
-                spectrogram.emplace(audio.sequence.sampleRate, (std::int64_t) length);
+                spectrogram.emplace(audio.sequence.sampleRate, (std::int64_t) length, spectrogramSettings_);
 
             for (int from = 0; from < length; from += chunk)
             {
@@ -1619,6 +1623,71 @@ void MainComponent::endClipGainDrag()
     {
         s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex].gainDb = value;
     });
+}
+
+namespace
+{
+    constexpr int kSpectrogramSizes[] { 256, 512, 1024, 2048, 4096, 8192, 16384 };
+}
+
+void MainComponent::loadSpectrogramSettings()
+{
+    spectrogramSettings_.fftSize = engine::SpectrogramSettings::validFftSize(settings_.getIntValue("spectrogram.fftSize", 2048));
+    spectrogramSettings_.window  = (engine::SpectrogramWindow) juce::jlimit(0, 3, settings_.getIntValue("spectrogram.window", 0));
+
+    spectrogramimage::Display display;
+    display.rangeDb = (float) juce::jlimit(20.0, 150.0, settings_.getDoubleValue("spectrogram.rangeDb", display.rangeDb));
+    display.gainDb  = (float) juce::jlimit(-40.0, 60.0, settings_.getDoubleValue("spectrogram.gainDb", display.gainDb));
+    audioEditor_.setSpectrogramDisplay(display);
+}
+
+/** Audacity's spectrogram settings: the window it's measured through, and
+    how its levels are coloured. */
+void MainComponent::showSpectrogramSettingsDialog()
+{
+    auto* window = new juce::AlertWindow("Spectrogram Settings",
+                                         "A longer window separates nearby pitches; a shorter one shows quick sounds sharply.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+
+    juce::StringArray sizes;
+    int               sizeIndex = 0;
+    for (int i = 0; i < (int) std::size(kSpectrogramSizes); ++i)
+    {
+        sizes.add(juce::String(kSpectrogramSizes[i]) + (kSpectrogramSizes[i] == 2048 ? " (default)" : ""));
+        if (kSpectrogramSizes[i] == spectrogramSettings_.fftSize)
+            sizeIndex = i;
+    }
+    window->addComboBox("size", sizes, "Window size (samples):");
+    window->getComboBoxComponent("size")->setSelectedItemIndex(sizeIndex);
+
+    window->addComboBox("window", { "Hann (default)", "Hamming", "Blackman-Harris", "Rectangular" }, "Window type:");
+    window->getComboBoxComponent("window")->setSelectedItemIndex((int) spectrogramSettings_.window);
+
+    const auto display = audioEditor_.spectrogramDisplay();
+    window->addTextEditor("gain", juce::String(display.gainDb, 1), "Gain (dB):");
+    window->addTextEditor("range", juce::String(display.rangeDb, 1), "Range (dB):");
+
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const int size = kSpectrogramSizes[juce::jlimit(0, (int) std::size(kSpectrogramSizes) - 1,
+                                                            window->getComboBoxComponent("size")->getSelectedItemIndex())];
+            self->settings_.setValue("spectrogram.fftSize", size);
+            self->settings_.setValue("spectrogram.window", juce::jlimit(0, 3, window->getComboBoxComponent("window")->getSelectedItemIndex()));
+            self->settings_.setValue("spectrogram.gainDb", window->getTextEditorContents("gain").getDoubleValue());
+            self->settings_.setValue("spectrogram.rangeDb", window->getTextEditorContents("range").getDoubleValue());
+            self->settings_.saveIfNeeded();
+
+            self->loadSpectrogramSettings();
+            self->refreshAudioEditorForSelected(); // measured again if the window changed
+        }));
 }
 
 } // namespace soundsplice

@@ -549,6 +549,10 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
+        case commands::spectrogramSettings:
+            showSpectrogramSettingsDialog();
+            break;
+
         case commands::spectrogramView:
         {
             const bool on = ! audioEditor_.showsSpectrogram();
@@ -735,6 +739,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
                 scaleMenu.addCommandItem(&commandManager_, id);
             menu.addSubMenu("Spectrogram Scale", scaleMenu);
         }
+        add(commands::spectrogramSettings);
         menu.addSeparator();
         add(commands::nextOpenFile);
         add(commands::previousOpenFile);

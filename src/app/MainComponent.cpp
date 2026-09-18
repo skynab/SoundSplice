@@ -135,6 +135,7 @@ MainComponent::MainComponent()
     audioEditor_.setDbScale(settings_.getValue("waveformDbScale", "0") == "1");
     audioEditor_.setSpectrogramView(settings_.getValue("spectrogramView", "0") == "1");
     audioEditor_.setSpectrogramScale((spectrogramimage::Scale) juce::jlimit(0, 2, settings_.getIntValue("spectrogramScale", 0)));
+    loadSpectrogramSettings();
     {
         // Anything unrecognised (a hand-edited file, a format from a later
         // build) falls back to bars and beats and 30 fps.

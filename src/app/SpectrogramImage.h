@@ -75,7 +75,21 @@ namespace spectrogramimage
         }
     }
 
-    inline juce::Colour colourFor(float levelDb)
+    /** How levels are coloured: the brightest colour at @p -gainDb and
+        below, down to black at @p rangeDb under it (Audacity's "gain" and
+        "range"), so a quiet recording can be brought up to be seen. */
+    struct Display
+    {
+        float rangeDb = -kFloorDb;
+        float gainDb  = 0.0f;
+
+        bool operator==(const Display& other) const noexcept
+        {
+            return rangeDb == other.rangeDb && gainDb == other.gainDb;
+        }
+    };
+
+    inline juce::Colour colourFor(float levelDb, Display display = {})
     {
         static const juce::Colour stops[] {
             juce::Colour(0xff0a0a12), juce::Colour(0xff1b1e5c), juce::Colour(0xff6a1b9a),
@@ -83,7 +97,8 @@ namespace spectrogramimage
         };
         constexpr int kStops = (int) std::size(stops);
 
-        const float t        = std::clamp((levelDb - kFloorDb) / -kFloorDb, 0.0f, 1.0f) * (float) (kStops - 1);
+        const float range    = std::max(1.0f, display.rangeDb);
+        const float t        = std::clamp((levelDb + display.gainDb + range) / range, 0.0f, 1.0f) * (float) (kStops - 1);
         const int   lower    = std::min((int) t, kStops - 2);
         return stops[lower].interpolatedWith(stops[lower + 1], t - (float) lower);
     }
@@ -147,7 +162,8 @@ namespace spectrogramimage
     /** @p data as an image a column per column and @p rows high, row 0 at the
         top (the highest frequency). Each row shows the loudest bin it spans,
         so a narrow tone high up, where a row covers many bins, isn't lost. */
-    inline juce::Image imageOf(const engine::SpectrogramData& data, int rows = 256, Scale scale = Scale::Logarithmic)
+    inline juce::Image imageOf(const engine::SpectrogramData& data, int rows = 256, Scale scale = Scale::Logarithmic,
+                               Display display = {})
     {
         if (data.isEmpty() || rows < 2)
             return {};
@@ -166,10 +182,10 @@ namespace spectrogramimage
 
             for (int column = 0; column < data.columns; ++column)
             {
-                float level = kFloorDb;
+                float level = engine::SpectrogramBuilder::kFloorDb;
                 for (int bin = binLow; bin <= binHigh; ++bin)
                     level = std::max(level, data.levelDb(column, bin));
-                pixels.setPixelColour(column, row, colourFor(level));
+                pixels.setPixelColour(column, row, colourFor(level, display));
             }
         }
 

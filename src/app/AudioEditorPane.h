@@ -400,16 +400,29 @@ public:
             return;
         spectrogramScale_ = scale;
         if (! spectrogramData_.isEmpty())
-            spectrogram_ = spectrogramimage::imageOf(spectrogramData_, 256, spectrogramScale_);
+            spectrogram_ = spectrogramimage::imageOf(spectrogramData_, 256, spectrogramScale_, spectrogramDisplay_);
         repaint();
     }
 
     spectrogramimage::Scale spectrogramScale() const noexcept { return spectrogramScale_; }
 
+    /** The spectrogram's colouring, redrawn from the analysis kept. */
+    void setSpectrogramDisplay(spectrogramimage::Display display)
+    {
+        if (display == spectrogramDisplay_)
+            return;
+        spectrogramDisplay_ = display;
+        if (! spectrogramData_.isEmpty())
+            spectrogram_ = spectrogramimage::imageOf(spectrogramData_, 256, spectrogramScale_, spectrogramDisplay_);
+        repaint();
+    }
+
+    spectrogramimage::Display spectrogramDisplay() const noexcept { return spectrogramDisplay_; }
+
     void setSpectrogram(const engine::SpectrogramData& data)
     {
         spectrogramData_     = data;
-        spectrogram_         = spectrogramimage::imageOf(data, 256, spectrogramScale_);
+        spectrogram_         = spectrogramimage::imageOf(data, 256, spectrogramScale_, spectrogramDisplay_);
         spectrogramColumns_  = data.columns;
         spectrogramSeconds_  = data.secondsPerColumn;
         spectrogramWindow_   = data.windowSeconds;
@@ -1507,6 +1520,7 @@ private:
     juce::Image      spectrogram_;
     engine::SpectrogramData  spectrogramData_;
     spectrogramimage::Scale  spectrogramScale_ = spectrogramimage::Scale::Logarithmic;
+    spectrogramimage::Display spectrogramDisplay_;
     int              spectrogramColumns_ = 0;
     double           spectrogramSeconds_ = 0.0;
     double           spectrogramWindow_  = 0.0;

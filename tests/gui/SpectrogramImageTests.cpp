@@ -109,3 +109,23 @@ TEST_CASE("The healing brush covers what was painted, softly at its edges", "[gu
     REQUIRE_THAT(from, WithinAbs(1.9, 1e-9));
     REQUIRE_THAT(to, WithinAbs(2.15, 1e-9));
 }
+
+TEST_CASE("The spectrogram's gain and range set how levels are coloured", "[gui][spectrogram]")
+{
+    const auto brightness = [](juce::Colour c) { return c.getPerceivedBrightness(); };
+
+    // By default -100 dB is black and 0 dB the brightest.
+    REQUIRE(brightness(spectrogramimage::colourFor(-100.0f)) < 0.1f);
+    REQUIRE(brightness(spectrogramimage::colourFor(0.0f)) > 0.9f);
+
+    // Gain brings a quiet level up; a narrower range makes the fall to black
+    // steeper.
+    spectrogramimage::Display loud;
+    loud.gainDb = 30.0f;
+    REQUIRE(spectrogramimage::colourFor(-30.0f, loud) == spectrogramimage::colourFor(0.0f));
+
+    spectrogramimage::Display narrow;
+    narrow.rangeDb = 50.0f;
+    REQUIRE(brightness(spectrogramimage::colourFor(-50.0f, narrow)) < 0.1f);
+    REQUIRE(spectrogramimage::colourFor(-25.0f, narrow) == spectrogramimage::colourFor(-50.0f));
+}
