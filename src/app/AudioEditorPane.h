@@ -12,6 +12,7 @@
 #include "TrackColours.h"
 #include "SampleDetail.h"
 #include "SampleDraw.h"
+#include "SpectrogramImage.h"
 #include "WaveformScale.h"
 #include "WaveformPeaks.h"
 
@@ -357,6 +358,35 @@ public:
 
     bool showsDbScale() const noexcept { return dbScale_; }
 
+    /** Shows the clip as a spectrogram, level by frequency over time, in
+        place of the waveform. The owner builds it (setSpectrogram) as it
+        builds the waveform's peaks, and only while this is on. */
+    void setSpectrogramView(bool on)
+    {
+        if (on == spectrogramView_)
+            return;
+        spectrogramView_ = on;
+        repaint();
+    }
+
+    bool showsSpectrogram() const noexcept { return spectrogramView_; }
+
+    void setSpectrogram(const engine::SpectrogramData& data)
+    {
+        spectrogram_         = spectrogramimage::imageOf(data);
+        spectrogramColumns_  = data.columns;
+        spectrogramSeconds_  = data.secondsPerColumn;
+        spectrogramWindow_   = data.windowSeconds;
+        spectrogramNyquist_  = data.sampleRate * 0.5;
+        repaint();
+    }
+
+    void clearSpectrogram()
+    {
+        spectrogram_ = {};
+        repaint();
+    }
+
     /** The samples asked for through onSampleDetailNeeded. */
     void setSampleDetail(SampleDetail detail)
     {
@@ -453,6 +483,12 @@ public:
         original ghosted behind so the edit is legible as a change. */
     void paintWaveform(juce::Graphics& g, juce::Rectangle<int> area)
     {
+        if (spectrogramView_)
+        {
+            paintSpectrogram(g, area);
+            return;
+        }
+
         if (peaks_.isEmpty() || peaksSampleRate_ <= 0.0)
         {
             g.setColour(juce::Colours::white.withAlpha(0.35f));
@@ -468,6 +504,56 @@ public:
         {
             auto lane = area.withY(area.getY() + ch * laneH).withHeight(laneH);
             paintChannel(g, lane, ch, gain);
+        }
+    }
+
+    /** The spectrogram over the part of the clip in view: each column is
+        placed at the middle of the window it was measured over, so a sound
+        lines up with where the waveform would show it. Frequency is marked
+        up the left. */
+    void paintSpectrogram(juce::Graphics& g, juce::Rectangle<int> area)
+    {
+        if (! spectrogram_.isValid() || spectrogramSeconds_ <= 0.0)
+        {
+            g.setColour(juce::Colours::white.withAlpha(0.35f));
+            g.drawText("Reading spectrogram...", area, juce::Justification::centred);
+            return;
+        }
+
+        const double viewFrom   = geometry_.visibleStartSeconds;
+        const double viewTo     = viewFrom + geometry_.visibleSeconds((float) area.getWidth());
+        const double firstAt    = spectrogramWindow_ * 0.5;
+        const double columnFrom = (viewFrom - firstAt) / spectrogramSeconds_;
+        const double columnTo   = (viewTo - firstAt) / spectrogramSeconds_;
+
+        // The columns in view, stretched to the area: a clip the view shows
+        // less than all of stretches its columns wider rather than repeating.
+        const auto source = juce::Rectangle<float>((float) columnFrom, 0.0f, (float) (columnTo - columnFrom),
+                                                   (float) spectrogram_.getHeight());
+        {
+            juce::Graphics::ScopedSaveState state(g);
+            g.reduceClipRegion(area);
+            g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+            const auto transform = juce::AffineTransform::translation(-source.getX(), 0.0f)
+                                       .scaled((float) area.getWidth() / source.getWidth(),
+                                               (float) area.getHeight() / source.getHeight())
+                                       .translated((float) area.getX(), (float) area.getY());
+            g.drawImageTransformed(spectrogram_, transform);
+        }
+
+        g.setFont(juce::FontOptions(10.0f));
+        for (double hz : { 100.0, 1000.0, 10000.0 })
+        {
+            if (hz >= spectrogramNyquist_)
+                continue;
+            const float y = (float) area.getBottom()
+                          - (float) spectrogramimage::proportionOf(hz, spectrogramNyquist_) * (float) area.getHeight();
+            g.setColour(juce::Colours::white.withAlpha(0.18f));
+            g.drawHorizontalLine((int) y, (float) area.getX(), (float) area.getRight());
+            g.setColour(juce::Colours::white.withAlpha(0.6f));
+            g.drawText(hz >= 1000.0 ? juce::String((int) (hz / 1000.0)) + " kHz" : juce::String((int) hz) + " Hz",
+                       juce::Rectangle<float>((float) area.getX() + 3.0f, y - 12.0f, 60.0f, 11.0f),
+                       juce::Justification::centredLeft);
         }
     }
 
@@ -1221,6 +1307,12 @@ private:
     SampleDetail     sampleDetail_; // the visible samples, once zoomed in past the peaks
     double           peaksSampleRate_ = 0.0;
     bool             dbScale_         = false;
+    bool             spectrogramView_ = false;
+    juce::Image      spectrogram_;
+    int              spectrogramColumns_ = 0;
+    double           spectrogramSeconds_ = 0.0;
+    double           spectrogramWindow_  = 0.0;
+    double           spectrogramNyquist_ = 24000.0;
 
     // The draw tool's stroke in progress, drawn straight into sampleDetail_.
     bool                 drawing_           = false;

@@ -26,6 +26,7 @@ add_executable(soundsplice_tests
   engine/RepairTests.cpp
   engine/DynamicsDspTests.cpp
   engine/PaulstretchTests.cpp
+  engine/SpectrogramTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp
@@ -128,6 +129,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/PaneWiringTests.cpp
     gui/AudioFormatsTests.cpp
     gui/MasterLoudnessTests.cpp
+    gui/SpectrogramImageTests.cpp
     gui/UtilityEffectsTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)

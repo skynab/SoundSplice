@@ -1,6 +1,7 @@
 #include "MainComponentInternal.h"
 
 #include "engine/Paulstretch.h"
+#include "engine/Spectrogram.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // The audio editor: clip gain, selection edits, noise reduction, speed and pitch,
@@ -59,12 +60,16 @@ void MainComponent::refreshAudioEditorForSelected()
     // Read once per window, not once per refresh. A destructive edit writes a
     // new file and a trim moves the window, so a changed key is exactly the
     // signal that the peaks are stale.
+    // The spectrogram is only built while it's shown, so turning it on is a
+    // change of key too.
     const auto peaksKey = file.getFullPathName() + "|" + juce::String(clip->sourceOffsetSeconds, 9)
-                        + "|" + juce::String(clipSeconds, 9);
+                        + "|" + juce::String(clipSeconds, 9) + (audioEditor_.showsSpectrogram() ? "|spectrogram" : "");
     if (peaksKey != waveformPeaksKey_)
     {
         waveformPeaks_.clear();
         waveformPeaksSampleRate_ = 0.0;
+
+        audioEditor_.clearSpectrogram();
 
         ClipAudio audio;
         if (openSelectedClipAudio(audio))
@@ -73,17 +78,34 @@ void MainComponent::refreshAudioEditorForSelected()
             // at once just to be drawn: the peaks are a tiny fraction of it.
             constexpr int chunk  = WaveformPeaks::kDefaultSamplesPerBin * 16384;
             const int     length = audio.window.length();
+
+            std::optional<engine::SpectrogramBuilder> spectrogram;
+            if (audioEditor_.showsSpectrogram())
+                spectrogram.emplace(audio.sequence.sampleRate, (std::int64_t) length);
+
             for (int from = 0; from < length; from += chunk)
             {
                 const auto channels = readClipAudio(audio, from, from + chunk);
                 if (channels.empty())
                 {
                     waveformPeaks_.clear();
+                    spectrogram.reset();
                     break;
                 }
                 waveformPeaks_.append(channels);
+
+                if (spectrogram)
+                {
+                    std::vector<const float*> pointers;
+                    for (const auto& channel : channels)
+                        pointers.push_back(channel.data());
+                    spectrogram->append(pointers.data(), (int) pointers.size(), (int) channels[0].size());
+                }
             }
             waveformPeaksSampleRate_ = audio.sequence.sampleRate;
+
+            if (spectrogram)
+                audioEditor_.setSpectrogram(spectrogram->finish());
         }
 
         waveformPeaksKey_ = peaksKey;

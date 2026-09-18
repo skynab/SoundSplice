@@ -257,6 +257,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(audioEditor_.showsDbScale());
             break;
 
+        case commands::spectrogramView:
+            info.setTicked(audioEditor_.showsSpectrogram());
+            break;
+
         case commands::nextOpenFile:
         case commands::previousOpenFile:
             info.setActive(! openFiles_.isEmpty());
@@ -506,6 +510,16 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         case commands::closeAllOpenFiles: closeAllOpenFiles(); break;
 
+        case commands::spectrogramView:
+        {
+            const bool on = ! audioEditor_.showsSpectrogram();
+            audioEditor_.setSpectrogramView(on);
+            settings_.setValue("spectrogramView", on ? "1" : "0");
+            settings_.saveIfNeeded();
+            refreshAudioEditorForSelected(); // builds it for the clip on show
+            break;
+        }
+
         case commands::waveformDbScale:
         {
             const bool db = ! audioEditor_.showsDbScale();
@@ -667,6 +681,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fitVertically);
         add(commands::showClipEnvelopes);
         add(commands::waveformDbScale);
+        add(commands::spectrogramView);
         menu.addSeparator();
         add(commands::nextOpenFile);
         add(commands::previousOpenFile);
