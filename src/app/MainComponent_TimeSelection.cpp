@@ -1002,4 +1002,64 @@ void MainComponent::detachAtSilences(float thresholdDb, double minSilenceSeconds
     showStatus("Detached " + juce::String(silenceCount) + (silenceCount == 1 ? " silence" : " silences"));
 }
 
+/** Crossfade Tracks, as Audacity's: with a time selection over exactly two
+    audio tracks, the upper hands over to the lower across it, as volume
+    curves on their clips. */
+void MainComponent::showCrossfadeTracksDialog()
+{
+    const auto& song = history_.current();
+    std::vector<int> audioTracks; // in the order they're shown, top first
+    for (const auto& track : song.tracks)
+        if (track.type == model::TrackType::Audio
+            && std::find(timeSelection_.trackIds.begin(), timeSelection_.trackIds.end(), track.id)
+                   != timeSelection_.trackIds.end())
+            audioTracks.push_back(track.id);
+
+    if (timeSelection_.isEmpty() || audioTracks.size() != 2)
+    {
+        showError("Select a stretch of time across exactly two audio tracks: the upper fades out, the lower fades in");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Crossfade Tracks",
+                                         "The upper track fades out across the selection as the lower fades in.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addComboBox("curve", { "Equal power (different material)", "Equal gain (the same material)" }, "Curve:");
+    window->getComboBoxComponent("curve")->setSelectedItemIndex(settings_.getIntValue("crossfadeTracks.curve", 0));
+    window->addButton("Crossfade", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    const int    outId = audioTracks[0], inId = audioTracks[1];
+    const double from = timeSelection_.startBeats, to = timeSelection_.endBeats;
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, outId, inId, from, to](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const bool equalPower = window->getComboBoxComponent("curve")->getSelectedItemIndex() == 0;
+            self->settings_.setValue("crossfadeTracks.curve", equalPower ? 0 : 1);
+
+            // Tried on a copy first, so a crossfade that finds nothing to shape
+            // doesn't leave an empty step in the history.
+            auto      trial  = self->history_.current();
+            const int shaped = model::arrangeedit::crossfadeTracks(trial, outId, inId, from, to, equalPower);
+            if (shaped == 0)
+            {
+                self->showError("Neither track has audio in the selection to crossfade");
+                return;
+            }
+            self->history_.edit("Crossfade tracks", [&](model::Song& s)
+            {
+                model::arrangeedit::crossfadeTracks(s, outId, inId, from, to, equalPower);
+            });
+
+            self->syncEngineTracks();
+            self->arrangementView_.setSong(self->history_.current());
+            self->showStatus("Crossfaded the tracks across the selection (" + juce::String(shaped)
+                             + (shaped == 1 ? " clip)" : " clips)"));
+        }));
+}
+
 } // namespace soundsplice

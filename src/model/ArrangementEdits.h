@@ -377,6 +377,66 @@ namespace arrangeedit
         return ducked;
     }
 
+    /** Audacity's Crossfade Tracks, as a handoff: across [@p fromBeats,
+        @p toBeats] the audio clips of @p outTrackId fade out and those of
+        @p inTrackId fade in, at equal power (cosine and sine, for unrelated
+        material) or equal gain (for the same material on both), as volume
+        curves on the clips, so the file is untouched and the fade can be
+        redrawn. The outgoing clips stay silent after the fade and the incoming
+        ones before it, which is the point of a handoff; any curve they already
+        had is kept where they still play and multiplied through the fade.
+        Returns how many clips were shaped. */
+    inline int crossfadeTracks(Song& song, int outTrackId, int inTrackId, double fromBeats, double toBeats,
+                               bool equalPower)
+    {
+        if (song.bpm <= 0.0 || toBeats <= fromBeats || outTrackId == inTrackId)
+            return 0;
+
+        const double secondsPerBeat = 60.0 / song.bpm;
+        constexpr int kSteps        = 16;
+        int           shaped        = 0;
+
+        for (auto& track : song.tracks)
+        {
+            const bool out = track.id == outTrackId;
+            if ((! out && track.id != inTrackId) || track.type != TrackType::Audio)
+                continue;
+
+            for (auto& clip : track.clips)
+            {
+                const double clipEnd = clip.startBeats + clip.lengthBeats;
+                if (clip.type != ClipType::Audio || clipEnd <= fromBeats || clip.startBeats >= toBeats)
+                    continue;
+
+                const auto fileSecondsAt = [&clip, secondsPerBeat](double beat)
+                { return clip.sourceOffsetSeconds + (beat - clip.startBeats) * secondsPerBeat; };
+                const double from = fileSecondsAt(fromBeats), to = fileSecondsAt(toBeats);
+
+                // What was there, kept where the clip still plays.
+                const auto            before = clip.envelope;
+                engine::ClipEnvelope  shapedEnvelope;
+                for (const auto& point : before.points())
+                    if (out ? point.seconds < from : point.seconds > to)
+                        shapedEnvelope.addPoint(point.seconds, point.gain);
+
+                for (int step = 0; step <= kSteps; ++step)
+                {
+                    const double t       = (double) step / kSteps;
+                    const double seconds = from + (to - from) * t;
+                    const double rising  = equalPower ? std::sin(t * 1.5707963267948966) : t;
+                    const double falling = equalPower ? std::cos(t * 1.5707963267948966) : 1.0 - t;
+                    const double fade    = out ? falling : rising;
+                    if (seconds >= 0.0)
+                        shapedEnvelope.addPoint(seconds, (float) (fade * before.gainAt(seconds)));
+                }
+
+                clip.envelope = std::move(shapedEnvelope);
+                ++shaped;
+            }
+        }
+        return shaped;
+    }
+
     /** Every stretch of [@p fromBeats, @p toBeats) none of @p sounds covers
         (intervals in beats, in any order, overlapping or not) that lasts at
         least @p minBeats, in order. */

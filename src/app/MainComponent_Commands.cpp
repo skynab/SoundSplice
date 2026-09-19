@@ -113,6 +113,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
         case commands::duplicateSelection:
         case commands::crossfadeClips:
+        case commands::crossfadeTracks:
         case commands::truncateSilence:
         case commands::repeatSelection:
         case commands::autoDuck:
@@ -428,6 +429,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::spectralClipEdit:        showSpectralClipEditDialog(); break;
         case commands::spectralClipEditsRemove: removeSpectralClipEdits(); break;
         case commands::crossfadeClips:  crossfadeClipsInSelection(); break;
+        case commands::crossfadeTracks: showCrossfadeTracksDialog(); break;
         case commands::truncateSilence: showTruncateSilenceDialog(); break;
         case commands::autoDuck:        showAutoDuckDialog(); break;
         case commands::repeatSelection: showRepeatDialog(); break;
@@ -764,6 +766,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::splitAtPlayhead);
         add(commands::joinClips);
         add(commands::crossfadeClips);
+        add(commands::crossfadeTracks);
         add(commands::duplicateSelection);
         add(commands::repeatSelection);
         add(commands::detachAtSilences);

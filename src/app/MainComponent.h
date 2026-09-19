@@ -364,6 +364,7 @@ private:
     void                   showSpectralGainDialog();
     void                   repairSpectralSelection();
     void                   showVocalReductionDialog();
+    void                   showCrossfadeTracksDialog();
     void                   showPitchCorrectionDialog();
     void                   detectPitch();
     void                   showAdaptiveNoiseReductionDialog();

@@ -425,3 +425,49 @@ TEST_CASE("Automatic crossfades follow overlaps and leave drawn fades alone", "[
     REQUIRE_FALSE(clips[1].autoFadeIn);
     REQUIRE_THAT(clips[0].fades.outSeconds, WithinAbs(1.0, 1e-9)); // the other side still fades
 }
+
+TEST_CASE("Crossfading tracks hands one over to the other across the selection", "[model][arrange]")
+{
+    Fixture f;
+    f.add(f.audio, 0.0, 10.0);      // the outgoing track (60 bpm: a beat a second)
+    f.add(f.other, 4.0, 10.0, 2.0); // the incoming one, starting 2 s into its file
+
+    REQUIRE(crossfadeTracks(f.song, f.audio, f.other, 5.0, 7.0, true) == 2);
+
+    const auto& out = findTrack(f.song, f.audio)->clips[0].envelope;
+    const auto& in  = findTrack(f.song, f.other)->clips[0].envelope;
+
+    // Timeline beats to each clip's file seconds: the outgoing clip's are the
+    // same; the incoming one's are 2 s on and start at beat 4, so beat 5 is 3 s.
+    REQUIRE_THAT(out.gainAt(5.0), WithinAbs(1.0, 1e-6));
+    REQUIRE_THAT(out.gainAt(6.0), WithinAbs(std::cos(0.7853981633974483), 1e-3)); // halfway, equal power
+    REQUIRE_THAT(out.gainAt(7.0), WithinAbs(0.0, 1e-6));
+    REQUIRE_THAT(out.gainAt(9.0), WithinAbs(0.0, 1e-6)); // stays out after
+    REQUIRE_THAT(out.gainAt(2.0), WithinAbs(1.0, 1e-6)); // untouched before
+
+    REQUIRE_THAT(in.gainAt(3.0), WithinAbs(0.0, 1e-6));  // beat 5
+    REQUIRE_THAT(in.gainAt(4.0), WithinAbs(std::sin(0.7853981633974483), 1e-3));
+    REQUIRE_THAT(in.gainAt(5.0), WithinAbs(1.0, 1e-6));  // beat 7
+    REQUIRE_THAT(in.gainAt(2.5), WithinAbs(0.0, 1e-6));  // silent before
+    REQUIRE_THAT(in.gainAt(9.0), WithinAbs(1.0, 1e-6));
+
+    // Equal power: the two together keep their power across the fade.
+    for (double beat : { 5.25, 5.9, 6.6 })
+        REQUIRE_THAT(std::pow(out.gainAt(beat), 2) + std::pow(in.gainAt(beat - 2.0), 2), WithinAbs(1.0, 0.02));
+
+    // Equal gain, over a curve already drawn: it's kept and multiplied through.
+    Fixture g;
+    auto& clip = g.add(g.audio, 0.0, 10.0);
+    clip.envelope.addPoint(1.0, 0.5f);
+    clip.envelope.addPoint(3.0, 0.5f);
+    g.add(g.other, 0.0, 10.0);
+    REQUIRE(crossfadeTracks(g.song, g.audio, g.other, 4.0, 8.0, false) == 2);
+    const auto& drawn = findTrack(g.song, g.audio)->clips[0].envelope;
+    REQUIRE_THAT(drawn.gainAt(1.0), WithinAbs(0.5, 1e-6));
+    REQUIRE_THAT(drawn.gainAt(6.0), WithinAbs(0.25, 1e-3)); // half the fade of half the level
+    REQUIRE_THAT(findTrack(g.song, g.other)->clips[0].envelope.gainAt(6.0), WithinAbs(0.5, 1e-3));
+
+    // Nothing to do on one track, or the wrong way round.
+    REQUIRE(crossfadeTracks(g.song, g.audio, g.audio, 4.0, 8.0, true) == 0);
+    REQUIRE(crossfadeTracks(g.song, g.audio, g.other, 8.0, 4.0, true) == 0);
+}
