@@ -175,4 +175,63 @@ inline std::vector<std::vector<float>> slide(const std::vector<std::vector<float
     return output;
 }
 
+/** @p channels with their pitch moved by @p semitonesAt(sample) semitones
+    around each input sample, the length kept: pitch correction's pass. The
+    curve is read at the stretcher's processing position, which trails what
+    it has been fed by its input latency, so each shift lands where it was
+    measured. Empty if too short to take in. */
+template <typename Curve>
+std::vector<std::vector<float>> transposeCurve(const std::vector<std::vector<float>>& channels, double sampleRate,
+                                               Curve&& semitonesAt, bool keepFormants)
+{
+    if (channels.empty() || channels[0].empty() || sampleRate <= 0.0)
+        return {};
+
+    const int length = (int) channels[0].size();
+    const int count  = (int) channels.size();
+
+    signalsmith::stretch::SignalsmithStretch<float> stretch;
+    stretch.presetDefault(count, (float) sampleRate);
+    if (keepFormants)
+        stretch.setFormantSemitones(0.0f, true);
+    stretch.setTransposeSemitones((float) semitonesAt(0));
+
+    const int     seekLength = stretch.outputSeekLength(1.0f);
+    constexpr int kBlock     = 256;
+    if (length < seekLength + kBlock)
+        return {};
+
+    std::vector<std::vector<float>> output((size_t) count, std::vector<float>((size_t) length, 0.0f));
+    std::vector<const float*>       in((size_t) count);
+    std::vector<float*>             out((size_t) count);
+    const auto point = [&](int inputAt, int outputAt)
+    {
+        for (int c = 0; c < count; ++c)
+        {
+            in[(size_t) c]  = channels[(size_t) c].data() + inputAt;
+            out[(size_t) c] = output[(size_t) c].data() + outputAt;
+        }
+    };
+
+    point(0, 0);
+    stretch.outputSeek(in.data(), seekLength);
+
+    const int body    = length - seekLength; // the flush gives the rest, at rate 1
+    int       written = 0;
+    for (int at = seekLength; at < length; at += kBlock)
+    {
+        const int n        = std::min(kBlock, length - at);
+        const int outCount = std::max(0, std::min(n, body - written));
+        const int now      = std::clamp(at - stretch.inputLatency() + n / 2, 0, length - 1);
+        stretch.setTransposeSemitones((float) semitonesAt(now));
+        point(at, written);
+        stretch.process(in.data(), n, out.data(), outCount);
+        written += outCount;
+    }
+
+    point(0, written);
+    stretch.flush(out.data(), length - written, 1.0f);
+    return output;
+}
+
 } // namespace soundsplice::engine::hqstretch

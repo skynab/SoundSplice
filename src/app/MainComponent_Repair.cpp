@@ -1,6 +1,8 @@
 #include "MainComponentInternal.h"
 
 #include "engine/AdaptiveNoiseReduction.h"
+#include "engine/HqStretch.h"
+#include "engine/PitchDetection.h"
 #include "engine/CenterChannel.h"
 
 #include "engine/Repair.h"
@@ -769,6 +771,87 @@ void MainComponent::showDecrackleDialog()
             if (edited)
                 self->showStatus(mended == 0 ? juce::String("No crackle found")
                                              : "Mended " + juce::String(mended) + (mended == 1 ? " crackle" : " crackles"));
+        }));
+}
+
+/** Pitch correction, as REAPER's ReaTune does it: each moment's pitch pulled
+    to the nearest note of a key's scale, as strongly and as quickly as
+    asked, over the selection or the whole clip. The length is kept. */
+void MainComponent::showPitchCorrectionDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Pitch Correction",
+                                         "Pulls a voice or instrument onto the notes of a key. A fast speed and full "
+                                         "strength give the robotic effect; slower and gentler sounds natural.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addComboBox("key", { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "Key:");
+    window->getComboBoxComponent("key")->setSelectedItemIndex(settings_.getIntValue("pitchCorrection.key", 0));
+    window->addComboBox("scale", { "Chromatic (every note)", "Major", "Minor" }, "Scale:");
+    window->getComboBoxComponent("scale")->setSelectedItemIndex(settings_.getIntValue("pitchCorrection.scale", 0));
+    window->addTextEditor("strength", juce::String(settings_.getDoubleValue("pitchCorrection.strength", 100.0)),
+                          "Strength (%):");
+    window->addTextEditor("speed", juce::String(settings_.getDoubleValue("pitchCorrection.speedMs", 30.0)),
+                          "Speed (ms, 0 snaps at once):");
+    window->addComboBox("formants", { "Moves with the pitch", "Stays put (for voices)" }, "Voice character:");
+    window->getComboBoxComponent("formants")->setSelectedItemIndex(settings_.getIntValue("speedPitch.keepFormants", 1));
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const int    key          = juce::jlimit(0, 11, window->getComboBoxComponent("key")->getSelectedItemIndex());
+            const auto   scale        = (engine::pitch::Scale) juce::jlimit(0, 2, window->getComboBoxComponent("scale")->getSelectedItemIndex());
+            const double strength     = juce::jlimit(0.0, 100.0, window->getTextEditorContents("strength").getDoubleValue()) / 100.0;
+            const double speedMs      = juce::jlimit(0.0, 1000.0, window->getTextEditorContents("speed").getDoubleValue());
+            const bool   keepFormants = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
+
+            auto& stored = self->settings_;
+            stored.setValue("pitchCorrection.key", key);
+            stored.setValue("pitchCorrection.scale", (int) scale);
+            stored.setValue("pitchCorrection.strength", strength * 100.0);
+            stored.setValue("pitchCorrection.speedMs", speedMs);
+            stored.setValue("speedPitch.keepFormants", keepFormants ? 1 : 0);
+
+            constexpr int kHop     = 256;
+            bool          tooShort = false;
+            const auto    transform = [&](std::vector<std::vector<float>>& channels, double rate)
+            {
+                // The pitch is heard in the channels together.
+                std::vector<float> mono(channels[0].size(), 0.0f);
+                for (const auto& channel : channels)
+                    for (size_t i = 0; i < mono.size() && i < channel.size(); ++i)
+                        mono[i] += channel[i] / (float) channels.size();
+
+                const auto shift = engine::pitch::correction(engine::pitch::track(mono, rate, kHop), rate, kHop, key,
+                                                             scale, strength, speedMs);
+                auto corrected = engine::hqstretch::transposeCurve(channels, rate, [&shift](int sample)
+                {
+                    return shift.empty() ? 0.0 : shift[std::min(shift.size() - 1, (size_t) sample / kHop)];
+                }, keepFormants);
+                if (corrected.empty())
+                    tooShort = true;
+                else
+                    channels = std::move(corrected);
+            };
+
+            self->showBusy("Correcting pitch...");
+            const bool whole  = self->audioEditor_.selection().isEmpty();
+            const bool edited = whole ? self->editWholeClip("Pitch correction", transform)
+                                      : self->editSelection("Pitch correction", false, transform);
+            if (tooShort)
+                self->showError("That's too short to correct - select at least a quarter of a second");
+            else if (edited)
+                self->showStatus(juce::String("Pitch corrected ") + (whole ? "across the clip" : "in the selection"));
         }));
 }
 

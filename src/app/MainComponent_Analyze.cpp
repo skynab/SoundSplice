@@ -3,6 +3,7 @@
 #include "engine/AmplitudeAnalysis.h"
 #include "engine/ClipChannels.h"
 #include "engine/OnsetDetection.h"
+#include "engine/PitchDetection.h"
 #include "model/Markers.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -472,6 +473,51 @@ void MainComponent::measureContrast()
     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::NoIcon, "Contrast", text, "OK", this);
     showStatus(juce::String("Contrast ") + (std::isfinite(difference) ? juce::String(difference, 1) + " dB" : "infinite")
                + (passes ? " - passes" : " - fails"));
+}
+
+/** The tuner: the pitch of the audio editor's selection, or the first half
+    minute of the clip, as the note it's nearest and how far off, from the
+    middle (median) of its voiced readings so a scoop or a breath doesn't
+    count. */
+void MainComponent::detectPitch()
+{
+    const auto* clip = selectedAudioClip();
+    ClipAudio   audio;
+    if (clip == nullptr || ! openSelectedClipAudio(audio) || audio.window.isEmpty())
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    const double rate = audio.sequence.sampleRate;
+    int          from = 0, to = std::min(audio.window.length(), (int) (30.0 * rate));
+    if (! audioEditor_.selection().isEmpty())
+        selectedClipRange(audio, from, to, false);
+
+    const auto channels = readClipAudio(audio, from, to);
+    if (channels.empty())
+        return;
+    std::vector<float> mono(channels[0].size(), 0.0f);
+    for (const auto& channel : channels)
+        for (size_t i = 0; i < mono.size() && i < channel.size(); ++i)
+            mono[i] += channel[i] / (float) channels.size();
+
+    std::vector<double> voiced;
+    for (const auto& reading : engine::pitch::track(mono, rate, 512))
+        if (reading.voiced())
+            voiced.push_back(reading.hz);
+    if (voiced.size() < 3)
+    {
+        showStatus("No clear pitch there - select a sung or played note");
+        return;
+    }
+
+    std::nth_element(voiced.begin(), voiced.begin() + (long) voiced.size() / 2, voiced.end());
+    const double hz    = voiced[voiced.size() / 2];
+    const double note  = engine::pitch::noteOf(hz);
+    const int    cents = (int) std::lround((note - std::round(note)) * 100.0);
+    showStatus(juce::String(engine::pitch::nameOf(note)) + (cents == 0 ? " in tune" : (cents > 0 ? " +" : " ")
+               + juce::String(cents) + " cents") + " (" + juce::String(hz, 1) + " Hz)");
 }
 
 } // namespace soundsplice

@@ -166,6 +166,8 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::captureRoomTone:
         case commands::vocalReduction:
         case commands::slidingStretch:
+        case commands::pitchCorrection:
+        case commands::detectPitch:
         case commands::adaptiveNoiseReduction:
         case commands::decrackle:
         case commands::plotSpectrum:
@@ -409,6 +411,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::clickRemoval:    showClickRemovalDialog(); break;
         case commands::vocalReduction:  showVocalReductionDialog(); break;
         case commands::slidingStretch:  showSlidingStretchDialog(); break;
+        case commands::pitchCorrection: showPitchCorrectionDialog(); break;
+        case commands::detectPitch:     detectPitch(); break;
         case commands::adaptiveNoiseReduction: showAdaptiveNoiseReductionDialog(); break;
         case commands::decrackle:       showDecrackleDialog(); break;
         case commands::clipFix:         showClipFixDialog(); break;
@@ -722,6 +726,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::changeTempo);
         add(commands::paulstretch);
         add(commands::slidingStretch);
+        add(commands::pitchCorrection);
         add(commands::reverseAudio);
         add(commands::applyEffects);
         menu.addSeparator();
@@ -889,6 +894,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::findClipping);
         add(commands::labelSounds);
         add(commands::beatFinder);
+        add(commands::detectPitch);
         menu.addSeparator();
         add(commands::contrastBackground);
         add(commands::contrast);

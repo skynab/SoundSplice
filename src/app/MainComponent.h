@@ -361,6 +361,8 @@ private:
     void                   showSpectralGainDialog();
     void                   repairSpectralSelection();
     void                   showVocalReductionDialog();
+    void                   showPitchCorrectionDialog();
+    void                   detectPitch();
     void                   showAdaptiveNoiseReductionDialog();
     void                   showDecrackleDialog();
     void                   reduceVocals(const engine::centre::Settings& settings);
