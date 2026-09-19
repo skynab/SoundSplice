@@ -164,6 +164,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
 
         case commands::captureRoomTone:
+        case commands::vocalReduction:
         case commands::plotSpectrum:
         case commands::amplitudeStatistics:
         case commands::findClipping:
@@ -399,6 +400,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::studioFadeOut:   studioFadeOutAudioSelection(); break;
         case commands::repairAudio:     repairAudioSelection(); break;
         case commands::clickRemoval:    showClickRemovalDialog(); break;
+        case commands::vocalReduction:  showVocalReductionDialog(); break;
         case commands::clipFix:         showClipFixDialog(); break;
         case commands::humRemoval:      showHumRemovalDialog(); break;
         case commands::spectralDelete:  scaleSpectralSelection("Spectral delete", 0.0f); break;
@@ -706,6 +708,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::clickRemoval);
         add(commands::clipFix);
         add(commands::humRemoval);
+        add(commands::vocalReduction);
         {
             // All of these act on a box dragged on the spectrogram.
             juce::PopupMenu spectral;

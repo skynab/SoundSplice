@@ -1,5 +1,7 @@
 #include "MainComponentInternal.h"
 
+#include "engine/CenterChannel.h"
+
 #include "engine/Repair.h"
 #include "engine/SpectralEdit.h"
 
@@ -608,6 +610,74 @@ void MainComponent::removeSpectralClipEdits()
     arrangementView_.setSong(history_.current());
     refreshAudioEditorForSelected();
     showStatus("Removed " + juce::String(removed) + (removed == 1 ? " clip spectral edit" : " clip spectral edits"));
+}
+
+/** Audacity's Vocal Reduction and Isolation, Audition's Center Channel
+    Extractor: what's panned to the centre of a stereo clip taken out or kept
+    alone, over the audio editor's selection or the whole clip. */
+void MainComponent::showVocalReductionDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Vocal Reduction and Isolation",
+                                         "Works on what's panned to the centre of a stereo recording: usually the lead vocal.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addComboBox("mode", { "Remove the centre (vocals out)", "Isolate the centre (vocals only)" }, "Action:");
+    window->getComboBoxComponent("mode")->setSelectedItemIndex(settings_.getIntValue("vocalReduction.mode", 0));
+    window->addTextEditor("strength", juce::String(settings_.getDoubleValue("vocalReduction.strength", 100.0)), "Strength (%):");
+    window->addTextEditor("low", juce::String(settings_.getDoubleValue("vocalReduction.lowHz", 120.0)), "From (Hz):");
+    window->addTextEditor("high", juce::String(settings_.getDoubleValue("vocalReduction.highHz", 9000.0)), "To (Hz):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            engine::centre::Settings settings;
+            settings.mode     = window->getComboBoxComponent("mode")->getSelectedItemIndex() == 1
+                                    ? engine::centre::Mode::Isolate : engine::centre::Mode::Remove;
+            settings.strength = juce::jlimit(0.0, 100.0, window->getTextEditorContents("strength").getDoubleValue()) / 100.0;
+            settings.lowHz    = juce::jlimit(0.0, 24000.0, window->getTextEditorContents("low").getDoubleValue());
+            settings.highHz   = juce::jlimit(settings.lowHz + 1.0, 96000.0, window->getTextEditorContents("high").getDoubleValue());
+
+            auto& stored = self->settings_;
+            stored.setValue("vocalReduction.mode", (int) settings.mode);
+            stored.setValue("vocalReduction.strength", settings.strength * 100.0);
+            stored.setValue("vocalReduction.lowHz", settings.lowHz);
+            stored.setValue("vocalReduction.highHz", settings.highHz);
+            self->reduceVocals(settings);
+        }));
+}
+
+void MainComponent::reduceVocals(const engine::centre::Settings& settings)
+{
+    const juce::String label = settings.mode == engine::centre::Mode::Isolate ? "Isolate vocals" : "Remove vocals";
+    bool               mono  = false;
+    const auto transform = [&settings, &mono](std::vector<std::vector<float>>& channels, double rate)
+    {
+        if (channels.size() < 2)
+        {
+            mono = true;
+            return;
+        }
+        engine::centre::process(channels[0], channels[1], rate, settings);
+    };
+
+    showBusy(label + "...");
+    const bool edited = audioEditor_.selection().isEmpty() ? editWholeClip(label, transform)
+                                                           : editSelection(label, false, transform);
+    if (mono)
+        showError("That clip is mono: there's no centre to find without two channels");
+    else if (edited)
+        showStatus(label + (audioEditor_.selection().isEmpty() ? " across the clip" : " in the selection"));
 }
 
 } // namespace soundsplice

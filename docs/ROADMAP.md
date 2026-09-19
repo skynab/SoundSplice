@@ -160,7 +160,7 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 
 **Stereo and special**
 ✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ✅ Repeat · ✅ **Truncate silence** (across the time selection's tracks, without rewriting audio) · 🟡 **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap)
-· ⬜ Center channel extractor / vocal reduction (Audition) · ✅ Stereo-to-mono downmix (Stereo Tools' Mono)
+· ✅ Center channel extractor / vocal reduction (Audition; Edit > Vocal Reduction and Isolation: remove or isolate the centre over a band; `src/engine/CenterChannel.h`) · ✅ Stereo-to-mono downmix (Stereo Tools' Mono)
 
 **Generators**
 ✅ Tone (sine/square/saw/triangle) · ✅ Chirp (linear or logarithmic) · ✅ **Noise** (white/pink/brown) · ✅ Silence · ✅ DTMF

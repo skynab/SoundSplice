@@ -21,6 +21,7 @@
 #include "engine/RawPcm.h"
 #include "engine/Generators.h"
 #include "engine/RoomTone.h"
+#include "engine/CenterChannel.h"
 #include "engine/SilenceDetection.h"
 #include "engine/Loudness.h"
 #include "engine/MatchEq.h"
@@ -357,6 +358,8 @@ private:
     void                   scaleSpectralSelection(const juce::String& label, float gain);
     void                   showSpectralGainDialog();
     void                   repairSpectralSelection();
+    void                   showVocalReductionDialog();
+    void                   reduceVocals(const engine::centre::Settings& settings);
     void                   showSpectralClipEditDialog();
     void                   addSpectralClipEdit(float gainDb);
     void                   removeSpectralClipEdits();
