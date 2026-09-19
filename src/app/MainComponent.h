@@ -22,6 +22,7 @@
 #include "engine/Generators.h"
 #include "engine/SilenceDetection.h"
 #include "engine/Loudness.h"
+#include "engine/MatchEq.h"
 #include "engine/TempoMap.h"
 #include "model/History.h"
 #include "model/Song.h"
@@ -460,6 +461,9 @@ private:
     void                   measureClipLoudness(const juce::String& title, const ClipAudio& audio, int from, int to,
                                                std::function<void(const engine::LoudnessReport&)> onMeasured);
     void                   measureLoudnessOfSelection();
+    void                   setMatchEqReference();
+    void                   matchEqToReference();
+    std::optional<engine::SpectrumAverager> measureSpectrumOfSelection();
     void                   showNormalizeLoudnessDialog();
 
     // The Generate menu — see MainComponent_Generate.cpp.
@@ -792,6 +796,8 @@ private:
     WaveformPeaks                      waveformPeaks_;
     juce::String                       waveformPeaksKey_;
     engine::SpectrogramSettings        spectrogramSettings_;
+    std::optional<std::array<double, engine::ThirdOctaveEq::kBands>> matchEqReference_; // Match EQ's aim
+    juce::String                       matchEqReferenceName_;
     double                             waveformPeaksSampleRate_ = 0.0;
 
     // The user's saved effect presets (kept in the app settings, see

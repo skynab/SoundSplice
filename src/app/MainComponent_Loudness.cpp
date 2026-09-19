@@ -1,4 +1,5 @@
 #include "MainComponentInternal.h"
+#include "model/GraphicEq31Bands.h"
 
 #include "engine/ClipChannels.h"
 #include "engine/Loudness.h"
@@ -191,6 +192,91 @@ void MainComponent::normalizeSelectedClipLoudness(double targetLufs, bool limitT
             message += " - held back by the -1 dBTP ceiling";
         showStatus(message);
     });
+}
+
+/** The average spectrum of the audio editor's selection, or the whole clip,
+    read a chunk at a time. Nothing if there's no clip or it can't be read. */
+std::optional<engine::SpectrumAverager> MainComponent::measureSpectrumOfSelection()
+{
+    ClipAudio audio;
+    if (selectedAudioClip() == nullptr || ! openSelectedClipAudio(audio) || audio.window.isEmpty())
+    {
+        showError("Select an audio clip first");
+        return std::nullopt;
+    }
+
+    int from = 0, to = audio.window.length();
+    if (! audioEditor_.selection().isEmpty())
+        selectedClipRange(audio, from, to, false);
+
+    engine::SpectrumAverager averager(audio.sequence.sampleRate);
+    constexpr int            kChunk = 1 << 18;
+    for (int at = from; at < to; at += kChunk)
+    {
+        const auto channels = readClipAudio(audio, at, std::min(to, at + kChunk));
+        if (channels.empty())
+            break;
+        averager.append(channels);
+    }
+
+    if (averager.isEmpty())
+    {
+        showError("That's too short to measure - select at least a tenth of a second");
+        return std::nullopt;
+    }
+    return averager;
+}
+
+void MainComponent::setMatchEqReference()
+{
+    showBusy("Measuring...");
+    const auto spectrum = measureSpectrumOfSelection();
+    if (! spectrum)
+        return;
+
+    matchEqReference_     = spectrum->bandLevelsDb();
+    matchEqReferenceName_ = juce::File(selectedAudioClip()->audioFile).getFileNameWithoutExtension();
+    showStatus("Match EQ reference set from " + matchEqReferenceName_
+               + " - select another clip and choose Edit > Match EQ to Reference");
+}
+
+/** Adds a 31-band graphic EQ to the selected track that turns this clip's
+    average tone into the reference's. An effect rather than an edit to the
+    audio, so it can be bypassed, adjusted or removed like any other. */
+void MainComponent::matchEqToReference()
+{
+    if (! matchEqReference_)
+    {
+        showError("Set a Match EQ reference first (Edit > Set as Match EQ Reference)");
+        return;
+    }
+
+    showBusy("Matching...");
+    const auto spectrum = measureSpectrumOfSelection();
+    if (! spectrum)
+        return;
+
+    const auto gains = engine::matcheq::gains(*matchEqReference_, spectrum->bandLevelsDb(), spectrum->sampleRate());
+    const int  index = selectedTrackIndex_;
+    if (index < 0 || index >= trackCount())
+        return;
+
+    history_.edit("Match EQ", [index, gains](model::Song& s)
+    {
+        auto slot = model::makeEffectSlot(model::EffectKind::GraphicEq31);
+        model::setGraphicEq31Gains(slot.graphicEq31, gains);
+        s.tracks[(size_t) index].effectChain.push_back(std::move(slot));
+    });
+
+    syncEngineTracks();
+    refreshEffectChainForSelected();
+    refreshAutomationPaneForSelected();
+
+    float largest = 0.0f;
+    for (float gain : gains)
+        largest = std::max(largest, std::abs(gain));
+    showStatus("Added a 31-band EQ matching " + matchEqReferenceName_ + " (up to "
+               + juce::String(largest, 1) + " dB) to the end of the track's effects");
 }
 
 } // namespace soundsplice

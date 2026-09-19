@@ -153,12 +153,17 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(renderJob_ == nullptr);
             break;
 
+        case commands::matchEq:
+            info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr && matchEqReference_.has_value());
+            break;
+
         case commands::plotSpectrum:
         case commands::amplitudeStatistics:
         case commands::findClipping:
         case commands::labelSounds:
         case commands::measureLoudness:
         case commands::normalizeLoudness:
+        case commands::matchEqReference:
         case commands::changeTempo:
         case commands::paulstretch:
             info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr);
@@ -433,6 +438,8 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::generateDtmf:    showGenerateDialog(engine::GeneratorKind::Dtmf); break;
         case commands::generateRhythm:  showGenerateDialog(engine::GeneratorKind::Rhythm); break;
         case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
+        case commands::matchEqReference:  setMatchEqReference(); break;
+        case commands::matchEq:           matchEqToReference(); break;
         case commands::resampleTrack:   showResampleTrackDialog(); break;
         case commands::mixAndRender:    mixAndRenderToNewTrack(); break;
         case commands::renameTrack:     renameSelectedTrack(); break;
@@ -695,6 +702,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         }
         menu.addSeparator();
         add(commands::normalizeLoudness);
+        add(commands::matchEqReference);
+        add(commands::matchEq);
         menu.addSeparator();
         add(commands::copyClip);
         add(commands::pasteClip);
