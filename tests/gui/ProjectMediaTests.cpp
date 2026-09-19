@@ -6,6 +6,7 @@
 
 #include <app/ProjectMedia.h>
 #include <model/History.h>
+#include <model/EffectParams.h>
 #include <model/Serialization.h>
 
 using namespace soundsplice;
@@ -230,4 +231,30 @@ TEST_CASE("The history visits every state the user can still get back to", "[gui
     history.forEachState([&seen](const model::Song& s) { seen.insert(s.bpm); });
 
     REQUIRE(seen == std::set<double> { 120.0, 101.0, 102.0, 103.0 });
+}
+
+TEST_CASE("A reverb's impulse response in the project's folder moves with it", "[gui][projectmedia]")
+{
+    TempFolder temp;
+    const auto here    = temp.root.getChildFile("here");
+    const auto project = here.getChildFile("song.soundsplice");
+
+    auto song   = songUsing(here.getChildFile("song Audio/a.wav"), here.getChildFile("song Audio/b.wav"));
+    auto reverb = model::makeEffectSlot(model::EffectKind::Convolution);
+    reverb.convolution.irFile = media::pathOf(here.getChildFile("Impulses/church.wav"));
+    song.tracks[0].effectChain.push_back(reverb);
+    auto elsewhere = reverb;
+    elsewhere.convolution.irFile = media::pathOf(temp.root.getChildFile("library/plate.wav"));
+    song.tracks[0].effectChain.push_back(elsewhere);
+
+    model::Song loaded;
+    REQUIRE(model::deserialize(model::serialize(media::withStoredPaths(song, project)), loaded));
+    REQUIRE(loaded.tracks[0].effectChain[0].convolution.irFile == "Impulses/church.wav");
+    REQUIRE(media::fileFromPath(loaded.tracks[0].effectChain[1].convolution.irFile)
+            == temp.root.getChildFile("library/plate.wav")); // outside: kept in full
+
+    const auto there = temp.root.getChildFile("there");
+    const auto moved = media::withResolvedPaths(loaded, there.getChildFile("song.soundsplice"));
+    REQUIRE(media::fileFromPath(moved.tracks[0].effectChain[0].convolution.irFile)
+            == there.getChildFile("Impulses/church.wav"));
 }

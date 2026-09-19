@@ -724,9 +724,11 @@ private:
         if (slot.kind == model::EffectKind::Convolution)
         {
             const auto& file = slot.convolution.irFile;
+            const juce::File response(juce::String::fromUTF8(file.c_str()));
             irButton_.setButtonText(file.empty() ? juce::String("Response: Built-in Hall")
-                                                 : "Response: " + juce::File(juce::String::fromUTF8(file.c_str()))
-                                                                      .getFileNameWithoutExtension());
+                                    : response.existsAsFile()
+                                        ? "Response: " + response.getFileNameWithoutExtension()
+                                        : "Response: " + response.getFileNameWithoutExtension() + " (missing - using the hall)");
             irButton_.setVisible(true);
         }
         updating_ = true;
