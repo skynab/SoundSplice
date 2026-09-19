@@ -17,6 +17,7 @@
 #include "engine/DynamicsProcessorEffect.h"
 #include "engine/ThirdOctaveEqEffect.h"
 #include "engine/ConvolutionEffect.h"
+#include "engine/VocoderEffect.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
@@ -57,7 +58,8 @@ enum class EffectNodeKind
     ParametricEq = 26,
     Dynamics     = 27,
     GraphicEq31  = 28,
-    Convolution  = 29
+    Convolution  = 29,
+    Vocoder      = 30
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -212,6 +214,13 @@ struct EffectSlotParams
     float       convMix        = 0.3f;
     float       convPreDelayMs = 0.0f;
     float       convGainDb     = 0.0f;
+
+    int   vocCarrier    = 1;
+    float vocPitchHz    = 110.0f;
+    int   vocBands      = 16;
+    float vocResponseMs = 30.0f;
+    float vocMix        = 1.0f;
+    float vocGainDb     = 0.0f;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -466,6 +475,16 @@ struct EchoNode final : EffectProcessor
     EchoEffect effect;
 
     EffectNodeKind kind() const noexcept override { return EffectNodeKind::Echo; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct VocoderNode final : EffectProcessor
+{
+    VocoderEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Vocoder; }
     void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
     void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
@@ -728,6 +747,15 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             dynamics->effect.setAttackMs(params.dynAttackMs);
             dynamics->effect.setReleaseMs(params.dynReleaseMs);
             dynamics->effect.setMakeUpDb(params.dynMakeUpDb);
+        }
+        else if (auto* vocoder = dynamic_cast<VocoderNode*>(&node))
+        {
+            vocoder->effect.setCarrier(params.vocCarrier);
+            vocoder->effect.setPitchHz(params.vocPitchHz);
+            vocoder->effect.setBands(params.vocBands);
+            vocoder->effect.setResponseMs(params.vocResponseMs);
+            vocoder->effect.setMix(params.vocMix);
+            vocoder->effect.setGainDb(params.vocGainDb);
         }
         else if (auto* convolution = dynamic_cast<ConvolutionNode*>(&node))
         {

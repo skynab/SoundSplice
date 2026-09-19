@@ -585,6 +585,7 @@ void AudioEngine::rebuildTrackEffectChain(int index)
             case EffectNodeKind::Dynamics:     chain->add(std::make_unique<DynamicsNode>());     break;
             case EffectNodeKind::GraphicEq31:  chain->add(std::make_unique<GraphicEq31Node>());  break;
             case EffectNodeKind::Convolution:  chain->add(std::make_unique<ConvolutionNode>());  break;
+            case EffectNodeKind::Vocoder:      chain->add(std::make_unique<VocoderNode>());      break;
 
             case EffectNodeKind::Plugin:
             {

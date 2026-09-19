@@ -260,6 +260,12 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
                              { "band5Type", 0 }, { "band5Hz", 5000 }, { "band5Gain", 0 }, { "band5Q", 1.0 },
                              { "band6Type", 6 }, { "band6Hz", 3400 }, { "band6Gain", 0 }, { "band6Q", 0.9 } } } } },
 
+        { EffectKind::Vocoder, {
+            { "Robot",      { { "carrier", 1 }, { "pitch", 110 }, { "bands", 16 }, { "response", 30 }, { "mix", 1 }, { "gain", 0 } } },
+            { "Deep Robot", { { "carrier", 1 }, { "pitch", 55 },  { "bands", 24 }, { "response", 40 }, { "mix", 1 }, { "gain", 0 } } },
+            { "Whisper",    { { "carrier", 2 }, { "pitch", 110 }, { "bands", 24 }, { "response", 20 }, { "mix", 1 }, { "gain", 0 } } },
+            { "Talk Box",   { { "carrier", 0 }, { "pitch", 110 }, { "bands", 16 }, { "response", 25 }, { "mix", 1 }, { "gain", 0 } } } } },
+
         { EffectKind::Convolution, {
             { "Subtle Space", { { "mix", 0.15 }, { "preDelay", 0 },  { "gain", 0 } } },
             { "Big Hall",     { { "mix", 0.4 },  { "preDelay", 25 }, { "gain", 0 } } },

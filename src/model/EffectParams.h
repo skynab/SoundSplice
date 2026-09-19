@@ -397,6 +397,22 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "band6Q", .name = "  Q", .min = 0.1, .max = 30, .step = 0.01,
                 .skewMidpoint = 1.5, .access = fieldAccess<&S::parametricEq, &ParametricEqSettings::band6Q> } } },
 
+        { .kind = EffectKind::Vocoder, .id = "vocoder", .name = "Vocoder", .group = "",
+          .params = {
+              { .id = "carrier", .name = "Carrier", .control = ParamControl::Choice, .min = 0, .max = 2, .step = 1,
+                .choices = { "Right channel", "Sawtooth", "Noise" },
+                .access = fieldAccess<&S::vocoder, &VocoderSettings::carrier> },
+              { .id = "pitch", .name = "Pitch", .min = 20, .max = 1000, .step = 1, .unit = " Hz",
+                .skewMidpoint = 150, .access = fieldAccess<&S::vocoder, &VocoderSettings::pitchHz> },
+              { .id = "bands", .name = "Bands", .min = 4, .max = 32, .step = 1,
+                .access = fieldAccess<&S::vocoder, &VocoderSettings::bands> },
+              { .id = "response", .name = "Response", .min = 2, .max = 200, .step = 1, .unit = " ms",
+                .access = fieldAccess<&S::vocoder, &VocoderSettings::responseMs> },
+              { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::vocoder, &VocoderSettings::mix> },
+              { .id = "gain", .name = "Output", .min = -24, .max = 24, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::vocoder, &VocoderSettings::gainDb> } } },
+
         { .kind = EffectKind::Convolution, .id = "convolution", .name = "Convolution Reverb", .group = "",
           .params = {
               { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
@@ -696,6 +712,7 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.dynamics.enabled     = kind == EffectKind::Dynamics;
     slot.graphicEq31.enabled  = kind == EffectKind::GraphicEq31;
     slot.convolution.enabled  = kind == EffectKind::Convolution;
+    slot.vocoder.enabled      = kind == EffectKind::Vocoder;
     return slot;
 }
 

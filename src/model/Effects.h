@@ -173,7 +173,8 @@ enum class EffectKind
     ParametricEq = 26, // see engine/ParametricEq.h
     Dynamics     = 27, // see engine/DynamicsProcessor.h
     GraphicEq31  = 28, // see engine/ThirdOctaveEq.h
-    Convolution  = 29  // see engine/ConvolutionEffect.h
+    Convolution  = 29, // see engine/ConvolutionEffect.h
+    Vocoder      = 30  // see engine/Vocoder.h
 };
 
 /**
@@ -624,6 +625,21 @@ struct ConvolutionSettings
     bool operator==(const ConvolutionSettings&) const = default;
 };
 
+/** A channel vocoder: the left channel (a voice) speaking through a carrier,
+    the right channel (0), a sawtooth at pitchHz (1) or noise (2). */
+struct VocoderSettings
+{
+    bool  enabled    = false;
+    int   carrier    = 1;
+    float pitchHz    = 110.0f;
+    int   bands      = 16;
+    float responseMs = 30.0f;
+    float mix        = 1.0f;
+    float gainDb     = 0.0f;
+
+    bool operator==(const VocoderSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -658,6 +674,7 @@ struct EffectSlot
     DynamicsSettings     dynamics;
     GraphicEq31Settings  graphicEq31;
     ConvolutionSettings  convolution;
+    VocoderSettings      vocoder;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

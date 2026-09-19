@@ -378,7 +378,13 @@ inline std::string serialize(const Song& song)
                 out << " " << detail::num((double) gain);
             out << " " << detail::num((double) slot.convolution.mix) << " "
                 << detail::num((double) slot.convolution.preDelayMs) << " "
-                << detail::num((double) slot.convolution.gainDb) << "\n";
+                << detail::num((double) slot.convolution.gainDb) << " "
+                << slot.vocoder.carrier << " "
+                << detail::num((double) slot.vocoder.pitchHz) << " "
+                << slot.vocoder.bands << " "
+                << detail::num((double) slot.vocoder.responseMs) << " "
+                << detail::num((double) slot.vocoder.mix) << " "
+                << detail::num((double) slot.vocoder.gainDb) << "\n";
 
             // A path takes the rest of its own line, as a plugin's name does.
             if (! slot.convolution.irFile.empty())
@@ -947,6 +953,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 auto   geq31 = model::graphicEq31Gains(defaults.graphicEq31);
                 double convMix = defaults.convolution.mix, convPreDelay = defaults.convolution.preDelayMs;
                 double convGain = defaults.convolution.gainDb;
+                int    vocCarrier = defaults.vocoder.carrier, vocBands = defaults.vocoder.bands;
+                double vocPitch = defaults.vocoder.pitchHz, vocResponse = defaults.vocoder.responseMs;
+                double vocMix = defaults.vocoder.mix, vocGain = defaults.vocoder.gainDb;
                 double peqHz6 = defaults.parametricEq.band6Hz, peqGain6 = defaults.parametricEq.band6GainDb, peqQ6 = defaults.parametricEq.band6Q;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
@@ -988,7 +997,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                         break; // an older file stops here: the rest keep their defaults
                     gain = (float) value;
                 }
-                ss >> convMix >> convPreDelay >> convGain;
+                ss >> convMix >> convPreDelay >> convGain
+                   >> vocCarrier >> vocPitch >> vocBands >> vocResponse >> vocMix >> vocGain;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -1136,6 +1146,13 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.convolution.mix        = (float) convMix;
                 slot.convolution.preDelayMs = (float) convPreDelay;
                 slot.convolution.gainDb     = (float) convGain;
+                slot.vocoder.enabled        = slot.enabled && slot.kind == EffectKind::Vocoder;
+                slot.vocoder.carrier        = std::clamp(vocCarrier, 0, 2);
+                slot.vocoder.pitchHz        = (float) vocPitch;
+                slot.vocoder.bands          = std::clamp(vocBands, 4, 32);
+                slot.vocoder.responseMs     = (float) vocResponse;
+                slot.vocoder.mix            = (float) vocMix;
+                slot.vocoder.gainDb         = (float) vocGain;
                 slot.dynamics.points = std::clamp(dyn_points, 2, 6);
                 slot.dynamics.point1InDb = (float) dyn_point1InDb;
                 slot.dynamics.point1OutDb = (float) dyn_point1OutDb;

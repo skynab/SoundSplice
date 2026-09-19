@@ -156,7 +156,7 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 **Delay, reverb and modulation**
 ✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ✅ Echo (multitap, with ping-pong) ·
 ✅ **Convolution reverb** with impulse-response loading (partitioned FFT convolution, a built-in hall until a file is loaded; `src/engine/Convolver.h`, `src/engine/ConvolutionEffect.h`) · ✅ Phaser ·
-✅ Flanger (`src/engine/ToneDsp.h`) · ✅ Wah-wah (auto-wah) · ⬜ Vocoder · ✅ Ring modulator (`src/engine/DynamicsDsp.h`)
+✅ Flanger (`src/engine/ToneDsp.h`) · ✅ Wah-wah (auto-wah) · ✅ Vocoder (left channel through the right, a sawtooth or noise; 4-32 bands, carrier flattened; `src/engine/Vocoder.h`) · ✅ Ring modulator (`src/engine/DynamicsDsp.h`)
 
 **Stereo and special**
 ✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ✅ Repeat · ✅ **Truncate silence** (across the time selection's tracks, without rewriting audio) · 🟡 **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap)
