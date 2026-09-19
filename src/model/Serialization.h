@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "model/Song.h"
+#include "model/GraphicEq31Bands.h"
 
 namespace soundsplice::model
 {
@@ -372,7 +373,10 @@ inline std::string serialize(const Song& song)
                 << slot.dynamics.detector << " "
                 << detail::num((double) slot.dynamics.attackMs) << " "
                 << detail::num((double) slot.dynamics.releaseMs) << " "
-                << detail::num((double) slot.dynamics.makeUpDb) << "\n";
+                << detail::num((double) slot.dynamics.makeUpDb);
+            for (float gain : model::graphicEq31Gains(slot.graphicEq31))
+                out << " " << detail::num((double) gain);
+            out << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -934,6 +938,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double dyn_attackMs = defaults.dynamics.attackMs;
                 double dyn_releaseMs = defaults.dynamics.releaseMs;
                 double dyn_makeUpDb = defaults.dynamics.makeUpDb;
+                auto   geq31 = model::graphicEq31Gains(defaults.graphicEq31);
                 double peqHz6 = defaults.parametricEq.band6Hz, peqGain6 = defaults.parametricEq.band6GainDb, peqQ6 = defaults.parametricEq.band6Q;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
@@ -968,6 +973,13 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                    >> peqType5 >> peqHz5 >> peqGain5 >> peqQ5
                    >> peqType6 >> peqHz6 >> peqGain6 >> peqQ6
                    >> dyn_points >> dyn_point1InDb >> dyn_point1OutDb >> dyn_point2InDb >> dyn_point2OutDb >> dyn_point3InDb >> dyn_point3OutDb >> dyn_point4InDb >> dyn_point4OutDb >> dyn_point5InDb >> dyn_point5OutDb >> dyn_point6InDb >> dyn_point6OutDb >> dyn_detector >> dyn_attackMs >> dyn_releaseMs >> dyn_makeUpDb;
+                for (auto& gain : geq31)
+                {
+                    double value = gain;
+                    if (! (ss >> value))
+                        break; // an older file stops here: the rest keep their defaults
+                    gain = (float) value;
+                }
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -1109,6 +1121,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.multiband.releaseMs    = (float) mbRelease;
                 slot.parametricEq.enabled   = slot.enabled && slot.kind == EffectKind::ParametricEq;
                 slot.dynamics.enabled       = slot.enabled && slot.kind == EffectKind::Dynamics;
+                slot.graphicEq31.enabled    = slot.enabled && slot.kind == EffectKind::GraphicEq31;
+                model::setGraphicEq31Gains(slot.graphicEq31, geq31);
                 slot.dynamics.points = std::clamp(dyn_points, 2, 6);
                 slot.dynamics.point1InDb = (float) dyn_point1InDb;
                 slot.dynamics.point1OutDb = (float) dyn_point1OutDb;

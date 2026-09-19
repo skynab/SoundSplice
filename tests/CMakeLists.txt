@@ -31,6 +31,7 @@ add_executable(soundsplice_tests
   engine/ClipSpectralEditsTests.cpp
   engine/ParametricEqTests.cpp
   engine/DynamicsProcessorTests.cpp
+  engine/ThirdOctaveEqTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp

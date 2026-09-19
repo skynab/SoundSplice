@@ -6,6 +6,7 @@
 #include "model/Effects.h"
 #include "model/ParametricEqBands.h"
 #include "model/DynamicsCurve.h"
+#include "model/GraphicEq31Bands.h"
 
 namespace soundsplice::engine
 {
@@ -58,6 +59,7 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::Multiband:  return std::make_unique<MultibandNode>();
         case model::EffectKind::ParametricEq: return std::make_unique<ParametricEqNode>();
         case model::EffectKind::Dynamics:     return std::make_unique<DynamicsNode>();
+        case model::EffectKind::GraphicEq31:  return std::make_unique<GraphicEq31Node>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -184,6 +186,7 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.dynAttackMs      = slot.dynamics.attackMs;
     params.dynReleaseMs     = slot.dynamics.releaseMs;
     params.dynMakeUpDb      = slot.dynamics.makeUpDb;
+    params.geq31Db          = model::graphicEq31Gains(slot.graphicEq31);
     return params;
 }
 

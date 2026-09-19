@@ -15,6 +15,7 @@
 #include "engine/DynamicsEffects.h"
 #include "engine/ParametricEqEffect.h"
 #include "engine/DynamicsProcessorEffect.h"
+#include "engine/ThirdOctaveEqEffect.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
@@ -53,7 +54,8 @@ enum class EffectNodeKind
     Echo       = 24,
     Multiband  = 25,
     ParametricEq = 26,
-    Dynamics     = 27
+    Dynamics     = 27,
+    GraphicEq31  = 28
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -201,6 +203,8 @@ struct EffectSlotParams
     float         dynAttackMs  = 5.0f;
     float         dynReleaseMs = 150.0f;
     float         dynMakeUpDb  = 0.0f;
+
+    std::array<float, ThirdOctaveEq::kBands> geq31Db {};
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -460,6 +464,16 @@ struct EchoNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct GraphicEq31Node final : EffectProcessor
+{
+    ThirdOctaveEqEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::GraphicEq31; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct DynamicsNode final : EffectProcessor
 {
     DynamicsProcessorEffect effect;
@@ -695,6 +709,11 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             dynamics->effect.setAttackMs(params.dynAttackMs);
             dynamics->effect.setReleaseMs(params.dynReleaseMs);
             dynamics->effect.setMakeUpDb(params.dynMakeUpDb);
+        }
+        else if (auto* graphic31 = dynamic_cast<GraphicEq31Node*>(&node))
+        {
+            for (int band = 0; band < ThirdOctaveEq::kBands; ++band)
+                graphic31->effect.setBandDb(band, params.geq31Db[(size_t) band]);
         }
 }
 

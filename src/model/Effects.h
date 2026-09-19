@@ -171,7 +171,8 @@ enum class EffectKind
     Echo       = 24,
     Multiband  = 25,
     ParametricEq = 26, // see engine/ParametricEq.h
-    Dynamics     = 27  // see engine/DynamicsProcessor.h
+    Dynamics     = 27, // see engine/DynamicsProcessor.h
+    GraphicEq31  = 28  // see engine/ThirdOctaveEq.h
 };
 
 /**
@@ -569,6 +570,46 @@ struct DynamicsSettings
     bool operator==(const DynamicsSettings&) const = default;
 };
 
+/** The 31-band graphic EQ's gains in dB, band1 at 20 Hz up to band31 at
+    20 kHz (engine::ThirdOctaveEq::kCentres). */
+struct GraphicEq31Settings
+{
+    bool  enabled = false;
+    float band1 = 0.0f;
+    float band2 = 0.0f;
+    float band3 = 0.0f;
+    float band4 = 0.0f;
+    float band5 = 0.0f;
+    float band6 = 0.0f;
+    float band7 = 0.0f;
+    float band8 = 0.0f;
+    float band9 = 0.0f;
+    float band10 = 0.0f;
+    float band11 = 0.0f;
+    float band12 = 0.0f;
+    float band13 = 0.0f;
+    float band14 = 0.0f;
+    float band15 = 0.0f;
+    float band16 = 0.0f;
+    float band17 = 0.0f;
+    float band18 = 0.0f;
+    float band19 = 0.0f;
+    float band20 = 0.0f;
+    float band21 = 0.0f;
+    float band22 = 0.0f;
+    float band23 = 0.0f;
+    float band24 = 0.0f;
+    float band25 = 0.0f;
+    float band26 = 0.0f;
+    float band27 = 0.0f;
+    float band28 = 0.0f;
+    float band29 = 0.0f;
+    float band30 = 0.0f;
+    float band31 = 0.0f;
+
+    bool operator==(const GraphicEq31Settings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -601,6 +642,7 @@ struct EffectSlot
     MultibandSettings  multiband;
     ParametricEqSettings parametricEq;
     DynamicsSettings     dynamics;
+    GraphicEq31Settings  graphicEq31;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;
