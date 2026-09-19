@@ -179,6 +179,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::contrastBackground:
         case commands::measureLoudness:
         case commands::normalizeLoudness:
+        case commands::normalizePeak:
         case commands::matchEqReference:
         case commands::changeTempo:
         case commands::paulstretch:
@@ -471,6 +472,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::generateRoomTone: showGenerateDialog(engine::GeneratorKind::RoomTone); break;
         case commands::captureRoomTone: captureRoomTone(); break;
         case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
+        case commands::normalizePeak:   showNormalizeDialog(); break;
         case commands::matchEqReference:  setMatchEqReference(); break;
         case commands::matchEq:           matchEqToReference(); break;
         case commands::resampleTrack:   showResampleTrackDialog(); break;
@@ -750,6 +752,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
             menu.addSubMenu("Spectral", spectral);
         }
         menu.addSeparator();
+        add(commands::normalizePeak);
         add(commands::normalizeLoudness);
         add(commands::matchEqReference);
         add(commands::matchEq);

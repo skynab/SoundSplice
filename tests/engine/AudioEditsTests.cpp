@@ -254,3 +254,48 @@ TEST_CASE("Studio fade out ends silent and darkens as it goes", "[engine][audioe
     REQUIRE(peakAround(high, 2000) > 0.6f);
     REQUIRE(peakAround(high, 36000) < peakAround(low, 36000) * 0.25f);
 }
+
+TEST_CASE("Normalize reaches its peak, takes DC out, and can even the channels out", "[engine][edits]")
+{
+    // A left channel peaking at 0.25 around a DC offset of 0.1, and a right
+    // channel peaking at 0.5 with none.
+    std::vector<std::vector<float>> audio(2, std::vector<float>(4800));
+    for (size_t i = 0; i < 4800; ++i)
+    {
+        const float wave = (float) std::sin(2.0 * 3.14159265358979 * 100.0 * (double) i / 48000.0);
+        audio[0][i]      = 0.1f + 0.25f * wave;
+        audio[1][i]      = 0.5f * wave;
+    }
+    const auto peakOf = [](const std::vector<float>& channel)
+    {
+        float peak = 0.0f;
+        for (float s : channel)
+            peak = std::max(peak, std::abs(s));
+        return peak;
+    };
+    const auto meanOf = [](const std::vector<float>& channel)
+    {
+        double sum = 0.0;
+        for (float s : channel)
+            sum += s;
+        return sum / (double) channel.size();
+    };
+
+    // Together, DC kept: the louder channel (the right, at 0.5; the left
+    // reaches 0.35 with its offset) sets one gain for both.
+    auto together = audio;
+    REQUIRE(soundsplice::engine::audioedits::normalize(together, 0.9f, false, false));
+    REQUIRE(std::abs(peakOf(together[1]) - 0.9f) < 1e-4f);
+    REQUIRE(std::abs(peakOf(together[0]) - 0.35f * 0.9f / 0.5f) < 1e-3f); // balance kept
+
+    // DC out first, then each channel on its own.
+    auto each = audio;
+    REQUIRE(soundsplice::engine::audioedits::normalize(each, 0.9f, true, true));
+    REQUIRE(std::abs(meanOf(each[0])) < 1e-4);
+    REQUIRE(std::abs(peakOf(each[0]) - 0.9f) < 1e-3f);
+    REQUIRE(std::abs(peakOf(each[1]) - 0.9f) < 1e-3f);
+
+    // Silence has no peak.
+    std::vector<std::vector<float>> silence(1, std::vector<float>(100, 0.0f));
+    REQUIRE_FALSE(soundsplice::engine::audioedits::normalize(silence, 0.9f, true, false));
+}

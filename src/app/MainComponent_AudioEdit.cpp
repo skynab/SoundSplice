@@ -303,13 +303,19 @@ void MainComponent::setSelectedClipGainDb(float gainDb)
     syncEngineTracks();
 }
 
-/** Sets the clip's gain so its loudest sample just reaches kNormaliseTargetPeak.
+/** Sets the clip's gain so its loudest sample just reaches @p targetPeak
+    (kNormaliseTargetPeak from the editor's button).
 
     Reads the file rather than using the thumbnail's summary: a thumbnail is a
     downsampled peak envelope, so it can under-report the true peak by enough
     to leave a "normalised" clip clipping. Reading is exact and happens once,
     on a button press, which is the one place it's affordable. */
 void MainComponent::normaliseSelectedClip()
+{
+    normaliseSelectedClipTo(kNormaliseTargetPeak);
+}
+
+void MainComponent::normaliseSelectedClipTo(float targetPeak)
 {
     const auto* clip = selectedAudioClip();
     if (clip == nullptr)
@@ -355,7 +361,7 @@ void MainComponent::normaliseSelectedClip()
         return;
     }
 
-    const float gainDb = juce::Decibels::gainToDecibels(kNormaliseTargetPeak / peak);
+    const float gainDb = juce::Decibels::gainToDecibels(targetPeak / peak);
 
     const int trackIndex = selectedTrackIndex_;
     const int clipIndex  = selectedClipIndex_;
@@ -1293,6 +1299,75 @@ void MainComponent::applySlidingStretch(const engine::hqstretch::Slide& slide)
         showStatus("Stretched from " + juce::String(slide.startTempoPercent, 1) + "% to "
                    + juce::String(slide.endTempoPercent, 1) + "% tempo, " + juce::String(slide.startSemitones, 1)
                    + " to " + juce::String(slide.endSemitones, 1) + " semitones");
+}
+
+/** Normalize, with Audacity's options. A plain peak target on the whole clip
+    stays non-destructive, as the editor's button is: the clip's gain is set.
+    Taking out DC offset, evening the channels out independently, or working
+    on only a selection changes the audio itself, as one undo step. */
+void MainComponent::showNormalizeDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Normalize",
+                                         "Brings the selection, or the whole clip, up (or down) so its loudest moment "
+                                         "reaches a level.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("peak", juce::String(settings_.getDoubleValue("normalize.peakDb", -1.0)), "Peak (dB):");
+    window->addComboBox("dc", { "Leave it", "Remove it" }, "DC offset:");
+    window->getComboBoxComponent("dc")->setSelectedItemIndex(settings_.getIntValue("normalize.removeDc", 1));
+    window->addComboBox("channels", { "Together (keeps their balance)", "Each on its own" }, "Channels:");
+    window->getComboBoxComponent("channels")->setSelectedItemIndex(settings_.getIntValue("normalize.independently", 0));
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double peakDb        = juce::jlimit(-60.0, 0.0, window->getTextEditorContents("peak").getDoubleValue());
+            const bool   removeDc      = window->getComboBoxComponent("dc")->getSelectedItemIndex() == 1;
+            const bool   independently = window->getComboBoxComponent("channels")->getSelectedItemIndex() == 1;
+            self->settings_.setValue("normalize.peakDb", peakDb);
+            self->settings_.setValue("normalize.removeDc", removeDc ? 1 : 0);
+            self->settings_.setValue("normalize.independently", independently ? 1 : 0);
+            self->normalizeWithOptions(juce::Decibels::decibelsToGain((float) peakDb), removeDc, independently);
+        }));
+}
+
+void MainComponent::normalizeWithOptions(float targetPeak, bool removeDc, bool independently)
+{
+    const bool whole = audioEditor_.selection().isEmpty();
+    if (whole && ! removeDc && ! independently)
+    {
+        normaliseSelectedClipTo(targetPeak); // the clip's gain, the file untouched
+        return;
+    }
+
+    // The clip's gain applies on top of whatever is written, so the audio is
+    // brought to the target as it will play: the target less that gain.
+    const float playGain = juce::Decibels::decibelsToGain(selectedAudioClip()->gainDb);
+    const float target   = playGain > 0.0f ? targetPeak / playGain : targetPeak;
+
+    bool       silent    = false;
+    const auto transform = [target, removeDc, independently, &silent](std::vector<std::vector<float>>& channels, double)
+    {
+        silent = ! engine::audioedits::normalize(channels, target, removeDc, independently);
+    };
+    showBusy("Normalizing...");
+    const bool edited = whole ? editWholeClip("Normalize", transform) : editSelection("Normalize", false, transform);
+    if (silent)
+        showError("That's silent: there's no peak to normalize to");
+    else if (edited)
+        showStatus(juce::String("Normalized to ") + juce::String(juce::Decibels::gainToDecibels(targetPeak), 1) + " dB"
+                   + (removeDc ? ", DC removed" : "") + (independently ? ", each channel on its own" : ""));
 }
 
 /** Speed and pitch, on the whole clip.

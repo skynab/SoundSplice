@@ -243,4 +243,44 @@ inline std::vector<float> resample(const std::vector<float>& samples, double rat
     return out;
 }
 
+/**
+    Normalize, as Audacity's: each channel's DC offset (its average, which
+    should be zero) taken out if @p removeDc, then the audio scaled so its
+    loudest sample reaches @p targetPeak, either all channels by the one gain
+    (keeping their balance) or, if @p independently, each by its own. The DC
+    comes out first so the peak it's measured by is the true swing. False,
+    changing nothing, if the audio is silent.
+*/
+inline bool normalize(std::vector<std::vector<float>>& channels, float targetPeak, bool removeDc, bool independently)
+{
+    std::vector<double> offsets(channels.size(), 0.0);
+    std::vector<float>  peaks(channels.size(), 0.0f);
+    for (size_t c = 0; c < channels.size(); ++c)
+    {
+        auto& channel = channels[c];
+        if (removeDc && ! channel.empty())
+        {
+            double sum = 0.0;
+            for (float s : channel)
+                sum += s;
+            offsets[c] = sum / (double) channel.size();
+        }
+        for (float s : channel)
+            peaks[c] = std::max(peaks[c], std::abs((float) (s - offsets[c])));
+    }
+
+    const float loudest = peaks.empty() ? 0.0f : *std::max_element(peaks.begin(), peaks.end());
+    if (loudest <= 0.0f)
+        return false;
+
+    for (size_t c = 0; c < channels.size(); ++c)
+    {
+        const float peak = independently ? peaks[c] : loudest;
+        const float gain = peak > 0.0f ? targetPeak / peak : 1.0f; // a silent channel stays silent
+        for (auto& s : channels[c])
+            s = (float) (s - offsets[c]) * gain;
+    }
+    return true;
+}
+
 } // namespace soundsplice::engine::audioedits

@@ -286,6 +286,9 @@ private:
     void                   beginClipGainDrag();
     void                   endClipGainDrag();
     void                   normaliseSelectedClip();
+    void                   normaliseSelectedClipTo(float targetPeak);
+    void                   showNormalizeDialog();
+    void                   normalizeWithOptions(float targetPeak, bool removeDc, bool independently);
     // The audio-editor edit actions. Each resolves the selection, transforms
     // the samples and goes through replaceClipAudio.
     /** Runs @p transform over the selected samples, reading only those, and

@@ -131,7 +131,7 @@ Built on 0.4, so each line is mostly DSP plus tests. Anything marked ✅ as real
 offline apply and preview.
 
 **Volume and dynamics**
-✅ Compressor · ✅ Gate · 🟡 Normalize (peak only) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ✅ **Auto Duck** (Edit > Auto Duck: dips the selected tracks under the lowest selected one, as editable clip volume curves) · ✅ Expander ·
+✅ Compressor · ✅ Gate · ✅ Normalize (Edit > Normalize: peak, DC offset removal, channels together or each on its own, over a selection or the clip; the plain whole-clip case still just sets clip gain) · ✅ Limiter (the Maximizer as a chain effect) · ✅ Amplify (`src/engine/UtilityEffects.h`) · ✅ **Loudness normalization (LUFS/LU, EBU R128)** (Edit > Normalize Loudness: clip gain to a LUFS target, held under -1 dBTP; `src/engine/Loudness.h`) · ✅ **Auto Duck** (Edit > Auto Duck: dips the selected tracks under the lowest selected one, as editable clip volume curves) · ✅ Expander ·
 ✅ **Multiband compressor** (three bands, Linkwitz-Riley crossovers; `src/engine/DynamicsDsp.h`) · ✅ **De-esser** (split-band, Linkwitz-Riley crossover) · ✅ Dynamics processor with a
 drawable transfer curve (Audition): up to six points, peak or RMS detector, drag the curve in the effect panel (`src/engine/DynamicsProcessor.h`)
 
