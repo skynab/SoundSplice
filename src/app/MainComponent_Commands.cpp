@@ -266,6 +266,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(arrangementView_.snapsToClipEdges());
             break;
 
+        case commands::autoCrossfades:
+            info.setTicked(autoCrossfades_);
+            break;
+
         case commands::showClipEnvelopes:
             info.setTicked(arrangementView_.showsEnvelopes());
             break;
@@ -548,6 +552,16 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
+        case commands::autoCrossfades:
+        {
+            autoCrossfades_ = ! autoCrossfades_;
+            settings_.setValue("autoCrossfades", autoCrossfades_ ? "1" : "0");
+            settings_.saveIfNeeded();
+            showStatus(autoCrossfades_ ? "Overlapping clips crossfade as they're moved"
+                                       : "Overlapping clips no longer crossfade by themselves");
+            break;
+        }
+
         case commands::snapToClipEdges:
         {
             const bool snap = ! arrangementView_.snapsToClipEdges();
@@ -818,6 +832,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::snapToGrid);
         add(commands::snapToMarkers);
         add(commands::snapToClipEdges);
+        add(commands::autoCrossfades);
         add(commands::resetLayout);
     }
     else if (topLevelMenuIndex == 3) // Markers

@@ -1,5 +1,7 @@
 #include "MainComponentInternal.h"
 
+#include "model/ArrangementEdits.h"
+
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // The application shell: construction and teardown, the timer, painting and
 // top-level layout, device notifications and the status banner.
@@ -132,6 +134,7 @@ MainComponent::MainComponent()
     arrangementView_.setSnapToMarkers(settings_.getValue("snapToMarkers", "1") != "0");
     arrangementView_.setSnapToClipEdges(settings_.getValue("snapToClipEdges", "1") != "0");
     arrangementView_.setShowEnvelopes(settings_.getValue("showClipEnvelopes", "0") == "1");
+    autoCrossfades_ = settings_.getValue("autoCrossfades", "1") == "1";
     arrangementView_.setShowSpectrograms(settings_.getValue("trackSpectrograms", "0") == "1");
     audioEditor_.setDbScale(settings_.getValue("waveformDbScale", "0") == "1");
     audioEditor_.setSpectrogramView(settings_.getValue("spectrogramView", "0") == "1");
@@ -678,13 +681,16 @@ MainComponent::MainComponent()
 
     arrangementView_.onClipMoved = [this](int trackIndex, int clipIndex, double newStartBeats)
     {
-        history_.edit("Move clip", [trackIndex, clipIndex, newStartBeats](model::Song& s)
+        const bool crossfade = autoCrossfades_;
+        history_.edit("Move clip", [trackIndex, clipIndex, newStartBeats, crossfade](model::Song& s)
         {
             if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
                 return;
             auto& clips = s.tracks[(size_t) trackIndex].clips;
             if (clipIndex >= 0 && clipIndex < (int) clips.size())
                 clips[(size_t) clipIndex].startBeats = juce::jmax(0.0, newStartBeats);
+            if (crossfade)
+                model::arrangeedit::applyAutoCrossfades(s, trackIndex);
         });
 
         arrangementView_.setSong(history_.current());

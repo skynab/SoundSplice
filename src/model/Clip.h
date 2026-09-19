@@ -47,6 +47,13 @@ struct Clip
         rule for fades longer than the clip are in engine/ClipFade.h. */
     engine::ClipFades fades;
 
+    /** Whether each fade was made by an automatic crossfade (REAPER's: two
+        clips overlapping on a track fade across the overlap) rather than
+        drawn: an automatic one goes when the overlap does, a drawn one is
+        never touched. See model::arrangeedit::applyAutoCrossfades. */
+    bool autoFadeIn  = false;
+    bool autoFadeOut = false;
+
     /** Which of the file's channels the clip plays: both, one of them on
         every output, or the two swapped. Non-destructive like the fades; see
         engine/ClipChannels.h and model/TrackChannels.h. Audio clips only. */

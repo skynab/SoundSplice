@@ -75,6 +75,8 @@ namespace detail
         out << "CLIPFADE " << num(clip.fades.inSeconds) << " " << (int) clip.fades.inShape << " "
             << num(clip.fades.outSeconds) << " " << (int) clip.fades.outShape << "\n";
         out << "CLIPCHANS " << (int) clip.channels << "\n";
+        if (clip.autoFadeIn || clip.autoFadeOut)
+            out << "CLIPAUTOXF " << (clip.autoFadeIn ? 1 : 0) << " " << (clip.autoFadeOut ? 1 : 0) << "\n";
 
         // Only when there's a curve: a clip without one reads back as unity.
         if (! clip.envelope.isEmpty())
@@ -503,6 +505,15 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
         if (readTagged("CLIPCHANS", rest))
             clip.channels = engine::clipChannelsFrom(std::atoi(rest.c_str()));
+
+        if (readTagged("CLIPAUTOXF", rest))
+        {
+            std::istringstream as(rest);
+            int in = 0, out = 0;
+            as >> in >> out;
+            clip.autoFadeIn  = in != 0;
+            clip.autoFadeOut = out != 0;
+        }
 
         if (readTagged("CLIPENV", rest))
         {

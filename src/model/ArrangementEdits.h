@@ -219,6 +219,66 @@ namespace arrangeedit
         return made;
     }
 
+    /** REAPER's automatic crossfades, for the audio track at @p trackIndex:
+        wherever one clip overlaps the next, the first fades out and the
+        second fades in across the overlap, at equal power. Fades made this way
+        before are cleared first, so an overlap that's gone takes its fades
+        with it; a fade drawn by hand is left as it is and never replaced. A
+        clip lying wholly inside another isn't crossfaded. Returns how many
+        crossfades there are. */
+    inline int applyAutoCrossfades(Song& song, int trackIndex)
+    {
+        if (trackIndex < 0 || trackIndex >= (int) song.tracks.size() || song.bpm <= 0.0)
+            return 0;
+        auto& track = song.tracks[(size_t) trackIndex];
+        if (track.type != TrackType::Audio)
+            return 0;
+
+        for (auto& clip : track.clips)
+        {
+            if (clip.autoFadeIn)
+                clip.fades.inSeconds = 0.0;
+            if (clip.autoFadeOut)
+                clip.fades.outSeconds = 0.0;
+            clip.autoFadeIn = clip.autoFadeOut = false;
+        }
+
+        std::vector<size_t> order;
+        for (size_t i = 0; i < track.clips.size(); ++i)
+            if (track.clips[i].type == ClipType::Audio)
+                order.push_back(i);
+        std::stable_sort(order.begin(), order.end(), [&track](size_t a, size_t b)
+                         { return track.clips[a].startBeats < track.clips[b].startBeats; });
+
+        const double secondsPerBeat = 60.0 / song.bpm;
+        int          made           = 0;
+        for (size_t i = 0; i + 1 < order.size(); ++i)
+        {
+            auto&        first    = track.clips[order[i]];
+            auto&        second   = track.clips[order[i + 1]];
+            const double firstEnd = first.startBeats + first.lengthBeats;
+            const double overlap  = firstEnd - second.startBeats;
+            if (overlap <= rangeedit::kEpsilonBeats || second.startBeats + second.lengthBeats <= firstEnd)
+                continue;
+
+            const double seconds = overlap * secondsPerBeat;
+            if (first.fades.outSeconds <= 0.0)
+            {
+                first.fades.outSeconds = seconds;
+                first.fades.outShape   = engine::FadeShape::EqualPower;
+                first.autoFadeOut      = true;
+            }
+            if (second.fades.inSeconds <= 0.0)
+            {
+                second.fades.inSeconds = seconds;
+                second.fades.inShape   = engine::FadeShape::EqualPower;
+                second.autoFadeIn      = true;
+            }
+            ++made;
+        }
+        return made;
+    }
+
     /** Puts a copy of what @p selection covers straight after it on the same
         tracks, pushing later clips along. Returns the selection over the copy,
         or an empty one if there was nothing to duplicate. */

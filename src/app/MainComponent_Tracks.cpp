@@ -1,5 +1,6 @@
 #include "MainComponentInternal.h"
 
+#include "model/ArrangementEdits.h"
 #include "SpectralRender.h"
 #include "engine/Resample.h"
 #include "model/TrackResample.h"
@@ -1278,13 +1279,16 @@ void MainComponent::quantizeNotes(double swingAmount)
     track has more than one clip. */
 void MainComponent::setClipLength(int trackIndex, int clipIndex, double newLengthBeats)
 {
-    history_.edit("Resize clip", [trackIndex, clipIndex, newLengthBeats](model::Song& s)
+    const bool crossfade = autoCrossfades_;
+    history_.edit("Resize clip", [trackIndex, clipIndex, newLengthBeats, crossfade](model::Song& s)
     {
         if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
             return;
         auto& clips = s.tracks[(size_t) trackIndex].clips;
         if (clipIndex >= 0 && clipIndex < (int) clips.size())
             clips[(size_t) clipIndex].lengthBeats = juce::jmax(1.0, newLengthBeats);
+        if (crossfade)
+            model::arrangeedit::applyAutoCrossfades(s, trackIndex);
     });
 
     syncEngineTracks();
@@ -1299,7 +1303,8 @@ void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newSta
 {
     const double bpm = history_.current().bpm;
 
-    history_.edit("Trim clip start", [trackIndex, clipIndex, newStartBeats, bpm](model::Song& s)
+    const bool crossfade = autoCrossfades_;
+    history_.edit("Trim clip start", [trackIndex, clipIndex, newStartBeats, bpm, crossfade](model::Song& s)
     {
         if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
             return;
@@ -1310,6 +1315,8 @@ void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newSta
         auto& clip = clips[(size_t) clipIndex];
         if (clip.type == model::ClipType::Audio)
             clip = trimClipStart(clip, newStartBeats, bpm, kMinTrimmedClipBeats);
+        if (crossfade)
+            model::arrangeedit::applyAutoCrossfades(s, trackIndex);
     });
 
     syncEngineTracks();
@@ -1360,6 +1367,12 @@ void MainComponent::setClipFades(int trackIndex, int clipIndex, const engine::Cl
         auto& clip = clips[(size_t) clipIndex];
         if (clip.type != model::ClipType::Audio)
             return;
+
+        // A fade set by hand is the user's from now on, not an automatic one.
+        if (fades.inSeconds != clip.fades.inSeconds || fades.inShape != clip.fades.inShape)
+            clip.autoFadeIn = false;
+        if (fades.outSeconds != clip.fades.outSeconds || fades.outShape != clip.fades.outShape)
+            clip.autoFadeOut = false;
 
         clip.fades            = fades;
         clip.fades.inSeconds  = juce::jmax(0.0, fades.inSeconds);

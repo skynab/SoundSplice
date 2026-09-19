@@ -377,3 +377,51 @@ TEST_CASE("Auto Duck writes a dip around each passage, in the clip's own time", 
     REQUIRE(f.sorted(f.other)[0].envelope.isEmpty());
     REQUIRE(duckClips(f.song, { f.audio }, { { 40.0, 41.0 } }, 0.25f, 0.5) == 0);
 }
+
+TEST_CASE("Automatic crossfades follow overlaps and leave drawn fades alone", "[model][arrange]")
+{
+    Fixture f;
+    f.add(f.audio, 0.0, 4.0);
+    f.add(f.audio, 3.5, 4.0);  // overlaps the first by half a beat: half a second at 60 bpm
+    f.add(f.audio, 10.0, 2.0); // on its own
+    f.add(f.audio, 10.5, 1.0); // wholly inside the one before
+
+    auto& track = f.song.tracks[0];
+    REQUIRE(applyAutoCrossfades(f.song, 0) == 1);
+
+    auto clips = f.sorted(f.audio);
+    REQUIRE_THAT(clips[0].fades.outSeconds, WithinAbs(0.5, 1e-9));
+    REQUIRE(clips[0].autoFadeOut);
+    REQUIRE_THAT(clips[1].fades.inSeconds, WithinAbs(0.5, 1e-9));
+    REQUIRE(clips[1].autoFadeIn);
+    REQUIRE(clips[1].fades.inShape == soundsplice::engine::FadeShape::EqualPower);
+    REQUIRE(clips[2].fades.isNone());   // nothing overlaps its start
+    REQUIRE(clips[3].fades.isNone());   // inside, not crossfaded
+
+    // Moved apart: the automatic fades go with the overlap.
+    for (auto& clip : track.clips)
+        if (clip.startBeats == 3.5)
+            clip.startBeats = 5.0;
+    REQUIRE(applyAutoCrossfades(f.song, 0) == 0);
+    for (const auto& clip : track.clips)
+    {
+        REQUIRE_FALSE(clip.autoFadeIn);
+        REQUIRE_FALSE(clip.autoFadeOut);
+        if (clip.startBeats < 10.0)
+            REQUIRE(clip.fades.isNone());
+    }
+
+    // A fade drawn by hand is neither replaced nor cleared.
+    for (auto& clip : track.clips)
+        if (clip.startBeats == 5.0)
+        {
+            clip.startBeats       = 3.0;
+            clip.fades.inSeconds  = 0.2;
+            clip.fades.inShape    = soundsplice::engine::FadeShape::SCurve;
+        }
+    REQUIRE(applyAutoCrossfades(f.song, 0) == 1);
+    clips = f.sorted(f.audio);
+    REQUIRE_THAT(clips[1].fades.inSeconds, WithinAbs(0.2, 1e-9));
+    REQUIRE_FALSE(clips[1].autoFadeIn);
+    REQUIRE_THAT(clips[0].fades.outSeconds, WithinAbs(1.0, 1e-9)); // the other side still fades
+}

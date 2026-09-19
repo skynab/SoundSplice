@@ -647,11 +647,14 @@ TEST_CASE("A clip's spectral edits round-trip", "[model][serialization]")
     region.gainDb = soundsplice::engine::SpectralRegion::kSilenceDb;
     clip.spectralEdits.push_back(region);
 
+    clip.autoFadeOut = true; // made by an automatic crossfade
     track.clips.push_back(clip);
     song.tracks.push_back(track);
 
     Song back;
     REQUIRE(deserialize(serialize(song), back));
     REQUIRE(back.tracks.at(0).clips.at(0).spectralEdits == song.tracks[0].clips[0].spectralEdits);
+    REQUIRE(back.tracks.at(0).clips.at(0).autoFadeOut);
+    REQUIRE_FALSE(back.tracks.at(0).clips.at(0).autoFadeIn);
     REQUIRE(back.tracks.at(0).clips.at(0).audioFile == "C:/audio/take 1.wav");
 }

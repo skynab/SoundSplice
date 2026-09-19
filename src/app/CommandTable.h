@@ -190,6 +190,7 @@ enum Id : int
     snapToGrid,
     snapToMarkers,
     snapToClipEdges,
+    autoCrossfades,
     resetLayout,
 };
 
@@ -350,6 +351,7 @@ inline const std::vector<Definition>& all()
         { showClipEnvelopes, "Show Clip Volume Curves", "View", "Draw each audio clip's volume curve and edit it: click a clip to add a point, drag to move one, Alt-click to remove one.", {} },
         { snapToGrid,       "Snap Clips to Grid   (hold Alt to invert)", "View", "Snap dragged clips to whole beats.", {} },
         { snapToMarkers,    "Snap to Markers and Playhead", "View", "Pull dragged clip edges onto nearby markers and the playhead.", {} },
+        { autoCrossfades,   "Automatic Crossfades", "View", "Crossfade audio clips wherever moving or resizing one makes it overlap its neighbour.", {} },
         { snapToClipEdges,  "Snap to Clip Edges", "View", "Pull dragged clip edges onto the edges of nearby clips.", {} },
         { resetLayout,      "Reset Layout",         "View", "Put the panes back where this layout starts them.", {} },
     };

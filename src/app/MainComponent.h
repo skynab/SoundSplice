@@ -817,6 +817,7 @@ private:
     juce::String                       matchEqReferenceName_;
     std::shared_ptr<const engine::RoomToneProfile> roomTone_; // Generate > Room Tone's source
     std::optional<double>              contrastBackgroundDb_;   // Analyze > Contrast's background level
+    bool                               autoCrossfades_ = true;  // overlapping clips crossfade as they're moved
     double                             waveformPeaksSampleRate_ = 0.0;
 
     // The user's saved effect presets (kept in the app settings, see
