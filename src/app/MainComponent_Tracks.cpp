@@ -1654,6 +1654,7 @@ void MainComponent::syncEngineTracks()
                 case model::EffectKind::GraphicEq31:  spec.kind = engine::EffectNodeKind::GraphicEq31;  break;
                 case model::EffectKind::Convolution:  spec.kind = engine::EffectNodeKind::Convolution;  break;
                 case model::EffectKind::Vocoder:      spec.kind = engine::EffectNodeKind::Vocoder;      break;
+                case model::EffectKind::ChannelMixer: spec.kind = engine::EffectNodeKind::ChannelMixer; break;
                 case model::EffectKind::Plugin:
                     spec.kind             = engine::EffectNodeKind::Plugin;
                     spec.pluginFormat     = pluginFormatName(slot.plugin.format);

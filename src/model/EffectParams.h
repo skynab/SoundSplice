@@ -397,6 +397,20 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "band6Q", .name = "  Q", .min = 0.1, .max = 30, .step = 0.01,
                 .skewMidpoint = 1.5, .access = fieldAccess<&S::parametricEq, &ParametricEqSettings::band6Q> } } },
 
+        { .kind = EffectKind::ChannelMixer, .id = "channelMixer", .name = "Channel Mixer", .group = "",
+          .params = {
+              { .id = "midSide", .name = "Mid/Side", .control = ParamControl::Choice, .min = 0, .max = 3, .step = 1,
+                .choices = { "Off", "Encode L/R to M/S", "Decode M/S to L/R", "Mix as M/S" },
+                .access = fieldAccess<&S::channelMixer, &ChannelMixerSettings::midSide> },
+              { .id = "leftToLeft", .name = "Left to Left", .min = -2, .max = 2, .step = 0.01, .displayScale = 100,
+                .unit = " %", .access = fieldAccess<&S::channelMixer, &ChannelMixerSettings::leftToLeft> },
+              { .id = "rightToLeft", .name = "Right to Left", .min = -2, .max = 2, .step = 0.01, .displayScale = 100,
+                .unit = " %", .access = fieldAccess<&S::channelMixer, &ChannelMixerSettings::rightToLeft> },
+              { .id = "leftToRight", .name = "Left to Right", .min = -2, .max = 2, .step = 0.01, .displayScale = 100,
+                .unit = " %", .access = fieldAccess<&S::channelMixer, &ChannelMixerSettings::leftToRight> },
+              { .id = "rightToRight", .name = "Right to Right", .min = -2, .max = 2, .step = 0.01, .displayScale = 100,
+                .unit = " %", .access = fieldAccess<&S::channelMixer, &ChannelMixerSettings::rightToRight> } } },
+
         { .kind = EffectKind::Vocoder, .id = "vocoder", .name = "Vocoder", .group = "",
           .params = {
               { .id = "carrier", .name = "Carrier", .control = ParamControl::Choice, .min = 0, .max = 2, .step = 1,
@@ -713,6 +727,7 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.graphicEq31.enabled  = kind == EffectKind::GraphicEq31;
     slot.convolution.enabled  = kind == EffectKind::Convolution;
     slot.vocoder.enabled      = kind == EffectKind::Vocoder;
+    slot.channelMixer.enabled = kind == EffectKind::ChannelMixer;
     return slot;
 }
 

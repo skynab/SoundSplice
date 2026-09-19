@@ -18,6 +18,7 @@
 #include "engine/ThirdOctaveEqEffect.h"
 #include "engine/ConvolutionEffect.h"
 #include "engine/VocoderEffect.h"
+#include "engine/ChannelMixer.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
@@ -59,7 +60,8 @@ enum class EffectNodeKind
     Dynamics     = 27,
     GraphicEq31  = 28,
     Convolution  = 29,
-    Vocoder      = 30
+    Vocoder      = 30,
+    ChannelMixer = 31
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -221,6 +223,8 @@ struct EffectSlotParams
     float vocResponseMs = 30.0f;
     float vocMix        = 1.0f;
     float vocGainDb     = 0.0f;
+
+    channelmixer::Matrix mixerMatrix;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -475,6 +479,16 @@ struct EchoNode final : EffectProcessor
     EchoEffect effect;
 
     EffectNodeKind kind() const noexcept override { return EffectNodeKind::Echo; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
+struct ChannelMixerNode final : EffectProcessor
+{
+    ChannelMixerEffect effect;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::ChannelMixer; }
     void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
     void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
@@ -747,6 +761,10 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             dynamics->effect.setAttackMs(params.dynAttackMs);
             dynamics->effect.setReleaseMs(params.dynReleaseMs);
             dynamics->effect.setMakeUpDb(params.dynMakeUpDb);
+        }
+        else if (auto* mixer = dynamic_cast<ChannelMixerNode*>(&node))
+        {
+            mixer->effect.setMatrix(params.mixerMatrix);
         }
         else if (auto* vocoder = dynamic_cast<VocoderNode*>(&node))
         {

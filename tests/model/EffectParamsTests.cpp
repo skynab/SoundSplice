@@ -20,7 +20,7 @@ namespace
         EffectKind::BassTreble, EffectKind::StereoTool, EffectKind::GraphicEq, EffectKind::DeEsser,
         EffectKind::Expander, EffectKind::RingMod, EffectKind::Wah, EffectKind::Echo,
         EffectKind::Multiband, EffectKind::ParametricEq, EffectKind::Dynamics, EffectKind::GraphicEq31,
-        EffectKind::Convolution, EffectKind::Vocoder
+        EffectKind::Convolution, EffectKind::Vocoder, EffectKind::ChannelMixer
     };
 
     /** Every parameter of every built-in, read from @p slot. */

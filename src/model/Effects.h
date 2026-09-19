@@ -174,7 +174,8 @@ enum class EffectKind
     Dynamics     = 27, // see engine/DynamicsProcessor.h
     GraphicEq31  = 28, // see engine/ThirdOctaveEq.h
     Convolution  = 29, // see engine/ConvolutionEffect.h
-    Vocoder      = 30  // see engine/Vocoder.h
+    Vocoder      = 30, // see engine/Vocoder.h
+    ChannelMixer = 31  // see engine/ChannelMixer.h
 };
 
 /**
@@ -640,6 +641,20 @@ struct VocoderSettings
     bool operator==(const VocoderSettings&) const = default;
 };
 
+/** How much of each input channel goes to each output, -2 to +2, with
+    mid/side conversion around the matrix (engine::channelmixer::MidSide). */
+struct ChannelMixerSettings
+{
+    bool  enabled      = false;
+    float leftToLeft   = 1.0f;
+    float rightToLeft  = 0.0f;
+    float leftToRight  = 0.0f;
+    float rightToRight = 1.0f;
+    int   midSide      = 0;
+
+    bool operator==(const ChannelMixerSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -675,6 +690,7 @@ struct EffectSlot
     GraphicEq31Settings  graphicEq31;
     ConvolutionSettings  convolution;
     VocoderSettings      vocoder;
+    ChannelMixerSettings channelMixer;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

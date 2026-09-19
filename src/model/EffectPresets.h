@@ -260,6 +260,18 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
                              { "band5Type", 0 }, { "band5Hz", 5000 }, { "band5Gain", 0 }, { "band5Q", 1.0 },
                              { "band6Type", 6 }, { "band6Hz", 3400 }, { "band6Gain", 0 }, { "band6Q", 0.9 } } } } },
 
+        { EffectKind::ChannelMixer, {
+            { "Unchanged", { { "midSide", 0 }, { "leftToLeft", 1 }, { "rightToLeft", 0 }, { "leftToRight", 0 }, { "rightToRight", 1 } } },
+            { "Swap Sides", { { "midSide", 0 }, { "leftToLeft", 0 }, { "rightToLeft", 1 }, { "leftToRight", 1 }, { "rightToRight", 0 } } },
+            { "Mono", { { "midSide", 0 }, { "leftToLeft", 0.5 }, { "rightToLeft", 0.5 }, { "leftToRight", 0.5 }, { "rightToRight", 0.5 } } },
+            { "Left Only", { { "midSide", 0 }, { "leftToLeft", 1 }, { "rightToLeft", 0 }, { "leftToRight", 1 }, { "rightToRight", 0 } } },
+            { "Right Only", { { "midSide", 0 }, { "leftToLeft", 0 }, { "rightToLeft", 1 }, { "leftToRight", 0 }, { "rightToRight", 1 } } },
+            { "Invert Right", { { "midSide", 0 }, { "leftToLeft", 1 }, { "rightToLeft", 0 }, { "leftToRight", 0 }, { "rightToRight", -1 } } },
+            { "Wider (Side +50%)", { { "midSide", 3 }, { "leftToLeft", 1 }, { "rightToLeft", 0 }, { "leftToRight", 0 }, { "rightToRight", 1.5 } } },
+            { "Narrower (Side -50%)", { { "midSide", 3 }, { "leftToLeft", 1 }, { "rightToLeft", 0 }, { "leftToRight", 0 }, { "rightToRight", 0.5 } } },
+            { "Encode to Mid/Side", { { "midSide", 1 }, { "leftToLeft", 1 }, { "rightToLeft", 0 }, { "leftToRight", 0 }, { "rightToRight", 1 } } },
+            { "Decode from Mid/Side", { { "midSide", 2 }, { "leftToLeft", 1 }, { "rightToLeft", 0 }, { "leftToRight", 0 }, { "rightToRight", 1 } } } } },
+
         { EffectKind::Vocoder, {
             { "Robot",      { { "carrier", 1 }, { "pitch", 110 }, { "bands", 16 }, { "response", 30 }, { "mix", 1 }, { "gain", 0 } } },
             { "Deep Robot", { { "carrier", 1 }, { "pitch", 55 },  { "bands", 24 }, { "response", 40 }, { "mix", 1 }, { "gain", 0 } } },

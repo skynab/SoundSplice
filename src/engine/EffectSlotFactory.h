@@ -62,6 +62,7 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::GraphicEq31:  return std::make_unique<GraphicEq31Node>();
         case model::EffectKind::Convolution:  return std::make_unique<ConvolutionNode>();
         case model::EffectKind::Vocoder:      return std::make_unique<VocoderNode>();
+        case model::EffectKind::ChannelMixer: return std::make_unique<ChannelMixerNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -199,6 +200,9 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.vocResponseMs    = slot.vocoder.responseMs;
     params.vocMix           = slot.vocoder.mix;
     params.vocGainDb        = slot.vocoder.gainDb;
+    params.mixerMatrix      = { slot.channelMixer.leftToLeft, slot.channelMixer.rightToLeft,
+                                slot.channelMixer.leftToRight, slot.channelMixer.rightToRight,
+                                (channelmixer::MidSide) std::clamp(slot.channelMixer.midSide, 0, 3) };
     return params;
 }
 

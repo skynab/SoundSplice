@@ -565,6 +565,9 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     graphic31.graphicEq31.band1  = -6.0f;
     graphic31.graphicEq31.band18 = 3.5f;
     graphic31.graphicEq31.band31 = 12.0f;
+    auto mixer                          = makeEffectSlot(EffectKind::ChannelMixer);
+    mixer.channelMixer.rightToLeft      = -0.25f;
+    mixer.channelMixer.midSide          = 3;
     auto vocoder               = makeEffectSlot(EffectKind::Vocoder);
     vocoder.vocoder.carrier    = 2;
     vocoder.vocoder.bands      = 24;
@@ -574,7 +577,7 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     convolution.convolution.mix        = 0.45f;
     convolution.convolution.preDelayMs = 30.0f;
     chain = { amplify, invert, dc, limiter, phaser, flanger, tone, stereo, graphic, deEss, expander, ring, wah, echo,
-              multiband, parametric, dynamics, graphic31, convolution, vocoder };
+              multiband, parametric, dynamics, graphic31, convolution, vocoder, mixer };
 
     Song restored;
     REQUIRE(deserialize(serialize(song), restored));
@@ -588,14 +591,14 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     {
         const auto lineEnd = text.find('\n', at);
         auto       cut     = lineEnd;
-        for (int field = 0; field < 7 + 17 + 24 + 5 + 15 + 24 + 17 + 31 + 3 + 6; ++field)
+        for (int field = 0; field < 7 + 17 + 24 + 5 + 15 + 24 + 17 + 31 + 3 + 6 + 5; ++field)
             cut = text.rfind(' ', cut - 1);
         text.erase(cut, lineEnd - cut);
     }
 
     Song old;
     REQUIRE(deserialize(text, old));
-    REQUIRE(old.tracks[0].effectChain.size() == 20);
+    REQUIRE(old.tracks[0].effectChain.size() == 21);
     REQUIRE(old.tracks[0].effectChain[3].kind == EffectKind::Limiter);
 
     const EffectSlot defaults;
@@ -625,6 +628,7 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
         REQUIRE(settingsOnly(slot.graphicEq31) == defaults.graphicEq31);
         REQUIRE(slot.convolution.mix == defaults.convolution.mix);
         REQUIRE(settingsOnly(slot.vocoder) == defaults.vocoder);
+        REQUIRE(settingsOnly(slot.channelMixer) == defaults.channelMixer);
     }
 }
 

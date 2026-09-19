@@ -160,7 +160,7 @@ needed: minimum statistics, following noise that changes; Edit > Adaptive Noise 
 ✅ Flanger (`src/engine/ToneDsp.h`) · ✅ Wah-wah (auto-wah) · ✅ Vocoder (left channel through the right, a sawtooth or noise; 4-32 bands, carrier flattened; `src/engine/Vocoder.h`) · ✅ Ring modulator (`src/engine/DynamicsDsp.h`)
 
 **Stereo and special**
-✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ✅ Repeat · ✅ **Truncate silence** (across the time selection's tracks, without rewriting audio) · 🟡 **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap)
+✅ Widener (mastering, and Stereo Tools' width on any track) · ✅ Invert (either channel or both) · ✅ Repeat · ✅ **Truncate silence** (across the time selection's tracks, without rewriting audio) · ✅ **Channel mixer / mid-side** (Stereo Tools: width, balance, mono, swap; the Channel Mixer effect: a 2x2 matrix with mid/side encode, decode, or both around it; `src/engine/ChannelMixer.h`)
 · ✅ Center channel extractor / vocal reduction (Audition; Edit > Vocal Reduction and Isolation: remove or isolate the centre over a band; `src/engine/CenterChannel.h`) · ✅ Stereo-to-mono downmix (Stereo Tools' Mono)
 
 **Generators**

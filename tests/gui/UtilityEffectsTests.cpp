@@ -154,3 +154,33 @@ TEST_CASE("The convolution reverb adds its tail a block late and swaps responses
     SUCCEED();
 }
 
+
+TEST_CASE("The channel mixer routes, folds and flips channels, and works in mid/side", "[gui][effects]")
+{
+    using namespace soundsplice::engine::channelmixer;
+    const auto run = [](Matrix m, float l, float r)
+    {
+        process(l, r, m);
+        return std::pair { l, r };
+    };
+
+    REQUIRE(run({}, 0.3f, -0.2f) == std::pair { 0.3f, -0.2f });                       // unchanged
+    REQUIRE(run({ 0, 1, 1, 0 }, 0.3f, -0.2f) == std::pair { -0.2f, 0.3f });            // swapped
+    const auto mono = run({ 0.5f, 0.5f, 0.5f, 0.5f }, 0.3f, -0.1f);
+    REQUIRE_THAT(mono.first, WithinAbs(0.1, 1e-6));
+    REQUIRE(mono.first == mono.second);
+    REQUIRE(run({ 1, 0, 0, -1 }, 0.3f, 0.2f) == std::pair { 0.3f, -0.2f });            // right inverted
+
+    // Encode then decode is a round trip; mixing as M/S with the side up
+    // widens, the mid kept.
+    const auto encoded = run({ 1, 0, 0, 1, MidSide::Encode }, 0.5f, 0.1f);
+    REQUIRE_THAT(encoded.first, WithinAbs(0.3, 1e-6));  // mid
+    REQUIRE_THAT(encoded.second, WithinAbs(0.2, 1e-6)); // side
+    const auto decoded = run({ 1, 0, 0, 1, MidSide::Decode }, encoded.first, encoded.second);
+    REQUIRE_THAT(decoded.first, WithinAbs(0.5, 1e-6));
+    REQUIRE_THAT(decoded.second, WithinAbs(0.1, 1e-6));
+
+    const auto wider = run({ 1, 0, 0, 1.5f, MidSide::Around }, 0.5f, 0.1f);
+    REQUIRE_THAT((wider.first + wider.second) * 0.5, WithinAbs(0.3, 1e-6));  // mid kept
+    REQUIRE_THAT((wider.first - wider.second) * 0.5, WithinAbs(0.3, 1e-6));  // side 0.2 x 1.5
+}
