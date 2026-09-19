@@ -5,6 +5,7 @@
 #include <app/AudioEditorPane.h>
 #include <app/MasteringPane.h>
 #include <app/EffectChainPanel.h>
+#include <model/EffectParams.h>
 #include <app/FileBrowserPanel.h>
 #include <app/MixerStrip.h>
 #include <app/OpenFilesPane.h>
@@ -52,17 +53,10 @@ namespace
 
     std::vector<model::EffectSlot> chainOfEveryKind()
     {
+        // Every built-in, so an effect added later is laid out here too.
         std::vector<model::EffectSlot> chain;
-        for (auto kind : { model::EffectKind::Filter, model::EffectKind::Delay,
-                           model::EffectKind::Reverb, model::EffectKind::Drive,
-                           model::EffectKind::Compressor, model::EffectKind::Tremolo,
-                           model::EffectKind::Chorus, model::EffectKind::Wobble })
-        {
-            model::EffectSlot slot;
-            slot.kind    = kind;
-            slot.enabled = true;
-            chain.push_back(slot);
-        }
+        for (const auto& effect : model::builtInEffects())
+            chain.push_back(model::makeEffectSlot(effect.kind));
         return chain;
     }
 }
@@ -342,4 +336,37 @@ TEST_CASE("The audit notices a control pushed outside its parent", "[gui][panes]
     const auto findings = paneaudit::audit(pane);
     REQUIRE(findings.size() == 1);
     REQUIRE(findings[0].what == "control outside its parent");
+}
+
+TEST_CASE("A long effect's controls scroll rather than falling off a short panel", "[gui][panes]")
+{
+    JuceFixture fixture;
+
+    EffectChainPanel panel;
+    panel.setVisible(true);
+    panel.setBounds(0, 0, 360, 260);
+    panel.setChain({ model::makeEffectSlot(model::EffectKind::ParametricEq) });
+    panel.selectSlotForTesting(0);
+    panel.resized();
+
+    // Every row's control is shown and sized, the last as well as the first,
+    // inside something that scrolls to them.
+    std::vector<juce::Component*> controls;
+    paneaudit::collectControls(panel, controls);
+    int sliders = 0, scrolled = 0;
+    for (auto* control : controls)
+    {
+        auto* slider = dynamic_cast<juce::Slider*>(control);
+        if (slider == nullptr)
+            continue;
+        ++sliders;
+        REQUIRE(paneaudit::effectivelyVisible(panel, slider));
+        REQUIRE(slider->getHeight() > 0);
+        if (slider->getBottom() > 260)
+            ++scrolled;
+        REQUIRE(slider->findParentComponentOfClass<juce::Viewport>() != nullptr);
+    }
+    REQUIRE(sliders == 18);  // six bands' frequency, gain and Q
+    REQUIRE(scrolled > 0);   // more than the panel's height, reached by scrolling
+    paneaudit::requireUsable(panel, "EffectChainPanel with a parametric EQ");
 }

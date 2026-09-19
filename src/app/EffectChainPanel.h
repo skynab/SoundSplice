@@ -121,7 +121,7 @@ public:
         };
         parametricView_.onDragStart = [this] { if (onSlotParamsDragStart) onSlotParamsDragStart(selected_); };
         parametricView_.onDragEnd   = [this] { if (onSlotParamsDragEnd) onSlotParamsDragEnd(selected_); };
-        addChildComponent(parametricView_);
+        paramsContent_.addChildComponent(parametricView_);
 
         dynamicsView_.onChanged = [this](const engine::TransferCurve& curve)
         {
@@ -136,7 +136,14 @@ public:
         };
         dynamicsView_.onDragStart = [this] { if (onSlotParamsDragStart) onSlotParamsDragStart(selected_); };
         dynamicsView_.onDragEnd   = [this] { if (onSlotParamsDragEnd) onSlotParamsDragEnd(selected_); };
-        addChildComponent(dynamicsView_);
+        paramsContent_.addChildComponent(dynamicsView_);
+
+        // The parameters scroll: a long effect (the parametric EQ's six bands)
+        // in a short pane keeps every row reachable rather than dropping the
+        // last of them off the bottom.
+        paramsViewport_.setViewedComponent(&paramsContent_, false);
+        paramsViewport_.setScrollBarsShown(true, false);
+        addChildComponent(paramsViewport_);
 
         setContentVisible(false);
     }
@@ -264,21 +271,31 @@ public:
         auto presetRow = area.removeFromTop(kRowHeight).reduced(2);
         setBoundsOrHide(presetsButton_, presetRow.removeFromLeft(juce::jmin(kPresetsButtonWidth, presetRow.getWidth())));
 
-        if (chain_[(size_t) selected_].kind == model::EffectKind::ParametricEq)
-            setBoundsOrHide(parametricView_, area.removeFromTop(kCurveHeight).reduced(2));
-        if (chain_[(size_t) selected_].kind == model::EffectKind::Dynamics)
+        // Everything below the presets scrolls, laid out at its full height
+        // inside the viewport.
+        setBoundsOrHide(paramsViewport_, area);
+        if (! paramsViewport_.isVisible())
+            return;
+
+        const auto kind       = chain_[(size_t) selected_].kind;
+        const int  width      = juce::jmax(1, area.getWidth() - paramsViewport_.getScrollBarThickness());
+        const int  curveSize  = kind == model::EffectKind::Dynamics ? juce::jmin(width, kCurveHeight + 60)
+                              : kind == model::EffectKind::ParametricEq ? kCurveHeight : 0;
+        paramsContent_.setSize(width, curveSize + (int) rows_.size() * kRowHeight);
+
+        auto content = paramsContent_.getLocalBounds();
+        if (kind == model::EffectKind::ParametricEq)
+            setBoundsOrHide(parametricView_, content.removeFromTop(curveSize).reduced(2));
+        if (kind == model::EffectKind::Dynamics)
         {
             // Square, as a transfer curve reads best: a dB in is a dB out.
-            auto curveArea = area.removeFromTop(juce::jmin(area.getWidth(), kCurveHeight + 60)).reduced(2);
+            auto curveArea = content.removeFromTop(curveSize).reduced(2);
             setBoundsOrHide(dynamicsView_, curveArea.withSizeKeepingCentre(curveArea.getHeight(), curveArea.getHeight()));
         }
 
-        // A kind with many rows in a short pane runs the last of them off the
-        // bottom. setBoundsOrHide hides those rather than leaving them
-        // zero-high and clickable against nothing.
         for (auto& row : rows_)
         {
-            auto line = area.removeFromTop(kRowHeight).reduced(2);
+            auto line = content.removeFromTop(kRowHeight).reduced(2);
 
             if (row.label != nullptr)
                 setBoundsOrHide(*row.label, line.removeFromLeft(juce::jmin(kLabelWidth, line.getWidth() / 3)));
@@ -540,7 +557,7 @@ private:
         button: what setContentVisible hides. */
     std::vector<juce::Component*> paramControls()
     {
-        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &parametricView_, &dynamicsView_ };
+        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &paramsViewport_, &parametricView_, &dynamicsView_ };
         for (auto& row : rows_)
         {
             if (row.label != nullptr)
@@ -583,7 +600,7 @@ private:
                     row.toggle = std::make_unique<juce::ToggleButton>(param.name);
                     row.toggle->setTooltip(tooltip);
                     row.toggle->onClick = [this] { reportInstantEdit(); };
-                    addAndMakeVisible(*row.toggle);
+                    paramsContent_.addAndMakeVisible(*row.toggle);
                     break;
                 }
 
@@ -594,7 +611,7 @@ private:
                         row.choice->addItem(param.choices[(size_t) i], i + 1);
                     row.choice->setTooltip(tooltip);
                     row.choice->onChange = [this] { reportInstantEdit(); };
-                    addAndMakeVisible(*row.choice);
+                    paramsContent_.addAndMakeVisible(*row.choice);
                     break;
                 }
 
@@ -617,7 +634,7 @@ private:
                     slider.onValueChange = [this] { pushParams(); };
                     slider.onDragStart   = [this] { if (onSlotParamsDragStart) onSlotParamsDragStart(selected_); };
                     slider.onDragEnd     = [this] { if (onSlotParamsDragEnd)   onSlotParamsDragEnd(selected_); };
-                    addAndMakeVisible(slider);
+                    paramsContent_.addAndMakeVisible(slider);
                     break;
                 }
             }
@@ -629,7 +646,7 @@ private:
                 row.label->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
                 row.label->setTooltip(tooltip);
                 row.label->setInterceptsMouseClicks(false, false);
-                addAndMakeVisible(*row.label);
+                paramsContent_.addAndMakeVisible(*row.label);
             }
 
             rows_.push_back(std::move(row));
@@ -646,6 +663,7 @@ private:
         presetsButton_.setVisible(false);
         parametricView_.setVisible(false);
         dynamicsView_.setVisible(false);
+        paramsViewport_.setVisible(false);
 
         const auto* descriptor = isValidSlot(selected_) ? model::descriptorFor(chain_[(size_t) selected_].kind)
                                                         : nullptr;
@@ -662,9 +680,13 @@ private:
         }
 
         if (descriptor != rowsFor_)
+        {
             buildRows(*descriptor);
+            paramsViewport_.setViewPosition(0, 0);
+        }
 
         presetsButton_.setVisible(true);
+        paramsViewport_.setVisible(true);
 
         const auto& slot = chain_[(size_t) selected_];
         if (slot.kind == model::EffectKind::ParametricEq)
@@ -762,6 +784,11 @@ private:
 
     juce::Label      placeholder_;
     juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_, presetsButton_;
+
+    // The content outlives the viewport showing it, and both outlive the
+    // curves and rows parented to the content (members go in reverse order).
+    juce::Component  paramsContent_;
+    juce::Viewport   paramsViewport_;
     ParametricEqView parametricView_;
     TransferCurveView dynamicsView_;
 

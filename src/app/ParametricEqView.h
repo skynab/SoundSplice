@@ -183,7 +183,10 @@ public:
     {
         const int hit = bandAt(e.position);
         if (hit < 0 || wheel.deltaY == 0.0f)
+        {
+            Component::mouseWheelMove(e, wheel); // off a point, it scrolls whatever holds the curve
             return;
+        }
         auto bands = bands_;
         auto& q    = bands[(size_t) hit].q;
         q          = juce::jlimit(0.1f, 30.0f, q * (wheel.deltaY > 0.0f ? 1.15f : 1.0f / 1.15f));
