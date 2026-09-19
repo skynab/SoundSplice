@@ -155,6 +155,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(renderJob_ == nullptr);
             break;
 
+        case commands::contrast:
+            info.setActive(selectedAudioClip() != nullptr && contrastBackgroundDb_.has_value());
+            break;
+
         case commands::matchEq:
             info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr && matchEqReference_.has_value());
             break;
@@ -164,6 +168,8 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::amplitudeStatistics:
         case commands::findClipping:
         case commands::labelSounds:
+        case commands::beatFinder:
+        case commands::contrastBackground:
         case commands::measureLoudness:
         case commands::normalizeLoudness:
         case commands::matchEqReference:
@@ -434,6 +440,9 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::amplitudeStatistics: showAmplitudeStatistics(); break;
         case commands::findClipping:    findClipping(); break;
         case commands::labelSounds:     showLabelSoundsDialog(); break;
+        case commands::beatFinder:      showBeatFinderDialog(); break;
+        case commands::contrastBackground: setContrastBackground(); break;
+        case commands::contrast:        measureContrast(); break;
         case commands::generateTone:    showGenerateDialog(engine::GeneratorKind::Tone); break;
         case commands::generateChirp:   showGenerateDialog(engine::GeneratorKind::Chirp); break;
         case commands::generateNoise:   showGenerateDialog(engine::GeneratorKind::Noise); break;
@@ -852,6 +861,10 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addSeparator();
         add(commands::findClipping);
         add(commands::labelSounds);
+        add(commands::beatFinder);
+        menu.addSeparator();
+        add(commands::contrastBackground);
+        add(commands::contrast);
     }
 
     return menu;

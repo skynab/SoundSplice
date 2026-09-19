@@ -2,6 +2,7 @@
 
 #include "engine/AmplitudeAnalysis.h"
 #include "engine/ClipChannels.h"
+#include "engine/OnsetDetection.h"
 #include "model/Markers.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -32,6 +33,14 @@ namespace
 
         void prepare(double) override {}
         void process(const float* const* outputs, int frames) override { detector.process(outputs, 2, frames); }
+    };
+
+    struct BeatScan final : MainComponent::ClipScan
+    {
+        std::unique_ptr<engine::OnsetDetector> detector;
+
+        void prepare(double sampleRate) override { detector = std::make_unique<engine::OnsetDetector>(sampleRate); }
+        void process(const float* const* outputs, int frames) override { detector->append(outputs, 2, frames); }
     };
 
     struct SilenceScan final : MainComponent::ClipScan
@@ -312,6 +321,157 @@ void MainComponent::addMarkerRangesInClip(int clipId, const std::vector<engine::
     });
 
     arrangementView_.setSong(history_.current());
+}
+
+void MainComponent::showBeatFinderDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Beat Finder",
+                                         "Adds a marker at each beat or hit in the selection or clip, "
+                                         "and estimates the tempo.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("sensitivity", juce::String(settings_.getDoubleValue("beatFinder.sensitivity", 50.0)),
+                          "Sensitivity (0 to 100):");
+    window->addTextEditor("gap", juce::String(settings_.getDoubleValue("beatFinder.gapMs", 100.0)),
+                          "Beats at least this far apart (ms):");
+    window->addButton("Find Beats", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double sensitivity = juce::jlimit(0.0, 100.0, window->getTextEditorContents("sensitivity").getDoubleValue());
+            const double gapMs       = juce::jlimit(10.0, 5000.0, window->getTextEditorContents("gap").getDoubleValue());
+            self->settings_.setValue("beatFinder.sensitivity", sensitivity);
+            self->settings_.setValue("beatFinder.gapMs", gapMs);
+            self->findBeats(sensitivity / 100.0, gapMs / 1000.0);
+        }));
+}
+
+/** Marks each onset, as Audacity's Beat Finder labels them: a point marker
+    per beat, numbered, one undo step, with the tempo they keep reported. */
+void MainComponent::findBeats(double sensitivity, double minGapSeconds)
+{
+    ClipAudio audio;
+    int       from = 0, to = 0;
+    bool      whole = true;
+    if (! selectedScanRange(audio, from, to, whole))
+        return;
+
+    const int clipId = selectedAudioClip()->id;
+    auto      scan   = std::make_shared<BeatScan>();
+
+    scanClipAudio("Beat Finder", "Finding beats", audio, from, to, scan,
+                  [this, scan, clipId, from, sensitivity, minGapSeconds](double rate)
+    {
+        const auto onsets = scan->detector->onsets(sensitivity, minGapSeconds);
+        if (onsets.empty())
+        {
+            showStatus("No beats found - try a higher sensitivity");
+            return;
+        }
+
+        std::vector<engine::silence::FrameRange> points;
+        for (auto at : onsets)
+            points.push_back({ (std::int64_t) at, (std::int64_t) at });
+        addMarkerRangesInClip(clipId, points, from, rate, "Beat", true, "Find beats");
+
+        const double bpm = scan->detector->tempoBpm();
+        showStatus("Marked " + juce::String((int) onsets.size()) + (onsets.size() == 1 ? " beat" : " beats")
+                   + (bpm > 0.0 ? ", about " + juce::String(bpm, 1) + " bpm" : juce::String()));
+    });
+}
+
+namespace
+{
+    /** The RMS level in dB of @p channels mixed to one, with @p gainDb. */
+    double rmsDb(const std::vector<std::vector<float>>& channels, float gainDb)
+    {
+        double sum   = 0.0;
+        size_t count = 0;
+        for (size_t i = 0; ! channels.empty() && i < channels[0].size(); ++i, ++count)
+        {
+            double mixed = 0.0;
+            for (const auto& channel : channels)
+                mixed += i < channel.size() ? channel[i] : 0.0f;
+            mixed /= (double) channels.size();
+            sum += mixed * mixed;
+        }
+        const double rms = count > 0 ? std::sqrt(sum / (double) count) : 0.0;
+        return (rms > 0.0 ? 20.0 * std::log10(rms) : -std::numeric_limits<double>::infinity()) + gainDb;
+    }
+}
+
+/** The audio editor's selection, read and measured as it plays; nothing if
+    there's no selection or it can't be read. */
+std::optional<double> MainComponent::selectionRmsDb()
+{
+    const auto* clip = selectedAudioClip();
+    ClipAudio   audio;
+    int         from = 0, to = 0;
+    if (clip == nullptr || audioEditor_.selection().isEmpty() || ! openSelectedClipAudio(audio)
+        || ! selectedClipRange(audio, from, to, false) || to <= from)
+    {
+        showError("Select a passage in the audio editor first");
+        return std::nullopt;
+    }
+
+    const auto channels = readClipAudio(audio, from, to);
+    if (channels.empty())
+    {
+        showError("Could not read " + juce::File(clip->audioFile).getFileName());
+        return std::nullopt;
+    }
+    return rmsDb(channels, clip->gainDb);
+}
+
+/** Contrast, as Audacity's is for WCAG 2.0's 1.4.7: the background's level,
+    from a selection of it alone, for Contrast to compare the foreground
+    against. */
+void MainComponent::setContrastBackground()
+{
+    if (const auto measured = selectionRmsDb())
+    {
+        contrastBackgroundDb_ = *measured;
+        showStatus("Contrast background: " + level(*measured, "dB RMS")
+                   + " - now select the foreground (speech) and choose Analyze > Contrast");
+    }
+}
+
+void MainComponent::measureContrast()
+{
+    if (! contrastBackgroundDb_)
+    {
+        showError("Set the background first: select a passage of just the background, then Analyze > Set Contrast Background");
+        return;
+    }
+
+    const auto foreground = selectionRmsDb();
+    if (! foreground)
+        return;
+
+    const double background = *contrastBackgroundDb_;
+    const double difference = *foreground - background;
+    const bool   passes     = ! std::isfinite(background) || difference >= 20.0;
+
+    juce::String text;
+    text << "Foreground: " << level(*foreground, "dB RMS") << "\n"
+         << "Background: " << level(background, "dB RMS") << "\n"
+         << "Difference: " << (std::isfinite(difference) ? juce::String(difference, 1) + " dB" : juce::String("infinite")) << "\n\n"
+         << (passes ? "Passes: the background is at least 20 dB below the foreground (WCAG 2.0, 1.4.7)."
+                    : "Fails: WCAG 2.0 (1.4.7) asks for the background to be at least 20 dB below the foreground.");
+    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::NoIcon, "Contrast", text, "OK", this);
+    showStatus(juce::String("Contrast ") + (std::isfinite(difference) ? juce::String(difference, 1) + " dB" : "infinite")
+               + (passes ? " - passes" : " - fails"));
 }
 
 } // namespace soundsplice

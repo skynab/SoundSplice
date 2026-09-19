@@ -35,6 +35,7 @@ add_executable(soundsplice_tests
   engine/MatchEqTests.cpp
   engine/ConvolverTests.cpp
   engine/PluckAndRoomToneTests.cpp
+  engine/OnsetDetectionTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp

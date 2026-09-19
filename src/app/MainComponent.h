@@ -454,6 +454,11 @@ private:
     void                   findClipping();
     void                   showLabelSoundsDialog();
     void                   labelSounds(float thresholdDb, double minSilenceSeconds, double minSoundSeconds);
+    void                   showBeatFinderDialog();
+    void                   findBeats(double sensitivity, double minGapSeconds);
+    std::optional<double>  selectionRmsDb();
+    void                   setContrastBackground();
+    void                   measureContrast();
     void                   addMarkerRangesInClip(int clipId, const std::vector<engine::silence::FrameRange>& runs,
                                                  int offset, double sampleRate, const juce::String& name,
                                                  bool numbered, const juce::String& label);
@@ -803,6 +808,7 @@ private:
     std::optional<std::array<double, engine::ThirdOctaveEq::kBands>> matchEqReference_; // Match EQ's aim
     juce::String                       matchEqReferenceName_;
     std::shared_ptr<const engine::RoomToneProfile> roomTone_; // Generate > Room Tone's source
+    std::optional<double>              contrastBackgroundDb_;   // Analyze > Contrast's background level
     double                             waveformPeaksSampleRate_ = 0.0;
 
     // The user's saved effect presets (kept in the app settings, see

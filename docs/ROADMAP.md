@@ -169,8 +169,8 @@ with the captured room's spectrum and level into the time selection; `src/engine
 
 **Analyzers**
 ✅ Plot spectrum · ✅ **Find clipping** (a marker range over each run) · ✅ **Measure RMS / amplitude statistics**
-(Audition: peak, RMS, DC offset, dynamic range) · ⬜ **Contrast** (WCAG foreground/background) ·
-✅ **Label sounds / silence finder** (Analyze menu; `src/engine/AmplitudeAnalysis.h`) · ⬜ **Beat finder** · ✅ **Loudness meter** (momentary, short-term,
+(Audition: peak, RMS, DC offset, dynamic range) · ✅ **Contrast** (WCAG foreground/background: Analyze > Set Contrast Background, then Contrast) ·
+✅ **Label sounds / silence finder** (Analyze menu; `src/engine/AmplitudeAnalysis.h`) · ✅ **Beat finder** (spectral-flux onsets as numbered point markers, with a tempo estimate; `src/engine/OnsetDetection.h`) · ✅ **Loudness meter** (momentary, short-term,
 integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser (Analyze > Measure Loudness), and live on the master bus in the Master pane, with a reset · ⬜ **Phase correlation meter / vectorscope** · ⬜ Oscilloscope
 
 ### Phase 3 — Spectral editing
