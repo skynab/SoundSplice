@@ -170,6 +170,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::detectPitch:
         case commands::adaptiveNoiseReduction:
         case commands::decrackle:
+        case commands::dereverb:
         case commands::plotSpectrum:
         case commands::amplitudeStatistics:
         case commands::findClipping:
@@ -415,6 +416,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::detectPitch:     detectPitch(); break;
         case commands::adaptiveNoiseReduction: showAdaptiveNoiseReductionDialog(); break;
         case commands::decrackle:       showDecrackleDialog(); break;
+        case commands::dereverb:        showDereverbDialog(); break;
         case commands::clipFix:         showClipFixDialog(); break;
         case commands::humRemoval:      showHumRemovalDialog(); break;
         case commands::spectralDelete:  scaleSpectralSelection("Spectral delete", 0.0f); break;
@@ -736,6 +738,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::humRemoval);
         add(commands::decrackle);
         add(commands::adaptiveNoiseReduction);
+        add(commands::dereverb);
         add(commands::vocalReduction);
         {
             // All of these act on a box dragged on the spectrogram.

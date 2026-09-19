@@ -1,6 +1,7 @@
 #include "MainComponentInternal.h"
 
 #include "engine/AdaptiveNoiseReduction.h"
+#include "engine/Dereverb.h"
 #include "engine/HqStretch.h"
 #include "engine/PitchDetection.h"
 #include "engine/CenterChannel.h"
@@ -852,6 +853,59 @@ void MainComponent::showPitchCorrectionDialog()
                 self->showError("That's too short to correct - select at least a quarter of a second");
             else if (edited)
                 self->showStatus(juce::String("Pitch corrected ") + (whole ? "across the clip" : "in the selection"));
+        }));
+}
+
+/** De-reverb: the room's tail taken out, over the selection or the whole
+    clip. The reverb time is the room's (how long a clap takes to die away);
+    too short leaves tail, too long takes some of the voice. */
+void MainComponent::showDereverbDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("DeReverb",
+                                         "Takes a room's echo out of a recording made in it: set the reverb time to "
+                                         "about how long a clap takes to die away there.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("time", juce::String(settings_.getDoubleValue("dereverb.seconds", 0.8)), "Reverb time (s):");
+    window->addTextEditor("amount", juce::String(settings_.getDoubleValue("dereverb.amount", 67.0)), "Amount (%):");
+    window->addTextEditor("floor", juce::String(settings_.getDoubleValue("dereverb.floorDb", -18.0)),
+                          "Never lower than (dB):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            engine::dereverb::Settings settings;
+            settings.reverbSeconds = juce::jlimit(0.1, 10.0, window->getTextEditorContents("time").getDoubleValue());
+            const double amount    = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
+            settings.amount        = amount / 100.0 * 3.0; // 67% is the engine's 2
+            settings.floorDb       = juce::jlimit(-60.0, 0.0, window->getTextEditorContents("floor").getDoubleValue());
+
+            self->settings_.setValue("dereverb.seconds", settings.reverbSeconds);
+            self->settings_.setValue("dereverb.amount", amount);
+            self->settings_.setValue("dereverb.floorDb", settings.floorDb);
+
+            const auto transform = [settings](std::vector<std::vector<float>>& channels, double rate)
+            {
+                for (auto& channel : channels)
+                    channel = engine::dereverb::process(channel, rate, settings);
+            };
+            self->showBusy("Removing reverb...");
+            const bool whole  = self->audioEditor_.selection().isEmpty();
+            const bool edited = whole ? self->editWholeClip("DeReverb", transform)
+                                      : self->editSelection("DeReverb", false, transform);
+            if (edited)
+                self->showStatus(juce::String("Reverb reduced ") + (whole ? "across the clip" : "in the selection"));
         }));
 }
 

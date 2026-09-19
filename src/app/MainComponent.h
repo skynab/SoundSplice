@@ -365,6 +365,7 @@ private:
     void                   detectPitch();
     void                   showAdaptiveNoiseReductionDialog();
     void                   showDecrackleDialog();
+    void                   showDereverbDialog();
     void                   reduceVocals(const engine::centre::Settings& settings);
     void                   showSpectralClipEditDialog();
     void                   addSpectralClipEdit(float gainDb);

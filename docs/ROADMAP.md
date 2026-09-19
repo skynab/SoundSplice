@@ -152,7 +152,7 @@ Change Tempo and Speed and Pitch's shift, the phase vocoder kept for clips too s
 **Noise removal and repair** (Audacity *and* Audition)
 ✅ Noise reduction · ✅ **Click/pop removal** · ✅ **Clip fix / DeClipper** · ✅ Repair (interpolate a short
 region) · ✅ **DeHummer** (50/60 Hz and harmonics) (Edit menu, on the audio editor's selection; `src/engine/Repair.h`) · ✅ **Adaptive noise reduction** (no noise print
-needed: minimum statistics, following noise that changes; Edit > Adaptive Noise Reduction; `src/engine/AdaptiveNoiseReduction.h`) · ⬜ **DeReverb** · ✅ DeCrackle (Edit > DeCrackle) · ✅ DC offset removal
+needed: minimum statistics, following noise that changes; Edit > Adaptive Noise Reduction; `src/engine/AdaptiveNoiseReduction.h`) · ✅ **DeReverb** (Edit > DeReverb: late reverb estimated from the room's reverb time and subtracted; `src/engine/Dereverb.h`) · ✅ DeCrackle (Edit > DeCrackle) · ✅ DC offset removal
 
 **Delay, reverb and modulation**
 ✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ✅ Echo (multitap, with ping-pong) ·
