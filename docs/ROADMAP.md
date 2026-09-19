@@ -141,9 +141,10 @@ drawable transfer curve (Audition): up to six points, peak or RMS detector, drag
 
 **Pitch and time**
 ✅ Change speed · ✅ Change pitch · ✅ **Change tempo** (Edit > Change Tempo, on the whole clip) ·
-✅ Paulstretch (`src/engine/Paulstretch.h`) · ⬜ Sliding stretch (pitch or tempo varying over the selection) · ⬜ **Formant-preserving
-pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercial) and Signalsmith Stretch
-(MIT) against the current phase vocoder · ⬜ Pitch correction / tuner (REAPER ReaTune)
+✅ Paulstretch (`src/engine/Paulstretch.h`) · ⬜ Sliding stretch (pitch or tempo varying over the selection) · ✅ **Formant-preserving
+pitch shift** (Speed and Pitch: Voice character, Stays put) · ✅ Better stretch quality: Signalsmith Stretch (MIT) now does
+Change Tempo and Speed and Pitch's shift, the phase vocoder kept for clips too short for it; Rubber Band left out, being GPL
+(`src/engine/HqStretch.h`, `cmake/stretch.cmake`) · ⬜ Pitch correction / tuner (REAPER ReaTune)
 
 **EQ and filters**
 ✅ LP/HP/BP · ✅ 3-band EQ · ✅ Bass and treble · ✅ **Graphic EQ** (10 bands ✅; 31 third-octave bands ✅, `src/engine/ThirdOctaveEq.h`) · ✅ **Parametric EQ** with a drawable curve (Audacity Filter Curve, REAPER ReaEQ): six bands, each a bell, shelf, notch or cut; drag the points on its curve (`src/engine/ParametricEq.h`) · ✅ Notch · ✅ Shelf · ✅ **Match EQ** (fit one clip's spectrum to another's: Edit > Set as Match EQ Reference, then Match EQ to Reference adds a 31-band EQ; `src/engine/MatchEq.h`)

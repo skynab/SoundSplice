@@ -44,6 +44,9 @@ include(cmake/get_cpm.cmake)
 # and test fast and in isolation. Everything on the audio thread trusts them.
 add_subdirectory(src/rt)
 
+# Time-stretching and pitch-shifting (MIT, header-only) - see cmake/stretch.cmake.
+include(cmake/stretch.cmake)
+
 # ---- Application (JUCE) ------------------------------------------------------
 if(SOUNDSPLICE_BUILD_APP)
   CPMAddPackage(

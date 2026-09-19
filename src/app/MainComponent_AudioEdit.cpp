@@ -1,4 +1,5 @@
 #include "MainComponentInternal.h"
+#include "engine/HqStretch.h"
 
 #include "engine/Paulstretch.h"
 #include "engine/Spectrogram.h"
@@ -1187,8 +1188,8 @@ void MainComponent::showChangeTempoDialog()
 }
 
 /** Change Tempo, as Audacity's: the whole clip played @p percent faster (or
-    slower, for a negative change) at the same pitch, by the phase vocoder
-    Speed and Pitch uses. The clip's length follows. */
+    slower, for a negative change) at the same pitch, by Signalsmith Stretch
+    (engine/HqStretch.h), all channels together. The clip's length follows. */
 void MainComponent::changeTempoOfSelectedClip(double percent)
 {
     if (std::abs(percent) < 1.0e-6)
@@ -1197,9 +1198,17 @@ void MainComponent::changeTempoOfSelectedClip(double percent)
     showBusy("Processing...");
     const double lengthFactor = 1.0 / (1.0 + percent / 100.0);
 
-    const bool applied = editWholeClip("Change tempo", [lengthFactor](std::vector<std::vector<float>>& channels, double)
+    const bool applied = editWholeClip("Change tempo", [lengthFactor](std::vector<std::vector<float>>& channels, double rate)
     {
-        for (auto& channel : channels)
+        engine::hqstretch::Settings settings;
+        settings.lengthFactor = lengthFactor;
+        auto stretched        = engine::hqstretch::process(channels, rate, settings);
+        if (! stretched.empty())
+        {
+            channels = std::move(stretched);
+            return;
+        }
+        for (auto& channel : channels) // too short for it: the phase vocoder
             channel = engine::timestretch::timeStretch(channel, lengthFactor);
     });
 
@@ -1230,6 +1239,9 @@ void MainComponent::showSpeedPitchDialog()
     window->addComboBox("pitch", semitones, "Pitch, keeping the length:");
     window->getComboBoxComponent("pitch")->setSelectedItemIndex(12); // 0
 
+    window->addComboBox("formants", { "Moves with the pitch", "Stays put (for voices)" }, "Voice character:");
+    window->getComboBoxComponent("formants")->setSelectedItemIndex(settings_.getIntValue("speedPitch.keepFormants", 1));
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
@@ -1241,11 +1253,13 @@ void MainComponent::showSpeedPitchDialog()
                 return;
 
             static const double kSpeeds[] = { 0.5, 0.75, 1.0, 1.5, 2.0 };
-            const int speedIndex = window->getComboBoxComponent("speed")->getSelectedItemIndex();
-            const int pitchIndex = window->getComboBoxComponent("pitch")->getSelectedItemIndex();
+            const int  speedIndex   = window->getComboBoxComponent("speed")->getSelectedItemIndex();
+            const int  pitchIndex   = window->getComboBoxComponent("pitch")->getSelectedItemIndex();
+            const bool keepFormants = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
+            self->settings_.setValue("speedPitch.keepFormants", keepFormants ? 1 : 0);
 
             self->applySpeedAndPitch(kSpeeds[(size_t) juce::jlimit(0, 4, speedIndex)],
-                                     (double) (juce::jlimit(0, 24, pitchIndex) - 12));
+                                     (double) (juce::jlimit(0, 24, pitchIndex) - 12), keepFormants);
         }));
 }
 
@@ -1253,8 +1267,10 @@ void MainComponent::showSpeedPitchDialog()
 
     Speed first, then pitch: the pitch shift preserves length, so doing it
     second means it operates on the already-retimed audio and the two
-    settings compose the way the dialog implies. */
-void MainComponent::applySpeedAndPitch(double speedFactor, double semitones)
+    settings compose the way the dialog implies. The shift is Signalsmith
+    Stretch's (engine/HqStretch.h), which can keep a voice's formants where
+    they were, so it doesn't turn into a chipmunk or a giant. */
+void MainComponent::applySpeedAndPitch(double speedFactor, double semitones, bool keepFormants)
 {
     const bool changesSpeed = std::abs(speedFactor - 1.0) > 1.0e-9;
     const bool changesPitch = std::abs(semitones) > 1.0e-9;
@@ -1265,15 +1281,26 @@ void MainComponent::applySpeedAndPitch(double speedFactor, double semitones)
     showBusy("Processing...");
 
     const bool applied = editWholeClip("Speed and pitch",
-        [speedFactor, semitones, changesSpeed, changesPitch](std::vector<std::vector<float>>& channels, double)
+        [speedFactor, semitones, changesSpeed, changesPitch, keepFormants](std::vector<std::vector<float>>& channels,
+                                                                            double rate)
     {
-        for (auto& channel : channels)
-        {
-            if (changesSpeed)
+        if (changesSpeed)
+            for (auto& channel : channels)
                 channel = engine::timestretch::changeSpeed(channel, speedFactor);
-            if (changesPitch)
-                channel = engine::timestretch::pitchShift(channel, semitones);
+        if (! changesPitch)
+            return;
+
+        engine::hqstretch::Settings settings;
+        settings.semitones    = semitones;
+        settings.keepFormants = keepFormants;
+        auto shifted          = engine::hqstretch::process(channels, rate, settings);
+        if (! shifted.empty())
+        {
+            channels = std::move(shifted);
+            return;
         }
+        for (auto& channel : channels) // too short for it: the phase vocoder
+            channel = engine::timestretch::pitchShift(channel, semitones);
     });
 
     if (applied)

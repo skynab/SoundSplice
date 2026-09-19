@@ -423,7 +423,7 @@ private:
     void                   importMarkersDialog();
     void                   showSpeedPitchDialog();
     void                   analyseSelection();
-    void                   applySpeedAndPitch(double speedFactor, double semitones);
+    void                   applySpeedAndPitch(double speedFactor, double semitones, bool keepFormants);
     void                   applyEffectsToSelection(const std::vector<model::EffectSlot>& chain);
 
     /** Converts between the audio editor's seconds (from the selected clip's

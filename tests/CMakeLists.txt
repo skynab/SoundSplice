@@ -40,6 +40,7 @@ add_executable(soundsplice_tests
   engine/VocoderTests.cpp
   engine/StereoScopeTests.cpp
   engine/AdaptiveNoiseReductionTests.cpp
+  engine/HqStretchTests.cpp
   engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp
