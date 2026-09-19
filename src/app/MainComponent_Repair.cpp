@@ -1,5 +1,6 @@
 #include "MainComponentInternal.h"
 
+#include "engine/AdaptiveNoiseReduction.h"
 #include "engine/CenterChannel.h"
 
 #include "engine/Repair.h"
@@ -678,6 +679,97 @@ void MainComponent::reduceVocals(const engine::centre::Settings& settings)
         showError("That clip is mono: there's no centre to find without two channels");
     else if (edited)
         showStatus(label + (audioEditor_.selection().isEmpty() ? " across the clip" : " in the selection"));
+}
+
+/** Adaptive noise reduction: no noise print needed, the noise followed as it
+    changes. Over the selection, or the whole clip. */
+void MainComponent::showAdaptiveNoiseReductionDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Adaptive Noise Reduction",
+                                         "Finds the steady noise under the sound (hiss, hum, air) by itself and takes "
+                                         "it down, following it if it changes. No noise print needed.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("reduction", juce::String(settings_.getDoubleValue("adaptiveNoise.reductionDb", 12.0)),
+                          "Reduction (dB):");
+    window->addTextEditor("floor", juce::String(settings_.getDoubleValue("adaptiveNoise.floorDb", -18.0)),
+                          "Never lower than (dB):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const float reduction = (float) juce::jlimit(0.0, 40.0, window->getTextEditorContents("reduction").getDoubleValue());
+            const float floor     = (float) juce::jlimit(-60.0, 0.0, window->getTextEditorContents("floor").getDoubleValue());
+            self->settings_.setValue("adaptiveNoise.reductionDb", reduction);
+            self->settings_.setValue("adaptiveNoise.floorDb", floor);
+
+            const auto transform = [reduction, floor](std::vector<std::vector<float>>& channels, double rate)
+            {
+                for (auto& channel : channels)
+                    channel = engine::noisereduction::reduceNoiseAdaptive(channel, rate, reduction, floor);
+            };
+            self->showBusy("Reducing noise...");
+            const bool whole  = self->audioEditor_.selection().isEmpty();
+            const bool edited = whole ? self->editWholeClip("Adaptive noise reduction", transform)
+                                      : self->editSelection("Adaptive noise reduction", false, transform);
+            if (edited)
+                self->showStatus(juce::String("Noise reduced ") + (whole ? "across the clip" : "in the selection"));
+        }));
+}
+
+/** De-crackle: the dense crackle of vinyl or a bad cable, mended. Over the
+    selection, or the whole clip. */
+void MainComponent::showDecrackleDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("DeCrackle",
+                                         "Mends crackle: many tiny clicks, each far shorter than a millisecond.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("amount", juce::String(settings_.getDoubleValue("decrackle.amount", 50.0)),
+                          "Amount (0 gentle to 100 thorough):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double amount = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
+            self->settings_.setValue("decrackle.amount", amount);
+
+            int        mended    = 0;
+            const auto transform = [amount, &mended](std::vector<std::vector<float>>& channels, double rate)
+            {
+                for (auto& channel : channels)
+                    mended += engine::repair::decrackle(channel, 0, (int) channel.size(), rate, amount / 100.0);
+            };
+            self->showBusy("Mending crackle...");
+            const bool whole  = self->audioEditor_.selection().isEmpty();
+            const bool edited = whole ? self->editWholeClip("DeCrackle", transform)
+                                      : self->editSelection("DeCrackle", false, transform);
+            if (edited)
+                self->showStatus(mended == 0 ? juce::String("No crackle found")
+                                             : "Mended " + juce::String(mended) + (mended == 1 ? " crackle" : " crackles"));
+        }));
 }
 
 } // namespace soundsplice

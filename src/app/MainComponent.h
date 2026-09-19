@@ -360,6 +360,8 @@ private:
     void                   showSpectralGainDialog();
     void                   repairSpectralSelection();
     void                   showVocalReductionDialog();
+    void                   showAdaptiveNoiseReductionDialog();
+    void                   showDecrackleDialog();
     void                   reduceVocals(const engine::centre::Settings& settings);
     void                   showSpectralClipEditDialog();
     void                   addSpectralClipEdit(float gainDb);

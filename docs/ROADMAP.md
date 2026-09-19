@@ -150,8 +150,8 @@ pitch shift** · ⬜ Better stretch quality: evaluate Rubber Band (GPL/commercia
 
 **Noise removal and repair** (Audacity *and* Audition)
 ✅ Noise reduction · ✅ **Click/pop removal** · ✅ **Clip fix / DeClipper** · ✅ Repair (interpolate a short
-region) · ✅ **DeHummer** (50/60 Hz and harmonics) (Edit menu, on the audio editor's selection; `src/engine/Repair.h`) · ⬜ **Adaptive noise reduction** (no noise print
-needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
+region) · ✅ **DeHummer** (50/60 Hz and harmonics) (Edit menu, on the audio editor's selection; `src/engine/Repair.h`) · ✅ **Adaptive noise reduction** (no noise print
+needed: minimum statistics, following noise that changes; Edit > Adaptive Noise Reduction; `src/engine/AdaptiveNoiseReduction.h`) · ⬜ **DeReverb** · ✅ DeCrackle (Edit > DeCrackle) · ✅ DC offset removal
 
 **Delay, reverb and modulation**
 ✅ Delay · ✅ Reverb · ✅ Tremolo · ✅ Chorus · ✅ Drive (Audacity has 11 distortion types) · ✅ Echo (multitap, with ping-pong) ·

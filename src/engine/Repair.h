@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace soundsplice::engine::repair
@@ -162,14 +163,15 @@ inline bool interpolate(std::vector<float>& samples, int from, int to, int conte
 }
 
 /**
-    Finds clicks in [@p from, @p to) of @p samples and fills each by
-    interpolate. A click is where the audio departs from what a short-term
+    The clicks in [@p from, @p to) of @p samples, each as the samples to
+    replace [first, last), for interpolate to fill. A click is where the audio departs from what a short-term
     model of it predicts by more than @p sensitivity times that model's usual
     error; runs of such samples close together are one click, and one wider
     than @p maxWidth samples is left alone, being more likely a transient in
-    the music than damage. Returns how many clicks were repaired.
+    the music than damage.
 */
-inline int removeClicks(std::vector<float>& samples, int from, int to, double sensitivity, int maxWidth)
+inline std::vector<std::pair<int, int>> findClicks(const std::vector<float>& samples, int from, int to,
+                                                   double sensitivity, int maxWidth)
 {
     const int size = (int) samples.size();
     from = std::clamp(from, 0, size);
@@ -218,7 +220,7 @@ inline int removeClicks(std::vector<float>& samples, int from, int to, double se
     std::sort(flagged.begin(), flagged.end());
     flagged.erase(std::unique(flagged.begin(), flagged.end()), flagged.end());
 
-    int repaired = 0;
+    std::vector<std::pair<int, int>> clicks;
     for (size_t i = 0; i < flagged.size();)
     {
         size_t j = i;
@@ -227,12 +229,50 @@ inline int removeClicks(std::vector<float>& samples, int from, int to, double se
 
         const int clickFrom = std::max(from, flagged[i] - kMargin);
         const int clickTo   = std::min(to, flagged[j] + 1 + kMargin);
-        if (clickTo - clickFrom <= maxWidth && interpolate(samples, clickFrom, clickTo, 1024, 24))
-            ++repaired;
+        if (clickTo - clickFrom <= maxWidth)
+            clicks.emplace_back(clickFrom, clickTo);
 
         i = j + 1;
     }
+    return clicks;
+}
+
+/** Each click findClicks finds, filled by interpolate. Returns how many were
+    repaired. */
+inline int removeClicks(std::vector<float>& samples, int from, int to, double sensitivity, int maxWidth)
+{
+    int repaired = 0;
+    for (const auto& [clickFrom, clickTo] : findClicks(samples, from, to, sensitivity, maxWidth))
+        if (interpolate(samples, clickFrom, clickTo, 1024, 24))
+            ++repaired;
     return repaired;
+}
+
+/**
+    De-crackle (Audition's DeCrackle): the dense crackle of a worn record or a
+    bad cable, hundreds of clicks a second each a sample or two wide, mended
+    by removeClicks tuned for them: nothing wider than a millisecond is
+    touched, so no transient in the music is, and the threshold drops as
+    @p amount (0 to 1) rises. Crackle is dense enough that each click's
+    neighbourhood holds others, which would throw off the model a repair is
+    built from: so every click is found first, all are filled, then all are
+    filled again, each now from a neighbourhood already mended. Returns how
+    many were mended.
+*/
+inline int decrackle(std::vector<float>& samples, int from, int to, double sampleRate, double amount)
+{
+    // In the model's usual errors, as findClicks counts them: lower flags
+    // quieter clicks, but under about 4 the music itself starts to count.
+    const double sensitivity = 8.0 - 4.0 * std::clamp(amount, 0.0, 1.0);
+    // A spike throws the model's predictions off for its order's length
+    // after it, so even a one-sample click is flagged about that wide.
+    const int    maxWidth    = std::max(32, (int) std::lround(0.001 * sampleRate));
+
+    const auto clicks = findClicks(samples, from, to, sensitivity, maxWidth);
+    for (int pass = 0; pass < 2; ++pass)
+        for (const auto& [clickFrom, clickTo] : clicks)
+            interpolate(samples, clickFrom, clickTo, 1024, 24);
+    return (int) clicks.size();
 }
 
 /**
