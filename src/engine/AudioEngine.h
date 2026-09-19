@@ -465,6 +465,8 @@ public:
     float   masterPeak(int channel) const noexcept { return master_.peak(channel); }
     LiveLoudness masterLoudness() const noexcept { return master_.loudness(); }
     void    resetMasterLoudness() noexcept { master_.resetLoudness(); }
+    double  masterCorrelation() const noexcept { return master_.correlation(); }
+    void    masterScope(std::vector<std::pair<float, float>>& out) const { master_.scope(out); }
     /** Gain reduction the mastering rack's limiter is applying, in dB. */
     float   masteringReductionDb() const noexcept { return mastering_.currentReductionDb(); }
 

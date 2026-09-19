@@ -45,6 +45,7 @@
 #include "FileBrowserPanel.h"
 #include "LevelMeter.h"
 #include "LoudnessReadout.h"
+#include "StereoScopeView.h"
 #include "MixerStrip.h"
 #include "OpenFiles.h"
 #include "OpenFilesPane.h"
@@ -758,6 +759,8 @@ private:
                                                    juce::MidiKeyboardComponent::horizontalKeyboard };
     LevelMeter                         meter_;
     LoudnessReadout                    loudnessReadout_;
+    StereoScopeView                    stereoScope_;
+    std::vector<std::pair<float, float>> scopePairs_; // reused each tick
 
     CallbackComponent                  editTab_;
     juce::Label                        editingLabel_;

@@ -514,6 +514,9 @@ void MainComponent::layoutMasterPanel()
     meter_.setBounds(masterArea.removeFromTop(44));
     masterArea.removeFromTop(4);
     loudnessReadout_.setBounds(masterArea.removeFromTop(24));
+    masterArea.removeFromTop(6);
+    stereoScope_.setBounds(masterArea.removeFromTop(juce::jmin(160, masterArea.getHeight())).withSizeKeepingCentre(
+        juce::jmin(masterArea.getWidth(), 220), juce::jmin(160, masterArea.getHeight())));
 }
 
 } // namespace soundsplice

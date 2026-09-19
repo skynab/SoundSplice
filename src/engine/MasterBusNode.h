@@ -5,12 +5,14 @@
 
 #include "engine/Loudness.h"
 #include "engine/Node.h"
+#include "engine/StereoScope.h"
 
 namespace soundsplice::engine
 {
 /**
     The master bus: applies a smoothed output gain and measures per-channel peak
-    for the meters, and loudness (engine/Loudness.h) for the loudness meter.
+    for the meters, loudness (engine/Loudness.h) for the loudness meter, and
+    the two channels' correlation and recent samples for the stereo scope.
     Readings are published into atomics that the UI reads on a timer
     (continuous level readout → atomics, not the command FIFO).
 
@@ -23,6 +25,7 @@ public:
     void prepare(double sampleRate, int /*maxBlockSize*/) override
     {
         gain_.reset(sampleRate, 0.02);
+        correlationMeter_.prepare(sampleRate);
 
         // Every export re-prepares the engine, twice; only a new rate should
         // throw away the integrated loudness measured so far.
@@ -49,6 +52,12 @@ public:
     }
 
     void setGainDb(float db) noexcept { gainDb_ = db; }
+
+    /** Read by the UI thread: -1 to +1 (see engine/StereoScope.h). */
+    double correlation() const noexcept { return correlation_.load(std::memory_order_relaxed); }
+
+    /** Read by the UI thread: the recent sample pairs, oldest first. */
+    void scope(std::vector<std::pair<float, float>>& out) const { scope_.copy(out); }
 
     /** Read by the UI thread. */
     float peak(int channel) const noexcept
@@ -92,6 +101,10 @@ public:
             const auto   hops = loudness_.hopCount();
             loudness_.process(channels, 2, numSamples);
             publishLoudness(reset || loudness_.hopCount() != hops);
+
+            correlationMeter_.process(channels[0], channels[1], numSamples);
+            correlation_.store(correlationMeter_.correlation(), std::memory_order_relaxed);
+            scope_.push(channels[0], channels[1], numSamples);
         }
     }
 
@@ -117,6 +130,10 @@ private:
     std::atomic<double> integrated_ { LoudnessMeter::kSilence };
     std::atomic<double> range_ { 0.0 };
     std::atomic<double> truePeak_ { LoudnessMeter::kSilence };
+
+    PhaseCorrelation    correlationMeter_;
+    std::atomic<double> correlation_ { 0.0 };
+    ScopeRing           scope_;
 
     float gainDb_ = 0.0f;
     juce::LinearSmoothedValue<float> gain_ { 1.0f };
