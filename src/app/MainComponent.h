@@ -17,6 +17,7 @@
 #include "engine/SampleSequence.h"
 #include "engine/AudioExport.h"
 #include "engine/TimeStretch.h"
+#include "engine/HqStretch.h"
 #include "engine/NoiseReduction.h"
 #include "engine/RawPcm.h"
 #include "engine/Generators.h"
@@ -424,6 +425,8 @@ private:
     void                   showSpeedPitchDialog();
     void                   analyseSelection();
     void                   applySpeedAndPitch(double speedFactor, double semitones, bool keepFormants);
+    void                   showSlidingStretchDialog();
+    void                   applySlidingStretch(const engine::hqstretch::Slide& slide);
     void                   applyEffectsToSelection(const std::vector<model::EffectSlot>& chain);
 
     /** Converts between the audio editor's seconds (from the selected clip's

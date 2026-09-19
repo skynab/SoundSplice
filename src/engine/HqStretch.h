@@ -59,4 +59,120 @@ inline std::vector<std::vector<float>> process(const std::vector<std::vector<flo
     return output;
 }
 
+/**
+    Sliding stretch (Audacity's): tempo and pitch that change steadily from
+    one end of the audio to the other, a ritardando or a tape winding down.
+    Tempo is as a percentage change (+100 twice as fast, -50 half as fast),
+    pitch in semitones, each moving in a straight line from its start value
+    to its end value across the input.
+*/
+struct Slide
+{
+    double startTempoPercent = 0.0;
+    double endTempoPercent   = 0.0;
+    double startSemitones    = 0.0;
+    double endSemitones      = 0.0;
+    bool   keepFormants      = false;
+
+    /** Input samples per output sample at @p fraction (0 to 1) of the input. */
+    double rateAt(double fraction) const noexcept
+    {
+        const double from = std::max(0.05, 1.0 + startTempoPercent / 100.0);
+        const double to   = std::max(0.05, 1.0 + endTempoPercent / 100.0);
+        return from + (to - from) * std::clamp(fraction, 0.0, 1.0);
+    }
+
+    double semitonesAt(double fraction) const noexcept
+    {
+        return startSemitones + (endSemitones - startSemitones) * std::clamp(fraction, 0.0, 1.0);
+    }
+
+    /** How long @p inputLength samples come out: the sum of 1 / rate across
+        them, which for a rate in a straight line is a logarithm. */
+    double outputLength(double inputLength) const noexcept
+    {
+        const double from = rateAt(0.0), to = rateAt(1.0);
+        return std::abs(to - from) < 1.0e-9 ? inputLength / from
+                                            : inputLength * std::log(to / from) / (to - from);
+    }
+};
+
+/** @p channels with @p settings applied; empty if too short to take in, as
+    process() is. */
+inline std::vector<std::vector<float>> slide(const std::vector<std::vector<float>>& channels, double sampleRate,
+                                             const Slide& settings)
+{
+    if (channels.empty() || channels[0].empty() || sampleRate <= 0.0)
+        return {};
+
+    const int inputLength  = (int) channels[0].size();
+    const int outputLength = std::max(1, (int) std::lround(settings.outputLength(inputLength)));
+    const int count        = (int) channels.size();
+
+    signalsmith::stretch::SignalsmithStretch<float> stretch;
+    stretch.presetDefault(count, (float) sampleRate);
+    stretch.setTransposeSemitones((float) settings.semitonesAt(0.0));
+    if (settings.keepFormants)
+        stretch.setFormantSemitones(0.0f, true);
+
+    // As exact() does it: a seek to line the start up, the body processed,
+    // and the tail flushed, but with the rate and pitch moving block by block.
+    const double startRate  = settings.rateAt(0.0), endRate = settings.rateAt(1.0);
+    const int    seekLength = stretch.outputSeekLength((float) startRate);
+    constexpr int kBlock    = 256;
+    if (inputLength < seekLength + kBlock)
+        return {};
+
+    std::vector<std::vector<float>> output((size_t) count, std::vector<float>((size_t) outputLength, 0.0f));
+    std::vector<const float*>       in((size_t) count);
+    std::vector<float*>             out((size_t) count);
+    const auto point = [&](int inputAt, int outputAt)
+    {
+        for (int c = 0; c < count; ++c)
+        {
+            in[(size_t) c]  = channels[(size_t) c].data() + inputAt;
+            out[(size_t) c] = output[(size_t) c].data() + outputAt;
+        }
+    };
+
+    point(0, 0);
+    stretch.outputSeek(in.data(), seekLength);
+
+    // The last seekLength of input comes out of the flush, at the end rate;
+    // the body's output is shared among its blocks by 1 / rate at each one's
+    // place in the sound (which the processing trails the input by seekLength).
+    const int flushLength = std::clamp((int) std::lround(seekLength / endRate), 0, outputLength);
+    const int bodyLength  = outputLength - flushLength;
+
+    std::vector<double> share;
+    double              total = 0.0;
+    for (int at = seekLength; at < inputLength; at += kBlock)
+    {
+        const int    n        = std::min(kBlock, inputLength - at);
+        const double fraction = (at - seekLength + n * 0.5) / (double) inputLength;
+        share.push_back(n / settings.rateAt(fraction));
+        total += share.back();
+    }
+
+    double target = 0.0;
+    int    written = 0;
+    size_t block   = 0;
+    for (int at = seekLength; at < inputLength; at += kBlock, ++block)
+    {
+        const int    n        = std::min(kBlock, inputLength - at);
+        const double fraction = (at - seekLength + n * 0.5) / (double) inputLength;
+        target += share[block] * bodyLength / std::max(1.0e-9, total);
+        const int outCount = std::max(0, std::min(bodyLength, (int) std::lround(target)) - written);
+
+        stretch.setTransposeSemitones((float) settings.semitonesAt(fraction));
+        point(at, written);
+        stretch.process(in.data(), n, out.data(), outCount);
+        written += outCount;
+    }
+
+    point(0, written);
+    stretch.flush(out.data(), outputLength - written, (float) endRate);
+    return output;
+}
+
 } // namespace soundsplice::engine::hqstretch

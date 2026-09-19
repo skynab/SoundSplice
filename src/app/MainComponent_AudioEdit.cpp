@@ -1216,6 +1216,85 @@ void MainComponent::changeTempoOfSelectedClip(double percent)
         showStatus("Tempo changed by " + juce::String(percent > 0 ? "+" : "") + juce::String(percent, 1) + "%");
 }
 
+/** Sliding Stretch, as Audacity's: tempo and pitch moving steadily from a
+    start value to an end value across the whole clip (whole, as Change Tempo
+    is, because the length changes). */
+void MainComponent::showSlidingStretchDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Sliding Stretch",
+                                         "Tempo and pitch that change steadily from the start of the clip to its end.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    const auto value = [this](const char* key, double fallback)
+    { return juce::String(settings_.getDoubleValue(juce::String("slidingStretch.") + key, fallback)); };
+    window->addTextEditor("startTempo", value("startTempo", 0.0), "Tempo change at the start (%):");
+    window->addTextEditor("endTempo", value("endTempo", 0.0), "Tempo change at the end (%):");
+    window->addTextEditor("startPitch", value("startPitch", 0.0), "Pitch at the start (semitones):");
+    window->addTextEditor("endPitch", value("endPitch", 0.0), "Pitch at the end (semitones):");
+    window->addComboBox("formants", { "Moves with the pitch", "Stays put (for voices)" }, "Voice character:");
+    window->getComboBoxComponent("formants")->setSelectedItemIndex(settings_.getIntValue("speedPitch.keepFormants", 1));
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const auto number = [window](const char* name, double lo, double hi)
+            { return juce::jlimit(lo, hi, window->getTextEditorContents(name).getDoubleValue()); };
+
+            engine::hqstretch::Slide slide;
+            slide.startTempoPercent = number("startTempo", -90.0, 400.0);
+            slide.endTempoPercent   = number("endTempo", -90.0, 400.0);
+            slide.startSemitones    = number("startPitch", -24.0, 24.0);
+            slide.endSemitones      = number("endPitch", -24.0, 24.0);
+            slide.keepFormants      = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
+
+            auto& stored = self->settings_;
+            stored.setValue("slidingStretch.startTempo", slide.startTempoPercent);
+            stored.setValue("slidingStretch.endTempo", slide.endTempoPercent);
+            stored.setValue("slidingStretch.startPitch", slide.startSemitones);
+            stored.setValue("slidingStretch.endPitch", slide.endSemitones);
+            stored.setValue("speedPitch.keepFormants", slide.keepFormants ? 1 : 0);
+            self->applySlidingStretch(slide);
+        }));
+}
+
+void MainComponent::applySlidingStretch(const engine::hqstretch::Slide& slide)
+{
+    const bool nothing = std::abs(slide.startTempoPercent) < 1.0e-9 && std::abs(slide.endTempoPercent) < 1.0e-9
+                      && std::abs(slide.startSemitones) < 1.0e-9 && std::abs(slide.endSemitones) < 1.0e-9;
+    if (nothing)
+        return;
+
+    showBusy("Stretching...");
+    bool       tooShort = false;
+    const bool applied  = editWholeClip("Sliding stretch", [&slide, &tooShort](std::vector<std::vector<float>>& channels,
+                                                                                double rate)
+    {
+        auto stretched = engine::hqstretch::slide(channels, rate, slide);
+        if (stretched.empty())
+            tooShort = true;
+        else
+            channels = std::move(stretched);
+    });
+
+    if (tooShort)
+        showError("That clip is too short to stretch gradually");
+    else if (applied)
+        showStatus("Stretched from " + juce::String(slide.startTempoPercent, 1) + "% to "
+                   + juce::String(slide.endTempoPercent, 1) + "% tempo, " + juce::String(slide.startSemitones, 1)
+                   + " to " + juce::String(slide.endSemitones, 1) + " semitones");
+}
+
 /** Speed and pitch, on the whole clip.
 
     Whole clip rather than a selection on purpose: both change the audio's

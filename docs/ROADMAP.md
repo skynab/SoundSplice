@@ -141,7 +141,7 @@ drawable transfer curve (Audition): up to six points, peak or RMS detector, drag
 
 **Pitch and time**
 ✅ Change speed · ✅ Change pitch · ✅ **Change tempo** (Edit > Change Tempo, on the whole clip) ·
-✅ Paulstretch (`src/engine/Paulstretch.h`) · ⬜ Sliding stretch (pitch or tempo varying over the selection) · ✅ **Formant-preserving
+✅ Paulstretch (`src/engine/Paulstretch.h`) · ✅ Sliding stretch (Edit > Sliding Stretch: tempo and pitch moving from one amount to another across the clip, by Signalsmith Stretch) · ✅ **Formant-preserving
 pitch shift** (Speed and Pitch: Voice character, Stays put) · ✅ Better stretch quality: Signalsmith Stretch (MIT) now does
 Change Tempo and Speed and Pitch's shift, the phase vocoder kept for clips too short for it; Rubber Band left out, being GPL
 (`src/engine/HqStretch.h`, `cmake/stretch.cmake`) · ⬜ Pitch correction / tuner (REAPER ReaTune)

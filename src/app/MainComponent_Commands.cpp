@@ -165,6 +165,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
         case commands::captureRoomTone:
         case commands::vocalReduction:
+        case commands::slidingStretch:
         case commands::adaptiveNoiseReduction:
         case commands::decrackle:
         case commands::plotSpectrum:
@@ -407,6 +408,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::repairAudio:     repairAudioSelection(); break;
         case commands::clickRemoval:    showClickRemovalDialog(); break;
         case commands::vocalReduction:  showVocalReductionDialog(); break;
+        case commands::slidingStretch:  showSlidingStretchDialog(); break;
         case commands::adaptiveNoiseReduction: showAdaptiveNoiseReductionDialog(); break;
         case commands::decrackle:       showDecrackleDialog(); break;
         case commands::clipFix:         showClipFixDialog(); break;
@@ -719,6 +721,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::studioFadeOut);
         add(commands::changeTempo);
         add(commands::paulstretch);
+        add(commands::slidingStretch);
         add(commands::reverseAudio);
         add(commands::applyEffects);
         menu.addSeparator();

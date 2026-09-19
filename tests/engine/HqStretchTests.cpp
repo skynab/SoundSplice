@@ -120,3 +120,33 @@ TEST_CASE("Keeping formants holds a voice's character as its pitch moves", "[eng
     REQUIRE(shifted > before * 1.25);                                // moved up with the pitch
     REQUIRE(std::abs(held - before) < std::abs(shifted - before) * 0.5); // stayed much closer
 }
+
+TEST_CASE("A sliding stretch speeds up and bends pitch across the sound", "[engine][stretch]")
+{
+    const auto tone = sine(440.0, 4.0);
+
+    // Speeding up from as-is to twice as fast: length L ln 2, pitch held.
+    hqstretch::Slide faster;
+    faster.endTempoPercent = 100.0;
+    const auto sped        = hqstretch::slide({ tone }, kRate, faster);
+    REQUIRE_THAT((double) sped[0].size(), WithinAbs(tone.size() * std::log(2.0), 2.0));
+    REQUIRE_THAT(peakHz(sped[0], sped[0].size() / 2 - 8192), WithinAbs(440.0, 3.0));
+
+    // Pitch rising an octave at the same tempo: low near the start, high near
+    // the end, the length unchanged.
+    hqstretch::Slide rising;
+    rising.endSemitones = 12.0;
+    const auto bent     = hqstretch::slide({ tone }, kRate, rising);
+    REQUIRE(bent[0].size() == tone.size());
+    const auto expected = [](double fraction) { return 440.0 * std::pow(2.0, fraction); };
+    // Measured over 16384 samples starting at 20% and at 70%: their middles
+    // sit at about 29% and 79% of the way.
+    const double early = peakHz(bent[0], (size_t) (0.2 * bent[0].size()));
+    const double late  = peakHz(bent[0], (size_t) (0.7 * bent[0].size()));
+    REQUIRE_THAT(early, WithinAbs(expected(0.2 + 8192.0 / bent[0].size()), 20.0));
+    REQUIRE_THAT(late, WithinAbs(expected(0.7 + 8192.0 / bent[0].size()), 35.0));
+    REQUIRE(late > early * 1.4);
+
+    // Too short to take in: nothing.
+    REQUIRE(hqstretch::slide({ std::vector<float>(64, 0.1f) }, kRate, rising).empty());
+}
