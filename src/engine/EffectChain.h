@@ -16,6 +16,7 @@
 #include "engine/ParametricEqEffect.h"
 #include "engine/DynamicsProcessorEffect.h"
 #include "engine/ThirdOctaveEqEffect.h"
+#include "engine/ConvolutionEffect.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
 
@@ -55,7 +56,8 @@ enum class EffectNodeKind
     Multiband  = 25,
     ParametricEq = 26,
     Dynamics     = 27,
-    GraphicEq31  = 28
+    GraphicEq31  = 28,
+    Convolution  = 29
 };
 
 /** What a chain slot should be. Carries plugin identity as plain strings —
@@ -205,6 +207,11 @@ struct EffectSlotParams
     float         dynMakeUpDb  = 0.0f;
 
     std::array<float, ThirdOctaveEq::kBands> geq31Db {};
+
+    std::string convIrFile;
+    float       convMix        = 0.3f;
+    float       convPreDelayMs = 0.0f;
+    float       convGainDb     = 0.0f;
 };
 
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
@@ -464,6 +471,18 @@ struct EchoNode final : EffectProcessor
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
+struct ConvolutionNode final : EffectProcessor
+{
+    ConvolutionReverbEffect effect;
+    std::string             loadedFile; // message thread only
+    bool                    loaded = false;
+
+    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Convolution; }
+    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
+    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
+    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+};
+
 struct GraphicEq31Node final : EffectProcessor
 {
     ThirdOctaveEqEffect effect;
@@ -709,6 +728,25 @@ inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
             dynamics->effect.setAttackMs(params.dynAttackMs);
             dynamics->effect.setReleaseMs(params.dynReleaseMs);
             dynamics->effect.setMakeUpDb(params.dynMakeUpDb);
+        }
+        else if (auto* convolution = dynamic_cast<ConvolutionNode*>(&node))
+        {
+            convolution->effect.setMix(params.convMix);
+            convolution->effect.setPreDelayMs(params.convPreDelayMs);
+            convolution->effect.setGainDb(params.convGainDb);
+            convolution->effect.collectRetired();
+
+            // Read only when the file changes, not on every parameter move. A
+            // file that can't be read leaves the built-in hall.
+            if (! convolution->loaded || params.convIrFile != convolution->loadedFile)
+            {
+                convolution->loaded     = true;
+                convolution->loadedFile = params.convIrFile;
+                std::vector<std::vector<float>> channels;
+                double                          rate = 0.0;
+                loadImpulseFile(params.convIrFile, channels, rate);
+                convolution->effect.setImpulse(std::move(channels), rate);
+            }
         }
         else if (auto* graphic31 = dynamic_cast<GraphicEq31Node*>(&node))
         {

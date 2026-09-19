@@ -172,7 +172,8 @@ enum class EffectKind
     Multiband  = 25,
     ParametricEq = 26, // see engine/ParametricEq.h
     Dynamics     = 27, // see engine/DynamicsProcessor.h
-    GraphicEq31  = 28  // see engine/ThirdOctaveEq.h
+    GraphicEq31  = 28, // see engine/ThirdOctaveEq.h
+    Convolution  = 29  // see engine/ConvolutionEffect.h
 };
 
 /**
@@ -610,6 +611,19 @@ struct GraphicEq31Settings
     bool operator==(const GraphicEq31Settings&) const = default;
 };
 
+/** A convolution reverb: an impulse response file (empty for the built-in
+    hall), mixed with the dry signal after a pre-delay. */
+struct ConvolutionSettings
+{
+    bool        enabled    = false;
+    std::string irFile;
+    float       mix        = 0.3f;
+    float       preDelayMs = 0.0f;
+    float       gainDb     = 0.0f;
+
+    bool operator==(const ConvolutionSettings&) const = default;
+};
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -643,6 +657,7 @@ struct EffectSlot
     ParametricEqSettings parametricEq;
     DynamicsSettings     dynamics;
     GraphicEq31Settings  graphicEq31;
+    ConvolutionSettings  convolution;
     PluginRef          plugin; // meaningful when kind == Plugin
 
     bool operator==(const EffectSlot&) const = default;

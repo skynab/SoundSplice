@@ -47,6 +47,9 @@ public:
     std::function<void(int slotIndex)>                              onPluginEditorRequested;
     std::function<void()>                                           onScanRequested;
     std::function<void(const model::EffectSlot& slot, int slotIndex)> onSlotParamsChanged;
+    /** The convolution reverb's response: @p browse to choose a file, or
+        false to go back to the built-in hall. */
+    std::function<void(int slotIndex, bool browse)>                 onImpulseResponseRequested;
 
     /** Brackets a change to the selected slot's parameters, so the owner can
         commit the whole thing as one undo step (see MainComponent's
@@ -121,6 +124,21 @@ public:
         };
         parametricView_.onDragStart = [this] { if (onSlotParamsDragStart) onSlotParamsDragStart(selected_); };
         parametricView_.onDragEnd   = [this] { if (onSlotParamsDragEnd) onSlotParamsDragEnd(selected_); };
+        irButton_.setTooltip("The recorded space the reverb reproduces: an impulse response file");
+        irButton_.onClick = [this]
+        {
+            if (! isValidSlot(selected_))
+                return;
+            const int      slot = selected_;
+            juce::PopupMenu menu;
+            menu.addItem("Load Impulse Response File...", [this, slot]
+                         { if (onImpulseResponseRequested) onImpulseResponseRequested(slot, true); });
+            menu.addItem("Use the Built-in Hall", ! chain_[(size_t) slot].convolution.irFile.empty(), false, [this, slot]
+                         { if (onImpulseResponseRequested) onImpulseResponseRequested(slot, false); });
+            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&irButton_));
+        };
+        paramsContent_.addChildComponent(irButton_);
+
         paramsContent_.addChildComponent(parametricView_);
 
         dynamicsView_.onChanged = [this](const engine::TransferCurve& curve)
@@ -280,10 +298,13 @@ public:
         const auto kind       = chain_[(size_t) selected_].kind;
         const int  width      = juce::jmax(1, area.getWidth() - paramsViewport_.getScrollBarThickness());
         const int  curveSize  = kind == model::EffectKind::Dynamics ? juce::jmin(width, kCurveHeight + 60)
-                              : kind == model::EffectKind::ParametricEq ? kCurveHeight : 0;
+                              : kind == model::EffectKind::ParametricEq ? kCurveHeight
+                              : kind == model::EffectKind::Convolution  ? kRowHeight : 0;
         paramsContent_.setSize(width, curveSize + (int) rows_.size() * kRowHeight);
 
         auto content = paramsContent_.getLocalBounds();
+        if (kind == model::EffectKind::Convolution)
+            setBoundsOrHide(irButton_, content.removeFromTop(curveSize).reduced(2));
         if (kind == model::EffectKind::ParametricEq)
             setBoundsOrHide(parametricView_, content.removeFromTop(curveSize).reduced(2));
         if (kind == model::EffectKind::Dynamics)
@@ -557,7 +578,7 @@ private:
         button: what setContentVisible hides. */
     std::vector<juce::Component*> paramControls()
     {
-        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &paramsViewport_, &parametricView_, &dynamicsView_ };
+        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &paramsViewport_, &parametricView_, &dynamicsView_, &irButton_ };
         for (auto& row : rows_)
         {
             if (row.label != nullptr)
@@ -663,6 +684,7 @@ private:
         presetsButton_.setVisible(false);
         parametricView_.setVisible(false);
         dynamicsView_.setVisible(false);
+        irButton_.setVisible(false);
         paramsViewport_.setVisible(false);
 
         const auto* descriptor = isValidSlot(selected_) ? model::descriptorFor(chain_[(size_t) selected_].kind)
@@ -698,6 +720,14 @@ private:
         {
             dynamicsView_.setCurve(model::transferCurve(slot.dynamics));
             dynamicsView_.setVisible(true);
+        }
+        if (slot.kind == model::EffectKind::Convolution)
+        {
+            const auto& file = slot.convolution.irFile;
+            irButton_.setButtonText(file.empty() ? juce::String("Response: Built-in Hall")
+                                                 : "Response: " + juce::File(juce::String::fromUTF8(file.c_str()))
+                                                                      .getFileNameWithoutExtension());
+            irButton_.setVisible(true);
         }
         updating_ = true;
 
@@ -791,6 +821,7 @@ private:
     juce::Viewport   paramsViewport_;
     ParametricEqView parametricView_;
     TransferCurveView dynamicsView_;
+    juce::TextButton  irButton_;
 
     std::vector<model::UserEffectPreset> userPresets_;
 

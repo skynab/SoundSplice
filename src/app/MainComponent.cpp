@@ -830,6 +830,7 @@ MainComponent::MainComponent()
     userEffectPresets_ = model::deserializeUserPresets(settings_.getValue("effectPresets").toStdString());
     effectChain_.setUserPresets(userEffectPresets_);
     effectChain_.onPresetSaveRequested = [this](const model::EffectSlot& slot, int) { promptToSaveEffectPreset(slot); };
+    effectChain_.onImpulseResponseRequested = [this](int slot, bool browse) { chooseImpulseResponse(slot, browse); };
     effectChain_.onUserPresetDeleted   = [this](const std::string& effectId, const std::string& name)
     {
         deleteUserEffectPreset(effectId, name);

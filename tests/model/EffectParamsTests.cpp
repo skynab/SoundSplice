@@ -19,7 +19,8 @@ namespace
         EffectKind::DcOffset, EffectKind::Limiter, EffectKind::Phaser, EffectKind::Flanger,
         EffectKind::BassTreble, EffectKind::StereoTool, EffectKind::GraphicEq, EffectKind::DeEsser,
         EffectKind::Expander, EffectKind::RingMod, EffectKind::Wah, EffectKind::Echo,
-        EffectKind::Multiband, EffectKind::ParametricEq, EffectKind::Dynamics, EffectKind::GraphicEq31
+        EffectKind::Multiband, EffectKind::ParametricEq, EffectKind::Dynamics, EffectKind::GraphicEq31,
+        EffectKind::Convolution
     };
 
     /** Every parameter of every built-in, read from @p slot. */

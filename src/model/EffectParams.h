@@ -397,6 +397,15 @@ inline const std::vector<EffectDescriptor>& builtInEffects()
               { .id = "band6Q", .name = "  Q", .min = 0.1, .max = 30, .step = 0.01,
                 .skewMidpoint = 1.5, .access = fieldAccess<&S::parametricEq, &ParametricEqSettings::band6Q> } } },
 
+        { .kind = EffectKind::Convolution, .id = "convolution", .name = "Convolution Reverb", .group = "",
+          .params = {
+              { .id = "mix", .name = "Mix", .min = 0, .max = 1, .step = 0.01, .displayScale = 100, .unit = " %",
+                .access = fieldAccess<&S::convolution, &ConvolutionSettings::mix> },
+              { .id = "preDelay", .name = "Pre-delay", .min = 0, .max = 500, .step = 1, .unit = " ms",
+                .access = fieldAccess<&S::convolution, &ConvolutionSettings::preDelayMs> },
+              { .id = "gain", .name = "Wet Gain", .min = -24, .max = 12, .step = 0.5, .unit = " dB",
+                .access = fieldAccess<&S::convolution, &ConvolutionSettings::gainDb> } } },
+
         { .kind = EffectKind::GraphicEq31, .id = "graphicEq31", .name = "Graphic EQ (31 bands)", .group = "",
           .params = {
               { .id = "band1", .name = "20 Hz", .min = -12, .max = 12, .step = 0.5, .unit = " dB",
@@ -686,6 +695,7 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
     slot.parametricEq.enabled = kind == EffectKind::ParametricEq;
     slot.dynamics.enabled     = kind == EffectKind::Dynamics;
     slot.graphicEq31.enabled  = kind == EffectKind::GraphicEq31;
+    slot.convolution.enabled  = kind == EffectKind::Convolution;
     return slot;
 }
 

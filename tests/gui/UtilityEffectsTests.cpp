@@ -108,3 +108,49 @@ TEST_CASE("A bypassed utility effect leaves the audio alone", "[gui][effects]")
             REQUIRE(out.getSample(0, n) == lastInput(0, n, 0.5f));
     }
 }
+
+TEST_CASE("The convolution reverb adds its tail a block late and swaps responses safely", "[gui][effects][convolution]")
+{
+    using namespace soundsplice::engine;
+
+    ConvolutionNode node;
+    node.prepare(48000.0, 512);
+
+    EffectSlotParams params;
+    params.enabled = true;
+    params.convMix = 0.5f;
+    applyParams(node, params); // no file: the built-in hall
+
+    // A click, then silence: half of it dry at once, the wet tail only from a
+    // block on, and still going a good while after.
+    juce::AudioBuffer<float> buffer(2, 48000);
+    buffer.clear();
+    buffer.setSample(0, 0, 1.0f);
+    buffer.setSample(1, 0, 1.0f);
+    for (int start = 0; start < buffer.getNumSamples(); start += 512)
+    {
+        juce::AudioBuffer<float> block(buffer.getArrayOfWritePointers(), 2, start,
+                                       std::min(512, buffer.getNumSamples() - start));
+        node.process(block);
+    }
+
+    REQUIRE(buffer.getSample(0, 0) == 0.5f);
+    for (int n = 1; n < Convolver::kBlock; ++n)
+        REQUIRE(buffer.getSample(0, n) == 0.0f);
+    float tail = 0.0f;
+    for (int n = 24000; n < 26000; ++n)
+        tail = std::max(tail, std::abs(buffer.getSample(0, n)));
+    REQUIRE(tail > 0.0f);
+    REQUIRE(buffer.getSample(0, 3000) != buffer.getSample(1, 3000)); // wide
+
+    // A file that doesn't exist falls back to the hall rather than silence,
+    // and the swap happens on the next block without the audio thread waiting.
+    params.convIrFile = "/nonexistent/impulse.wav";
+    applyParams(node, params);
+    juce::AudioBuffer<float> next(2, 512);
+    next.clear();
+    node.process(next);
+    applyParams(node, params); // frees the response the audio thread let go of
+    SUCCEED();
+}
+

@@ -60,6 +60,7 @@ inline std::unique_ptr<EffectProcessor> makeEffectNode(model::EffectKind kind)
         case model::EffectKind::ParametricEq: return std::make_unique<ParametricEqNode>();
         case model::EffectKind::Dynamics:     return std::make_unique<DynamicsNode>();
         case model::EffectKind::GraphicEq31:  return std::make_unique<GraphicEq31Node>();
+        case model::EffectKind::Convolution:  return std::make_unique<ConvolutionNode>();
         case model::EffectKind::Plugin:     return nullptr;
     }
     return nullptr;
@@ -187,6 +188,10 @@ inline EffectSlotParams toSlotParams(const model::EffectSlot& slot)
     params.dynReleaseMs     = slot.dynamics.releaseMs;
     params.dynMakeUpDb      = slot.dynamics.makeUpDb;
     params.geq31Db          = model::graphicEq31Gains(slot.graphicEq31);
+    params.convIrFile       = slot.convolution.irFile;
+    params.convMix          = slot.convolution.mix;
+    params.convPreDelayMs   = slot.convolution.preDelayMs;
+    params.convGainDb       = slot.convolution.gainDb;
     return params;
 }
 

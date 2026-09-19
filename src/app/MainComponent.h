@@ -461,6 +461,8 @@ private:
     void                   measureClipLoudness(const juce::String& title, const ClipAudio& audio, int from, int to,
                                                std::function<void(const engine::LoudnessReport&)> onMeasured);
     void                   measureLoudnessOfSelection();
+    void                   chooseImpulseResponse(int slotIndex, bool browse);
+    void                   setImpulseResponse(int slotIndex, const juce::File& file);
     void                   setMatchEqReference();
     void                   matchEqToReference();
     std::optional<engine::SpectrumAverager> measureSpectrumOfSelection();

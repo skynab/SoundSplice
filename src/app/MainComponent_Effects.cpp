@@ -401,4 +401,56 @@ void MainComponent::endEffectSlotParamsDrag(int slotIndex)
     });
 }
 
+/** The convolution reverb's impulse response: a file chosen here, or back
+    to the built-in hall. Kept as the file's path in the slot, like an audio
+    clip's, and read by the effect when it changes. */
+void MainComponent::chooseImpulseResponse(int slotIndex, bool browse)
+{
+    if (! browse)
+    {
+        setImpulseResponse(slotIndex, {});
+        return;
+    }
+
+    chooser_ = std::make_unique<juce::FileChooser>("Load an impulse response", juce::File{},
+                                                   audiofiles::wildcards());
+    const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+    chooser_->launchAsync(flags, [this, slotIndex](const juce::FileChooser& fc)
+    {
+        const auto file = fc.getResult();
+        if (file == juce::File{})
+            return;
+
+        std::vector<std::vector<float>> channels;
+        double                          rate = 0.0;
+        if (! engine::loadImpulseFile(file.getFullPathName().toStdString(), channels, rate))
+        {
+            showError("Could not read " + file.getFileName() + " as audio");
+            return;
+        }
+        setImpulseResponse(slotIndex, file);
+        showStatus("Reverb response: " + file.getFileName() + " ("
+                   + juce::String((double) channels[0].size() / rate, 2) + "s, "
+                   + (channels.size() > 1 ? "stereo" : "mono") + ")");
+    });
+}
+
+void MainComponent::setImpulseResponse(int slotIndex, const juce::File& file)
+{
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
+        return;
+
+    const int         index = selectedTrackIndex_;
+    const std::string path  = file == juce::File{} ? std::string() : file.getFullPathName().toStdString();
+    history_.edit(path.empty() ? "Use built-in reverb hall" : "Load impulse response", [index, slotIndex, path](model::Song& s)
+    {
+        auto& chain = s.tracks[(size_t) index].effectChain;
+        if (slotIndex >= 0 && slotIndex < (int) chain.size())
+            chain[(size_t) slotIndex].convolution.irFile = path;
+    });
+
+    syncEngineTracks();
+    refreshEffectChainForSelected();
+}
+
 } // namespace soundsplice

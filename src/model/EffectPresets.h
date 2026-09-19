@@ -260,6 +260,11 @@ inline const std::vector<EffectPreset>& factoryPresets(EffectKind kind)
                              { "band5Type", 0 }, { "band5Hz", 5000 }, { "band5Gain", 0 }, { "band5Q", 1.0 },
                              { "band6Type", 6 }, { "band6Hz", 3400 }, { "band6Gain", 0 }, { "band6Q", 0.9 } } } } },
 
+        { EffectKind::Convolution, {
+            { "Subtle Space", { { "mix", 0.15 }, { "preDelay", 0 },  { "gain", 0 } } },
+            { "Big Hall",     { { "mix", 0.4 },  { "preDelay", 25 }, { "gain", 0 } } },
+            { "All Wet",      { { "mix", 1.0 },  { "preDelay", 0 },  { "gain", 0 } } } } },
+
         { EffectKind::GraphicEq31, {
             { "Flat", { { "band1", 0 }, { "band2", 0 }, { "band3", 0 }, { "band4", 0 }, { "band5", 0 }, { "band6", 0 }, { "band7", 0 }, { "band8", 0 }, { "band9", 0 }, { "band10", 0 }, { "band11", 0 }, { "band12", 0 }, { "band13", 0 }, { "band14", 0 }, { "band15", 0 }, { "band16", 0 }, { "band17", 0 }, { "band18", 0 }, { "band19", 0 }, { "band20", 0 }, { "band21", 0 }, { "band22", 0 }, { "band23", 0 }, { "band24", 0 }, { "band25", 0 }, { "band26", 0 }, { "band27", 0 }, { "band28", 0 }, { "band29", 0 }, { "band30", 0 }, { "band31", 0 } } },
             { "Bass Boost", { { "band1", 6 }, { "band2", 6 }, { "band3", 6 }, { "band4", 6 }, { "band5", 5.5 }, { "band6", 5.5 }, { "band7", 4.5 }, { "band8", 4 }, { "band9", 3 }, { "band10", 2 }, { "band11", 1 }, { "band12", 0.5 }, { "band13", 0.5 }, { "band14", 0 }, { "band15", 0 }, { "band16", 0 }, { "band17", 0 }, { "band18", 0 }, { "band19", 0 }, { "band20", 0 }, { "band21", 0 }, { "band22", 0 }, { "band23", 0 }, { "band24", 0 }, { "band25", 0 }, { "band26", 0 }, { "band27", 0 }, { "band28", 0 }, { "band29", 0 }, { "band30", 0 }, { "band31", 0 } } },

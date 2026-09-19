@@ -376,7 +376,13 @@ inline std::string serialize(const Song& song)
                 << detail::num((double) slot.dynamics.makeUpDb);
             for (float gain : model::graphicEq31Gains(slot.graphicEq31))
                 out << " " << detail::num((double) gain);
-            out << "\n";
+            out << " " << detail::num((double) slot.convolution.mix) << " "
+                << detail::num((double) slot.convolution.preDelayMs) << " "
+                << detail::num((double) slot.convolution.gainDb) << "\n";
+
+            // A path takes the rest of its own line, as a plugin's name does.
+            if (! slot.convolution.irFile.empty())
+                out << "FXIR " << slot.convolution.irFile << "\n";
 
             if (slot.kind == EffectKind::Plugin)
             {
@@ -939,6 +945,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double dyn_releaseMs = defaults.dynamics.releaseMs;
                 double dyn_makeUpDb = defaults.dynamics.makeUpDb;
                 auto   geq31 = model::graphicEq31Gains(defaults.graphicEq31);
+                double convMix = defaults.convolution.mix, convPreDelay = defaults.convolution.preDelayMs;
+                double convGain = defaults.convolution.gainDb;
                 double peqHz6 = defaults.parametricEq.band6Hz, peqGain6 = defaults.parametricEq.band6GainDb, peqQ6 = defaults.parametricEq.band6Q;
 
                 ss >> kind >> enabled >> filterMode >> cutoff >> resonance
@@ -980,6 +988,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                         break; // an older file stops here: the rest keep their defaults
                     gain = (float) value;
                 }
+                ss >> convMix >> convPreDelay >> convGain;
 
                 slot.kind                   = (EffectKind) kind;
                 slot.enabled                = enabled != 0;
@@ -1123,6 +1132,10 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.dynamics.enabled       = slot.enabled && slot.kind == EffectKind::Dynamics;
                 slot.graphicEq31.enabled    = slot.enabled && slot.kind == EffectKind::GraphicEq31;
                 model::setGraphicEq31Gains(slot.graphicEq31, geq31);
+                slot.convolution.enabled    = slot.enabled && slot.kind == EffectKind::Convolution;
+                slot.convolution.mix        = (float) convMix;
+                slot.convolution.preDelayMs = (float) convPreDelay;
+                slot.convolution.gainDb     = (float) convGain;
                 slot.dynamics.points = std::clamp(dyn_points, 2, 6);
                 slot.dynamics.point1InDb = (float) dyn_point1InDb;
                 slot.dynamics.point1OutDb = (float) dyn_point1OutDb;
@@ -1164,6 +1177,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 slot.parametricEq.band6Hz     = (float) peqHz6;
                 slot.parametricEq.band6GainDb = (float) peqGain6;
                 slot.parametricEq.band6Q      = (float) peqQ6;
+
+                if (readTagged("FXIR", rest))
+                    slot.convolution.irFile = rest;
 
                 if (slot.kind == EffectKind::Plugin)
                 {
