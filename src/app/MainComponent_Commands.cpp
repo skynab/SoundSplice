@@ -149,6 +149,8 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::generateNoise:
         case commands::generateSilence:
         case commands::generateDtmf:
+        case commands::generatePluck:
+        case commands::generateRoomTone:
         case commands::generateRhythm:
             info.setActive(renderJob_ == nullptr);
             break;
@@ -157,6 +159,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(renderJob_ == nullptr && selectedAudioClip() != nullptr && matchEqReference_.has_value());
             break;
 
+        case commands::captureRoomTone:
         case commands::plotSpectrum:
         case commands::amplitudeStatistics:
         case commands::findClipping:
@@ -437,6 +440,9 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::generateSilence: showGenerateDialog(engine::GeneratorKind::Silence); break;
         case commands::generateDtmf:    showGenerateDialog(engine::GeneratorKind::Dtmf); break;
         case commands::generateRhythm:  showGenerateDialog(engine::GeneratorKind::Rhythm); break;
+        case commands::generatePluck:   showGenerateDialog(engine::GeneratorKind::Pluck); break;
+        case commands::generateRoomTone: showGenerateDialog(engine::GeneratorKind::RoomTone); break;
+        case commands::captureRoomTone: captureRoomTone(); break;
         case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
         case commands::matchEqReference:  setMatchEqReference(); break;
         case commands::matchEq:           matchEqToReference(); break;
@@ -831,6 +837,10 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::generateNoise);
         add(commands::generateDtmf);
         add(commands::generateRhythm);
+        add(commands::generatePluck);
+        menu.addSeparator();
+        add(commands::captureRoomTone);
+        add(commands::generateRoomTone);
         menu.addSeparator();
         add(commands::generateSilence);
     }

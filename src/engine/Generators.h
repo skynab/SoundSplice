@@ -4,17 +4,21 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "engine/Oscillator.h"
+#include "engine/RoomTone.h"
 
 namespace soundsplice::engine
 {
 /**
     Audio made from nothing, as Audacity's Generate menu makes it: a tone, a
     chirp sweeping from one frequency and level to another, white, pink or
-    brown noise, silence, and DTMF (telephone keypad) tones.
+    brown noise, silence, DTMF (telephone keypad) tones, a click track, a
+    plucked string, and room tone synthesized from a captured passage.
 
     A Generator renders one channel a chunk at a time, in order, so a long
     generation is written to disk without being held in memory; the same spec
@@ -28,7 +32,9 @@ enum class GeneratorKind
     Noise,
     Silence,
     Dtmf,
-    Rhythm
+    Rhythm,
+    Pluck,   // a plucked string (Karplus-Strong), as Audacity's Pluck
+    RoomTone // noise with a captured room's spectrum, to fill gaps
 };
 
 enum class NoiseColour
@@ -57,6 +63,10 @@ struct GeneratorSpec
     double rhythmBpm   = 120.0; // a rhythm track's tempo
     int    beatsPerBar = 4;     // its first beat is accented
 
+    double pluckDecay = 0.5; // 0 rings long, 1 dies fast
+
+    std::shared_ptr<const RoomToneProfile> roomTone; // what RoomTone synthesizes
+
     double seconds = 30.0;
 };
 
@@ -70,6 +80,10 @@ public:
     {
         if (spec_.kind == GeneratorKind::Dtmf)
             layOutDtmf();
+        if (spec_.kind == GeneratorKind::Pluck)
+            startPluck();
+        if (spec_.kind == GeneratorKind::RoomTone && spec_.roomTone != nullptr && ! spec_.roomTone->isEmpty())
+            roomTone_ = std::make_unique<RoomToneSynth>(*spec_.roomTone);
     }
 
     /** How many frames the whole generation is. */
@@ -135,6 +149,12 @@ private:
 
             case GeneratorKind::Rhythm:
                 return rhythmSample();
+
+            case GeneratorKind::Pluck:
+                return (float) (pluckSample() * edgeFade(0.0, 0.02));
+
+            case GeneratorKind::RoomTone:
+                return roomTone_ != nullptr ? (float) (roomTone_->next() * edgeFade(0.01, 0.01)) : 0.0f;
 
             case GeneratorKind::Silence:
                 break;
@@ -253,6 +273,64 @@ private:
         return (float) (clampAmplitude(spec_.startAmplitude) * decay * std::sin(kTwoPi * hz * into));
     }
 
+    /** 1 except within @p inSeconds of the start and @p outSeconds of the
+        end, where it ramps (a raised cosine) from and to 0, so the audio
+        starts and stops without a click. */
+    double edgeFade(double inSeconds, double outSeconds) const noexcept
+    {
+        const auto ramp = [](double x) { return x >= 1.0 ? 1.0 : 0.5 - 0.5 * std::cos(3.14159265358979323846 * x); };
+        const double fromStart = (double) frame_ / rate_;
+        const double toEnd     = (double) (total_ - 1 - frame_) / rate_;
+        double gain = 1.0;
+        if (inSeconds > 0.0)
+            gain *= ramp(fromStart / inSeconds);
+        if (outSeconds > 0.0)
+            gain *= ramp(toEnd / outSeconds);
+        return gain;
+    }
+
+    /** Karplus-Strong: a delay line a period long, filled with a burst of
+        noise, fed back through a two-point average, so the string's
+        brightness dies away before its body does. A first-order allpass
+        takes up the fraction of a sample the line's length can't, so the
+        pitch is exact rather than rounded to the nearest period. */
+    void startPluck()
+    {
+        const double hz     = std::clamp(spec_.startHz, 20.0, rate_ * 0.25);
+        const double period = rate_ / hz - 0.5; // the average adds half a sample
+        const int    length = std::max(2, (int) std::floor(period - 0.1));
+        const double frac   = period - length; // (0.1, 1.1]: the allpass stays well behaved
+        allpassC_           = (1.0 - frac) / (1.0 + frac);
+
+        pluck_.assign((size_t) length, 0.0);
+        double mean = 0.0;
+        for (auto& s : pluck_)
+            mean += (s = white());
+        mean /= (double) length;
+        for (auto& s : pluck_)
+            s = (s - mean) * clampAmplitude(spec_.startAmplitude);
+
+        // How much of each pass the string keeps: from about 4 s of ring at
+        // 0 to a quick thunk at 1, the same at any pitch.
+        const double ringSeconds = 4.0 * std::pow(0.02, std::clamp(spec_.pluckDecay, 0.0, 1.0));
+        loopGain_ = std::pow(0.001, 1.0 / (ringSeconds * hz)); // -60 dB over the ring
+    }
+
+    double pluckSample() noexcept
+    {
+        if (pluck_.empty())
+            return 0.0;
+        const double out     = pluck_[pluckAt_];
+        const double average = loopGain_ * 0.5 * (out + pluckLast_);
+        pluckLast_           = out;
+        const double tuned   = allpassC_ * average + allpassX1_ - allpassC_ * allpassY1_;
+        allpassX1_           = average;
+        allpassY1_           = tuned;
+        pluck_[pluckAt_]     = tuned;
+        pluckAt_             = (pluckAt_ + 1) % pluck_.size();
+        return std::clamp(out, -1.0, 1.0);
+    }
+
     GeneratorSpec spec_;
     double        rate_;
     std::int64_t  total_;
@@ -266,6 +344,14 @@ private:
     std::string  keys_;
     std::int64_t toneFrames_ = 0;
     std::int64_t slotFrames_ = 0;
+
+    std::vector<double> pluck_;
+    size_t              pluckAt_   = 0;
+    double              pluckLast_ = 0.0;
+    double              allpassC_ = 0.0, allpassX1_ = 0.0, allpassY1_ = 0.0;
+    double              loopGain_ = 0.999;
+
+    std::unique_ptr<RoomToneSynth> roomTone_;
 };
 
 } // namespace soundsplice::engine

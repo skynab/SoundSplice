@@ -21,6 +21,8 @@ namespace
             case engine::GeneratorKind::Silence: return "Silence";
             case engine::GeneratorKind::Dtmf:    return "DTMF Tones";
             case engine::GeneratorKind::Rhythm:  return "Rhythm Track";
+            case engine::GeneratorKind::Pluck:   return "Pluck";
+            case engine::GeneratorKind::RoomTone: return "Room Tone";
         }
         return "Audio";
     }
@@ -72,6 +74,12 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
     if (renderJob_ != nullptr)
     {
         showError("A render is already running");
+        return;
+    }
+
+    if (kind == engine::GeneratorKind::RoomTone && roomTone_ == nullptr)
+    {
+        showError("Capture some room tone first: select a quiet passage in the audio editor, then Generate > Capture Room Tone");
         return;
     }
 
@@ -133,11 +141,22 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
             window->addTextEditor("startAmplitude", value("startAmplitude", 0.8), "Amplitude (0 to 1):");
             break;
 
+        case engine::GeneratorKind::Pluck:
+            window->addTextEditor("startHz", value("startHz", 220.0), "Pitch (Hz):");
+            window->addTextEditor("pluckDecay", value("pluckDecay", 0.5), "Decay (0 rings long, 1 dies fast):");
+            window->addTextEditor("startAmplitude", value("startAmplitude", 0.8), "Amplitude (0 to 1):");
+            break;
+
+        case engine::GeneratorKind::RoomTone:
+            window->setMessage("Noise with the captured room's colour and level, never repeating.");
+            break;
+
         case engine::GeneratorKind::Silence:
             break;
     }
 
-    const double defaultSeconds = kind == engine::GeneratorKind::Dtmf ? 1.0 : 30.0;
+    const double defaultSeconds = kind == engine::GeneratorKind::Dtmf ? 1.0
+                                : kind == engine::GeneratorKind::Pluck ? 2.0 : 30.0;
     if (kind == engine::GeneratorKind::Rhythm)
     {
         // A rhythm track's length is its bars, so it has no duration of its own.
@@ -186,6 +205,8 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
             spec.seconds        = number("seconds", 0.0);
             spec.rhythmBpm      = juce::jlimit(20.0, 400.0, number("rhythmBpm", 120.0));
             spec.beatsPerBar    = juce::jlimit(1, 32, (int) std::lround(number("beatsPerBar", 4.0)));
+            spec.pluckDecay     = juce::jlimit(0.0, 1.0, number("pluckDecay", 0.5));
+            spec.roomTone       = self->roomTone_;
 
             if (kind == engine::GeneratorKind::Rhythm)
             {
@@ -203,7 +224,8 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
                 self->showError("The duration needs to be more than 0 seconds");
                 return;
             }
-            if ((kind == engine::GeneratorKind::Tone || kind == engine::GeneratorKind::Chirp)
+            if ((kind == engine::GeneratorKind::Tone || kind == engine::GeneratorKind::Chirp
+                 || kind == engine::GeneratorKind::Pluck)
                 && (spec.startHz <= 0.0 || (kind == engine::GeneratorKind::Chirp && spec.endHz <= 0.0)))
             {
                 self->showError("Frequencies need to be above 0 Hz");
@@ -226,6 +248,7 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
             settings.setValue(prefix + "dtmf", juce::String(spec.dtmf));
             settings.setValue(prefix + "dtmfDuty", spec.dtmfDuty * 100.0);
             settings.setValue(prefix + "seconds", spec.seconds);
+            settings.setValue(prefix + "pluckDecay", spec.pluckDecay);
 
             self->generateAudio(spec);
         }));
@@ -358,6 +381,49 @@ void MainComponent::generateAudio(const engine::GeneratorSpec& spec)
     };
 
     renderJob_ = app::OfflineRenderJob::launch("Generate " + name, std::move(work), std::move(onFinished));
+}
+
+/** Room tone's source: the audio editor's selection, a passage where nothing
+    but the room is heard, measured for Generate > Room Tone to synthesize. */
+void MainComponent::captureRoomTone()
+{
+    const auto* clip = selectedAudioClip();
+    ClipAudio   audio;
+    int         from = 0, to = 0;
+    if (clip == nullptr || audioEditor_.selection().isEmpty() || ! openSelectedClipAudio(audio)
+        || ! selectedClipRange(audio, from, to, false))
+    {
+        showError("Select a quiet passage of the room in the audio editor first");
+        return;
+    }
+
+    const auto channels = readClipAudio(audio, from, to);
+    if (channels.empty())
+    {
+        showError("Could not read " + juce::File(clip->audioFile).getFileName());
+        return;
+    }
+
+    std::vector<float> mono(channels[0].size(), 0.0f);
+    for (const auto& channel : channels)
+        for (size_t i = 0; i < mono.size() && i < channel.size(); ++i)
+            mono[i] += channel[i] / (float) channels.size();
+
+    // Measured as it plays, with the clip's gain.
+    const float gain = juce::Decibels::decibelsToGain(clip->gainDb);
+    for (auto& s : mono)
+        s *= gain;
+
+    auto profile = engine::RoomToneProfile::capture(mono);
+    if (profile.isEmpty())
+    {
+        showError("That's too short to capture - select at least a tenth of a second of room");
+        return;
+    }
+
+    roomTone_ = std::make_shared<const engine::RoomToneProfile>(std::move(profile));
+    showStatus("Room tone captured from " + juce::String(audioEditor_.selection().lengthSeconds(), 2)
+               + "s - Generate > Room Tone fills a time selection with it");
 }
 
 } // namespace soundsplice

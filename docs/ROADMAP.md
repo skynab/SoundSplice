@@ -164,8 +164,8 @@ needed) · ⬜ **DeReverb** · ⬜ DeCrackle · ✅ DC offset removal
 
 **Generators**
 ✅ Tone (sine/square/saw/triangle) · ✅ Chirp (linear or logarithmic) · ✅ **Noise** (white/pink/brown) · ✅ Silence · ✅ DTMF
-(Generate menu: into the time selection, at the playhead, or on a new track; `src/engine/Generators.h`) · ✅ Rhythm track / click track (Generate > Rhythm Track: tempo, beats per bar, bars) · ⬜ Pluck · ⬜ **Room tone fill** (synthesize or loop
-captured room tone into gaps)
+(Generate menu: into the time selection, at the playhead, or on a new track; `src/engine/Generators.h`) · ✅ Rhythm track / click track (Generate > Rhythm Track: tempo, beats per bar, bars) · ✅ Pluck (Karplus-Strong, allpass-tuned) · ✅ **Room tone fill** (Generate > Capture Room Tone, then Room Tone: noise synthesized
+with the captured room's spectrum and level into the time selection; `src/engine/RoomTone.h`)
 
 **Analyzers**
 ✅ Plot spectrum · ✅ **Find clipping** (a marker range over each run) · ✅ **Measure RMS / amplitude statistics**

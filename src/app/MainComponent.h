@@ -20,6 +20,7 @@
 #include "engine/NoiseReduction.h"
 #include "engine/RawPcm.h"
 #include "engine/Generators.h"
+#include "engine/RoomTone.h"
 #include "engine/SilenceDetection.h"
 #include "engine/Loudness.h"
 #include "engine/MatchEq.h"
@@ -461,6 +462,7 @@ private:
     void                   measureClipLoudness(const juce::String& title, const ClipAudio& audio, int from, int to,
                                                std::function<void(const engine::LoudnessReport&)> onMeasured);
     void                   measureLoudnessOfSelection();
+    void                   captureRoomTone();
     void                   chooseImpulseResponse(int slotIndex, bool browse);
     void                   setImpulseResponse(int slotIndex, const juce::File& file);
     void                   setMatchEqReference();
@@ -800,6 +802,7 @@ private:
     engine::SpectrogramSettings        spectrogramSettings_;
     std::optional<std::array<double, engine::ThirdOctaveEq::kBands>> matchEqReference_; // Match EQ's aim
     juce::String                       matchEqReferenceName_;
+    std::shared_ptr<const engine::RoomToneProfile> roomTone_; // Generate > Room Tone's source
     double                             waveformPeaksSampleRate_ = 0.0;
 
     // The user's saved effect presets (kept in the app settings, see
