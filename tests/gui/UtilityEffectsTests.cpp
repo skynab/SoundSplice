@@ -55,7 +55,27 @@ TEST_CASE("Every built-in effect kind builds a node of that kind", "[gui][effect
         INFO(effect.name);
         const auto node = engine::makeConfiguredNode(model::makeEffectSlot(effect.kind));
         REQUIRE(node != nullptr);
-        REQUIRE((int) node->kind() == (int) effect.kind);
+        REQUIRE(node->kind() == effect.kind);
+    }
+}
+
+TEST_CASE("Every node reads exactly the parameters its descriptor names", "[gui][effects]")
+{
+    // What stands in for a struct field the compiler would check: a parameter
+    // the node never reads is a control that does nothing, and a read by an id
+    // the descriptor doesn't have is a setting stuck at zero.
+    for (const auto& effect : model::builtInEffects())
+    {
+        INFO(effect.name);
+        const auto values = model::effectParamValues(model::makeEffectSlot(effect.kind));
+        const auto node   = engine::makeBuiltInNode(effect.kind);
+        REQUIRE(node != nullptr);
+        node->applyParams(values);
+
+        for (const auto& id : values.unreadIds())
+            FAIL_CHECK("never read: " << id);
+        for (const auto& id : values.missingIds())
+            FAIL_CHECK("no such parameter: " << id);
     }
 }
 
@@ -116,10 +136,13 @@ TEST_CASE("The convolution reverb adds its tail a block late and swaps responses
     ConvolutionNode node;
     node.prepare(48000.0, 512);
 
-    EffectSlotParams params;
+    EffectParamValues params;
     params.enabled = true;
-    params.convMix = 0.5f;
-    applyParams(node, params); // no file: the built-in hall
+    params.set("mix", 0.5);
+    params.set("preDelay", 0.0);
+    params.set("gain", 0.0);
+    params.setText("irFile", "");
+    node.applyParams(params); // no file: the built-in hall
 
     // A click, then silence: half of it dry at once, the wet tail only from a
     // block on, and still going a good while after.
@@ -145,12 +168,12 @@ TEST_CASE("The convolution reverb adds its tail a block late and swaps responses
 
     // A file that doesn't exist falls back to the hall rather than silence,
     // and the swap happens on the next block without the audio thread waiting.
-    params.convIrFile = "/nonexistent/impulse.wav";
-    applyParams(node, params);
+    params.setText("irFile", "/nonexistent/impulse.wav");
+    node.applyParams(params);
     juce::AudioBuffer<float> next(2, 512);
     next.clear();
     node.process(next);
-    applyParams(node, params); // frees the response the audio thread let go of
+    node.applyParams(params); // frees the response the audio thread let go of
     SUCCEED();
 }
 

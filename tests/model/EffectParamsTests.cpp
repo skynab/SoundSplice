@@ -188,13 +188,33 @@ TEST_CASE("Values are clamped to a parameter's range and step", "[model][effectp
     REQUIRE(clampToParam(toggle, 0.7) == 1.0);
 }
 
-TEST_CASE("A new slot is enabled, with its own kind's flag set", "[model][effectparams]")
+TEST_CASE("A new slot is enabled", "[model][effectparams]")
 {
     const auto slot = makeEffectSlot(EffectKind::Compressor);
 
     REQUIRE(slot.kind == EffectKind::Compressor);
     REQUIRE(slot.enabled);
-    REQUIRE(slot.compressor.enabled);
-    REQUIRE_FALSE(slot.filter.enabled);
-    REQUIRE_FALSE(slot.drive.enabled);
+}
+
+TEST_CASE("A slot's values carry its own kind's parameters by id", "[model][effectparams]")
+{
+    for (const auto& effect : builtInEffects())
+    {
+        INFO(effect.name);
+
+        auto slot    = makeEffectSlot(effect.kind);
+        slot.enabled = false;
+        const auto& param = effect.params.back();
+        setParamValue(slot, param, differentValue(param, paramValue(slot, param)));
+
+        const auto values = effectParamValues(slot);
+        REQUIRE_FALSE(values.enabled);
+        for (const auto& each : effect.params)
+            REQUIRE(values.get(each.id) == paramValue(slot, each));
+        REQUIRE(values.missingIds().empty());
+    }
+
+    const auto plugin = effectParamValues(makeEffectSlot(EffectKind::Plugin));
+    REQUIRE(plugin.enabled);
+    REQUIRE(plugin.unreadIds().empty()); // nothing to read
 }

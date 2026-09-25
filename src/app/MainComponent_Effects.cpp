@@ -19,7 +19,7 @@ void MainComponent::refreshEffectChainForSelected()
     effectChain_.setChain(history_.current().tracks[(size_t) selectedTrackIndex_].effectChain);
 }
 
-// makeEffectNode and toSlotParams used to live here. They moved to
+// Turning a slot into its configured node used to live here. It moved to
 // engine/EffectSlotFactory.h when a *third* copy of the same mapping turned
 // up in the bounce tool: the tool's copy had silently fallen behind the
 // engine's, so the tool was measuring a different signal path from the one
@@ -112,7 +112,7 @@ void MainComponent::setEffectSlotBypass(int slotIndex, bool enabled)
     });
 
     const auto& updatedChain = history_.current().tracks[(size_t) selectedTrackIndex_].effectChain;
-    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, engine::toSlotParams(updatedChain[(size_t) slotIndex]));
+    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(updatedChain[(size_t) slotIndex]));
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
@@ -130,7 +130,7 @@ void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotI
         return;
 
     chain[(size_t) slotIndex] = slot;
-    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, engine::toSlotParams(slot));
+    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(slot));
 }
 
 /** Probes for plugins and caches the result, so the next launch doesn't

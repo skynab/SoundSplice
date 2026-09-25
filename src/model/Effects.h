@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "engine/EffectKind.h"
+
 namespace soundsplice::model
 {
 /** Master delay settings, stored in the document (saved + undoable state). */
@@ -142,41 +144,9 @@ struct MasteringSettings
     bool operator==(const MasteringSettings&) const = default;
 };
 
-enum class EffectKind
-{
-    Filter = 0,
-    Delay  = 1,
-    Reverb = 2,
-    Plugin = 3,
-    Drive      = 4, // see engine::DriveEffect and PedalEffects.h
-    Compressor = 5,
-    Tremolo    = 6,
-    Chorus     = 7,
-    Wobble     = 8,
-    Gate       = 9,
-    Eq         = 10,
-    Amplify    = 11, // see engine/UtilityEffects.h
-    Invert     = 12,
-    DcOffset   = 13,
-    Limiter    = 14,
-    Phaser     = 15, // see engine/ToneEffects.h
-    Flanger    = 16,
-    BassTreble = 17,
-    StereoTool = 18,
-    GraphicEq  = 19, // see engine/DynamicsEffects.h
-    DeEsser    = 20,
-    Expander   = 21,
-    RingMod    = 22,
-    Wah        = 23,
-    Echo       = 24,
-    Multiband  = 25,
-    ParametricEq = 26, // see engine/ParametricEq.h
-    Dynamics     = 27, // see engine/DynamicsProcessor.h
-    GraphicEq31  = 28, // see engine/ThirdOctaveEq.h
-    Convolution  = 29, // see engine/ConvolutionEffect.h
-    Vocoder      = 30, // see engine/Vocoder.h
-    ChannelMixer = 31  // see engine/ChannelMixer.h
-};
+/** Defined in the engine, below the model, so the chain's nodes and the
+    document's slots share one list (see engine/EffectKind.h). */
+using EffectKind = engine::EffectKind;
 
 /**
     One effect in a track's chain: a built-in or a hosted plugin.
@@ -187,8 +157,8 @@ enum class EffectKind
 
     `enabled` belongs to the slot rather than to the settings structs, so
     bypass means the same thing for a plugin as for a built-in. The
-    per-settings `enabled` flags stay for the master bus, whose effects are
-    single fixed effects rather than chain slots.
+    per-settings `enabled` flags are the master bus's, whose effects are
+    single fixed effects rather than chain slots; in a slot they stay false.
 */
 /** An overdrive/distortion pedal. `hardClip` picks a fuzz's flat ceiling over
     an overdrive's gradual compression; `cabinet` is on by default because

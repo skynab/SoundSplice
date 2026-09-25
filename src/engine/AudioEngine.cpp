@@ -554,63 +554,31 @@ void AudioEngine::rebuildTrackEffectChain(int index)
     auto chain = std::make_unique<EffectChain>();
     for (const auto& spec : chainStructure_[(size_t) index])
     {
-        switch (spec.kind)
+        if (spec.kind != EffectKind::Plugin)
         {
-            case EffectNodeKind::Filter: chain->add(std::make_unique<FilterNode>()); break;
-            case EffectNodeKind::Delay:  chain->add(std::make_unique<DelayNode>());  break;
-            case EffectNodeKind::Reverb: chain->add(std::make_unique<ReverbNode>()); break;
-            case EffectNodeKind::Drive:  chain->add(std::make_unique<DriveNode>());  break;
-            case EffectNodeKind::Compressor: chain->add(std::make_unique<CompressorNode>()); break;
-            case EffectNodeKind::Tremolo:    chain->add(std::make_unique<TremoloNode>());    break;
-            case EffectNodeKind::Chorus:     chain->add(std::make_unique<ChorusNode>());     break;
-            case EffectNodeKind::Wobble:     chain->add(std::make_unique<WobbleNode>());     break;
-            case EffectNodeKind::Gate:       chain->add(std::make_unique<GateNode>());       break;
-            case EffectNodeKind::Eq:         chain->add(std::make_unique<EqNode>());         break;
-            case EffectNodeKind::Amplify:    chain->add(std::make_unique<AmplifyNode>());    break;
-            case EffectNodeKind::Invert:     chain->add(std::make_unique<InvertNode>());     break;
-            case EffectNodeKind::DcOffset:   chain->add(std::make_unique<DcOffsetNode>());   break;
-            case EffectNodeKind::Limiter:    chain->add(std::make_unique<LimiterNode>());    break;
-            case EffectNodeKind::Phaser:     chain->add(std::make_unique<PhaserNode>());     break;
-            case EffectNodeKind::Flanger:    chain->add(std::make_unique<FlangerNode>());    break;
-            case EffectNodeKind::BassTreble: chain->add(std::make_unique<BassTrebleNode>()); break;
-            case EffectNodeKind::StereoTool: chain->add(std::make_unique<StereoToolNode>()); break;
-            case EffectNodeKind::GraphicEq:  chain->add(std::make_unique<GraphicEqNode>());  break;
-            case EffectNodeKind::DeEsser:    chain->add(std::make_unique<DeEsserNode>());    break;
-            case EffectNodeKind::Expander:   chain->add(std::make_unique<ExpanderNode>());   break;
-            case EffectNodeKind::RingMod:    chain->add(std::make_unique<RingModNode>());    break;
-            case EffectNodeKind::Wah:        chain->add(std::make_unique<WahNode>());        break;
-            case EffectNodeKind::Echo:       chain->add(std::make_unique<EchoNode>());       break;
-            case EffectNodeKind::Multiband:  chain->add(std::make_unique<MultibandNode>());  break;
-            case EffectNodeKind::ParametricEq: chain->add(std::make_unique<ParametricEqNode>()); break;
-            case EffectNodeKind::Dynamics:     chain->add(std::make_unique<DynamicsNode>());     break;
-            case EffectNodeKind::GraphicEq31:  chain->add(std::make_unique<GraphicEq31Node>());  break;
-            case EffectNodeKind::Convolution:  chain->add(std::make_unique<ConvolutionNode>());  break;
-            case EffectNodeKind::Vocoder:      chain->add(std::make_unique<VocoderNode>());      break;
-            case EffectNodeKind::ChannelMixer: chain->add(std::make_unique<ChannelMixerNode>()); break;
-
-            case EffectNodeKind::Plugin:
-            {
-                // Instantiated here, on the message thread: loading a binary
-                // and running third-party initialisation must never happen
-                // under the audio thread. A plugin this machine doesn't have
-                // simply leaves a gap in the chain rather than failing the
-                // load — the document still remembers which one it wanted.
-                std::string error;
-                auto instance = pluginHost_.createInstance(spec.pluginFormat, spec.pluginIdentifier,
-                                                           rateForPlugins > 0.0 ? rateForPlugins : 48000.0,
-                                                           currentBlockSize_, &error);
-                if (instance == nullptr)
-                {
-                    DBG("plugin unavailable: " << spec.pluginIdentifier.c_str() << " (" << error.c_str() << ")");
-                    break;
-                }
-
-                auto node = std::make_unique<PluginNode>(std::move(instance));
-                node->restoreState(spec.pluginState);
+            if (auto node = makeBuiltInNode(spec.kind))
                 chain->add(std::move(node));
-                break;
-            }
+            continue;
         }
+
+        // Instantiated here, on the message thread: loading a binary and
+        // running third-party initialisation must never happen under the
+        // audio thread. A plugin this machine doesn't have simply leaves a
+        // gap in the chain rather than failing the load — the document still
+        // remembers which one it wanted.
+        std::string error;
+        auto instance = pluginHost_.createInstance(spec.pluginFormat, spec.pluginIdentifier,
+                                                   rateForPlugins > 0.0 ? rateForPlugins : 48000.0,
+                                                   currentBlockSize_, &error);
+        if (instance == nullptr)
+        {
+            DBG("plugin unavailable: " << spec.pluginIdentifier.c_str() << " (" << error.c_str() << ")");
+            continue;
+        }
+
+        auto node = std::make_unique<PluginNode>(std::move(instance));
+        node->restoreState(spec.pluginState);
+        chain->add(std::move(node));
     }
 
     // Prepared here, on the message thread, where allocating a delay line is
@@ -648,13 +616,13 @@ bool AudioEngine::setTrackEffectChain(int index, const std::vector<EffectSlotSpe
     return true;
 }
 
-void AudioEngine::setTrackEffectSlotParams(int index, int slotIndex, const EffectSlotParams& params)
+void AudioEngine::setTrackEffectSlotParams(int index, int slotIndex, const EffectParamValues& values)
 {
     if (index < 0 || index >= kMaxTracks || slotIndex < 0)
         return;
 
     if (auto* chain = submittedChain_[(size_t) index])
-        chain->applyParams((size_t) slotIndex, params);
+        chain->applyParams((size_t) slotIndex, values);
 }
 
 PluginNode* AudioEngine::trackPluginNode(int index, int slotIndex)

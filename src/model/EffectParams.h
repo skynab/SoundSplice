@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
+#include "engine/EffectParamValues.h"
 #include "model/Effects.h"
 
 namespace soundsplice::model
@@ -21,9 +23,14 @@ namespace soundsplice::model
     tests/model/EffectParamsTests.cpp checks every entry against the document
     it points into, so it can't point at the wrong field.
 
-    JUCE-free so those checks run headless. Storage is unchanged: the table
-    reads and writes the existing settings structs, so project files are
-    exactly as they were.
+    The ids are also how everything else reaches a parameter: the engine's
+    nodes read their settings by them (effectParamValues), and the project
+    file saves each one under them (Serialization.h). So adding an effect is
+    its settings struct and slot member (Effects.h), an entry here, and its
+    node in engine/EffectChain.h; nothing else lists effects.
+
+    JUCE-free so those checks run headless. The values themselves live in the
+    settings structs, which the table reads and writes.
 */
 
 /** How a parameter is edited. */
@@ -686,49 +693,51 @@ inline const EffectDescriptor* descriptorFor(EffectKind kind)
     return nullptr;
 }
 
-/** A new, enabled slot of @p kind with its default settings.
+/** The built-in with id @p id (as saved in a project), or nullptr. */
+inline const EffectDescriptor* descriptorFor(std::string_view id)
+{
+    for (const auto& effect : builtInEffects())
+        if (id == effect.id)
+            return &effect;
+    return nullptr;
+}
 
-    Also sets the per-kind `enabled` flag the way loading a project does
-    (true only for the slot's own kind), so a slot added in the app compares
-    equal to the same slot after a save and reload. */
+/** @p effect's parameter with id @p id, or nullptr. */
+inline const EffectParam* paramFor(const EffectDescriptor& effect, std::string_view id)
+{
+    for (const auto& param : effect.params)
+        if (id == param.id)
+            return &param;
+    return nullptr;
+}
+
+/** A new, enabled slot of @p kind with its default settings. */
 inline EffectSlot makeEffectSlot(EffectKind kind)
 {
     EffectSlot slot;
     slot.kind    = kind;
     slot.enabled = true; // added because you want to hear it
-
-    slot.filter.enabled     = kind == EffectKind::Filter;
-    slot.delay.enabled      = kind == EffectKind::Delay;
-    slot.reverb.enabled     = kind == EffectKind::Reverb;
-    slot.drive.enabled      = kind == EffectKind::Drive;
-    slot.compressor.enabled = kind == EffectKind::Compressor;
-    slot.tremolo.enabled    = kind == EffectKind::Tremolo;
-    slot.chorus.enabled     = kind == EffectKind::Chorus;
-    slot.wobble.enabled     = kind == EffectKind::Wobble;
-    slot.gate.enabled       = kind == EffectKind::Gate;
-    slot.eqPedal.enabled    = kind == EffectKind::Eq;
-    slot.amplify.enabled    = kind == EffectKind::Amplify;
-    slot.invert.enabled     = kind == EffectKind::Invert;
-    slot.dcOffset.enabled   = kind == EffectKind::DcOffset;
-    slot.limiter.enabled    = kind == EffectKind::Limiter;
-    slot.phaser.enabled     = kind == EffectKind::Phaser;
-    slot.flanger.enabled    = kind == EffectKind::Flanger;
-    slot.bassTreble.enabled = kind == EffectKind::BassTreble;
-    slot.stereoTool.enabled = kind == EffectKind::StereoTool;
-    slot.graphicEq.enabled  = kind == EffectKind::GraphicEq;
-    slot.deEsser.enabled    = kind == EffectKind::DeEsser;
-    slot.expander.enabled   = kind == EffectKind::Expander;
-    slot.ringMod.enabled    = kind == EffectKind::RingMod;
-    slot.wah.enabled        = kind == EffectKind::Wah;
-    slot.echo.enabled       = kind == EffectKind::Echo;
-    slot.multiband.enabled  = kind == EffectKind::Multiband;
-    slot.parametricEq.enabled = kind == EffectKind::ParametricEq;
-    slot.dynamics.enabled     = kind == EffectKind::Dynamics;
-    slot.graphicEq31.enabled  = kind == EffectKind::GraphicEq31;
-    slot.convolution.enabled  = kind == EffectKind::Convolution;
-    slot.vocoder.enabled      = kind == EffectKind::Vocoder;
-    slot.channelMixer.enabled = kind == EffectKind::ChannelMixer;
     return slot;
+}
+
+/** @p slot's settings for its own kind, by parameter id: what the engine's
+    node for it reads (see engine::EffectParamValues). Empty but for
+    `enabled` for a plugin, whose parameters belong to the plugin. */
+inline engine::EffectParamValues effectParamValues(const EffectSlot& slot)
+{
+    engine::EffectParamValues values;
+    values.kind    = slot.kind;
+    values.enabled = slot.enabled;
+
+    if (const auto* effect = descriptorFor(slot.kind))
+        for (const auto& param : effect->params)
+            values.set(param.id, paramValue(slot, param));
+
+    // The one setting that isn't a number, so it has no descriptor entry.
+    if (slot.kind == EffectKind::Convolution)
+        values.setText("irFile", slot.convolution.irFile);
+
+    return values;
 }
 
 } // namespace soundsplice::model

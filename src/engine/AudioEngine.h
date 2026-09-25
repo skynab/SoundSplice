@@ -331,7 +331,7 @@ public:
         the message thread: these are atomics inside nodes it built and still
         holds a pointer to. Addressed by index rather than by kind so a chain
         with two filters is editable at all. */
-    void setTrackEffectSlotParams(int index, int slotIndex, const EffectSlotParams& params);
+    void setTrackEffectSlotParams(int index, int slotIndex, const EffectParamValues& values);
 
     /** A hosted plugin in a track's chain, for opening its editor. nullptr if
         that slot isn't a plugin (or the chain is a rebuild behind). Message

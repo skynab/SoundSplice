@@ -1,5 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <sstream>
+#include <string>
+#include <string_view>
+
 #include <model/EffectParams.h>
 #include <model/Serialization.h>
 #include <model/Song.h>
@@ -94,7 +98,6 @@ static Song makeSampleSong()
         EffectSlot filterSlot;
         filterSlot.kind             = EffectKind::Filter;
         filterSlot.enabled          = true;
-        filterSlot.filter.enabled   = true;
         filterSlot.filter.mode      = 2;
         filterSlot.filter.cutoff    = 3200.0f;
         filterSlot.filter.resonance = 0.9f;
@@ -110,7 +113,6 @@ static Song makeSampleSong()
         EffectSlot delaySlot;
         delaySlot.kind           = EffectKind::Delay;
         delaySlot.enabled        = true;
-        delaySlot.delay.enabled  = true;
         delaySlot.delay.timeMs   = 180.0f;
         delaySlot.delay.feedback = 0.55f;
         delaySlot.delay.mix      = 0.4f;
@@ -120,7 +122,6 @@ static Song makeSampleSong()
         EffectSlot driveSlot;
         driveSlot.kind           = EffectKind::Drive;
         driveSlot.enabled        = true;
-        driveSlot.drive.enabled  = true;
         driveSlot.drive.drive    = 17.5f;
         driveSlot.drive.tone     = 0.72f;
         driveSlot.drive.level    = 0.44f;
@@ -132,7 +133,6 @@ static Song makeSampleSong()
         EffectSlot compSlot;
         compSlot.kind                    = EffectKind::Compressor;
         compSlot.enabled                 = true;
-        compSlot.compressor.enabled      = true;
         compSlot.compressor.thresholdDb  = -23.5f;
         compSlot.compressor.ratio        = 6.5f;
         compSlot.compressor.attackMs     = 3.5f;
@@ -142,14 +142,12 @@ static Song makeSampleSong()
         EffectSlot tremSlot;
         tremSlot.kind            = EffectKind::Tremolo;
         tremSlot.enabled         = true;
-        tremSlot.tremolo.enabled = true;
         tremSlot.tremolo.rateHz  = 6.25f;
         tremSlot.tremolo.depth   = 0.85f;
 
         EffectSlot chorusSlot;
         chorusSlot.kind           = EffectKind::Chorus;
         chorusSlot.enabled        = true;
-        chorusSlot.chorus.enabled = true;
         chorusSlot.chorus.rateHz  = 1.75f;
         chorusSlot.chorus.depth   = 0.68f;
         chorusSlot.chorus.mix     = 0.42f;
@@ -157,7 +155,6 @@ static Song makeSampleSong()
         EffectSlot wobbleSlot;
         wobbleSlot.kind                 = EffectKind::Wobble;
         wobbleSlot.enabled              = true;
-        wobbleSlot.wobble.enabled       = true;
         wobbleSlot.wobble.rateBeats     = 0.5f;
         wobbleSlot.wobble.depth         = 0.88f;
         wobbleSlot.wobble.baseCutoffHz  = 310.0f;
@@ -172,7 +169,6 @@ static Song makeSampleSong()
         EffectSlot reverbSlot;
         reverbSlot.kind            = EffectKind::Reverb;
         reverbSlot.enabled         = true;
-        reverbSlot.reverb.enabled  = true;
         reverbSlot.reverb.roomSize = 0.8f;
         reverbSlot.reverb.damping  = 0.2f;
         reverbSlot.reverb.mix      = 0.35f;
@@ -198,6 +194,40 @@ static Song makeSampleSong()
     setSessionClip(s, 2, 1, sessionClipB); // bass track, second scene
 
     return s;
+}
+
+/** @p song as a version 1 file saved it: every built-in's settings on the
+    FXSLOT line by position (detail::kPositionalEffectParams), no FXPARAMS.
+    Only the first @p fields of them, as a file from before the rest existed. */
+static std::string asPositionalFile(const Song& song, size_t fields)
+{
+    std::istringstream in(serialize(song));
+    std::string        out, line;
+    while (std::getline(in, line))
+    {
+        if (line.rfind("FXPARAMS", 0) == 0)
+        {
+            // Every value by name, the unwritten ones at their defaults.
+            EffectSlot slot;
+            detail::readEffectParams(line.substr(8), slot);
+
+            std::string values;
+            for (size_t i = 0; i < fields; ++i)
+            {
+                const std::string_view name = detail::kPositionalEffectParams[i];
+                const auto*            effect = descriptorFor(name.substr(0, name.find('.')));
+                const auto*            param  = paramFor(*effect, name.substr(name.find('.') + 1));
+                values += " " + detail::num(paramValue(slot, *param));
+            }
+            out.pop_back(); // onto the end of the FXSLOT line just written
+            out += values + '\n';
+            continue;
+        }
+        if (line.rfind("SOUNDSPLICE", 0) == 0)
+            line = "SOUNDSPLICE 1";
+        out += line + '\n';
+    }
+    return out;
 }
 
 TEST_CASE("Song survives a serialize/deserialize round trip", "[model][io]")
@@ -584,52 +614,97 @@ TEST_CASE("Utility effects round-trip, and older files load them at their defaul
     REQUIRE(restored.tracks[0].effectChain == chain);
 
     // A file from before these existed: every FXSLOT line stops after the
-    // EQ's values, short of the utility effects' seven fields and the tone
-    // effects' seventeen after them, and the dynamics effects' twenty-four.
-    std::string text = serialize(song);
-    for (auto at = text.find("FXSLOT "); at != std::string::npos; at = text.find("FXSLOT ", at + 1))
-    {
-        const auto lineEnd = text.find('\n', at);
-        auto       cut     = lineEnd;
-        for (int field = 0; field < 7 + 17 + 24 + 5 + 15 + 24 + 17 + 31 + 3 + 6 + 5; ++field)
-            cut = text.rfind(' ', cut - 1);
-        text.erase(cut, lineEnd - cut);
-    }
-
+    // pedals' values, the 45 that came before the utility effects.
     Song old;
-    REQUIRE(deserialize(text, old));
+    REQUIRE(deserialize(asPositionalFile(song, 45), old));
     REQUIRE(old.tracks[0].effectChain.size() == 21);
     REQUIRE(old.tracks[0].effectChain[3].kind == EffectKind::Limiter);
 
     const EffectSlot defaults;
     for (const auto& slot : old.tracks[0].effectChain)
     {
-        REQUIRE(slot.amplify.gainDb == defaults.amplify.gainDb);
-        REQUIRE(slot.invert.left == defaults.invert.left);
-        REQUIRE(slot.dcOffset.cutoffHz == defaults.dcOffset.cutoffHz);
-        REQUIRE(slot.limiter.ceilingDb == defaults.limiter.ceilingDb);
-        REQUIRE(slot.limiter.releaseMs == defaults.limiter.releaseMs);
-
-        // Compared without the enabled flag, which follows the slot's own kind.
-        const auto settingsOnly = [](auto settings) { settings.enabled = false; return settings; };
-        REQUIRE(settingsOnly(slot.phaser) == defaults.phaser);
-        REQUIRE(settingsOnly(slot.flanger) == defaults.flanger);
-        REQUIRE(settingsOnly(slot.bassTreble) == defaults.bassTreble);
-        REQUIRE(settingsOnly(slot.stereoTool) == defaults.stereoTool);
-        REQUIRE(settingsOnly(slot.graphicEq) == defaults.graphicEq);
-        REQUIRE(settingsOnly(slot.deEsser) == defaults.deEsser);
-        REQUIRE(settingsOnly(slot.expander) == defaults.expander);
-        REQUIRE(settingsOnly(slot.ringMod) == defaults.ringMod);
-        REQUIRE(settingsOnly(slot.wah) == defaults.wah);
-        REQUIRE(settingsOnly(slot.echo) == defaults.echo);
-        REQUIRE(settingsOnly(slot.multiband) == defaults.multiband);
-        REQUIRE(settingsOnly(slot.parametricEq) == defaults.parametricEq);
-        REQUIRE(settingsOnly(slot.dynamics) == defaults.dynamics);
-        REQUIRE(settingsOnly(slot.graphicEq31) == defaults.graphicEq31);
+        REQUIRE(slot.amplify == defaults.amplify);
+        REQUIRE(slot.invert == defaults.invert);
+        REQUIRE(slot.dcOffset == defaults.dcOffset);
+        REQUIRE(slot.limiter == defaults.limiter);
+        REQUIRE(slot.phaser == defaults.phaser);
+        REQUIRE(slot.flanger == defaults.flanger);
+        REQUIRE(slot.bassTreble == defaults.bassTreble);
+        REQUIRE(slot.stereoTool == defaults.stereoTool);
+        REQUIRE(slot.graphicEq == defaults.graphicEq);
+        REQUIRE(slot.deEsser == defaults.deEsser);
+        REQUIRE(slot.expander == defaults.expander);
+        REQUIRE(slot.ringMod == defaults.ringMod);
+        REQUIRE(slot.wah == defaults.wah);
+        REQUIRE(slot.echo == defaults.echo);
+        REQUIRE(slot.multiband == defaults.multiband);
+        REQUIRE(slot.parametricEq == defaults.parametricEq);
+        REQUIRE(slot.dynamics == defaults.dynamics);
+        REQUIRE(slot.graphicEq31 == defaults.graphicEq31);
         REQUIRE(slot.convolution.mix == defaults.convolution.mix);
-        REQUIRE(settingsOnly(slot.vocoder) == defaults.vocoder);
-        REQUIRE(settingsOnly(slot.channelMixer) == defaults.channelMixer);
+        REQUIRE(slot.vocoder == defaults.vocoder);
+        REQUIRE(slot.channelMixer == defaults.channelMixer);
     }
+}
+
+TEST_CASE("A version 1 file's positional effect settings load in full", "[model][io]")
+{
+    // The table that reads them is frozen: these are the old line's first and
+    // last fields and each group's first, as that build wrote them.
+    const auto& order = detail::kPositionalEffectParams;
+    REQUIRE(std::size(order) == 197);
+    REQUIRE(std::string(order[0]) == "filter.mode");
+    REQUIRE(std::string(order[18]) == "compressor.threshold");
+    REQUIRE(std::string(order[45]) == "amplify.gain");
+    REQUIRE(std::string(order[52]) == "phaser.rate");
+    REQUIRE(std::string(order[69]) == "graphicEq.band31");
+    REQUIRE(std::string(order[93]) == "echo.time");
+    REQUIRE(std::string(order[98]) == "multiband.lowCrossover");
+    REQUIRE(std::string(order[111]) == "parametricEq.band1Type");
+    REQUIRE(std::string(order[135]) == "dynamics.points");
+    REQUIRE(std::string(order[152]) == "graphicEq31.band1");
+    REQUIRE(std::string(order[183]) == "convolution.mix");
+    REQUIRE(std::string(order[186]) == "vocoder.carrier");
+    REQUIRE(std::string(order[192]) == "channelMixer.leftToLeft");
+    REQUIRE(std::string(order[196]) == "channelMixer.midSide");
+
+    // Every parameter of every built-in at the top of its range, in one chain.
+    Song  song;
+    auto& track = addTrack(song, TrackType::Audio, "Effects");
+    for (const auto& effect : builtInEffects())
+    {
+        auto slot = makeEffectSlot(effect.kind);
+        for (const auto& param : effect.params)
+            setParamValue(slot, param, param.max);
+        track.effectChain.push_back(slot);
+    }
+
+    Song old;
+    REQUIRE(deserialize(asPositionalFile(song, std::size(order)), old));
+    REQUIRE(old.tracks[0].effectChain == song.tracks[0].effectChain);
+}
+
+TEST_CASE("Effect settings are saved by name, and unknown names are skipped", "[model][io]")
+{
+    Song      song;
+    const int id     = addTrack(song, TrackType::Audio, "Vox").id;
+    auto      filter = makeEffectSlot(EffectKind::Filter);
+    filter.filter.cutoff = 440.0f;
+    auto delay           = makeEffectSlot(EffectKind::Delay);
+    delay.filter.mode    = 2; // another kind's setting, kept for switching back
+    findTrack(song, id)->effectChain = { filter, delay };
+
+    auto text = serialize(song);
+    REQUIRE(text.find("FXPARAMS filter.mode=0 filter.cutoff=440 filter.resonance=") != std::string::npos);
+    REQUIRE(text.find("FXPARAMS filter.mode=2 delay.time=300 ") != std::string::npos);
+
+    // A name from a newer build, or one no longer used, doesn't stop the rest.
+    const auto at = text.find("FXPARAMS ");
+    text.insert(at + 9, "ghost.level=3 filter.ghost=1 nonsense filter.cutoff=oops ");
+
+    Song restored;
+    REQUIRE(deserialize(text, restored));
+    REQUIRE(restored.tracks[0].effectChain == findTrack(song, id)->effectChain);
 }
 
 TEST_CASE("A clip's spectral edits round-trip", "[model][serialization]")

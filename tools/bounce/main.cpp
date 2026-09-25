@@ -40,7 +40,7 @@
     path the app does not play - the one thing a verification tool must never
     do, and silently, since everything still ran and only the numbers lied.
 
-    Now it goes through the same engine::makeEffectNode / engine::toSlotParams
+    Now it goes through the same engine::makeConfiguredNode
     the app uses, so a kind or a parameter added anywhere reaches this
     automatically. Plugin slots still return null (no host here) and are
     skipped by the callers. */
@@ -1625,7 +1625,7 @@ int main(int argc, char** argv)
     {
         struct GainNode final : EffectProcessor
         {
-            EffectNodeKind kind() const noexcept override { return EffectNodeKind::Filter; }
+            EffectKind kind() const noexcept override { return EffectKind::Filter; }
             void prepare(double, int) override {}
             void setEnabled(bool) override {}
             void process(juce::AudioBuffer<float>& buffer) override { buffer.applyGain(0.25f); }
@@ -1633,7 +1633,7 @@ int main(int argc, char** argv)
 
         struct ClipNode final : EffectProcessor
         {
-            EffectNodeKind kind() const noexcept override { return EffectNodeKind::Filter; }
+            EffectKind kind() const noexcept override { return EffectKind::Filter; }
             void prepare(double, int) override {}
             void setEnabled(bool) override {}
             void process(juce::AudioBuffer<float>& buffer) override

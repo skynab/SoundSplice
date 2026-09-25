@@ -1622,45 +1622,12 @@ void MainComponent::syncEngineTracks()
         for (const auto& slot : track.effectChain)
         {
             engine::EffectSlotSpec spec;
-            switch (slot.kind)
+            spec.kind = slot.kind;
+            if (slot.kind == model::EffectKind::Plugin)
             {
-                case model::EffectKind::Filter: spec.kind = engine::EffectNodeKind::Filter; break;
-                case model::EffectKind::Delay:  spec.kind = engine::EffectNodeKind::Delay;  break;
-                case model::EffectKind::Reverb: spec.kind = engine::EffectNodeKind::Reverb; break;
-                case model::EffectKind::Drive:  spec.kind = engine::EffectNodeKind::Drive;  break;
-                case model::EffectKind::Compressor: spec.kind = engine::EffectNodeKind::Compressor; break;
-                case model::EffectKind::Tremolo:    spec.kind = engine::EffectNodeKind::Tremolo;    break;
-                case model::EffectKind::Chorus:     spec.kind = engine::EffectNodeKind::Chorus;     break;
-                case model::EffectKind::Wobble:     spec.kind = engine::EffectNodeKind::Wobble;     break;
-                case model::EffectKind::Gate:       spec.kind = engine::EffectNodeKind::Gate;       break;
-                case model::EffectKind::Eq:         spec.kind = engine::EffectNodeKind::Eq;         break;
-                case model::EffectKind::Amplify:    spec.kind = engine::EffectNodeKind::Amplify;    break;
-                case model::EffectKind::Invert:     spec.kind = engine::EffectNodeKind::Invert;     break;
-                case model::EffectKind::DcOffset:   spec.kind = engine::EffectNodeKind::DcOffset;   break;
-                case model::EffectKind::Limiter:    spec.kind = engine::EffectNodeKind::Limiter;    break;
-                case model::EffectKind::Phaser:     spec.kind = engine::EffectNodeKind::Phaser;     break;
-                case model::EffectKind::Flanger:    spec.kind = engine::EffectNodeKind::Flanger;    break;
-                case model::EffectKind::BassTreble: spec.kind = engine::EffectNodeKind::BassTreble; break;
-                case model::EffectKind::StereoTool: spec.kind = engine::EffectNodeKind::StereoTool; break;
-                case model::EffectKind::GraphicEq:  spec.kind = engine::EffectNodeKind::GraphicEq;  break;
-                case model::EffectKind::DeEsser:    spec.kind = engine::EffectNodeKind::DeEsser;    break;
-                case model::EffectKind::Expander:   spec.kind = engine::EffectNodeKind::Expander;   break;
-                case model::EffectKind::RingMod:    spec.kind = engine::EffectNodeKind::RingMod;    break;
-                case model::EffectKind::Wah:        spec.kind = engine::EffectNodeKind::Wah;        break;
-                case model::EffectKind::Echo:       spec.kind = engine::EffectNodeKind::Echo;       break;
-                case model::EffectKind::Multiband:  spec.kind = engine::EffectNodeKind::Multiband;  break;
-                case model::EffectKind::ParametricEq: spec.kind = engine::EffectNodeKind::ParametricEq; break;
-                case model::EffectKind::Dynamics:     spec.kind = engine::EffectNodeKind::Dynamics;     break;
-                case model::EffectKind::GraphicEq31:  spec.kind = engine::EffectNodeKind::GraphicEq31;  break;
-                case model::EffectKind::Convolution:  spec.kind = engine::EffectNodeKind::Convolution;  break;
-                case model::EffectKind::Vocoder:      spec.kind = engine::EffectNodeKind::Vocoder;      break;
-                case model::EffectKind::ChannelMixer: spec.kind = engine::EffectNodeKind::ChannelMixer; break;
-                case model::EffectKind::Plugin:
-                    spec.kind             = engine::EffectNodeKind::Plugin;
-                    spec.pluginFormat     = pluginFormatName(slot.plugin.format);
-                    spec.pluginIdentifier = slot.plugin.identifier;
-                    spec.pluginState      = slot.plugin.state;
-                    break;
+                spec.pluginFormat     = pluginFormatName(slot.plugin.format);
+                spec.pluginIdentifier = slot.plugin.identifier;
+                spec.pluginState      = slot.plugin.state;
             }
             chainSpecs.push_back(std::move(spec));
         }
@@ -1673,7 +1640,7 @@ void MainComponent::syncEngineTracks()
         // Parameters, one call per slot, addressed by position — a chain may
         // hold two filters, and "the filter" stops meaning anything then.
         for (size_t s = 0; s < track.effectChain.size(); ++s)
-            engine_.setTrackEffectSlotParams(i, (int) s, engine::toSlotParams(track.effectChain[s]));
+            engine_.setTrackEffectSlotParams(i, (int) s, model::effectParamValues(track.effectChain[s]));
     }
     engine_.setActiveTrackCount(n);
 

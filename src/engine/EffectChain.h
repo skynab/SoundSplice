@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <string>
@@ -7,6 +8,8 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include "engine/EffectKind.h"
+#include "engine/EffectParamValues.h"
 #include "engine/DelayEffect.h"
 #include "engine/DriveEffect.h"
 #include "engine/PedalEffects.h"
@@ -24,55 +27,15 @@
 
 namespace soundsplice::engine
 {
-/** What one node of a chain is. Mirrors model::EffectKind, which `engine`
-    can't reference: `model` already depends on `engine` (a Clip owns an
-    engine::Pattern), so the dependency can't run both ways. The owner
-    converts at the boundary, as it does for automation curves. */
-enum class EffectNodeKind
-{
-    Filter = 0,
-    Delay  = 1,
-    Reverb = 2,
-    Plugin = 3,
-    Drive      = 4,
-    Compressor = 5,
-    Tremolo    = 6,
-    Chorus     = 7,
-    Wobble     = 8,
-    Gate       = 9,
-    Eq         = 10,
-    Amplify    = 11,
-    Invert     = 12,
-    DcOffset   = 13,
-    Limiter    = 14,
-    Phaser     = 15,
-    Flanger    = 16,
-    BassTreble = 17,
-    StereoTool = 18,
-    GraphicEq  = 19,
-    DeEsser    = 20,
-    Expander   = 21,
-    RingMod    = 22,
-    Wah        = 23,
-    Echo       = 24,
-    Multiband  = 25,
-    ParametricEq = 26,
-    Dynamics     = 27,
-    GraphicEq31  = 28,
-    Convolution  = 29,
-    Vocoder      = 30,
-    ChannelMixer = 31
-};
-
 /** What a chain slot should be. Carries plugin identity as plain strings —
     the engine can't reference model::PluginRef, and this is the same boundary
     the rest of the engine keeps. */
 struct EffectSlotSpec
 {
-    EffectNodeKind kind = EffectNodeKind::Filter;
-    std::string    pluginFormat;
-    std::string    pluginIdentifier;
-    std::string    pluginState; // base64, applied after instantiation
+    EffectKind  kind = EffectKind::Filter;
+    std::string pluginFormat;
+    std::string pluginIdentifier;
+    std::string pluginState; // base64, applied after instantiation
 
     /** Only identity matters for deciding whether to rebuild — a changed
         preset is restored onto the existing instance, not a new chain. */
@@ -84,149 +47,6 @@ struct EffectSlotSpec
     }
 };
 
-/** Every built-in's parameters for one slot, pushed by index. All of them
-    travel together because only the ones matching the slot's kind are read —
-    the same trade model::EffectSlot makes, so switching a slot's kind doesn't
-    lose the settings of the others. */
-struct EffectSlotParams
-{
-    bool  enabled = false;
-
-    int   filterMode      = 0;
-    float filterCutoff    = 1000.0f;
-    float filterResonance = 0.707f;
-
-    float delayTimeMs   = 300.0f;
-    float delayFeedback = 0.35f;
-    float delayMix      = 0.3f;
-
-    float reverbRoomSize = 0.5f;
-    float reverbDamping  = 0.5f;
-    float reverbMix      = 0.3f;
-
-    float driveAmount   = 4.0f;
-    float driveTone     = 0.5f;
-    float driveLevel    = 0.7f;
-    bool  driveHardClip = false;
-    bool  driveCabinet  = true;
-    float driveAsymmetry = 0.0f;
-    bool  driveOversample = false;
-    int   driveStages     = 1;
-    bool  driveCabinetIr  = false;
-
-    float compThresholdDb = -18.0f;
-    float compRatio       = 4.0f;
-    float compAttackMs    = 10.0f;
-    float compReleaseMs   = 120.0f;
-    float compMakeUpDb    = 0.0f;
-
-    float tremoloRateHz = 5.0f;
-    float tremoloDepth  = 0.5f;
-
-    float chorusRateHz = 0.6f;
-    float chorusDepth  = 0.5f;
-    float chorusMix    = 0.5f;
-
-    float wobbleRateBeats    = 0.25f;
-    float wobbleDepth        = 0.7f;
-    float wobbleBaseCutoffHz = 200.0f;
-    float wobbleResonance    = 0.9f;
-    float wobbleMix          = 1.0f;
-
-    float gateThresholdDb = -40.0f;
-    float gateRangeDb     = 60.0f;
-    float gateAttackMs    = 2.0f;
-    float gateHoldMs      = 20.0f;
-    float gateReleaseMs   = 150.0f;
-
-    float eqLowShelfHz  = 100.0f;
-    float eqLowShelfDb  = 0.0f;
-    float eqMidHz       = 800.0f;
-    float eqMidDb       = 0.0f;
-    float eqMidQ        = 1.0f;
-    float eqHighShelfHz = 4000.0f;
-    float eqHighShelfDb = 0.0f;
-
-    float amplifyGainDb    = 0.0f;
-    bool  invertLeft       = true;
-    bool  invertRight      = true;
-    float dcCutoffHz       = 5.0f;
-    float limiterInputDb   = 0.0f;
-    float limiterCeilingDb = -1.0f;
-    float limiterReleaseMs = 100.0f;
-
-    float phaserRateHz     = 0.5f;
-    float phaserDepth      = 0.7f;
-    float phaserFeedback   = 0.5f;
-    int   phaserStagePairs = 3;
-    float phaserMix        = 0.5f;
-    float flangerRateHz    = 0.25f;
-    float flangerDepth     = 0.7f;
-    float flangerDelayMs   = 1.0f;
-    float flangerFeedback  = 0.5f;
-    float flangerMix       = 0.5f;
-    float bassDb           = 0.0f;
-    float trebleDb         = 0.0f;
-    float toneVolumeDb     = 0.0f;
-    float stereoWidth      = 1.0f;
-    float stereoBalance    = 0.0f;
-    bool  stereoMono       = false;
-    bool  stereoSwap       = false;
-
-    float graphicEqDb[10] {};
-    float deEssFrequencyHz = 5500.0f;
-    float deEssThresholdDb = -30.0f;
-    float deEssReductionDb = 12.0f;
-    float expThresholdDb   = -40.0f;
-    float expRatio         = 2.0f;
-    float expRangeDb       = 40.0f;
-    float expAttackMs      = 5.0f;
-    float expReleaseMs     = 100.0f;
-    float ringFrequencyHz  = 440.0f;
-    float ringMix          = 1.0f;
-    float wahRateHz        = 1.5f;
-    float wahDepth         = 0.8f;
-    float wahResonance     = 4.0f;
-    float wahMix           = 1.0f;
-    float echoTimeMs       = 250.0f;
-    int   echoTaps         = 3;
-    float echoDecay        = 0.5f;
-    float echoMix          = 0.35f;
-    bool  echoPingPong     = false;
-
-    float mbLowHz          = 200.0f;
-    float mbHighHz         = 3000.0f;
-    float mbThresholdDb[3] { -20.0f, -20.0f, -20.0f };
-    float mbRatio[3]       { 3.0f, 3.0f, 3.0f };
-    float mbMakeUpDb[3]    {};
-    float mbAttackMs       = 10.0f;
-    float mbReleaseMs      = 150.0f;
-
-    std::array<ParametricBand, ParametricEq::kBands> peqBands {};
-
-    TransferCurve dynCurve;
-    int           dynDetector  = 0;
-    float         dynAttackMs  = 5.0f;
-    float         dynReleaseMs = 150.0f;
-    float         dynMakeUpDb  = 0.0f;
-
-    std::array<float, ThirdOctaveEq::kBands> geq31Db {};
-
-    std::string convIrFile;
-    float       convMix        = 0.3f;
-    float       convPreDelayMs = 0.0f;
-    float       convGainDb     = 0.0f;
-
-    int   vocCarrier    = 1;
-    float vocPitchHz    = 110.0f;
-    int   vocBands      = 16;
-    float vocResponseMs = 30.0f;
-    float vocMix        = 1.0f;
-    float vocGainDb     = 0.0f;
-
-    channelmixer::Matrix mixerMatrix;
-};
-
 /** One effect in a track's chain. Virtual dispatch costs one indirect call
     per node per block, which is nothing against the work inside — and it's
     what lets a node hold only the state its own kind needs, instead of every
@@ -235,7 +55,7 @@ struct EffectProcessor
 {
     virtual ~EffectProcessor() = default;
 
-    virtual EffectNodeKind kind() const noexcept = 0;
+    virtual EffectKind kind() const noexcept = 0;
     virtual void prepare(double sampleRate, int blockSize) = 0;
     virtual void process(juce::AudioBuffer<float>& buffer) = 0;
 
@@ -247,558 +67,458 @@ struct EffectProcessor
         A no-op for every node except Wobble: bpm has no meaning to a filter, a
         delay in milliseconds, or a plugin, so only the one node that actually
         needs it overrides this. A default here rather than widening
-        process()'s signature, so the other seven nodes' call sites don't have
+        process()'s signature, so the other nodes' call sites don't have
         to thread through a value none of them read. */
     virtual void setBpm(double /*bpm*/) {}
 
+    /** Bypass and every parameter, from one slot's settings. Message thread:
+        the setters behind it store atomics the audio thread reads.
+
+        The live chain, the offline "apply effects to a selection" path and
+        the bounce tool all configure nodes through this, so they can't set
+        one up differently from each other - which they once did. */
+    void applyParams(const EffectParamValues& values)
+    {
+        setEnabled(values.enabled);
+        apply(values);
+    }
+
+protected:
+    /** Reads this node's parameters out of @p values, by the ids its
+        model::EffectDescriptor gives them. A hosted plugin keeps its own. */
+    virtual void apply(const EffectParamValues& /*values*/) {}
 };
 
-struct FilterNode final : EffectProcessor
+/** What every built-in node is: one effect object, prepared, run and
+    bypassed. Each node below adds only how it reads its parameters. */
+template <typename Effect, EffectKind Kind>
+struct BuiltInNode : EffectProcessor
 {
-    FilterEffect effect;
+    Effect effect;
 
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Filter; }
+    EffectKind kind() const noexcept override { return Kind; }
     void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
     void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
 };
 
-struct DelayNode final : EffectProcessor
+struct FilterNode final : BuiltInNode<FilterEffect, EffectKind::Filter>
 {
-    DelayEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Delay; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setMode(p.getInt("mode"));
+        effect.setCutoff(p.getFloat("cutoff"));
+        effect.setResonance(p.getFloat("resonance"));
+    }
 };
 
-struct DriveNode final : EffectProcessor
+struct DelayNode final : BuiltInNode<DelayEffect, EffectKind::Delay>
 {
-    DriveEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Drive; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setTimeMs(p.getFloat("time"));
+        effect.setFeedback(p.getFloat("feedback"));
+        effect.setMix(p.getFloat("mix"));
+    }
 };
 
-struct CompressorNode final : EffectProcessor
+struct ReverbNode final : BuiltInNode<ReverbEffect, EffectKind::Reverb>
 {
-    CompressorEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Compressor; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setRoomSize(p.getFloat("room"));
+        effect.setDamping(p.getFloat("damping"));
+        effect.setMix(p.getFloat("mix"));
+    }
 };
 
-struct TremoloNode final : EffectProcessor
+struct DriveNode final : BuiltInNode<DriveEffect, EffectKind::Drive>
 {
-    TremoloEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Tremolo; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setDrive(p.getFloat("drive"));
+        effect.setTone(p.getFloat("tone"));
+        effect.setLevel(p.getFloat("level"));
+        effect.setHardClip(p.getBool("hardClip"));
+        effect.setCabinet(p.getBool("cabinet"));
+        effect.setAsymmetry(p.getFloat("asymmetry"));
+        effect.setOversample(p.getBool("oversample"));
+        effect.setStages(p.getInt("stages"));
+        effect.setCabinetIr(p.getBool("cabinetIr"));
+    }
 };
 
-struct ChorusNode final : EffectProcessor
+struct CompressorNode final : BuiltInNode<CompressorEffect, EffectKind::Compressor>
 {
-    ChorusEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Chorus; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setThresholdDb(p.getFloat("threshold"));
+        effect.setRatio(p.getFloat("ratio"));
+        effect.setAttackMs(p.getFloat("attack"));
+        effect.setReleaseMs(p.getFloat("release"));
+        effect.setMakeUpDb(p.getFloat("makeUp"));
+    }
 };
 
-struct WobbleNode final : EffectProcessor
+struct TremoloNode final : BuiltInNode<TremoloEffect, EffectKind::Tremolo>
 {
-    WobbleEffect effect;
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setRateHz(p.getFloat("rate"));
+        effect.setDepth(p.getFloat("depth"));
+    }
+};
 
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Wobble; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+struct ChorusNode final : BuiltInNode<ChorusEffect, EffectKind::Chorus>
+{
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setRateHz(p.getFloat("rate"));
+        effect.setDepth(p.getFloat("depth"));
+        effect.setMix(p.getFloat("mix"));
+    }
+};
+
+struct WobbleNode final : BuiltInNode<WobbleEffect, EffectKind::Wobble>
+{
     void setBpm(double bpm) override { effect.setBpm(bpm); }
+
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setRateInBeats(p.getFloat("rate"));
+        effect.setDepth(p.getFloat("depth"));
+        effect.setBaseCutoffHz(p.getFloat("cutoff"));
+        effect.setResonance(p.getFloat("resonance"));
+        effect.setMix(p.getFloat("mix"));
+    }
 };
 
-struct GateNode final : EffectProcessor
+struct GateNode final : BuiltInNode<GateEffect, EffectKind::Gate>
 {
-    GateEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Gate; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setThresholdDb(p.getFloat("threshold"));
+        effect.setRangeDb(p.getFloat("range"));
+        effect.setAttackMs(p.getFloat("attack"));
+        effect.setHoldMs(p.getFloat("hold"));
+        effect.setReleaseMs(p.getFloat("release"));
+    }
 };
 
-struct EqNode final : EffectProcessor
+struct EqNode final : BuiltInNode<EqPedalEffect, EffectKind::Eq>
 {
-    EqPedalEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Eq; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setLowShelfHz(p.getFloat("lowFreq"));
+        effect.setLowShelfDb(p.getFloat("low"));
+        effect.setMidHz(p.getFloat("midFreq"));
+        effect.setMidDb(p.getFloat("mid"));
+        effect.setMidQ(p.getFloat("midQ"));
+        effect.setHighShelfHz(p.getFloat("highFreq"));
+        effect.setHighShelfDb(p.getFloat("high"));
+    }
 };
 
-struct AmplifyNode final : EffectProcessor
+struct AmplifyNode final : BuiltInNode<AmplifyEffect, EffectKind::Amplify>
 {
-    AmplifyEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Amplify; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setGainDb(p.getFloat("gain"));
+    }
 };
 
-struct InvertNode final : EffectProcessor
+struct InvertNode final : BuiltInNode<InvertEffect, EffectKind::Invert>
 {
-    InvertEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Invert; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setLeft(p.getBool("left"));
+        effect.setRight(p.getBool("right"));
+    }
 };
 
-struct DcOffsetNode final : EffectProcessor
+struct DcOffsetNode final : BuiltInNode<DcOffsetEffect, EffectKind::DcOffset>
 {
-    DcOffsetEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::DcOffset; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setCutoffHz(p.getFloat("cutoff"));
+    }
 };
 
-struct LimiterNode final : EffectProcessor
+struct LimiterNode final : BuiltInNode<LimiterEffect, EffectKind::Limiter>
 {
-    LimiterEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Limiter; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setInputGainDb(p.getFloat("input"));
+        effect.setCeilingDb(p.getFloat("ceiling"));
+        effect.setReleaseMs(p.getFloat("release"));
+    }
 };
 
-struct PhaserNode final : EffectProcessor
+struct PhaserNode final : BuiltInNode<PhaserEffect, EffectKind::Phaser>
 {
-    PhaserEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Phaser; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setRateHz(p.getFloat("rate"));
+        effect.setDepth(p.getFloat("depth"));
+        effect.setFeedback(p.getFloat("feedback"));
+        effect.setStages(p.getInt("stages") * 2); // stored as pairs, so every setting makes whole notches
+        effect.setMix(p.getFloat("mix"));
+    }
 };
 
-struct FlangerNode final : EffectProcessor
+struct FlangerNode final : BuiltInNode<FlangerEffect, EffectKind::Flanger>
 {
-    FlangerEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Flanger; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setRateHz(p.getFloat("rate"));
+        effect.setDepth(p.getFloat("depth"));
+        effect.setDelayMs(p.getFloat("delay"));
+        effect.setFeedback(p.getFloat("feedback"));
+        effect.setMix(p.getFloat("mix"));
+    }
 };
 
-struct BassTrebleNode final : EffectProcessor
+struct BassTrebleNode final : BuiltInNode<BassTrebleEffect, EffectKind::BassTreble>
 {
-    BassTrebleEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::BassTreble; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setBassDb(p.getFloat("bass"));
+        effect.setTrebleDb(p.getFloat("treble"));
+        effect.setVolumeDb(p.getFloat("volume"));
+    }
 };
 
-struct StereoToolNode final : EffectProcessor
+struct StereoToolNode final : BuiltInNode<StereoToolEffect, EffectKind::StereoTool>
 {
-    StereoToolEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::StereoTool; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setWidth(p.getFloat("width"));
+        effect.setBalance(p.getFloat("balance"));
+        effect.setMono(p.getBool("mono"));
+        effect.setSwap(p.getBool("swap"));
+    }
 };
 
-struct GraphicEqNode final : EffectProcessor
+struct GraphicEqNode final : BuiltInNode<GraphicEqEffect, EffectKind::GraphicEq>
 {
-    GraphicEqEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::GraphicEq; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        static constexpr const char* kIds[] { "band31", "band62", "band125", "band250", "band500",
+                                             "band1k",  "band2k",  "band4k",  "band8k",  "band16k" };
+        for (int band = 0; band < 10; ++band)
+            effect.setBandDb(band, p.getFloat(kIds[band]));
+    }
 };
 
-struct DeEsserNode final : EffectProcessor
+struct DeEsserNode final : BuiltInNode<DeEsserEffect, EffectKind::DeEsser>
 {
-    DeEsserEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::DeEsser; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setFrequencyHz(p.getFloat("frequency"));
+        effect.setThresholdDb(p.getFloat("threshold"));
+        effect.setMaxReductionDb(p.getFloat("reduction"));
+    }
 };
 
-struct ExpanderNode final : EffectProcessor
+struct ExpanderNode final : BuiltInNode<ExpanderEffect, EffectKind::Expander>
 {
-    ExpanderEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Expander; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setThresholdDb(p.getFloat("threshold"));
+        effect.setRatio(p.getFloat("ratio"));
+        effect.setRangeDb(p.getFloat("range"));
+        effect.setAttackMs(p.getFloat("attack"));
+        effect.setReleaseMs(p.getFloat("release"));
+    }
 };
 
-struct RingModNode final : EffectProcessor
+struct RingModNode final : BuiltInNode<RingModulatorEffect, EffectKind::RingMod>
 {
-    RingModulatorEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::RingMod; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setFrequencyHz(p.getFloat("frequency"));
+        effect.setMix(p.getFloat("mix"));
+    }
 };
 
-struct WahNode final : EffectProcessor
+struct WahNode final : BuiltInNode<WahEffect, EffectKind::Wah>
 {
-    WahEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Wah; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setRateHz(p.getFloat("rate"));
+        effect.setDepth(p.getFloat("depth"));
+        effect.setResonance(p.getFloat("resonance"));
+        effect.setMix(p.getFloat("mix"));
+    }
 };
 
-struct EchoNode final : EffectProcessor
+struct EchoNode final : BuiltInNode<EchoEffect, EffectKind::Echo>
 {
-    EchoEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Echo; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setTimeMs(p.getFloat("time"));
+        effect.setTaps(p.getInt("taps"));
+        effect.setDecay(p.getFloat("decay"));
+        effect.setMix(p.getFloat("mix"));
+        effect.setPingPong(p.getBool("pingPong"));
+    }
 };
 
-struct ChannelMixerNode final : EffectProcessor
+struct MultibandNode final : BuiltInNode<MultibandEffect, EffectKind::Multiband>
 {
-    ChannelMixerEffect effect;
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setLowHz(p.getFloat("lowCrossover"));
+        effect.setHighHz(p.getFloat("highCrossover"));
+        effect.setAttackMs(p.getFloat("attack"));
+        effect.setReleaseMs(p.getFloat("release"));
 
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::ChannelMixer; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+        static constexpr const char* kBands[] { "low", "mid", "high" };
+        for (int band = 0; band < 3; ++band)
+        {
+            const std::string name = kBands[band];
+            effect.setBand(band, p.getFloat(name + "Threshold"), p.getFloat(name + "Ratio"), p.getFloat(name + "MakeUp"));
+        }
+    }
 };
 
-struct VocoderNode final : EffectProcessor
+struct ParametricEqNode final : BuiltInNode<ParametricEqEffect, EffectKind::ParametricEq>
 {
-    VocoderEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Vocoder; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        for (int band = 0; band < ParametricEq::kBands; ++band)
+        {
+            const auto     name = "band" + std::to_string(band + 1);
+            ParametricBand settings;
+            settings.type   = (ParametricBand::Type) std::clamp(p.getInt(name + "Type"), 0, 6);
+            settings.hz     = p.getFloat(name + "Hz");
+            settings.gainDb = p.getFloat(name + "Gain");
+            settings.q      = p.getFloat(name + "Q");
+            effect.setBand(band, settings);
+        }
+    }
 };
 
-struct ConvolutionNode final : EffectProcessor
+struct DynamicsNode final : BuiltInNode<DynamicsProcessorEffect, EffectKind::Dynamics>
 {
-    ConvolutionReverbEffect effect;
-    std::string             loadedFile; // message thread only
-    bool                    loaded = false;
+    void apply(const EffectParamValues& p) override
+    {
+        TransferCurve curve;
+        curve.count = std::clamp(p.getInt("points"), 2, TransferCurve::kMaxPoints);
+        for (int point = 0; point < TransferCurve::kMaxPoints; ++point)
+        {
+            const auto name = "point" + std::to_string(point + 1);
+            curve.points[(size_t) point] = { p.getFloat(name + "In"), p.getFloat(name + "Out") };
+        }
 
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Convolution; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+        effect.setCurve(curve);
+        effect.setDetector((DynamicsProcessor::Detector) p.getInt("detector"));
+        effect.setAttackMs(p.getFloat("attack"));
+        effect.setReleaseMs(p.getFloat("release"));
+        effect.setMakeUpDb(p.getFloat("makeUp"));
+    }
 };
 
-struct GraphicEq31Node final : EffectProcessor
+struct GraphicEq31Node final : BuiltInNode<ThirdOctaveEqEffect, EffectKind::GraphicEq31>
 {
-    ThirdOctaveEqEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::GraphicEq31; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        for (int band = 0; band < ThirdOctaveEq::kBands; ++band)
+            effect.setBandDb(band, p.getFloat("band" + std::to_string(band + 1)));
+    }
 };
 
-struct DynamicsNode final : EffectProcessor
+struct ConvolutionNode final : BuiltInNode<ConvolutionReverbEffect, EffectKind::Convolution>
 {
-    DynamicsProcessorEffect effect;
+    std::string loadedFile; // message thread only
+    bool        loaded = false;
 
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Dynamics; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setMix(p.getFloat("mix"));
+        effect.setPreDelayMs(p.getFloat("preDelay"));
+        effect.setGainDb(p.getFloat("gain"));
+        effect.collectRetired();
+
+        // Read only when the file changes, not on every parameter move. A
+        // file that can't be read leaves the built-in hall.
+        const auto& file = p.text("irFile");
+        if (! loaded || file != loadedFile)
+        {
+            loaded     = true;
+            loadedFile = file;
+            std::vector<std::vector<float>> channels;
+            double                          rate = 0.0;
+            loadImpulseFile(file, channels, rate);
+            effect.setImpulse(std::move(channels), rate);
+        }
+    }
 };
 
-struct ParametricEqNode final : EffectProcessor
+struct VocoderNode final : BuiltInNode<VocoderEffect, EffectKind::Vocoder>
 {
-    ParametricEqEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::ParametricEq; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setCarrier(p.getInt("carrier"));
+        effect.setPitchHz(p.getFloat("pitch"));
+        effect.setBands(p.getInt("bands"));
+        effect.setResponseMs(p.getFloat("response"));
+        effect.setMix(p.getFloat("mix"));
+        effect.setGainDb(p.getFloat("gain"));
+    }
 };
 
-struct MultibandNode final : EffectProcessor
+struct ChannelMixerNode final : BuiltInNode<ChannelMixerEffect, EffectKind::ChannelMixer>
 {
-    MultibandEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Multiband; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
+    void apply(const EffectParamValues& p) override
+    {
+        effect.setMatrix({ p.getFloat("leftToLeft"), p.getFloat("rightToLeft"), p.getFloat("leftToRight"),
+                          p.getFloat("rightToRight"), (channelmixer::MidSide) std::clamp(p.getInt("midSide"), 0, 3) });
+    }
 };
 
-struct ReverbNode final : EffectProcessor
+/** A new node for a built-in effect kind, or nullptr for a kind that can't
+    be built here (Plugin, which needs the plugin host). The one list of
+    which node realises which kind: the live chain, the offline render and
+    the bounce tool all build through it. */
+inline std::unique_ptr<EffectProcessor> makeBuiltInNode(EffectKind kind)
 {
-    ReverbEffect effect;
-
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Reverb; }
-    void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
-    void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
-    void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
-};
-
-/** Applies one slot's parameters to a node, by dynamic kind.
-
-    A free function rather than only an EffectChain member because a node is
-    also configured outside a chain - the offline "apply effects to a
-    selection" path and the bounce tool both build a single node and need it
-    set up exactly as the live chain would. Having the dispatch in one place
-    is what stops those from drifting, which they had. */
-inline void applyParams(EffectProcessor& node, const EffectSlotParams& params)
-{
-        node.setEnabled(params.enabled);
-
-        if (auto* filter = dynamic_cast<FilterNode*>(&node))
-        {
-            filter->effect.setMode(params.filterMode);
-            filter->effect.setCutoff(params.filterCutoff);
-            filter->effect.setResonance(params.filterResonance);
-        }
-        else if (auto* delay = dynamic_cast<DelayNode*>(&node))
-        {
-            delay->effect.setTimeMs(params.delayTimeMs);
-            delay->effect.setFeedback(params.delayFeedback);
-            delay->effect.setMix(params.delayMix);
-        }
-        else if (auto* reverb = dynamic_cast<ReverbNode*>(&node))
-        {
-            reverb->effect.setRoomSize(params.reverbRoomSize);
-            reverb->effect.setDamping(params.reverbDamping);
-            reverb->effect.setMix(params.reverbMix);
-        }
-        else if (auto* comp = dynamic_cast<CompressorNode*>(&node))
-        {
-            comp->effect.setThresholdDb(params.compThresholdDb);
-            comp->effect.setRatio(params.compRatio);
-            comp->effect.setAttackMs(params.compAttackMs);
-            comp->effect.setReleaseMs(params.compReleaseMs);
-            comp->effect.setMakeUpDb(params.compMakeUpDb);
-        }
-        else if (auto* chorus = dynamic_cast<ChorusNode*>(&node))
-        {
-            chorus->effect.setRateHz(params.chorusRateHz);
-            chorus->effect.setDepth(params.chorusDepth);
-            chorus->effect.setMix(params.chorusMix);
-        }
-        else if (auto* trem = dynamic_cast<TremoloNode*>(&node))
-        {
-            trem->effect.setRateHz(params.tremoloRateHz);
-            trem->effect.setDepth(params.tremoloDepth);
-        }
-        else if (auto* wobble = dynamic_cast<WobbleNode*>(&node))
-        {
-            wobble->effect.setRateInBeats(params.wobbleRateBeats);
-            wobble->effect.setDepth(params.wobbleDepth);
-            wobble->effect.setBaseCutoffHz(params.wobbleBaseCutoffHz);
-            wobble->effect.setResonance(params.wobbleResonance);
-            wobble->effect.setMix(params.wobbleMix);
-        }
-        else if (auto* drive = dynamic_cast<DriveNode*>(&node))
-        {
-            drive->effect.setDrive(params.driveAmount);
-            drive->effect.setTone(params.driveTone);
-            drive->effect.setLevel(params.driveLevel);
-            drive->effect.setHardClip(params.driveHardClip);
-            drive->effect.setCabinet(params.driveCabinet);
-            drive->effect.setAsymmetry(params.driveAsymmetry);
-            drive->effect.setOversample(params.driveOversample);
-            drive->effect.setStages(params.driveStages);
-            drive->effect.setCabinetIr(params.driveCabinetIr);
-        }
-        else if (auto* eq = dynamic_cast<EqNode*>(&node))
-        {
-            eq->effect.setLowShelfHz(params.eqLowShelfHz);
-            eq->effect.setLowShelfDb(params.eqLowShelfDb);
-            eq->effect.setMidHz(params.eqMidHz);
-            eq->effect.setMidDb(params.eqMidDb);
-            eq->effect.setMidQ(params.eqMidQ);
-            eq->effect.setHighShelfHz(params.eqHighShelfHz);
-            eq->effect.setHighShelfDb(params.eqHighShelfDb);
-        }
-        else if (auto* gate = dynamic_cast<GateNode*>(&node))
-        {
-            gate->effect.setThresholdDb(params.gateThresholdDb);
-            gate->effect.setRangeDb(params.gateRangeDb);
-            gate->effect.setAttackMs(params.gateAttackMs);
-            gate->effect.setHoldMs(params.gateHoldMs);
-            gate->effect.setReleaseMs(params.gateReleaseMs);
-        }
-        else if (auto* amplify = dynamic_cast<AmplifyNode*>(&node))
-        {
-            amplify->effect.setGainDb(params.amplifyGainDb);
-        }
-        else if (auto* invert = dynamic_cast<InvertNode*>(&node))
-        {
-            invert->effect.setLeft(params.invertLeft);
-            invert->effect.setRight(params.invertRight);
-        }
-        else if (auto* dc = dynamic_cast<DcOffsetNode*>(&node))
-        {
-            dc->effect.setCutoffHz(params.dcCutoffHz);
-        }
-        else if (auto* limiter = dynamic_cast<LimiterNode*>(&node))
-        {
-            limiter->effect.setInputGainDb(params.limiterInputDb);
-            limiter->effect.setCeilingDb(params.limiterCeilingDb);
-            limiter->effect.setReleaseMs(params.limiterReleaseMs);
-        }
-        else if (auto* phaser = dynamic_cast<PhaserNode*>(&node))
-        {
-            phaser->effect.setRateHz(params.phaserRateHz);
-            phaser->effect.setDepth(params.phaserDepth);
-            phaser->effect.setFeedback(params.phaserFeedback);
-            phaser->effect.setStages(params.phaserStagePairs * 2);
-            phaser->effect.setMix(params.phaserMix);
-        }
-        else if (auto* flanger = dynamic_cast<FlangerNode*>(&node))
-        {
-            flanger->effect.setRateHz(params.flangerRateHz);
-            flanger->effect.setDepth(params.flangerDepth);
-            flanger->effect.setDelayMs(params.flangerDelayMs);
-            flanger->effect.setFeedback(params.flangerFeedback);
-            flanger->effect.setMix(params.flangerMix);
-        }
-        else if (auto* tone = dynamic_cast<BassTrebleNode*>(&node))
-        {
-            tone->effect.setBassDb(params.bassDb);
-            tone->effect.setTrebleDb(params.trebleDb);
-            tone->effect.setVolumeDb(params.toneVolumeDb);
-        }
-        else if (auto* stereo = dynamic_cast<StereoToolNode*>(&node))
-        {
-            stereo->effect.setWidth(params.stereoWidth);
-            stereo->effect.setBalance(params.stereoBalance);
-            stereo->effect.setMono(params.stereoMono);
-            stereo->effect.setSwap(params.stereoSwap);
-        }
-        else if (auto* graphic = dynamic_cast<GraphicEqNode*>(&node))
-        {
-            for (int band = 0; band < 10; ++band)
-                graphic->effect.setBandDb(band, params.graphicEqDb[band]);
-        }
-        else if (auto* deEss = dynamic_cast<DeEsserNode*>(&node))
-        {
-            deEss->effect.setFrequencyHz(params.deEssFrequencyHz);
-            deEss->effect.setThresholdDb(params.deEssThresholdDb);
-            deEss->effect.setMaxReductionDb(params.deEssReductionDb);
-        }
-        else if (auto* expander = dynamic_cast<ExpanderNode*>(&node))
-        {
-            expander->effect.setThresholdDb(params.expThresholdDb);
-            expander->effect.setRatio(params.expRatio);
-            expander->effect.setRangeDb(params.expRangeDb);
-            expander->effect.setAttackMs(params.expAttackMs);
-            expander->effect.setReleaseMs(params.expReleaseMs);
-        }
-        else if (auto* ring = dynamic_cast<RingModNode*>(&node))
-        {
-            ring->effect.setFrequencyHz(params.ringFrequencyHz);
-            ring->effect.setMix(params.ringMix);
-        }
-        else if (auto* wah = dynamic_cast<WahNode*>(&node))
-        {
-            wah->effect.setRateHz(params.wahRateHz);
-            wah->effect.setDepth(params.wahDepth);
-            wah->effect.setResonance(params.wahResonance);
-            wah->effect.setMix(params.wahMix);
-        }
-        else if (auto* echo = dynamic_cast<EchoNode*>(&node))
-        {
-            echo->effect.setTimeMs(params.echoTimeMs);
-            echo->effect.setTaps(params.echoTaps);
-            echo->effect.setDecay(params.echoDecay);
-            echo->effect.setMix(params.echoMix);
-            echo->effect.setPingPong(params.echoPingPong);
-        }
-        else if (auto* multiband = dynamic_cast<MultibandNode*>(&node))
-        {
-            multiband->effect.setLowHz(params.mbLowHz);
-            multiband->effect.setHighHz(params.mbHighHz);
-            multiband->effect.setAttackMs(params.mbAttackMs);
-            multiband->effect.setReleaseMs(params.mbReleaseMs);
-            for (int band = 0; band < 3; ++band)
-                multiband->effect.setBand(band, params.mbThresholdDb[band], params.mbRatio[band],
-                                          params.mbMakeUpDb[band]);
-        }
-        else if (auto* parametric = dynamic_cast<ParametricEqNode*>(&node))
-        {
-            for (int band = 0; band < ParametricEq::kBands; ++band)
-                parametric->effect.setBand(band, params.peqBands[(size_t) band]);
-        }
-        else if (auto* dynamics = dynamic_cast<DynamicsNode*>(&node))
-        {
-            dynamics->effect.setCurve(params.dynCurve);
-            dynamics->effect.setDetector((DynamicsProcessor::Detector) params.dynDetector);
-            dynamics->effect.setAttackMs(params.dynAttackMs);
-            dynamics->effect.setReleaseMs(params.dynReleaseMs);
-            dynamics->effect.setMakeUpDb(params.dynMakeUpDb);
-        }
-        else if (auto* mixer = dynamic_cast<ChannelMixerNode*>(&node))
-        {
-            mixer->effect.setMatrix(params.mixerMatrix);
-        }
-        else if (auto* vocoder = dynamic_cast<VocoderNode*>(&node))
-        {
-            vocoder->effect.setCarrier(params.vocCarrier);
-            vocoder->effect.setPitchHz(params.vocPitchHz);
-            vocoder->effect.setBands(params.vocBands);
-            vocoder->effect.setResponseMs(params.vocResponseMs);
-            vocoder->effect.setMix(params.vocMix);
-            vocoder->effect.setGainDb(params.vocGainDb);
-        }
-        else if (auto* convolution = dynamic_cast<ConvolutionNode*>(&node))
-        {
-            convolution->effect.setMix(params.convMix);
-            convolution->effect.setPreDelayMs(params.convPreDelayMs);
-            convolution->effect.setGainDb(params.convGainDb);
-            convolution->effect.collectRetired();
-
-            // Read only when the file changes, not on every parameter move. A
-            // file that can't be read leaves the built-in hall.
-            if (! convolution->loaded || params.convIrFile != convolution->loadedFile)
-            {
-                convolution->loaded     = true;
-                convolution->loadedFile = params.convIrFile;
-                std::vector<std::vector<float>> channels;
-                double                          rate = 0.0;
-                loadImpulseFile(params.convIrFile, channels, rate);
-                convolution->effect.setImpulse(std::move(channels), rate);
-            }
-        }
-        else if (auto* graphic31 = dynamic_cast<GraphicEq31Node*>(&node))
-        {
-            for (int band = 0; band < ThirdOctaveEq::kBands; ++band)
-                graphic31->effect.setBandDb(band, params.geq31Db[(size_t) band]);
-        }
+    switch (kind)
+    {
+        case EffectKind::Filter:        return std::make_unique<FilterNode>();
+        case EffectKind::Delay:         return std::make_unique<DelayNode>();
+        case EffectKind::Reverb:        return std::make_unique<ReverbNode>();
+        case EffectKind::Drive:         return std::make_unique<DriveNode>();
+        case EffectKind::Compressor:    return std::make_unique<CompressorNode>();
+        case EffectKind::Tremolo:       return std::make_unique<TremoloNode>();
+        case EffectKind::Chorus:        return std::make_unique<ChorusNode>();
+        case EffectKind::Wobble:        return std::make_unique<WobbleNode>();
+        case EffectKind::Gate:          return std::make_unique<GateNode>();
+        case EffectKind::Eq:            return std::make_unique<EqNode>();
+        case EffectKind::Amplify:       return std::make_unique<AmplifyNode>();
+        case EffectKind::Invert:        return std::make_unique<InvertNode>();
+        case EffectKind::DcOffset:      return std::make_unique<DcOffsetNode>();
+        case EffectKind::Limiter:       return std::make_unique<LimiterNode>();
+        case EffectKind::Phaser:        return std::make_unique<PhaserNode>();
+        case EffectKind::Flanger:       return std::make_unique<FlangerNode>();
+        case EffectKind::BassTreble:    return std::make_unique<BassTrebleNode>();
+        case EffectKind::StereoTool:    return std::make_unique<StereoToolNode>();
+        case EffectKind::GraphicEq:     return std::make_unique<GraphicEqNode>();
+        case EffectKind::DeEsser:       return std::make_unique<DeEsserNode>();
+        case EffectKind::Expander:      return std::make_unique<ExpanderNode>();
+        case EffectKind::RingMod:       return std::make_unique<RingModNode>();
+        case EffectKind::Wah:           return std::make_unique<WahNode>();
+        case EffectKind::Echo:          return std::make_unique<EchoNode>();
+        case EffectKind::Multiband:     return std::make_unique<MultibandNode>();
+        case EffectKind::ParametricEq:  return std::make_unique<ParametricEqNode>();
+        case EffectKind::Dynamics:      return std::make_unique<DynamicsNode>();
+        case EffectKind::GraphicEq31:   return std::make_unique<GraphicEq31Node>();
+        case EffectKind::Convolution:   return std::make_unique<ConvolutionNode>();
+        case EffectKind::Vocoder:       return std::make_unique<VocoderNode>();
+        case EffectKind::ChannelMixer:  return std::make_unique<ChannelMixerNode>();
+        case EffectKind::Plugin:        return nullptr;
+    }
+    return nullptr;
 }
 
 /**
@@ -848,14 +568,16 @@ public:
 
     /** Applies one slot's parameters, addressed by *position*. By index rather
         than by kind because a chain may hold two filters, and "the filter"
-        stops meaning anything the moment it does. An out-of-range index is
-        ignored: the live chain can be one rebuild behind the document. */
-    void applyParams(size_t index, const EffectSlotParams& params)
+        stops meaning anything the moment it does. An out-of-range index, or a
+        node of another kind, is ignored: the live chain can be one rebuild
+        behind the document, and a node reading another effect's values by
+        its own ids would find none of them. */
+    void applyParams(size_t index, const EffectParamValues& values)
     {
-        if (index >= nodes_.size())
+        if (index >= nodes_.size() || nodes_[index]->kind() != values.kind)
             return;
 
-        engine::applyParams(*nodes_[index], params);
+        nodes_[index]->applyParams(values);
     }
 
     EffectProcessor* nodeAt(size_t index) { return index < nodes_.size() ? nodes_[index].get() : nullptr; }

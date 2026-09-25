@@ -41,7 +41,7 @@ public:
             instance_->releaseResources();
     }
 
-    EffectNodeKind kind() const noexcept override { return EffectNodeKind::Plugin; }
+    EffectKind kind() const noexcept override { return EffectKind::Plugin; }
 
     void prepare(double sampleRate, int blockSize) override
     {
