@@ -370,6 +370,26 @@ inline std::string serialize(const Song& song)
                 out << "FXPLUGNAME " << slot.plugin.name << "\n";
                 out << "FXPLUGSTATE " << slot.plugin.state << "\n";
             }
+
+            // Only lanes with points, and only when there are some, as for
+            // the track's own lanes.
+            size_t effectLanes = 0;
+            for (const auto& [paramId, lane] : slot.automation)
+                if (! lane.empty())
+                    ++effectLanes;
+
+            if (effectLanes > 0)
+            {
+                out << "FXAUTOS " << effectLanes << "\n";
+                for (const auto& [paramId, lane] : slot.automation)
+                {
+                    if (lane.empty())
+                        continue;
+                    out << "FXLANE " << paramId << " " << lane.points().size() << "\n";
+                    for (const auto& pt : lane.points())
+                        out << "TAPT " << detail::num(pt.beat) << " " << detail::num((double) pt.value) << "\n";
+                }
+            }
         }
 
         // The session grid's column for this track. Slots are written by index
@@ -846,6 +866,29 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                     slot.plugin.name = rest;
                     if (! readTagged("FXPLUGSTATE", rest)) return fail("truncated plugin slot");
                     slot.plugin.state = rest;
+                }
+
+                if (readTagged("FXAUTOS", rest))
+                {
+                    const int laneCount = std::atoi(rest.c_str());
+                    for (int l = 0; l < laneCount; ++l)
+                    {
+                        if (! readTagged("FXLANE", rest)) return fail("truncated effect automation");
+                        std::istringstream ls(rest);
+                        std::string        paramId;
+                        int                pointCount = 0;
+                        ls >> paramId >> pointCount;
+
+                        auto& lane = slot.automation[paramId];
+                        for (int p = 0; p < pointCount; ++p)
+                        {
+                            if (! readTagged("TAPT", rest)) return fail("truncated effect automation");
+                            std::istringstream ps(rest);
+                            double beat = 0.0, value = 0.0;
+                            ps >> beat >> value;
+                            lane.addPoint(beat, (float) value);
+                        }
+                    }
                 }
 
                 track.effectChain.push_back(std::move(slot));

@@ -218,3 +218,18 @@ TEST_CASE("A slot's values carry its own kind's parameters by id", "[model][effe
     REQUIRE(plugin.enabled);
     REQUIRE(plugin.unreadIds().empty()); // nothing to read
 }
+
+TEST_CASE("The live values leave out automated parameters", "[model][effectparams]")
+{
+    auto slot = makeEffectSlot(EffectKind::Filter);
+    slot.automation["cutoff"].addPoint(0.0, 500.0f);
+    slot.automation["mode"]; // empty: not automated
+
+    const auto live = effectParamValues(slot, true);
+    REQUIRE_FALSE(live.find("cutoff").has_value());
+    REQUIRE(live.find("mode").has_value());
+    REQUIRE(live.find("resonance").has_value());
+
+    // Everything else - an offline render, the bounce tool - gets them all.
+    REQUIRE(effectParamValues(slot).find("cutoff").has_value());
+}

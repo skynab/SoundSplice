@@ -1640,7 +1640,7 @@ void MainComponent::syncEngineTracks()
         // Parameters, one call per slot, addressed by position — a chain may
         // hold two filters, and "the filter" stops meaning anything then.
         for (size_t s = 0; s < track.effectChain.size(); ++s)
-            engine_.setTrackEffectSlotParams(i, (int) s, model::effectParamValues(track.effectChain[s]));
+            engine_.setTrackEffectSlotParams(i, (int) s, model::effectParamValues(track.effectChain[s], true));
     }
     engine_.setActiveTrackCount(n);
 

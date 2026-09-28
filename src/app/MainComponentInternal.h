@@ -170,6 +170,22 @@ inline engine::TrackAutomation toTrackAutomation(const model::Track& track)
 
     copyLane(model::TrackParam::Gain, curves.gain);
     copyLane(model::TrackParam::Pan, curves.pan);
+
+    for (size_t s = 0; s < track.effectChain.size(); ++s)
+    {
+        const auto& slot = track.effectChain[s];
+        for (const auto& [paramId, lane] : slot.automation)
+        {
+            if (lane.empty())
+                continue;
+
+            engine::EffectParamCurve effectCurve { (int) s, slot.kind, paramId, {} };
+            for (const auto& point : lane.points())
+                effectCurve.curve.addPoint(point.beat, point.value);
+            effectCurve.curve.sortPoints();
+            curves.effects.push_back(std::move(effectCurve));
+        }
+    }
     return curves;
 }
 

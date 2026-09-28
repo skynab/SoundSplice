@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cmath>
+#include <map>
 #include <string>
 #include <vector>
 
 #include "engine/EffectKind.h"
+#include "model/AutomationLane.h"
 
 namespace soundsplice::model
 {
@@ -663,7 +665,21 @@ struct EffectSlot
     ChannelMixerSettings channelMixer;
     PluginRef          plugin; // meaningful when kind == Plugin
 
+    // Automation for this effect's parameters, keyed by descriptor id (see
+    // model/EffectParams.h). Kept on the slot rather than the track so the
+    // lanes move with the effect when the chain is reordered, and go with it
+    // when it's removed. An automated parameter's static value above is what
+    // it falls back to once the lane is gone.
+    std::map<std::string, AutomationLane> automation;
+
     bool operator==(const EffectSlot&) const = default;
+
+    /** The lane driving @p paramId, or nullptr if it isn't automated. */
+    const AutomationLane* lane(const std::string& paramId) const
+    {
+        const auto it = automation.find(paramId);
+        return (it != automation.end() && ! it->second.empty()) ? &it->second : nullptr;
+    }
 };
 
 } // namespace soundsplice::model

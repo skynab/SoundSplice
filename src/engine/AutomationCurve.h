@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
+
+#include "engine/EffectKind.h"
 
 namespace soundsplice::engine
 {
@@ -77,12 +80,26 @@ private:
     An empty curve means "not automated", and the track falls back to its
     static value.
 */
+/** One automated parameter of one effect in a track's chain. Addressed by
+    the slot's position and kind (checked against the node before it's set,
+    since the chain can be one rebuild behind), and by the parameter's
+    descriptor id. */
+struct EffectParamCurve
+{
+    int             slot = 0;
+    EffectKind      kind = EffectKind::Filter;
+    std::string     paramId;
+    AutomationCurve curve; // in the parameter's own units
+};
+
 struct TrackAutomation
 {
     AutomationCurve gain;      // dB
     AutomationCurve pan;       // -1..+1
 
-    bool any() const noexcept { return ! gain.empty() || ! pan.empty(); }
+    std::vector<EffectParamCurve> effects;
+
+    bool any() const noexcept { return ! gain.empty() || ! pan.empty() || ! effects.empty(); }
 };
 
 } // namespace soundsplice::engine

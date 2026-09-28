@@ -15,6 +15,21 @@
 
 namespace soundsplice::engine
 {
+/** Sets every automated effect parameter in @p chain to its value at
+    @p beat. Audio thread, once per block before the chain runs: the values
+    step per block rather than ramping across it, which at a normal block
+    size is finer than any knob is turned. A curve whose slot now holds
+    another kind of effect is skipped. */
+inline void applyEffectAutomation(EffectChain& chain, const TrackAutomation& automation, double beat) noexcept
+{
+    for (const auto& lane : automation.effects)
+    {
+        auto* node = chain.nodeAt((size_t) lane.slot);
+        if (node != nullptr && node->kind() == lane.kind && ! lane.curve.empty())
+            node->setParam(lane.paramId, lane.curve.valueAt(beat, 0.0f));
+    }
+}
+
 /**
     One mixer channel: a synth driven by its own sequencer, *and* an audio-clip
     player, both summed into the same per-track gain, pan, mute, solo and
@@ -228,6 +243,8 @@ public:
             // reaches a wobble immediately instead of waiting for the next
             // structural rebuild.
             effectChain_->setBpm(context.transport.bpm);
+            if (automation_ != nullptr)
+                applyEffectAutomation(*effectChain_, *automation_, context.transport.ppqPosition);
             effectChain_->process(scratch);
         }
 

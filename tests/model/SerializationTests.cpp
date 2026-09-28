@@ -737,3 +737,36 @@ TEST_CASE("A clip's spectral edits round-trip", "[model][serialization]")
     REQUIRE_FALSE(back.tracks.at(0).clips.at(0).autoFadeIn);
     REQUIRE(back.tracks.at(0).clips.at(0).audioFile == "C:/audio/take 1.wav");
 }
+
+TEST_CASE("Effect automation round-trips with its slot", "[model][io]")
+{
+    Song      song;
+    const int id = addTrack(song, TrackType::Audio, "Vox").id;
+
+    auto filter = makeEffectSlot(EffectKind::Filter);
+    filter.automation["cutoff"].addPoint(0.0, 200.0f);
+    filter.automation["cutoff"].addPoint(8.0, 8000.0f);
+    filter.automation["resonance"].addPoint(4.0, 2.5f);
+    filter.automation["mode"]; // an empty lane isn't written
+
+    auto eq = makeEffectSlot(EffectKind::ParametricEq);
+    eq.automation["band3Gain"].addPoint(1.5, -6.0f);
+    findTrack(song, id)->effectChain = { makeEffectSlot(EffectKind::Delay), filter, eq };
+
+    const auto text = serialize(song);
+    REQUIRE(text.find("FXLANE mode") == std::string::npos);
+
+    Song restored;
+    REQUIRE(deserialize(text, restored));
+    const auto& chain = restored.tracks[0].effectChain;
+    REQUIRE(chain[0].automation.empty());
+    REQUIRE(chain[1].lane("cutoff") != nullptr);
+    REQUIRE(chain[1].lane("cutoff")->valueAt(4.0) == 4100.0f);
+    REQUIRE(chain[1].lane("resonance")->points().size() == 1);
+    REQUIRE(chain[1].lane("mode") == nullptr);
+    REQUIRE(chain[2].lane("band3Gain")->valueAt(0.0) == -6.0f);
+
+    // An empty lane never reaches the file, so compare without it.
+    findTrack(song, id)->effectChain[1].automation.erase("mode");
+    REQUIRE(restored.tracks[0].effectChain == findTrack(song, id)->effectChain);
+}

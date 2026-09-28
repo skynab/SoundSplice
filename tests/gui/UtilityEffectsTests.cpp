@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <engine/EffectSlotFactory.h>
+#include <engine/InstrumentTrack.h>
 #include <model/EffectParams.h>
 
 #include <algorithm>
@@ -247,4 +248,51 @@ TEST_CASE("The channel mixer routes, folds and flips channels, and works in mid/
     const auto wider = run({ 1, 0, 0, 1.5f, MidSide::Around }, 0.5f, 0.1f);
     REQUIRE_THAT((wider.first + wider.second) * 0.5, WithinAbs(0.3, 1e-6));  // mid kept
     REQUIRE_THAT((wider.first - wider.second) * 0.5, WithinAbs(0.3, 1e-6));  // side 0.2 x 1.5
+}
+
+TEST_CASE("Effect automation sets its parameter each block, and only on its own kind", "[gui][effects]")
+{
+    using namespace soundsplice::engine;
+
+    EffectChain chain;
+    chain.add(makeBuiltInNode(EffectKind::Filter));
+    chain.add(makeBuiltInNode(EffectKind::Amplify));
+    chain.applyParams(1, model::effectParamValues(model::makeEffectSlot(model::EffectKind::Amplify), true));
+    chain.prepare(48000.0, kBlock);
+
+    // Amplify's gain ramps from 0 to 12 dB over four beats.
+    TrackAutomation automation;
+    EffectParamCurve gain { 1, EffectKind::Amplify, "gain", {} };
+    gain.curve.addPoint(0.0, 0.0f);
+    gain.curve.addPoint(4.0, 12.0f);
+    automation.effects.push_back(gain);
+
+    // A curve meant for another kind at the same slot is ignored.
+    EffectParamCurve stale { 1, EffectKind::Filter, "cutoff", {} };
+    stale.curve.addPoint(0.0, 20.0f);
+    automation.effects.push_back(stale);
+
+    const auto levelAt = [&](double beat)
+    {
+        applyEffectAutomation(chain, automation, beat);
+        juce::AudioBuffer<float> buffer(2, kBlock);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int n = 0; n < kBlock; ++n)
+                buffer.setSample(ch, n, 0.25f);
+        chain.process(buffer);
+        return buffer.getSample(0, kBlock - 1);
+    };
+
+    // The filter at slot 0 was never enabled, so it passes the signal through.
+    // Amplify glides to a new gain, so each level is read once it's settled.
+    const auto settledAt = [&](double beat)
+    {
+        for (int i = 0; i < 50; ++i)
+            levelAt(beat);
+        return levelAt(beat);
+    };
+
+    REQUIRE_THAT(settledAt(0.0), WithinAbs(0.25f, 1.0e-3));
+    REQUIRE_THAT(settledAt(2.0), WithinAbs(0.25f * juce::Decibels::decibelsToGain(6.0f), 1.0e-3));
+    REQUIRE_THAT(settledAt(4.0), WithinAbs(0.25f * juce::Decibels::decibelsToGain(12.0f), 1.0e-3));
 }

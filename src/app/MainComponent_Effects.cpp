@@ -112,7 +112,7 @@ void MainComponent::setEffectSlotBypass(int slotIndex, bool enabled)
     });
 
     const auto& updatedChain = history_.current().tracks[(size_t) selectedTrackIndex_].effectChain;
-    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(updatedChain[(size_t) slotIndex]));
+    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(updatedChain[(size_t) slotIndex], true));
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
@@ -130,7 +130,7 @@ void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotI
         return;
 
     chain[(size_t) slotIndex] = slot;
-    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(slot));
+    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(slot, true));
 }
 
 /** Probes for plugins and caches the result, so the next launch doesn't

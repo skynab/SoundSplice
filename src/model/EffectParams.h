@@ -722,8 +722,12 @@ inline EffectSlot makeEffectSlot(EffectKind kind)
 
 /** @p slot's settings for its own kind, by parameter id: what the engine's
     node for it reads (see engine::EffectParamValues). Empty but for
-    `enabled` for a plugin, whose parameters belong to the plugin. */
-inline engine::EffectParamValues effectParamValues(const EffectSlot& slot)
+    `enabled` for a plugin, whose parameters belong to the plugin.
+
+    @p withoutAutomated leaves out the parameters that have a lane, for the
+    live chain: there the lane sets them every block, and a static value
+    pushed on every edit would fight it. */
+inline engine::EffectParamValues effectParamValues(const EffectSlot& slot, bool withoutAutomated = false)
 {
     engine::EffectParamValues values;
     values.kind    = slot.kind;
@@ -731,7 +735,8 @@ inline engine::EffectParamValues effectParamValues(const EffectSlot& slot)
 
     if (const auto* effect = descriptorFor(slot.kind))
         for (const auto& param : effect->params)
-            values.set(param.id, paramValue(slot, param));
+            if (! withoutAutomated || slot.lane(param.id) == nullptr)
+                values.set(param.id, paramValue(slot, param));
 
     // The one setting that isn't a number, so it has no descriptor entry.
     if (slot.kind == EffectKind::Convolution)
