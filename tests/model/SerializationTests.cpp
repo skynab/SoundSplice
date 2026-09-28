@@ -770,3 +770,33 @@ TEST_CASE("Effect automation round-trips with its slot", "[model][io]")
     findTrack(song, id)->effectChain[1].automation.erase("mode");
     REQUIRE(restored.tracks[0].effectChain == findTrack(song, id)->effectChain);
 }
+
+TEST_CASE("Automation curve shapes round-trip, and an unknown one reads as linear", "[model][io]")
+{
+    Song      song;
+    const int id = addTrack(song, TrackType::Audio, "Vox").id;
+    auto&     track = *findTrack(song, id);
+    track.laneFor(TrackParam::Gain).addPoint(0.0, -12.0f, CurveShape::SCurve);
+    track.laneFor(TrackParam::Gain).addPoint(4.0, 0.0f);
+    song.masterGainDb.addPoint(2.0, -3.0f, CurveShape::Hold);
+    song.masterGainDb.addPoint(6.0, 0.0f);
+    auto filter = makeEffectSlot(EffectKind::Filter);
+    filter.automation["cutoff"].addPoint(0.0, 200.0f, CurveShape::FastStart);
+    filter.automation["cutoff"].addPoint(4.0, 800.0f);
+    track.effectChain = { filter };
+
+    auto text = serialize(song);
+    Song restored;
+    REQUIRE(deserialize(text, restored));
+    REQUIRE(restored == song);
+
+    // A linear point's record is exactly what it was before shapes existed.
+    REQUIRE(text.find("TAPT 4 0\n") != std::string::npos);
+
+    const auto at = text.find("TAPT 0 -12 4");
+    REQUIRE(at != std::string::npos);
+    text.replace(at, 12, "TAPT 0 -12 99");
+    Song unknown;
+    REQUIRE(deserialize(text, unknown));
+    REQUIRE(unknown.tracks[0].lane(TrackParam::Gain)->points()[0].shape == CurveShape::Linear);
+}

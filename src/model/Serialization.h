@@ -120,6 +120,27 @@ namespace detail
         return s;
     }
 
+    /** One automation point record: beat, value, and the shape of the
+        segment it starts when that isn't a straight line - appended, so a
+        file from before shapes existed reads every segment as linear. */
+    inline void writePoint(std::ostringstream& out, const char* tag, const AutomationPoint& point)
+    {
+        out << tag << " " << num(point.beat) << " " << num((double) point.value);
+        if (point.shape != CurveShape::Linear)
+            out << " " << (int) point.shape;
+        out << "\n";
+    }
+
+    /** The mirror of writePoint: adds the record's point to @p lane. */
+    inline void readPoint(const std::string& fields, AutomationLane& lane)
+    {
+        std::istringstream ps(fields);
+        double beat = 0.0, value = 0.0;
+        int    shape = 0;
+        ps >> beat >> value >> shape;
+        lane.addPoint(beat, (float) value, engine::curveShapeFrom(shape));
+    }
+
     /** Sets one effect parameter from a project, by descriptor. A choice or a
         switch is kept to its range, since it becomes an enum or a count; a
         slider value is taken as saved. */
@@ -284,7 +305,7 @@ inline std::string serialize(const Song& song)
     out << "PROJECTROOT " << song.projectRootFolder << "\n";
     out << "AUTO " << song.masterGainDb.points().size() << "\n";
     for (const auto& p : song.masterGainDb.points())
-        out << "APT " << detail::num(p.beat) << " " << detail::num((double) p.value) << "\n";
+        detail::writePoint(out, "APT", p);
     out << "MARKERS " << song.markers.size() << "\n";
     for (const auto& marker : song.markers)
     {
@@ -327,7 +348,7 @@ inline std::string serialize(const Song& song)
                 continue;
             out << "TLANE " << param << " " << lane.points().size() << "\n";
             for (const auto& pt : lane.points())
-                out << "TAPT " << detail::num(pt.beat) << " " << detail::num((double) pt.value) << "\n";
+                detail::writePoint(out, "TAPT", pt);
         }
 
         const auto& synth = track.synthSettings;
@@ -387,7 +408,7 @@ inline std::string serialize(const Song& song)
                         continue;
                     out << "FXLANE " << paramId << " " << lane.points().size() << "\n";
                     for (const auto& pt : lane.points())
-                        out << "TAPT " << detail::num(pt.beat) << " " << detail::num((double) pt.value) << "\n";
+                        detail::writePoint(out, "TAPT", pt);
                 }
             }
         }
@@ -701,10 +722,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             // Once a count-prefixed record is present its points are not
             // optional — a short list means the file is damaged.
             if (! readTagged("APT", rest)) return fail("truncated master automation");
-            std::istringstream ps(rest);
-            double beat = 0.0, value = 0.0;
-            ps >> beat >> value;
-            song.masterGainDb.addPoint(beat, (float) value);
+            detail::readPoint(rest, song.masterGainDb);
         }
     }
 
@@ -782,10 +800,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 for (int p = 0; p < pointCount; ++p)
                 {
                     if (! readTagged("TAPT", rest)) return fail("truncated track automation");
-                    std::istringstream ps(rest);
-                    double beat = 0.0, value = 0.0;
-                    ps >> beat >> value;
-                    lane.addPoint(beat, (float) value);
+                    detail::readPoint(rest, lane);
                 }
             }
         }
@@ -883,10 +898,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                         for (int p = 0; p < pointCount; ++p)
                         {
                             if (! readTagged("TAPT", rest)) return fail("truncated effect automation");
-                            std::istringstream ps(rest);
-                            double beat = 0.0, value = 0.0;
-                            ps >> beat >> value;
-                            lane.addPoint(beat, (float) value);
+                            detail::readPoint(rest, lane);
                         }
                     }
                 }

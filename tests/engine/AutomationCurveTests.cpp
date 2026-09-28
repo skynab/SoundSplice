@@ -84,3 +84,22 @@ TEST_CASE("TrackAutomation reports whether anything is automated", "[engine][aut
     automation.pan.addPoint(0.0, -1.0f);
     REQUIRE(automation.any());
 }
+
+TEST_CASE("The engine's curve shapes a segment exactly as the document's lane does", "[engine][automation]")
+{
+    using namespace soundsplice;
+
+    for (int shape = 0; shape <= (int) engine::CurveShape::SCurve; ++shape)
+    {
+        model::AutomationLane   lane;
+        engine::AutomationCurve curve;
+        lane.addPoint(1.0, -30.0f, (engine::CurveShape) shape);
+        lane.addPoint(5.0, 6.0f);
+        curve.addPoint(1.0, -30.0f, (engine::CurveShape) shape);
+        curve.addPoint(5.0, 6.0f);
+        curve.sortPoints();
+
+        for (double beat = 0.0; beat <= 6.0; beat += 0.125)
+            REQUIRE(curve.valueAt(beat, 0.0f) == lane.valueAt(beat));
+    }
+}

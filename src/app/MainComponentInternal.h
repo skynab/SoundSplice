@@ -163,7 +163,7 @@ inline engine::TrackAutomation toTrackAutomation(const model::Track& track)
         if (const auto* lane = track.lane(param))
         {
             for (const auto& point : lane->points())
-                into.addPoint(point.beat, point.value);
+                into.addPoint(point.beat, point.value, point.shape);
             into.sortPoints();
         }
     };
@@ -181,7 +181,7 @@ inline engine::TrackAutomation toTrackAutomation(const model::Track& track)
 
             engine::EffectParamCurve effectCurve { (int) s, slot.kind, paramId, {} };
             for (const auto& point : lane.points())
-                effectCurve.curve.addPoint(point.beat, point.value);
+                effectCurve.curve.addPoint(point.beat, point.value, point.shape);
             effectCurve.curve.sortPoints();
             curves.effects.push_back(std::move(effectCurve));
         }

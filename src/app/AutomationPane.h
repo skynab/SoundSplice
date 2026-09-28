@@ -95,7 +95,7 @@ public:
 
         hintLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
         hintLabel_.setInterceptsMouseClicks(false, false);
-        hintLabel_.setText("Click to add a point - drag to move - right-click to remove",
+        hintLabel_.setText("Click to add a point - drag to move - right-click for its curve - Alt-click to remove",
                            juce::dontSendNotification);
         addAndMakeVisible(hintLabel_);
 
@@ -241,9 +241,17 @@ public:
         const double beat  = beatForX((float) event.position.x);
         const int    index = pointUnder(event.position, lane, range);
 
-        // Right-click (or a modifier) removes. Checked before the add path so
-        // a right-click on a point can't add one on top of it.
-        if (event.mods.isPopupMenu() || event.mods.isAltDown())
+        // Right-click offers the point's curve and its removal; Alt-click
+        // removes straight away. Both checked before the add path so neither
+        // can add a point on top of the one it was aimed at.
+        if (event.mods.isPopupMenu())
+        {
+            if (index >= 0)
+                showPointMenu(index);
+            return;
+        }
+
+        if (event.mods.isAltDown())
         {
             if (index >= 0)
             {
@@ -305,6 +313,27 @@ public:
             onEditGestureEnd();
     }
 
+    /** What the point menu's items do, by the ids showPointMenu gives them:
+        kRemovePoint, or kShapeBase plus a CurveShape. Public as a testing
+        seam, since the menu itself only answers asynchronously. */
+    static constexpr int kRemovePoint = 1;
+    static constexpr int kShapeBase   = 10;
+
+    void applyPointMenuChoice(int index, int choice)
+    {
+        if (index < 0 || index >= (int) lane_.points().size())
+            return;
+
+        if (choice == kRemovePoint)
+            lane_.removePointAt(index);
+        else if (choice >= kShapeBase && choice <= kShapeBase + (int) model::CurveShape::SCurve)
+            lane_.setShape(index, (model::CurveShape) (choice - kShapeBase));
+        else
+            return;
+
+        commit();
+    }
+
     // ---- testing seams ----
     const model::AutomationLane& laneForTesting() const noexcept { return lane_; }
     juce::Rectangle<int>         laneBoundsForTesting() const { return laneBounds(); }
@@ -341,6 +370,30 @@ private:
         }
 
         return -1;
+    }
+
+    void showPointMenu(int index)
+    {
+        const auto current = lane_.points()[(size_t) index].shape;
+
+        juce::PopupMenu menu;
+        menu.addItem(kRemovePoint, "Remove Point");
+        menu.addSeparator();
+        menu.addSectionHeader("Curve to the next point");
+        const std::pair<model::CurveShape, const char*> shapes[] {
+            { model::CurveShape::Linear, "Linear" },       { model::CurveShape::Hold, "Hold (step)" },
+            { model::CurveShape::FastStart, "Fast Start" }, { model::CurveShape::SlowStart, "Slow Start" },
+            { model::CurveShape::SCurve, "S-Curve" }
+        };
+        for (const auto& [shape, name] : shapes)
+            menu.addItem(kShapeBase + (int) shape, name, true, shape == current);
+
+        menu.showMenuAsync(juce::PopupMenu::Options().withMousePosition(),
+                           [safe = juce::Component::SafePointer<AutomationPane>(this), index](int choice)
+                           {
+                               if (safe != nullptr)
+                                   safe->applyPointMenuChoice(index, choice);
+                           });
     }
 
     void commit()
@@ -403,8 +456,30 @@ private:
         path.startNewSubPath((float) lane.getX(), yFor(points.front().value));
         started = true;
 
-        for (const auto& point : points)
-            path.lineTo(timeline_.xForBeat(point.beat), yFor(point.value));
+        // A shaped segment is drawn from the lane's own valueAt, sampled a few
+        // pixels apart, so the line on screen is the one that plays.
+        for (size_t i = 0; i < points.size(); ++i)
+        {
+            const auto& point = points[i];
+            const float x     = timeline_.xForBeat(point.beat);
+
+            if (i > 0 && points[i - 1].shape == model::CurveShape::Hold)
+            {
+                path.lineTo(x, yFor(points[i - 1].value));
+            }
+            else if (i > 0 && points[i - 1].shape != model::CurveShape::Linear)
+            {
+                const auto& from  = points[i - 1];
+                const float fromX = timeline_.xForBeat(from.beat);
+                const int   steps = juce::jlimit(2, 256, (int) ((x - fromX) / 3.0f));
+                for (int k = 1; k < steps; ++k)
+                {
+                    const double beat = from.beat + (point.beat - from.beat) * k / steps;
+                    path.lineTo(timeline_.xForBeat(beat), yFor(lane_.valueAt(beat)));
+                }
+            }
+            path.lineTo(x, yFor(point.value));
+        }
 
         path.lineTo((float) lane.getRight(), yFor(points.back().value));
 

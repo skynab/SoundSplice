@@ -4,12 +4,17 @@
 #include <cmath>
 #include <vector>
 
+#include "engine/AutomationShape.h"
+
 namespace soundsplice::model
 {
+using engine::CurveShape;
+
 struct AutomationPoint
 {
-    double beat  = 0.0;
-    float  value = 0.0f;
+    double     beat  = 0.0;
+    float      value = 0.0f;
+    CurveShape shape = CurveShape::Linear; // of the segment from here to the next point
 
     bool operator==(const AutomationPoint&) const = default;
 };
@@ -27,16 +32,27 @@ public:
 
     const std::vector<AutomationPoint>& points() const { return points_; }
 
-    /** Adds a point, keeping the lane sorted; replaces the value at a coincident beat. */
-    void addPoint(double beat, float value)
+    /** Adds a point, keeping the lane sorted; replaces the value (and
+        shape) at a coincident beat. */
+    void addPoint(double beat, float value, CurveShape shape = CurveShape::Linear)
     {
         auto it = std::lower_bound(points_.begin(), points_.end(), beat,
                                    [](const AutomationPoint& p, double b) { return p.beat < b; });
 
         if (it != points_.end() && std::abs(it->beat - beat) < 1.0e-9)
+        {
             it->value = value;
+            it->shape = shape;
+        }
         else
-            points_.insert(it, AutomationPoint { beat, value });
+            points_.insert(it, AutomationPoint { beat, value, shape });
+    }
+
+    /** Sets the shape of the segment starting at point @p index. */
+    void setShape(int index, CurveShape shape)
+    {
+        if (index >= 0 && index < (int) points_.size())
+            points_[(size_t) index].shape = shape;
     }
 
     /** Interpolated value at @p beat; @p fallback when the lane is empty. */
@@ -58,7 +74,7 @@ public:
         if (span <= 0.0)
             return lower.value;
 
-        const double t = (beat - lower.beat) / span;
+        const double t = engine::shapedFraction(lower.shape, (beat - lower.beat) / span);
         return (float) (lower.value + (upper.value - lower.value) * t);
     }
 
@@ -109,7 +125,7 @@ public:
         if (index < 0 || index >= (int) points_.size())
             return -1;
 
-        const AutomationPoint moved { std::max(0.0, beat), value };
+        const AutomationPoint moved { std::max(0.0, beat), value, points_[(size_t) index].shape };
 
         points_.erase(points_.begin() + index);
 

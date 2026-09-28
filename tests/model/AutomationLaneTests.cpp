@@ -147,3 +147,49 @@ TEST_CASE("Sorted order survives editing, so valueAt still interpolates",
     REQUIRE(lane.points()[1].beat == 6.0);
     REQUIRE(lane.valueAt(5.0) == 0.5f); // halfway between them
 }
+
+TEST_CASE("A segment follows the shape of the point it starts at", "[model][automation]")
+{
+    using soundsplice::model::CurveShape;
+
+    const auto at = [](CurveShape shape, double beat)
+    {
+        AutomationLane lane;
+        lane.addPoint(0.0, 0.0f, shape);
+        lane.addPoint(4.0, 1.0f);
+        return lane.valueAt(beat);
+    };
+
+    REQUIRE(at(CurveShape::Linear, 1.0) == 0.25f);
+    REQUIRE(at(CurveShape::Hold, 3.99) == 0.0f);
+    REQUIRE(at(CurveShape::Hold, 4.0) == 1.0f);
+    REQUIRE(at(CurveShape::FastStart, 1.0) > 0.5f);  // most of the way already
+    REQUIRE(at(CurveShape::SlowStart, 3.0) < 0.5f);  // most of it still to come
+    REQUIRE(at(CurveShape::SCurve, 2.0) == 0.5f);    // symmetric about the middle
+    REQUIRE(at(CurveShape::SCurve, 0.4) < 0.1f);     // and gentle at the ends
+
+    // Every shape still starts and ends on the points' values.
+    for (int shape = 0; shape <= (int) CurveShape::SCurve; ++shape)
+    {
+        REQUIRE(at((CurveShape) shape, 0.0) == 0.0f);
+        REQUIRE(at((CurveShape) shape, 4.0) == 1.0f);
+    }
+}
+
+TEST_CASE("Moving a point keeps its shape, and setShape changes only it", "[model][automation]")
+{
+    using soundsplice::model::CurveShape;
+
+    AutomationLane lane;
+    lane.addPoint(0.0, 0.0f, CurveShape::SCurve);
+    lane.addPoint(4.0, 1.0f);
+    lane.addPoint(8.0, 0.0f);
+
+    const int moved = lane.movePoint(0, 6.0, 0.5f); // past its neighbour
+    REQUIRE(lane.points()[(size_t) moved].shape == CurveShape::SCurve);
+
+    lane.setShape(0, CurveShape::Hold);
+    REQUIRE(lane.points()[0].shape == CurveShape::Hold);
+    REQUIRE(lane.points()[2].shape == CurveShape::Linear);
+    lane.setShape(9, CurveShape::Hold); // out of range: nothing
+}

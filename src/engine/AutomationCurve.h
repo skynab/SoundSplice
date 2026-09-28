@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/AutomationShape.h"
 #include "engine/EffectKind.h"
 
 namespace soundsplice::engine
@@ -24,14 +25,18 @@ namespace soundsplice::engine
 */
 struct AutomationCurvePoint
 {
-    double beat  = 0.0;
-    float  value = 0.0f;
+    double     beat  = 0.0;
+    float      value = 0.0f;
+    CurveShape shape = CurveShape::Linear; // of the segment from here to the next point
 };
 
 class AutomationCurve
 {
 public:
-    void addPoint(double beat, float value) { points_.push_back({ beat, value }); }
+    void addPoint(double beat, float value, CurveShape shape = CurveShape::Linear)
+    {
+        points_.push_back({ beat, value, shape });
+    }
 
     /** Points must be sorted for valueAt's binary search; the converter feeds
         them in order, but sorting here makes that impossible to get wrong. */
@@ -64,7 +69,7 @@ public:
         if (span <= 0.0)
             return lower.value;
 
-        return (float) (lower.value + (upper.value - lower.value) * ((beat - lower.beat) / span));
+        return (float) (lower.value + (upper.value - lower.value) * shapedFraction(lower.shape, (beat - lower.beat) / span));
     }
 
 private:

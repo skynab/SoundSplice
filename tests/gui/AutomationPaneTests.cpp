@@ -94,7 +94,7 @@ TEST_CASE("Dragging moves the point that was grabbed", "[gui][automation]")
     REQUIRE(moved.value > valueBefore); // dragged up = louder
 }
 
-TEST_CASE("Right-clicking a point removes it", "[gui][automation]")
+TEST_CASE("Alt-clicking a point removes it", "[gui][automation]")
 {
     JuceFixture fixture;
     AutomationPane pane;
@@ -106,8 +106,35 @@ TEST_CASE("Right-clicking a point removes it", "[gui][automation]")
     pane.mouseDown(eventAt(pane, at));
     REQUIRE(pane.laneForTesting().points().size() == 1);
 
-    pane.mouseDown(eventAt(pane, at, juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+    pane.mouseDown(eventAt(pane, at, juce::ModifierKeys(juce::ModifierKeys::altModifier)));
     REQUIRE(pane.laneForTesting().points().empty());
+}
+
+TEST_CASE("A point's menu sets its curve or removes it, as one edit each", "[gui][automation]")
+{
+    JuceFixture fixture;
+    AutomationPane pane;
+
+    model::AutomationLane existing;
+    existing.addPoint(0.0, -12.0f);
+    existing.addPoint(8.0, 0.0f);
+    prepare(pane, existing);
+
+    int edits = 0;
+    pane.onLaneEdited = [&](const AutomationTarget&, const model::AutomationLane&) { ++edits; };
+
+    pane.applyPointMenuChoice(0, AutomationPane::kShapeBase + (int) model::CurveShape::Hold);
+    REQUIRE(pane.laneForTesting().points()[0].shape == model::CurveShape::Hold);
+    REQUIRE(pane.laneForTesting().valueAt(7.9) == -12.0f);
+    REQUIRE(edits == 1);
+
+    pane.applyPointMenuChoice(1, AutomationPane::kRemovePoint);
+    REQUIRE(pane.laneForTesting().points().size() == 1);
+    REQUIRE(edits == 2);
+
+    pane.applyPointMenuChoice(5, AutomationPane::kRemovePoint); // no such point
+    pane.applyPointMenuChoice(0, 0);                           // dismissed
+    REQUIRE(edits == 2);
 }
 
 TEST_CASE("Right-clicking empty space adds nothing", "[gui][automation]")
