@@ -262,6 +262,11 @@ public:
         makeUps_[(size_t) band].store(makeUpDb, std::memory_order_relaxed);
     }
 
+    // One band's setting at a time, for automating it alone.
+    void setBandThresholdDb(int band, float db) { if (valid(band)) thresholds_[(size_t) band].store(db, std::memory_order_relaxed); }
+    void setBandRatio(int band, float ratio)    { if (valid(band)) ratios_[(size_t) band].store(ratio, std::memory_order_relaxed); }
+    void setBandMakeUpDb(int band, float db)    { if (valid(band)) makeUps_[(size_t) band].store(db, std::memory_order_relaxed); }
+
     void process(juce::AudioBuffer<float>& buffer)
     {
         if (! enabled_.load(std::memory_order_relaxed))
@@ -279,6 +284,8 @@ public:
     }
 
 private:
+    static bool valid(int band) noexcept { return band >= 0 && band < MultibandCompressor::kBands; }
+
     static constexpr int kBands = MultibandCompressor::kBands;
 
     MultibandCompressor                  multiband_;

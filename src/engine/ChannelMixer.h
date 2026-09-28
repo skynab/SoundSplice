@@ -79,6 +79,12 @@ public:
         midSide_.store((int) m.midSide, std::memory_order_relaxed);
     }
 
+    void setLeftToLeft(float amount)   { ll_.store(amount, std::memory_order_relaxed); }
+    void setRightToLeft(float amount)  { rl_.store(amount, std::memory_order_relaxed); }
+    void setLeftToRight(float amount)  { lr_.store(amount, std::memory_order_relaxed); }
+    void setRightToRight(float amount) { rr_.store(amount, std::memory_order_relaxed); }
+    void setMidSide(int mode)          { midSide_.store(mode, std::memory_order_relaxed); }
+
     void process(juce::AudioBuffer<float>& buffer)
     {
         if (! enabled_.load(std::memory_order_relaxed) || buffer.getNumChannels() < 2)

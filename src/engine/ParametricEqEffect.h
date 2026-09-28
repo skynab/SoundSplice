@@ -33,6 +33,13 @@ public:
         shared.q.store(band.q, std::memory_order_relaxed);
     }
 
+    // One field of one band, so automating a band's gain doesn't also
+    // rewrite its frequency with whatever the caller last knew of it.
+    void setBandType(int index, int type)     { if (valid(index)) shared_[(size_t) index].type.store(type, std::memory_order_relaxed); }
+    void setBandHz(int index, float hz)       { if (valid(index)) shared_[(size_t) index].hz.store(hz, std::memory_order_relaxed); }
+    void setBandGainDb(int index, float db)   { if (valid(index)) shared_[(size_t) index].gainDb.store(db, std::memory_order_relaxed); }
+    void setBandQ(int index, float q)         { if (valid(index)) shared_[(size_t) index].q.store(q, std::memory_order_relaxed); }
+
     void process(juce::AudioBuffer<float>& buffer)
     {
         if (! enabled_.load(std::memory_order_relaxed))
@@ -62,6 +69,8 @@ public:
     }
 
 private:
+    static bool valid(int index) noexcept { return index >= 0 && index < ParametricEq::kBands; }
+
     struct SharedBand
     {
         std::atomic<int>   type { 0 };

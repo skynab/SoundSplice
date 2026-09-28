@@ -4,6 +4,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -71,6 +72,11 @@ struct EffectProcessor
         to thread through a value none of them read. */
     virtual void setBpm(double /*bpm*/) {}
 
+    /** One parameter, by its descriptor id: what automation sets each block.
+        Audio-thread safe - a table lookup and an atomic store, nothing
+        allocated. False if this node has no such parameter. */
+    virtual bool setParam(std::string_view /*id*/, float /*value*/) { return false; }
+
     /** Bypass and every parameter, from one slot's settings. Message thread:
         the setters behind it store atomics the audio thread reads.
 
@@ -89,360 +95,405 @@ protected:
     virtual void apply(const EffectParamValues& /*values*/) {}
 };
 
+/** One parameter of a built-in node: the id its model::EffectDescriptor
+    gives it, and how to set it. A node's table of these is its whole
+    parameter surface - applying a slot's settings and automating one
+    parameter both go through it, so the two can't disagree.
+
+    A family of numbered parameters (a parametric EQ's six band gains) is one
+    entry: ids id1..idN, each followed by suffix, with the number, from 0,
+    passed to the setter. */
+template <typename Effect>
+struct NodeParam
+{
+    const char* id;
+    void (*set)(Effect&, int index, float value);
+    int         count  = 0; // 0 for a single parameter
+    const char* suffix = "";
+
+    /** Whether @p name is this parameter, or one of its family, and which.
+        Allocates nothing, so it's safe on the audio thread. */
+    bool matches(std::string_view name, int& index) const noexcept
+    {
+        const std::string_view prefix = id, tail = suffix;
+        if (count == 0)
+        {
+            index = 0;
+            return name == prefix;
+        }
+
+        if (name.size() <= prefix.size() + tail.size() || name.substr(0, prefix.size()) != prefix
+            || name.substr(name.size() - tail.size()) != tail)
+            return false;
+
+        int number = 0;
+        for (const char c : name.substr(prefix.size(), name.size() - prefix.size() - tail.size()))
+        {
+            if (c < '0' || c > '9' || number > count)
+                return false;
+            number = number * 10 + (c - '0');
+        }
+        index = number - 1;
+        return number >= 1 && number <= count;
+    }
+
+    /** The id of member @p index of this entry. Message thread: it allocates. */
+    std::string idAt(int index) const
+    {
+        return count == 0 ? std::string(id) : id + std::to_string(index + 1) + suffix;
+    }
+};
+
 /** What every built-in node is: one effect object, prepared, run and
-    bypassed. Each node below adds only how it reads its parameters. */
-template <typename Effect, EffectKind Kind>
+    bypassed, with its parameters set through Derived::kParams. Each node
+    below adds only that table. */
+template <typename Derived, typename Effect, EffectKind Kind>
 struct BuiltInNode : EffectProcessor
 {
+    using Param = NodeParam<Effect>;
+
     Effect effect;
 
     EffectKind kind() const noexcept override { return Kind; }
     void prepare(double sampleRate, int blockSize) override { effect.prepare(sampleRate, blockSize); }
     void process(juce::AudioBuffer<float>& buffer) override { effect.process(buffer); }
     void setEnabled(bool enabled) override { effect.setEnabled(enabled); }
-};
 
-struct FilterNode final : BuiltInNode<FilterEffect, EffectKind::Filter>
-{
-    void apply(const EffectParamValues& p) override
+    bool setParam(std::string_view id, float value) override
     {
-        effect.setMode(p.getInt("mode"));
-        effect.setCutoff(p.getFloat("cutoff"));
-        effect.setResonance(p.getFloat("resonance"));
+        for (const auto& param : Derived::kParams)
+        {
+            int index = 0;
+            if (param.matches(id, index))
+            {
+                param.set(effect, index, value);
+                return true;
+            }
+        }
+        return false;
+    }
+
+protected:
+    /** Every parameter in the table that @p values has. One it lacks is left
+        as it is: that's how an automated parameter is kept out of the static
+        settings, so the two don't take turns. */
+    void apply(const EffectParamValues& values) override
+    {
+        for (const auto& param : Derived::kParams)
+            for (int index = 0; index < std::max(1, param.count); ++index)
+                if (const auto value = values.find(param.idAt(index)))
+                    param.set(effect, index, (float) *value);
     }
 };
 
-struct DelayNode final : BuiltInNode<DelayEffect, EffectKind::Delay>
+struct FilterNode final : BuiltInNode<FilterNode, FilterEffect, EffectKind::Filter>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setTimeMs(p.getFloat("time"));
-        effect.setFeedback(p.getFloat("feedback"));
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "mode", [](FilterEffect& e, int, float v) { e.setMode((int) std::lround(v)); } },
+        { "cutoff", [](FilterEffect& e, int, float v) { e.setCutoff(v); } },
+        { "resonance", [](FilterEffect& e, int, float v) { e.setResonance(v); } },
+    };
 };
 
-struct ReverbNode final : BuiltInNode<ReverbEffect, EffectKind::Reverb>
+struct DelayNode final : BuiltInNode<DelayNode, DelayEffect, EffectKind::Delay>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setRoomSize(p.getFloat("room"));
-        effect.setDamping(p.getFloat("damping"));
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "time", [](DelayEffect& e, int, float v) { e.setTimeMs(v); } },
+        { "feedback", [](DelayEffect& e, int, float v) { e.setFeedback(v); } },
+        { "mix", [](DelayEffect& e, int, float v) { e.setMix(v); } },
+    };
 };
 
-struct DriveNode final : BuiltInNode<DriveEffect, EffectKind::Drive>
+struct ReverbNode final : BuiltInNode<ReverbNode, ReverbEffect, EffectKind::Reverb>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setDrive(p.getFloat("drive"));
-        effect.setTone(p.getFloat("tone"));
-        effect.setLevel(p.getFloat("level"));
-        effect.setHardClip(p.getBool("hardClip"));
-        effect.setCabinet(p.getBool("cabinet"));
-        effect.setAsymmetry(p.getFloat("asymmetry"));
-        effect.setOversample(p.getBool("oversample"));
-        effect.setStages(p.getInt("stages"));
-        effect.setCabinetIr(p.getBool("cabinetIr"));
-    }
+    static constexpr Param kParams[] {
+        { "room", [](ReverbEffect& e, int, float v) { e.setRoomSize(v); } },
+        { "damping", [](ReverbEffect& e, int, float v) { e.setDamping(v); } },
+        { "mix", [](ReverbEffect& e, int, float v) { e.setMix(v); } },
+    };
 };
 
-struct CompressorNode final : BuiltInNode<CompressorEffect, EffectKind::Compressor>
+struct DriveNode final : BuiltInNode<DriveNode, DriveEffect, EffectKind::Drive>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setThresholdDb(p.getFloat("threshold"));
-        effect.setRatio(p.getFloat("ratio"));
-        effect.setAttackMs(p.getFloat("attack"));
-        effect.setReleaseMs(p.getFloat("release"));
-        effect.setMakeUpDb(p.getFloat("makeUp"));
-    }
+    static constexpr Param kParams[] {
+        { "drive", [](DriveEffect& e, int, float v) { e.setDrive(v); } },
+        { "tone", [](DriveEffect& e, int, float v) { e.setTone(v); } },
+        { "level", [](DriveEffect& e, int, float v) { e.setLevel(v); } },
+        { "hardClip", [](DriveEffect& e, int, float v) { e.setHardClip(v >= 0.5f); } },
+        { "cabinet", [](DriveEffect& e, int, float v) { e.setCabinet(v >= 0.5f); } },
+        { "asymmetry", [](DriveEffect& e, int, float v) { e.setAsymmetry(v); } },
+        { "oversample", [](DriveEffect& e, int, float v) { e.setOversample(v >= 0.5f); } },
+        { "stages", [](DriveEffect& e, int, float v) { e.setStages((int) std::lround(v)); } },
+        { "cabinetIr", [](DriveEffect& e, int, float v) { e.setCabinetIr(v >= 0.5f); } },
+    };
 };
 
-struct TremoloNode final : BuiltInNode<TremoloEffect, EffectKind::Tremolo>
+struct CompressorNode final : BuiltInNode<CompressorNode, CompressorEffect, EffectKind::Compressor>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setRateHz(p.getFloat("rate"));
-        effect.setDepth(p.getFloat("depth"));
-    }
+    static constexpr Param kParams[] {
+        { "threshold", [](CompressorEffect& e, int, float v) { e.setThresholdDb(v); } },
+        { "ratio", [](CompressorEffect& e, int, float v) { e.setRatio(v); } },
+        { "attack", [](CompressorEffect& e, int, float v) { e.setAttackMs(v); } },
+        { "release", [](CompressorEffect& e, int, float v) { e.setReleaseMs(v); } },
+        { "makeUp", [](CompressorEffect& e, int, float v) { e.setMakeUpDb(v); } },
+    };
 };
 
-struct ChorusNode final : BuiltInNode<ChorusEffect, EffectKind::Chorus>
+struct TremoloNode final : BuiltInNode<TremoloNode, TremoloEffect, EffectKind::Tremolo>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setRateHz(p.getFloat("rate"));
-        effect.setDepth(p.getFloat("depth"));
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "rate", [](TremoloEffect& e, int, float v) { e.setRateHz(v); } },
+        { "depth", [](TremoloEffect& e, int, float v) { e.setDepth(v); } },
+    };
 };
 
-struct WobbleNode final : BuiltInNode<WobbleEffect, EffectKind::Wobble>
+struct ChorusNode final : BuiltInNode<ChorusNode, ChorusEffect, EffectKind::Chorus>
+{
+    static constexpr Param kParams[] {
+        { "rate", [](ChorusEffect& e, int, float v) { e.setRateHz(v); } },
+        { "depth", [](ChorusEffect& e, int, float v) { e.setDepth(v); } },
+        { "mix", [](ChorusEffect& e, int, float v) { e.setMix(v); } },
+    };
+};
+
+struct WobbleNode final : BuiltInNode<WobbleNode, WobbleEffect, EffectKind::Wobble>
 {
     void setBpm(double bpm) override { effect.setBpm(bpm); }
 
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setRateInBeats(p.getFloat("rate"));
-        effect.setDepth(p.getFloat("depth"));
-        effect.setBaseCutoffHz(p.getFloat("cutoff"));
-        effect.setResonance(p.getFloat("resonance"));
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "rate", [](WobbleEffect& e, int, float v) { e.setRateInBeats(v); } },
+        { "depth", [](WobbleEffect& e, int, float v) { e.setDepth(v); } },
+        { "cutoff", [](WobbleEffect& e, int, float v) { e.setBaseCutoffHz(v); } },
+        { "resonance", [](WobbleEffect& e, int, float v) { e.setResonance(v); } },
+        { "mix", [](WobbleEffect& e, int, float v) { e.setMix(v); } },
+    };
 };
 
-struct GateNode final : BuiltInNode<GateEffect, EffectKind::Gate>
+struct GateNode final : BuiltInNode<GateNode, GateEffect, EffectKind::Gate>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setThresholdDb(p.getFloat("threshold"));
-        effect.setRangeDb(p.getFloat("range"));
-        effect.setAttackMs(p.getFloat("attack"));
-        effect.setHoldMs(p.getFloat("hold"));
-        effect.setReleaseMs(p.getFloat("release"));
-    }
+    static constexpr Param kParams[] {
+        { "threshold", [](GateEffect& e, int, float v) { e.setThresholdDb(v); } },
+        { "range", [](GateEffect& e, int, float v) { e.setRangeDb(v); } },
+        { "attack", [](GateEffect& e, int, float v) { e.setAttackMs(v); } },
+        { "hold", [](GateEffect& e, int, float v) { e.setHoldMs(v); } },
+        { "release", [](GateEffect& e, int, float v) { e.setReleaseMs(v); } },
+    };
 };
 
-struct EqNode final : BuiltInNode<EqPedalEffect, EffectKind::Eq>
+struct EqNode final : BuiltInNode<EqNode, EqPedalEffect, EffectKind::Eq>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setLowShelfHz(p.getFloat("lowFreq"));
-        effect.setLowShelfDb(p.getFloat("low"));
-        effect.setMidHz(p.getFloat("midFreq"));
-        effect.setMidDb(p.getFloat("mid"));
-        effect.setMidQ(p.getFloat("midQ"));
-        effect.setHighShelfHz(p.getFloat("highFreq"));
-        effect.setHighShelfDb(p.getFloat("high"));
-    }
+    static constexpr Param kParams[] {
+        { "lowFreq", [](EqPedalEffect& e, int, float v) { e.setLowShelfHz(v); } },
+        { "low", [](EqPedalEffect& e, int, float v) { e.setLowShelfDb(v); } },
+        { "midFreq", [](EqPedalEffect& e, int, float v) { e.setMidHz(v); } },
+        { "mid", [](EqPedalEffect& e, int, float v) { e.setMidDb(v); } },
+        { "midQ", [](EqPedalEffect& e, int, float v) { e.setMidQ(v); } },
+        { "highFreq", [](EqPedalEffect& e, int, float v) { e.setHighShelfHz(v); } },
+        { "high", [](EqPedalEffect& e, int, float v) { e.setHighShelfDb(v); } },
+    };
 };
 
-struct AmplifyNode final : BuiltInNode<AmplifyEffect, EffectKind::Amplify>
+struct AmplifyNode final : BuiltInNode<AmplifyNode, AmplifyEffect, EffectKind::Amplify>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setGainDb(p.getFloat("gain"));
-    }
+    static constexpr Param kParams[] {
+        { "gain", [](AmplifyEffect& e, int, float v) { e.setGainDb(v); } },
+    };
 };
 
-struct InvertNode final : BuiltInNode<InvertEffect, EffectKind::Invert>
+struct InvertNode final : BuiltInNode<InvertNode, InvertEffect, EffectKind::Invert>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setLeft(p.getBool("left"));
-        effect.setRight(p.getBool("right"));
-    }
+    static constexpr Param kParams[] {
+        { "left", [](InvertEffect& e, int, float v) { e.setLeft(v >= 0.5f); } },
+        { "right", [](InvertEffect& e, int, float v) { e.setRight(v >= 0.5f); } },
+    };
 };
 
-struct DcOffsetNode final : BuiltInNode<DcOffsetEffect, EffectKind::DcOffset>
+struct DcOffsetNode final : BuiltInNode<DcOffsetNode, DcOffsetEffect, EffectKind::DcOffset>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setCutoffHz(p.getFloat("cutoff"));
-    }
+    static constexpr Param kParams[] {
+        { "cutoff", [](DcOffsetEffect& e, int, float v) { e.setCutoffHz(v); } },
+    };
 };
 
-struct LimiterNode final : BuiltInNode<LimiterEffect, EffectKind::Limiter>
+struct LimiterNode final : BuiltInNode<LimiterNode, LimiterEffect, EffectKind::Limiter>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setInputGainDb(p.getFloat("input"));
-        effect.setCeilingDb(p.getFloat("ceiling"));
-        effect.setReleaseMs(p.getFloat("release"));
-    }
+    static constexpr Param kParams[] {
+        { "input", [](LimiterEffect& e, int, float v) { e.setInputGainDb(v); } },
+        { "ceiling", [](LimiterEffect& e, int, float v) { e.setCeilingDb(v); } },
+        { "release", [](LimiterEffect& e, int, float v) { e.setReleaseMs(v); } },
+    };
 };
 
-struct PhaserNode final : BuiltInNode<PhaserEffect, EffectKind::Phaser>
+struct PhaserNode final : BuiltInNode<PhaserNode, PhaserEffect, EffectKind::Phaser>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setRateHz(p.getFloat("rate"));
-        effect.setDepth(p.getFloat("depth"));
-        effect.setFeedback(p.getFloat("feedback"));
-        effect.setStages(p.getInt("stages") * 2); // stored as pairs, so every setting makes whole notches
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "rate", [](PhaserEffect& e, int, float v) { e.setRateHz(v); } },
+        { "depth", [](PhaserEffect& e, int, float v) { e.setDepth(v); } },
+        { "feedback", [](PhaserEffect& e, int, float v) { e.setFeedback(v); } },
+        { "stages", [](PhaserEffect& e, int, float v) { e.setStages((int) std::lround(v) * 2); } },
+        { "mix", [](PhaserEffect& e, int, float v) { e.setMix(v); } },
+    };
 };
 
-struct FlangerNode final : BuiltInNode<FlangerEffect, EffectKind::Flanger>
+struct FlangerNode final : BuiltInNode<FlangerNode, FlangerEffect, EffectKind::Flanger>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setRateHz(p.getFloat("rate"));
-        effect.setDepth(p.getFloat("depth"));
-        effect.setDelayMs(p.getFloat("delay"));
-        effect.setFeedback(p.getFloat("feedback"));
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "rate", [](FlangerEffect& e, int, float v) { e.setRateHz(v); } },
+        { "depth", [](FlangerEffect& e, int, float v) { e.setDepth(v); } },
+        { "delay", [](FlangerEffect& e, int, float v) { e.setDelayMs(v); } },
+        { "feedback", [](FlangerEffect& e, int, float v) { e.setFeedback(v); } },
+        { "mix", [](FlangerEffect& e, int, float v) { e.setMix(v); } },
+    };
 };
 
-struct BassTrebleNode final : BuiltInNode<BassTrebleEffect, EffectKind::BassTreble>
+struct BassTrebleNode final : BuiltInNode<BassTrebleNode, BassTrebleEffect, EffectKind::BassTreble>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setBassDb(p.getFloat("bass"));
-        effect.setTrebleDb(p.getFloat("treble"));
-        effect.setVolumeDb(p.getFloat("volume"));
-    }
+    static constexpr Param kParams[] {
+        { "bass", [](BassTrebleEffect& e, int, float v) { e.setBassDb(v); } },
+        { "treble", [](BassTrebleEffect& e, int, float v) { e.setTrebleDb(v); } },
+        { "volume", [](BassTrebleEffect& e, int, float v) { e.setVolumeDb(v); } },
+    };
 };
 
-struct StereoToolNode final : BuiltInNode<StereoToolEffect, EffectKind::StereoTool>
+struct StereoToolNode final : BuiltInNode<StereoToolNode, StereoToolEffect, EffectKind::StereoTool>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setWidth(p.getFloat("width"));
-        effect.setBalance(p.getFloat("balance"));
-        effect.setMono(p.getBool("mono"));
-        effect.setSwap(p.getBool("swap"));
-    }
+    static constexpr Param kParams[] {
+        { "width", [](StereoToolEffect& e, int, float v) { e.setWidth(v); } },
+        { "balance", [](StereoToolEffect& e, int, float v) { e.setBalance(v); } },
+        { "mono", [](StereoToolEffect& e, int, float v) { e.setMono(v >= 0.5f); } },
+        { "swap", [](StereoToolEffect& e, int, float v) { e.setSwap(v >= 0.5f); } },
+    };
 };
 
-struct GraphicEqNode final : BuiltInNode<GraphicEqEffect, EffectKind::GraphicEq>
+struct GraphicEqNode final : BuiltInNode<GraphicEqNode, GraphicEqEffect, EffectKind::GraphicEq>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        static constexpr const char* kIds[] { "band31", "band62", "band125", "band250", "band500",
-                                             "band1k",  "band2k",  "band4k",  "band8k",  "band16k" };
-        for (int band = 0; band < 10; ++band)
-            effect.setBandDb(band, p.getFloat(kIds[band]));
-    }
+    static constexpr Param kParams[] {
+        { "band31", [](GraphicEqEffect& e, int, float v) { e.setBandDb(0, v); } },
+        { "band62", [](GraphicEqEffect& e, int, float v) { e.setBandDb(1, v); } },
+        { "band125", [](GraphicEqEffect& e, int, float v) { e.setBandDb(2, v); } },
+        { "band250", [](GraphicEqEffect& e, int, float v) { e.setBandDb(3, v); } },
+        { "band500", [](GraphicEqEffect& e, int, float v) { e.setBandDb(4, v); } },
+        { "band1k", [](GraphicEqEffect& e, int, float v) { e.setBandDb(5, v); } },
+        { "band2k", [](GraphicEqEffect& e, int, float v) { e.setBandDb(6, v); } },
+        { "band4k", [](GraphicEqEffect& e, int, float v) { e.setBandDb(7, v); } },
+        { "band8k", [](GraphicEqEffect& e, int, float v) { e.setBandDb(8, v); } },
+        { "band16k", [](GraphicEqEffect& e, int, float v) { e.setBandDb(9, v); } },
+    };
 };
 
-struct DeEsserNode final : BuiltInNode<DeEsserEffect, EffectKind::DeEsser>
+struct DeEsserNode final : BuiltInNode<DeEsserNode, DeEsserEffect, EffectKind::DeEsser>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setFrequencyHz(p.getFloat("frequency"));
-        effect.setThresholdDb(p.getFloat("threshold"));
-        effect.setMaxReductionDb(p.getFloat("reduction"));
-    }
+    static constexpr Param kParams[] {
+        { "frequency", [](DeEsserEffect& e, int, float v) { e.setFrequencyHz(v); } },
+        { "threshold", [](DeEsserEffect& e, int, float v) { e.setThresholdDb(v); } },
+        { "reduction", [](DeEsserEffect& e, int, float v) { e.setMaxReductionDb(v); } },
+    };
 };
 
-struct ExpanderNode final : BuiltInNode<ExpanderEffect, EffectKind::Expander>
+struct ExpanderNode final : BuiltInNode<ExpanderNode, ExpanderEffect, EffectKind::Expander>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setThresholdDb(p.getFloat("threshold"));
-        effect.setRatio(p.getFloat("ratio"));
-        effect.setRangeDb(p.getFloat("range"));
-        effect.setAttackMs(p.getFloat("attack"));
-        effect.setReleaseMs(p.getFloat("release"));
-    }
+    static constexpr Param kParams[] {
+        { "threshold", [](ExpanderEffect& e, int, float v) { e.setThresholdDb(v); } },
+        { "ratio", [](ExpanderEffect& e, int, float v) { e.setRatio(v); } },
+        { "range", [](ExpanderEffect& e, int, float v) { e.setRangeDb(v); } },
+        { "attack", [](ExpanderEffect& e, int, float v) { e.setAttackMs(v); } },
+        { "release", [](ExpanderEffect& e, int, float v) { e.setReleaseMs(v); } },
+    };
 };
 
-struct RingModNode final : BuiltInNode<RingModulatorEffect, EffectKind::RingMod>
+struct RingModNode final : BuiltInNode<RingModNode, RingModulatorEffect, EffectKind::RingMod>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setFrequencyHz(p.getFloat("frequency"));
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "frequency", [](RingModulatorEffect& e, int, float v) { e.setFrequencyHz(v); } },
+        { "mix", [](RingModulatorEffect& e, int, float v) { e.setMix(v); } },
+    };
 };
 
-struct WahNode final : BuiltInNode<WahEffect, EffectKind::Wah>
+struct WahNode final : BuiltInNode<WahNode, WahEffect, EffectKind::Wah>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setRateHz(p.getFloat("rate"));
-        effect.setDepth(p.getFloat("depth"));
-        effect.setResonance(p.getFloat("resonance"));
-        effect.setMix(p.getFloat("mix"));
-    }
+    static constexpr Param kParams[] {
+        { "rate", [](WahEffect& e, int, float v) { e.setRateHz(v); } },
+        { "depth", [](WahEffect& e, int, float v) { e.setDepth(v); } },
+        { "resonance", [](WahEffect& e, int, float v) { e.setResonance(v); } },
+        { "mix", [](WahEffect& e, int, float v) { e.setMix(v); } },
+    };
 };
 
-struct EchoNode final : BuiltInNode<EchoEffect, EffectKind::Echo>
+struct EchoNode final : BuiltInNode<EchoNode, EchoEffect, EffectKind::Echo>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setTimeMs(p.getFloat("time"));
-        effect.setTaps(p.getInt("taps"));
-        effect.setDecay(p.getFloat("decay"));
-        effect.setMix(p.getFloat("mix"));
-        effect.setPingPong(p.getBool("pingPong"));
-    }
+    static constexpr Param kParams[] {
+        { "time", [](EchoEffect& e, int, float v) { e.setTimeMs(v); } },
+        { "taps", [](EchoEffect& e, int, float v) { e.setTaps((int) std::lround(v)); } },
+        { "decay", [](EchoEffect& e, int, float v) { e.setDecay(v); } },
+        { "mix", [](EchoEffect& e, int, float v) { e.setMix(v); } },
+        { "pingPong", [](EchoEffect& e, int, float v) { e.setPingPong(v >= 0.5f); } },
+    };
 };
 
-struct MultibandNode final : BuiltInNode<MultibandEffect, EffectKind::Multiband>
+struct MultibandNode final : BuiltInNode<MultibandNode, MultibandEffect, EffectKind::Multiband>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setLowHz(p.getFloat("lowCrossover"));
-        effect.setHighHz(p.getFloat("highCrossover"));
-        effect.setAttackMs(p.getFloat("attack"));
-        effect.setReleaseMs(p.getFloat("release"));
-
-        static constexpr const char* kBands[] { "low", "mid", "high" };
-        for (int band = 0; band < 3; ++band)
-        {
-            const std::string name = kBands[band];
-            effect.setBand(band, p.getFloat(name + "Threshold"), p.getFloat(name + "Ratio"), p.getFloat(name + "MakeUp"));
-        }
-    }
+    static constexpr Param kParams[] {
+        { "lowCrossover", [](MultibandEffect& e, int, float v) { e.setLowHz(v); } },
+        { "highCrossover", [](MultibandEffect& e, int, float v) { e.setHighHz(v); } },
+        { "attack", [](MultibandEffect& e, int, float v) { e.setAttackMs(v); } },
+        { "release", [](MultibandEffect& e, int, float v) { e.setReleaseMs(v); } },
+        { "lowThreshold", [](MultibandEffect& e, int, float v) { e.setBandThresholdDb(0, v); } },
+        { "lowRatio", [](MultibandEffect& e, int, float v) { e.setBandRatio(0, v); } },
+        { "lowMakeUp", [](MultibandEffect& e, int, float v) { e.setBandMakeUpDb(0, v); } },
+        { "midThreshold", [](MultibandEffect& e, int, float v) { e.setBandThresholdDb(1, v); } },
+        { "midRatio", [](MultibandEffect& e, int, float v) { e.setBandRatio(1, v); } },
+        { "midMakeUp", [](MultibandEffect& e, int, float v) { e.setBandMakeUpDb(1, v); } },
+        { "highThreshold", [](MultibandEffect& e, int, float v) { e.setBandThresholdDb(2, v); } },
+        { "highRatio", [](MultibandEffect& e, int, float v) { e.setBandRatio(2, v); } },
+        { "highMakeUp", [](MultibandEffect& e, int, float v) { e.setBandMakeUpDb(2, v); } },
+    };
 };
 
-struct ParametricEqNode final : BuiltInNode<ParametricEqEffect, EffectKind::ParametricEq>
+struct ParametricEqNode final : BuiltInNode<ParametricEqNode, ParametricEqEffect, EffectKind::ParametricEq>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        for (int band = 0; band < ParametricEq::kBands; ++band)
-        {
-            const auto     name = "band" + std::to_string(band + 1);
-            ParametricBand settings;
-            settings.type   = (ParametricBand::Type) std::clamp(p.getInt(name + "Type"), 0, 6);
-            settings.hz     = p.getFloat(name + "Hz");
-            settings.gainDb = p.getFloat(name + "Gain");
-            settings.q      = p.getFloat(name + "Q");
-            effect.setBand(band, settings);
-        }
-    }
+    static constexpr Param kParams[] {
+        { "band", [](ParametricEqEffect& e, int i, float v) { e.setBandType(i, std::clamp((int) std::lround(v), 0, 6)); }, 6, "Type" },
+        { "band", [](ParametricEqEffect& e, int i, float v) { e.setBandHz(i, v); }, 6, "Hz" },
+        { "band", [](ParametricEqEffect& e, int i, float v) { e.setBandGainDb(i, v); }, 6, "Gain" },
+        { "band", [](ParametricEqEffect& e, int i, float v) { e.setBandQ(i, v); }, 6, "Q" },
+    };
 };
 
-struct DynamicsNode final : BuiltInNode<DynamicsProcessorEffect, EffectKind::Dynamics>
+struct DynamicsNode final : BuiltInNode<DynamicsNode, DynamicsProcessorEffect, EffectKind::Dynamics>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        TransferCurve curve;
-        curve.count = std::clamp(p.getInt("points"), 2, TransferCurve::kMaxPoints);
-        for (int point = 0; point < TransferCurve::kMaxPoints; ++point)
-        {
-            const auto name = "point" + std::to_string(point + 1);
-            curve.points[(size_t) point] = { p.getFloat(name + "In"), p.getFloat(name + "Out") };
-        }
-
-        effect.setCurve(curve);
-        effect.setDetector((DynamicsProcessor::Detector) p.getInt("detector"));
-        effect.setAttackMs(p.getFloat("attack"));
-        effect.setReleaseMs(p.getFloat("release"));
-        effect.setMakeUpDb(p.getFloat("makeUp"));
-    }
+    static constexpr Param kParams[] {
+        { "points", [](DynamicsProcessorEffect& e, int, float v) { e.setPointCount(std::clamp((int) std::lround(v), 2, TransferCurve::kMaxPoints)); } },
+        { "point", [](DynamicsProcessorEffect& e, int i, float v) { e.setPointInDb(i, v); }, 6, "In" },
+        { "point", [](DynamicsProcessorEffect& e, int i, float v) { e.setPointOutDb(i, v); }, 6, "Out" },
+        { "detector", [](DynamicsProcessorEffect& e, int, float v) { e.setDetector((DynamicsProcessor::Detector) (int) std::lround(v)); } },
+        { "attack", [](DynamicsProcessorEffect& e, int, float v) { e.setAttackMs(v); } },
+        { "release", [](DynamicsProcessorEffect& e, int, float v) { e.setReleaseMs(v); } },
+        { "makeUp", [](DynamicsProcessorEffect& e, int, float v) { e.setMakeUpDb(v); } },
+    };
 };
 
-struct GraphicEq31Node final : BuiltInNode<ThirdOctaveEqEffect, EffectKind::GraphicEq31>
+struct GraphicEq31Node final : BuiltInNode<GraphicEq31Node, ThirdOctaveEqEffect, EffectKind::GraphicEq31>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        for (int band = 0; band < ThirdOctaveEq::kBands; ++band)
-            effect.setBandDb(band, p.getFloat("band" + std::to_string(band + 1)));
-    }
+    static constexpr Param kParams[] {
+        { "band", [](ThirdOctaveEqEffect& e, int i, float v) { e.setBandDb(i, v); }, 31, "" },
+    };
 };
 
-struct ConvolutionNode final : BuiltInNode<ConvolutionReverbEffect, EffectKind::Convolution>
+struct ConvolutionNode final : BuiltInNode<ConvolutionNode, ConvolutionReverbEffect, EffectKind::Convolution>
 {
     std::string loadedFile; // message thread only
     bool        loaded = false;
 
-    void apply(const EffectParamValues& p) override
+    // The impulse response is a file, not a number, so it isn't in the table
+    // and can't be automated: it's read here, on the message thread.
+    void apply(const EffectParamValues& values) override
     {
-        effect.setMix(p.getFloat("mix"));
-        effect.setPreDelayMs(p.getFloat("preDelay"));
-        effect.setGainDb(p.getFloat("gain"));
+        BuiltInNode::apply(values);
         effect.collectRetired();
 
         // Read only when the file changes, not on every parameter move. A
         // file that can't be read leaves the built-in hall.
-        const auto& file = p.text("irFile");
+        const auto& file = values.text("irFile");
         if (! loaded || file != loadedFile)
         {
             loaded     = true;
@@ -453,28 +504,35 @@ struct ConvolutionNode final : BuiltInNode<ConvolutionReverbEffect, EffectKind::
             effect.setImpulse(std::move(channels), rate);
         }
     }
+
+    static constexpr Param kParams[] {
+        { "mix", [](ConvolutionReverbEffect& e, int, float v) { e.setMix(v); } },
+        { "preDelay", [](ConvolutionReverbEffect& e, int, float v) { e.setPreDelayMs(v); } },
+        { "gain", [](ConvolutionReverbEffect& e, int, float v) { e.setGainDb(v); } },
+    };
 };
 
-struct VocoderNode final : BuiltInNode<VocoderEffect, EffectKind::Vocoder>
+struct VocoderNode final : BuiltInNode<VocoderNode, VocoderEffect, EffectKind::Vocoder>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setCarrier(p.getInt("carrier"));
-        effect.setPitchHz(p.getFloat("pitch"));
-        effect.setBands(p.getInt("bands"));
-        effect.setResponseMs(p.getFloat("response"));
-        effect.setMix(p.getFloat("mix"));
-        effect.setGainDb(p.getFloat("gain"));
-    }
+    static constexpr Param kParams[] {
+        { "carrier", [](VocoderEffect& e, int, float v) { e.setCarrier((int) std::lround(v)); } },
+        { "pitch", [](VocoderEffect& e, int, float v) { e.setPitchHz(v); } },
+        { "bands", [](VocoderEffect& e, int, float v) { e.setBands((int) std::lround(v)); } },
+        { "response", [](VocoderEffect& e, int, float v) { e.setResponseMs(v); } },
+        { "mix", [](VocoderEffect& e, int, float v) { e.setMix(v); } },
+        { "gain", [](VocoderEffect& e, int, float v) { e.setGainDb(v); } },
+    };
 };
 
-struct ChannelMixerNode final : BuiltInNode<ChannelMixerEffect, EffectKind::ChannelMixer>
+struct ChannelMixerNode final : BuiltInNode<ChannelMixerNode, ChannelMixerEffect, EffectKind::ChannelMixer>
 {
-    void apply(const EffectParamValues& p) override
-    {
-        effect.setMatrix({ p.getFloat("leftToLeft"), p.getFloat("rightToLeft"), p.getFloat("leftToRight"),
-                          p.getFloat("rightToRight"), (channelmixer::MidSide) std::clamp(p.getInt("midSide"), 0, 3) });
-    }
+    static constexpr Param kParams[] {
+        { "leftToLeft", [](ChannelMixerEffect& e, int, float v) { e.setLeftToLeft(v); } },
+        { "rightToLeft", [](ChannelMixerEffect& e, int, float v) { e.setRightToLeft(v); } },
+        { "leftToRight", [](ChannelMixerEffect& e, int, float v) { e.setLeftToRight(v); } },
+        { "rightToRight", [](ChannelMixerEffect& e, int, float v) { e.setRightToRight(v); } },
+        { "midSide", [](ChannelMixerEffect& e, int, float v) { e.setMidSide(std::clamp((int) std::lround(v), 0, 3)); } },
+    };
 };
 
 /** A new node for a built-in effect kind, or nullptr for a kind that can't

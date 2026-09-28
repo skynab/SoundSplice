@@ -28,6 +28,19 @@ public:
         }
     }
 
+    // One part of the curve at a time, for automating a single point.
+    void setPointCount(int count)        { count_.store(count, std::memory_order_relaxed); }
+    void setPointInDb(int index, float db)
+    {
+        if (index >= 0 && index < TransferCurve::kMaxPoints)
+            inDb_[(size_t) index].store(db, std::memory_order_relaxed);
+    }
+    void setPointOutDb(int index, float db)
+    {
+        if (index >= 0 && index < TransferCurve::kMaxPoints)
+            outDb_[(size_t) index].store(db, std::memory_order_relaxed);
+    }
+
     void setDetector(DynamicsProcessor::Detector detector) { detector_.store((int) detector, std::memory_order_relaxed); }
     void setMakeUpDb(float db)   { makeUpDb_.store(db, std::memory_order_relaxed); }
     void setAttackMs(float ms)   { attackMs_.store(ms, std::memory_order_relaxed); }

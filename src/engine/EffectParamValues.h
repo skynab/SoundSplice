@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -63,6 +64,19 @@ public:
             }
         missing_.emplace_back(id);
         return 0.0;
+    }
+
+    /** The value of @p id, or nothing if there is no such parameter. */
+    std::optional<double> find(std::string_view id) const
+    {
+        for (const auto& entry : numbers_)
+            if (entry.id == id)
+            {
+                entry.read = true;
+                return entry.value;
+            }
+        missing_.emplace_back(id);
+        return std::nullopt;
     }
 
     float getFloat(std::string_view id) const { return (float) get(id); }

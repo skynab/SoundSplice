@@ -79,6 +79,47 @@ TEST_CASE("Every node reads exactly the parameters its descriptor names", "[gui]
     }
 }
 
+TEST_CASE("Every parameter can be set on its own, as automation sets it", "[gui][effects]")
+{
+    for (const auto& effect : model::builtInEffects())
+    {
+        INFO(effect.name);
+        const auto node = engine::makeBuiltInNode(effect.kind);
+        for (const auto& param : effect.params)
+        {
+            INFO(param.id);
+            REQUIRE(node->setParam(param.id, (float) param.max));
+        }
+        REQUIRE_FALSE(node->setParam("noSuchParameter", 1.0f));
+        REQUIRE_FALSE(node->setParam("band0", 1.0f));
+        REQUIRE_FALSE(node->setParam("band99", 1.0f));
+    }
+}
+
+TEST_CASE("Setting one band of the parametric EQ leaves the others alone", "[gui][effects]")
+{
+    // A flat EQ, then one band's gain automated up: only that band may move,
+    // which a whole-band setter fed stale values would get wrong.
+    auto slot = model::makeEffectSlot(model::EffectKind::ParametricEq);
+    auto node = engine::makeConfiguredNode(slot);
+    node->prepare(48000.0, kBlock);
+    REQUIRE(node->setParam("band3Gain", 12.0f)); // the 400 Hz bell
+
+    juce::AudioBuffer<float> buffer(2, kBlock);
+    float                    peak = 0.0f;
+    for (int start = 0; start < kFrames; start += kBlock)
+    {
+        for (int ch = 0; ch < 2; ++ch)
+            for (int n = 0; n < kBlock; ++n)
+                buffer.setSample(ch, n, 0.1f * (float) std::sin(2.0 * juce::MathConstants<double>::pi * 400.0
+                                                                   * (start + n) / 48000.0));
+        node->process(buffer);
+        if (start > kFrames / 2)
+            peak = std::max(peak, buffer.getMagnitude(0, 0, kBlock));
+    }
+    REQUIRE_THAT(peak, WithinAbs(0.1f * juce::Decibels::decibelsToGain(12.0f), 0.02f));
+}
+
 TEST_CASE("Amplify and Invert change level and polarity exactly", "[gui][effects]")
 {
     auto amplify           = model::makeEffectSlot(model::EffectKind::Amplify);
