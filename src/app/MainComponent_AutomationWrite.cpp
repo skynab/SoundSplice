@@ -1,0 +1,249 @@
+#include "MainComponentInternal.h"
+
+// Recording automation by moving controls during playback, in the mode the
+// master panel's Automation picker sets (see model::AutomationMode).
+//
+// A *pass* is one stretch of playback that writes anything. It opens when a
+// control is first moved (or, in Write mode, when playback starts), and
+// closes when playback stops or the mode goes back to Read. While a control
+// is being written, its lane is kept from the engine - the engine plays the
+// control's own value, so what you hear is what you're doing rather than the
+// lane you're replacing - and its moves go into the document's lane as the
+// playhead passes (model::LaneWriter). Closing the pass makes the whole of it
+// one undo step.
+
+namespace soundsplice
+{
+namespace
+{
+    /** Every lane in @p from - master, tracks', effects' - put into @p to,
+        where the same track and the same effect still are. */
+    void copyLanes(const model::Song& from, model::Song& to)
+    {
+        to.masterGainDb = from.masterGainDb;
+        for (size_t t = 0; t < std::min(from.tracks.size(), to.tracks.size()); ++t)
+        {
+            const auto& source = from.tracks[t];
+            auto&       target = to.tracks[t];
+            if (source.id != target.id)
+                continue;
+
+            target.automation = source.automation;
+            for (size_t s = 0; s < std::min(source.effectChain.size(), target.effectChain.size()); ++s)
+                if (source.effectChain[s].kind == target.effectChain[s].kind)
+                    target.effectChain[s].automation = source.effectChain[s].automation;
+        }
+    }
+}
+
+bool MainComponent::AutomationWriteKey::operator==(const AutomationWriteKey& other) const
+{
+    return track == other.track && slot == other.slot && kind == other.kind && param == other.param;
+}
+
+MainComponent::AutomationWriteKey MainComponent::AutomationWriteKey::trackParam(int track, model::TrackParam param)
+{
+    return { track, -1, {}, param == model::TrackParam::Gain ? "gain" : "pan" };
+}
+
+/** The lane @p key writes into, created if it's new, or nullptr if what it
+    names is no longer there. */
+model::AutomationLane* MainComponent::automationLaneFor(model::Song& song, const AutomationWriteKey& key)
+{
+    if (key.track < 0)
+        return &song.masterGainDb;
+    if (key.track >= (int) song.tracks.size())
+        return nullptr;
+
+    auto& track = song.tracks[(size_t) key.track];
+    if (key.slot < 0)
+        return &track.laneFor(key.param == "gain" ? model::TrackParam::Gain : model::TrackParam::Pan);
+
+    if (key.slot >= (int) track.effectChain.size() || track.effectChain[(size_t) key.slot].kind != key.kind)
+        return nullptr;
+    return &track.effectChain[(size_t) key.slot].automation[key.param];
+}
+
+bool MainComponent::isWritingAutomation(const AutomationWriteKey& key) const
+{
+    for (const auto& write : automationWrites_)
+        if (write.key == key && write.writer.active())
+            return true;
+    return false;
+}
+
+/** @p track's automation as the engine should play it: without the lanes
+    being written, which the controls are driving instead. */
+engine::TrackAutomation MainComponent::engineAutomationFor(int trackIndex, const model::Track& track) const
+{
+    auto curves = toTrackAutomation(track);
+    for (const auto& write : automationWrites_)
+    {
+        if (write.key.track != trackIndex || ! write.writer.active())
+            continue;
+
+        if (write.key.slot < 0)
+            (write.key.param == "gain" ? curves.gain : curves.pan) = {};
+        else
+            curves.effects.erase(std::remove_if(curves.effects.begin(), curves.effects.end(),
+                                                [&](const engine::EffectParamCurve& curve)
+                                                {
+                                                    return curve.slot == write.key.slot
+                                                        && curve.paramId == write.key.param;
+                                                }),
+                                 curves.effects.end());
+    }
+    return curves;
+}
+
+void MainComponent::openAutomationPass()
+{
+    if (automationPassOpen_)
+        return;
+
+    automationPassOpen_   = true;
+    automationPassBefore_ = history_.current();
+    automationPassBeat_   = uiTempoMap_.ppqFromSamples(engine_.playheadSamples());
+
+    // Write mode takes every track's volume and pan for the whole pass.
+    if (automationMode_ == model::AutomationMode::Write)
+    {
+        const auto& song = history_.current();
+        for (int t = 0; t < (int) song.tracks.size(); ++t)
+        {
+            automationControlMoved(AutomationWriteKey::trackParam(t, model::TrackParam::Gain),
+                                   song.tracks[(size_t) t].gainDb, false);
+            automationControlMoved(AutomationWriteKey::trackParam(t, model::TrackParam::Pan),
+                                   song.tracks[(size_t) t].pan, false);
+        }
+    }
+}
+
+/** A control named by @p key moved to @p value, or was grabbed there
+    (@p touching). Starts writing it if the mode and the transport say so. */
+void MainComponent::automationControlMoved(const AutomationWriteKey& key, float value, bool touching)
+{
+    if (automationMode_ == model::AutomationMode::Read || ! engine_.isPlaying())
+        return;
+
+    // In Touch mode only a held control writes: a nudge from the scroll
+    // wheel or the keyboard has no release to end it.
+    if (automationMode_ == model::AutomationMode::Touch && ! touching && ! isWritingAutomation(key))
+        return;
+
+    openAutomationPass();
+
+    auto& song = history_.mutableCurrent();
+    auto* lane = automationLaneFor(song, key);
+    if (lane == nullptr)
+        return;
+
+    auto it = std::find_if(automationWrites_.begin(), automationWrites_.end(),
+                           [&](const AutomationWrite& write) { return write.key == key; });
+    if (it == automationWrites_.end())
+        it = automationWrites_.insert(automationWrites_.end(), AutomationWrite { key });
+
+    it->value    = value;
+    it->touching = it->touching || touching;
+
+    if (! it->writer.active())
+    {
+        it->writer.begin(*lane, uiTempoMap_.ppqFromSamples(engine_.playheadSamples()), value);
+
+        // From here the control drives the sound, not the lane.
+        if (key.track >= 0)
+            engine_.setTrackAutomation(key.track, engineAutomationFor(key.track, song.tracks[(size_t) key.track]));
+    }
+}
+
+/** The control named by @p key was let go. In Touch mode that ends its
+    writing; Latch and Write carry on with the last value. */
+void MainComponent::automationControlReleased(const AutomationWriteKey& key)
+{
+    for (auto it = automationWrites_.begin(); it != automationWrites_.end(); ++it)
+    {
+        if (! (it->key == key))
+            continue;
+
+        it->touching = false;
+        if (automationMode_ != model::AutomationMode::Touch || ! it->writer.active())
+            return;
+
+        auto& song = history_.mutableCurrent();
+        if (auto* lane = automationLaneFor(song, key))
+            it->writer.end(*lane, uiTempoMap_.ppqFromSamples(engine_.playheadSamples()));
+        automationWrites_.erase(it);
+
+        if (key.track >= 0 && key.track < (int) song.tracks.size())
+            engine_.setTrackAutomation(key.track, engineAutomationFor(key.track, song.tracks[(size_t) key.track]));
+        return;
+    }
+}
+
+/** From the UI timer: carries every write along to the playhead, and closes
+    the pass when playback has stopped. */
+void MainComponent::tickAutomationWrites()
+{
+    if (! engine_.isPlaying())
+    {
+        closeAutomationPass();
+        return;
+    }
+
+    if (automationMode_ == model::AutomationMode::Write)
+        openAutomationPass();
+    if (! automationPassOpen_)
+        return;
+
+    const double beat = uiTempoMap_.ppqFromSamples(engine_.playheadSamples());
+    auto&        song = history_.mutableCurrent();
+    for (auto& write : automationWrites_)
+        if (auto* lane = automationLaneFor(song, write.key); lane != nullptr && write.writer.active())
+            write.writer.advance(*lane, beat, write.value);
+
+    automationPassBeat_ = beat;
+}
+
+/** Ends every write where the playhead last was, and makes the pass one undo
+    step: the lanes go back to how they were and the recorded ones are
+    committed as a single edit. */
+void MainComponent::closeAutomationPass()
+{
+    if (! automationPassOpen_)
+        return;
+
+    automationPassOpen_ = false;
+
+    auto& song = history_.mutableCurrent();
+    for (auto& write : automationWrites_)
+        if (auto* lane = automationLaneFor(song, write.key))
+            write.writer.end(*lane, automationPassBeat_);
+    automationWrites_.clear();
+
+    const model::Song recorded = history_.current();
+    copyLanes(automationPassBefore_, history_.mutableCurrent());
+    automationPassBefore_ = {};
+
+    // A pass that ended up writing nothing new isn't worth an undo step.
+    auto probe = history_.current();
+    copyLanes(recorded, probe);
+    if (! (probe == history_.current()))
+        history_.edit("Record automation", [&recorded](model::Song& s) { copyLanes(recorded, s); });
+
+    syncEngineTracks();
+    arrangementView_.setSong(history_.current());
+    refreshAutomationPaneForSelected();
+}
+
+void MainComponent::setAutomationMode(model::AutomationMode mode)
+{
+    if (mode == automationMode_)
+        return;
+
+    // Changing mode mid-pass ends the pass as it stands rather than
+    // reinterpreting what's already being written.
+    closeAutomationPass();
+    automationMode_ = mode;
+}
+
+} // namespace soundsplice

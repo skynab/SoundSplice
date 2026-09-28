@@ -272,12 +272,13 @@ MainComponent::MainComponent()
     {
         const float db = (float) masterSlider.getValue();
         post(Cmd::SetMasterGainDb, db);
-        if (recordAutomation_ && engine_.isPlaying())
-        {
-            const double beat = uiTempoMap_.ppqFromSamples(engine_.playheadSamples());
-            history_.mutableCurrent().masterGainDb.addPoint(beat, db);
-        }
+        automationControlMoved(AutomationWriteKey::master(), db, masterSlider.isMouseButtonDown());
     };
+    masterSlider.onDragStart = [this]
+    {
+        automationControlMoved(AutomationWriteKey::master(), (float) masterSlider.getValue(), true);
+    };
+    masterSlider.onDragEnd = [this] { automationControlReleased(AutomationWriteKey::master()); };
     masterPanel_.addAndMakeVisible(masterSlider);
     masterLabel.attachToComponent(&masterSlider, true);
 
@@ -494,10 +495,21 @@ MainComponent::MainComponent()
     masterPanel_.addAndMakeVisible(eqTrebleSlider);
     masterPanel_.addAndMakeVisible(eqCurveView_);
 
-    // ---- gain automation: arm, then move the master fader or a track's fader
-    // while playing (Rec Auto arms both; Clr Auto clears both, the master lane
-    // and the currently selected track's) ----
-    autoRecButton.onClick   = [this] { recordAutomation_ = autoRecButton.getToggleState(); };
+    // ---- automation: the mode moving a control records in (Read, Touch,
+    // Latch, Write - see model::AutomationMode), and Clr Auto, which clears
+    // the master lane and the currently selected track's ----
+    autoModeBox.addItem("Read",  1 + (int) model::AutomationMode::Read);
+    autoModeBox.addItem("Touch", 1 + (int) model::AutomationMode::Touch);
+    autoModeBox.addItem("Latch", 1 + (int) model::AutomationMode::Latch);
+    autoModeBox.addItem("Write", 1 + (int) model::AutomationMode::Write);
+    autoModeBox.setSelectedId(1 + (int) model::AutomationMode::Read, juce::dontSendNotification);
+    autoModeBox.setTooltip("Automation: Read plays the lanes. Touch writes a control while you hold it, "
+                           "Latch keeps writing its last value until playback stops, "
+                           "Write also writes every track's volume and pan");
+    autoModeBox.onChange = [this]
+    {
+        setAutomationMode((model::AutomationMode) (autoModeBox.getSelectedId() - 1));
+    };
     autoClearButton.onClick = [this]
     {
         auto& song = history_.mutableCurrent();
@@ -505,7 +517,7 @@ MainComponent::MainComponent()
         if (selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) song.tracks.size())
             song.tracks[(size_t) selectedTrackIndex_].automation.clear(); // every parameter, not just gain
     };
-    masterPanel_.addAndMakeVisible(autoRecButton);
+    masterPanel_.addAndMakeVisible(autoModeBox);
     masterPanel_.addAndMakeVisible(autoClearButton);
 
     masterPanel_.addAndMakeVisible(meter_);
@@ -1280,12 +1292,14 @@ void MainComponent::timerCallback()
 
     // Gain automation playback (coarse, message-thread; sample-accurate on
     // export — see bounceProject()). Master and per-track lanes both apply.
-    if (! recordAutomation_ && engine_.isPlaying())
+    tickAutomationWrites();
+
+    if (engine_.isPlaying())
     {
         const double beat = uiTempoMap_.ppqFromSamples(playhead);
         const auto&  song = history_.current();
 
-        if (! song.masterGainDb.empty())
+        if (! song.masterGainDb.empty() && ! isWritingAutomation(AutomationWriteKey::master()))
         {
             const float db = song.masterGainDb.valueAt(beat, (float) masterSlider.getValue());
             post(Cmd::SetMasterGainDb, db);
@@ -1301,10 +1315,12 @@ void MainComponent::timerCallback()
         {
             const auto& track = song.tracks[(size_t) i];
 
-            if (const auto* lane = track.lane(model::TrackParam::Gain))
-                trackStrips_[i]->setGainDb(lane->valueAt(beat, track.gainDb));
-            if (const auto* lane = track.lane(model::TrackParam::Pan))
-                trackStrips_[i]->setPan(lane->valueAt(beat, track.pan));
+            const auto* gain = track.lane(model::TrackParam::Gain);
+            const auto* pan  = track.lane(model::TrackParam::Pan);
+            if (gain != nullptr && ! isWritingAutomation(AutomationWriteKey::trackParam(i, model::TrackParam::Gain)))
+                trackStrips_[i]->setGainDb(gain->valueAt(beat, track.gainDb));
+            if (pan != nullptr && ! isWritingAutomation(AutomationWriteKey::trackParam(i, model::TrackParam::Pan)))
+                trackStrips_[i]->setPan(pan->valueAt(beat, track.pan));
         }
     }
 }

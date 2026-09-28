@@ -28,6 +28,7 @@
 #include "engine/MatchEq.h"
 #include "engine/TempoMap.h"
 #include "model/History.h"
+#include "model/AutomationWriter.h"
 #include "model/Song.h"
 #include "model/TimeSelection.h"
 
@@ -631,7 +632,49 @@ private:
     model::History<model::Song> history_;
     int                         selectedTrackIndex_ = 0;
     int                         selectedClipIndex_  = 0;
-    bool                        recordAutomation_   = false;
+
+    // ---- recording automation (MainComponent_AutomationWrite.cpp) ----
+    /** Which lane a control writes: the master's (track -1), a track's volume
+        or pan (slot -1, param "gain" or "pan"), or an effect parameter. */
+    struct AutomationWriteKey
+    {
+        int               track = -1;
+        int               slot  = -1;
+        model::EffectKind kind  = model::EffectKind::Filter;
+        std::string       param;
+
+        bool operator==(const AutomationWriteKey& other) const;
+        static AutomationWriteKey master() { return {}; }
+        static AutomationWriteKey trackParam(int track, model::TrackParam param);
+        static AutomationWriteKey effect(int track, int slot, model::EffectKind kind, std::string param)
+        {
+            return { track, slot, kind, std::move(param) };
+        }
+    };
+
+    struct AutomationWrite
+    {
+        AutomationWriteKey key;
+        model::LaneWriter  writer;
+        float              value    = 0.0f;
+        bool               touching = false;
+    };
+
+    model::AutomationLane*  automationLaneFor(model::Song& song, const AutomationWriteKey& key);
+    bool                    isWritingAutomation(const AutomationWriteKey& key) const;
+    engine::TrackAutomation engineAutomationFor(int trackIndex, const model::Track& track) const;
+    void                    openAutomationPass();
+    void                    automationControlMoved(const AutomationWriteKey& key, float value, bool touching);
+    void                    automationControlReleased(const AutomationWriteKey& key);
+    void                    tickAutomationWrites();
+    void                    closeAutomationPass();
+    void                    setAutomationMode(model::AutomationMode mode);
+
+    model::AutomationMode        automationMode_     = model::AutomationMode::Read;
+    std::vector<AutomationWrite> automationWrites_;
+    bool                         automationPassOpen_ = false;
+    model::Song                  automationPassBefore_;
+    double                       automationPassBeat_ = 0.0;
     bool                        awaitingRecordedTake_ = false;
 
     // Chosen when the take is armed, not when it ends: the destination has to
@@ -761,7 +804,7 @@ private:
     juce::ToggleButton eqButton { "EQ" };
     juce::Slider       eqBassSlider, eqMidSlider, eqTrebleSlider;
     EqCurveView        eqCurveView_;
-    juce::ToggleButton autoRecButton   { "Rec Auto" };
+    juce::ComboBox     autoModeBox;
     juce::TextButton   autoClearButton { "Clr Auto" };
     juce::Label        tempoLabel  { {}, "Tempo" };
     juce::Label        masterLabel { {}, "Master" };

@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <model/AutomationLane.h>
+#include <model/AutomationWriter.h>
 
 using Catch::Approx;
 using soundsplice::model::AutomationLane;
@@ -192,4 +193,64 @@ TEST_CASE("Moving a point keeps its shape, and setShape changes only it", "[mode
     REQUIRE(lane.points()[0].shape == CurveShape::Hold);
     REQUIRE(lane.points()[2].shape == CurveShape::Linear);
     lane.setShape(9, CurveShape::Hold); // out of range: nothing
+}
+
+TEST_CASE("Writing over a lane replaces only the stretch that was written", "[model][automation]")
+{
+    using soundsplice::model::LaneWriter;
+
+    AutomationLane lane;
+    lane.addPoint(0.0, 0.0f);
+    lane.addPoint(8.0, 1.0f);
+
+    LaneWriter writer;
+    writer.begin(lane, 2.0, 0.9f); // grabbed at 0.9 where the curve was at 0.25
+    writer.advance(lane, 3.0, 0.9f);
+    writer.advance(lane, 4.0, 0.5f);
+    writer.end(lane, 5.0);
+    REQUIRE_FALSE(writer.active());
+
+    REQUIRE(lane.valueAt(1.0) == Approx(0.125f));  // before: untouched
+    REQUIRE(lane.valueAt(2.0) == Approx(0.25f));   // starts from the curve
+    REQUIRE(lane.valueAt(2.5) == Approx(0.9f));    // then jumps to the control
+    REQUIRE(lane.valueAt(3.0) == Approx(0.9f));    // held flat, not ramped
+    REQUIRE(lane.valueAt(3.5) == Approx(0.7f));
+    REQUIRE(lane.valueAt(4.5) == Approx(0.5f));    // held to where it was let go
+    REQUIRE(lane.valueAt(6.5) == Approx(0.75f));   // after: back into the old curve
+    REQUIRE(lane.valueAt(8.0) == Approx(1.0f));
+}
+
+TEST_CASE("A held value writes two points, however long it's held", "[model][automation]")
+{
+    using soundsplice::model::LaneWriter;
+
+    AutomationLane lane;
+    LaneWriter     writer;
+    writer.begin(lane, 0.0, -6.0f);
+    for (double beat = 0.25; beat <= 16.0; beat += 0.25)
+        writer.advance(lane, beat, -6.0f);
+    writer.end(lane, 16.0);
+
+    REQUIRE(lane.points().size() == 2);
+    REQUIRE(lane.valueAt(9.0) == -6.0f);
+}
+
+TEST_CASE("A jump back while writing starts a new stretch there", "[model][automation]")
+{
+    using soundsplice::model::LaneWriter;
+
+    AutomationLane lane;
+    lane.addPoint(0.0, 0.0f);
+    lane.addPoint(16.0, 0.0f);
+
+    LaneWriter writer;
+    writer.begin(lane, 4.0, 1.0f);
+    writer.advance(lane, 8.0, 1.0f);
+    writer.advance(lane, 2.0, 0.5f); // the loop wrapped
+    writer.advance(lane, 3.0, 0.5f);
+    writer.end(lane, 3.0);
+
+    REQUIRE(lane.valueAt(6.0) == Approx(1.0f)); // the first stretch survives
+    REQUIRE(lane.valueAt(2.5) == Approx(0.5f));
+    REQUIRE(lane.valueAt(12.0) == Approx(0.5f)); // from where it ended back to the old curve
 }

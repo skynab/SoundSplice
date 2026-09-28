@@ -26,6 +26,7 @@ target_sources(SoundSplice PRIVATE
   MainComponent.cpp
   MainComponent_Analyze.cpp
   MainComponent_AudioEdit.cpp
+  MainComponent_AutomationWrite.cpp
   MainComponent_Commands.cpp
   MainComponent_Effects.cpp
   MainComponent_Generate.cpp

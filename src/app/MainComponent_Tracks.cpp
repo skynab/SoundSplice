@@ -1576,7 +1576,7 @@ void MainComponent::syncEngineTracks()
         engine_.setTrackSolo(i, track.solo);
         engine_.setTrackGainDb(i, track.gainDb);
         engine_.setTrackPan(i, track.pan);
-        engine_.setTrackAutomation(i, toTrackAutomation(track));
+        engine_.setTrackAutomation(i, engineAutomationFor(i, track));
 
         // The session grid's column for this track. Empty slots are submitted
         // too — the index is the scene, so the list has to stay aligned with
@@ -1863,14 +1863,12 @@ void MainComponent::setTrackGain(int index, float gainDb)
         auto& track = song.tracks[(size_t) index];
         track.gainDb = gainDb;
 
-        // The same global "Rec Auto" toggle arms every automatable per-track
-        // parameter — touch whichever control you want to automate while it's
-        // on (see also setTrackPan).
-        if (recordAutomation_ && engine_.isPlaying())
-            track.laneFor(model::TrackParam::Gain)
-                 .addPoint(uiTempoMap_.ppqFromSamples(engine_.playheadSamples()), gainDb);
     }
     engine_.setTrackGainDb(index, gainDb);
+
+    // Written into the lane if the automation mode says so (see
+    // MainComponent_AutomationWrite.cpp); the drag hooks say when it's held.
+    automationControlMoved(AutomationWriteKey::trackParam(index, model::TrackParam::Gain), gainDb, false);
 }
 
 /** Remembers where a fader was when it was grabbed. */
@@ -1880,6 +1878,9 @@ void MainComponent::beginFaderDrag(int trackIndex, MixerStrip::Fader fader)
     faderDragWhich_ = fader;
     faderDragFrom_  = readFader(history_.current(), trackIndex, fader);
     faderDragging_  = true;
+
+    const auto param = fader == MixerStrip::Fader::Gain ? model::TrackParam::Gain : model::TrackParam::Pan;
+    automationControlMoved(AutomationWriteKey::trackParam(trackIndex, param), faderDragFrom_, true);
 }
 
 /** Turns a whole fader drag into one undo step.
@@ -1899,6 +1900,8 @@ void MainComponent::endFaderDrag(int trackIndex, MixerStrip::Fader fader)
         return;
 
     faderDragging_ = false;
+    automationControlReleased(AutomationWriteKey::trackParam(
+        trackIndex, fader == MixerStrip::Fader::Gain ? model::TrackParam::Gain : model::TrackParam::Pan));
 
     const float landedOn = readFader(history_.current(), trackIndex, fader);
     commitDrag(history_, faderName(fader), faderDragFrom_, landedOn,
@@ -1970,11 +1973,9 @@ void MainComponent::setTrackPan(int index, float pan)
     {
         auto& track = song.tracks[(size_t) index];
         track.pan = pan;
-        if (recordAutomation_ && engine_.isPlaying())
-            track.laneFor(model::TrackParam::Pan)
-                 .addPoint(uiTempoMap_.ppqFromSamples(engine_.playheadSamples()), pan);
     }
     engine_.setTrackPan(index, pan);
+    automationControlMoved(AutomationWriteKey::trackParam(index, model::TrackParam::Pan), pan, false);
 }
 
 void MainComponent::selectTrack(int index)

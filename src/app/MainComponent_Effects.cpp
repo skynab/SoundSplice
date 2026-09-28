@@ -129,8 +129,33 @@ void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotI
     if (slotIndex < 0 || slotIndex >= (int) chain.size())
         return;
 
-    chain[(size_t) slotIndex] = slot;
-    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(slot, true));
+    // Which parameters this move changed, for recording automation: the panel
+    // hands over the whole slot, not the one control that moved.
+    std::vector<const model::EffectParam*> moved;
+    if (const auto* effect = model::descriptorFor(slot.kind); effect != nullptr && chain[(size_t) slotIndex].kind == slot.kind)
+        for (const auto& param : effect->params)
+            if (model::paramValue(chain[(size_t) slotIndex], param) != model::paramValue(slot, param))
+                moved.push_back(&param);
+
+    // The lanes stay as the document has them - the panel's copy of the slot
+    // may be older than a lane being written into it.
+    auto updated       = slot;
+    updated.automation = chain[(size_t) slotIndex].automation;
+    chain[(size_t) slotIndex] = updated;
+    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(updated, true));
+
+    for (const auto* param : moved)
+    {
+        const auto key   = AutomationWriteKey::effect(selectedTrackIndex_, slotIndex, slot.kind, param->id);
+        const auto value = (float) model::paramValue(slot, *param);
+        automationControlMoved(key, value, effectSlotDragging_);
+
+        // A parameter with a lane isn't in the static values above, so one
+        // being written is set on its own - otherwise the knob would do
+        // nothing audible until the pass ended.
+        if (isWritingAutomation(key))
+            engine_.setTrackEffectParam(selectedTrackIndex_, slotIndex, slot.kind, param->id, value);
+    }
 }
 
 /** Probes for plugins and caches the result, so the next launch doesn't
@@ -388,6 +413,14 @@ void MainComponent::endEffectSlotParamsDrag(int slotIndex)
     const auto& chain = history_.current().tracks[(size_t) selectedTrackIndex_].effectChain;
     if (slotIndex < 0 || slotIndex >= (int) chain.size())
         return;
+
+    // Every parameter of this slot being written was held by this drag.
+    std::vector<AutomationWriteKey> held;
+    for (const auto& write : automationWrites_)
+        if (write.key.track == selectedTrackIndex_ && write.key.slot == slotIndex && write.touching)
+            held.push_back(write.key);
+    for (const auto& key : held)
+        automationControlReleased(key);
 
     const auto landedOn   = chain[(size_t) slotIndex];
     const int  trackIndex = selectedTrackIndex_;

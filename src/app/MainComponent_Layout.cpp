@@ -456,7 +456,7 @@ void MainComponent::layoutMasterPanel()
     auto masterArea = masterPanel_.getLocalBounds();
 
     auto masterRow = masterArea.removeFromTop(26);
-    autoRecButton.setBounds(masterRow.removeFromRight(76));
+    autoModeBox.setBounds(masterRow.removeFromRight(76));
     masterRow.removeFromRight(6);
     autoClearButton.setBounds(masterRow.removeFromRight(76));
     masterRow.removeFromRight(10);

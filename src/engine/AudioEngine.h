@@ -333,6 +333,11 @@ public:
         with two filters is editable at all. */
     void setTrackEffectSlotParams(int index, int slotIndex, const EffectParamValues& values);
 
+    /** One parameter of one slot, by id, if that slot is still @p kind.
+        For a parameter being written while its lane is set aside, which the
+        slot's static values leave out. */
+    void setTrackEffectParam(int index, int slotIndex, EffectKind kind, const std::string& paramId, float value);
+
     /** A hosted plugin in a track's chain, for opening its editor. nullptr if
         that slot isn't a plugin (or the chain is a rebuild behind). Message
         thread. */

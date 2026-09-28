@@ -624,6 +624,17 @@ void AudioEngine::setTrackEffectSlotParams(int index, int slotIndex, const Effec
         chain->applyParams((size_t) slotIndex, values);
 }
 
+void AudioEngine::setTrackEffectParam(int index, int slotIndex, EffectKind kind, const std::string& paramId,
+                                      float value)
+{
+    if (index < 0 || index >= kMaxTracks || slotIndex < 0)
+        return;
+
+    if (auto* chain = submittedChain_[(size_t) index])
+        if (auto* node = chain->nodeAt((size_t) slotIndex); node != nullptr && node->kind() == kind)
+            node->setParam(paramId, value);
+}
+
 PluginNode* AudioEngine::trackPluginNode(int index, int slotIndex)
 {
     if (index < 0 || index >= kMaxTracks || slotIndex < 0)
