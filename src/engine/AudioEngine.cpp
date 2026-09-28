@@ -563,18 +563,17 @@ void AudioEngine::rebuildTrackEffectChain(int index)
 
         // Instantiated here, on the message thread: loading a binary and
         // running third-party initialisation must never happen under the
-        // audio thread. A plugin this machine doesn't have simply leaves a
-        // gap in the chain rather than failing the load — the document still
-        // remembers which one it wanted.
+        // audio thread. A plugin this machine doesn't have becomes a node
+        // that passes audio through rather than failing the load — the
+        // document still remembers which one it wanted. A node rather than a
+        // gap, so every later slot keeps the position the document gives it,
+        // which is how parameters and automation find it.
         std::string error;
         auto instance = pluginHost_.createInstance(spec.pluginFormat, spec.pluginIdentifier,
                                                    rateForPlugins > 0.0 ? rateForPlugins : 48000.0,
                                                    currentBlockSize_, &error);
         if (instance == nullptr)
-        {
             DBG("plugin unavailable: " << spec.pluginIdentifier.c_str() << " (" << error.c_str() << ")");
-            continue;
-        }
 
         auto node = std::make_unique<PluginNode>(std::move(instance));
         node->restoreState(spec.pluginState);

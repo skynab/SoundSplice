@@ -3,6 +3,7 @@
 
 #include <engine/EffectSlotFactory.h>
 #include <engine/InstrumentTrack.h>
+#include <engine/PluginNode.h>
 #include <model/EffectParams.h>
 
 #include <algorithm>
@@ -295,4 +296,74 @@ TEST_CASE("Effect automation sets its parameter each block, and only on its own 
     REQUIRE_THAT(settledAt(0.0), WithinAbs(0.25f, 1.0e-3));
     REQUIRE_THAT(settledAt(2.0), WithinAbs(0.25f * juce::Decibels::decibelsToGain(6.0f), 1.0e-3));
     REQUIRE_THAT(settledAt(4.0), WithinAbs(0.25f * juce::Decibels::decibelsToGain(12.0f), 1.0e-3));
+}
+
+namespace
+{
+    /** Just enough of a hosted plugin: one gain parameter, applied. */
+    struct FakePlugin final : juce::AudioPluginInstance
+    {
+        juce::AudioParameterFloat* gain = nullptr;
+
+        FakePlugin()
+        {
+            auto parameter = std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { "gain", 1 }, "Gain", 0.0f, 1.0f, 0.5f);
+            gain           = parameter.get();
+            addHostedParameter(std::move(parameter));
+        }
+
+        void fillInPluginDescription(juce::PluginDescription&) const override {}
+        const juce::String getName() const override { return "Fake"; }
+        void prepareToPlay(double, int) override {}
+        void releaseResources() override {}
+        void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override { buffer.applyGain(gain->get()); }
+        double getTailLengthSeconds() const override { return 0.0; }
+        bool acceptsMidi() const override { return false; }
+        bool producesMidi() const override { return false; }
+        juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+        bool hasEditor() const override { return false; }
+        int getNumPrograms() override { return 1; }
+        int getCurrentProgram() override { return 0; }
+        void setCurrentProgram(int) override {}
+        const juce::String getProgramName(int) override { return {}; }
+        void changeProgramName(int, const juce::String&) override {}
+        void getStateInformation(juce::MemoryBlock&) override {}
+        void setStateInformation(const void*, int) override {}
+    };
+}
+
+TEST_CASE("A plugin's parameters are listed by its own id and automated through it", "[gui][effects]")
+{
+    using namespace soundsplice::engine;
+
+    auto  plugin = std::make_unique<FakePlugin>();
+    auto* gain   = plugin->gain;
+    PluginNode node(std::move(plugin));
+
+    const auto params = node.parameters();
+    REQUIRE(params.size() == 1);
+    REQUIRE(params[0].id == "gain");
+    REQUIRE(params[0].name == "Gain");
+    REQUIRE(params[0].value == 0.5f);
+
+    REQUIRE(node.setParam("gain", 0.25f));
+    REQUIRE(gain->get() == 0.25f);
+    REQUIRE(node.setParam("gain", 3.0f)); // held to the normalised range
+    REQUIRE(gain->get() == 1.0f);
+    REQUIRE_FALSE(node.setParam("volume", 0.5f));
+
+    // Through the chain, as the track does it each block.
+    EffectChain chain;
+    chain.add(std::make_unique<PluginNode>(nullptr)); // a plugin that didn't load keeps its place
+    chain.add(std::make_unique<PluginNode>(std::make_unique<FakePlugin>()));
+    TrackAutomation automation;
+    EffectParamCurve curve { 1, EffectKind::Plugin, "gain", {} };
+    curve.curve.addPoint(0.0, 0.0f);
+    curve.curve.addPoint(4.0, 1.0f);
+    automation.effects.push_back(curve);
+
+    applyEffectAutomation(chain, automation, 1.0);
+    auto* hosted = dynamic_cast<PluginNode*>(chain.nodeAt(1));
+    REQUIRE(hosted->parameters()[0].value == 0.25f);
+    REQUIRE(dynamic_cast<PluginNode*>(chain.nodeAt(0))->parameters().empty());
 }

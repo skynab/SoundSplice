@@ -1684,12 +1684,27 @@ void MainComponent::refreshAutomationPaneForSelected()
     const auto& track = history_.current().tracks[(size_t) selectedTrackIndex_];
 
     // The picker: the track's own parameters, then every parameter of every
-    // built-in in its chain, a section per effect. A plugin's parameters are
-    // its own and aren't offered yet.
+    // effect in its chain, a section per effect. A plugin's come from the
+    // loaded instance, in its own 0..1 range and its own words for the ends;
+    // one that isn't loaded has none to offer.
     auto targets = AutomationPane::trackTargets();
     for (size_t s = 0; s < track.effectChain.size(); ++s)
     {
-        const auto& slot   = track.effectChain[s];
+        const auto& slot = track.effectChain[s];
+        if (slot.kind == model::EffectKind::Plugin)
+        {
+            const auto* node = engine_.trackPluginNode(selectedTrackIndex_, (int) s);
+            if (node == nullptr)
+                continue;
+
+            const auto heading = juce::String((int) s + 1) + ". "
+                               + (slot.plugin.name.empty() ? juce::String("Plugin") : juce::String(slot.plugin.name));
+            for (const auto& info : node->parameters())
+                targets.push_back({ AutomationTarget::effect((int) s, slot.kind, info.id), juce::String(info.name),
+                                    heading, { 0.0f, 1.0f, info.highest, info.lowest, info.value } });
+            continue;
+        }
+
         const auto* effect = model::descriptorFor(slot.kind);
         if (effect == nullptr)
             continue;

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "engine/PluginModule.h"
 
@@ -33,6 +36,53 @@ public:
         // Pre-allocated so processBlock never has to grow it. Insert effects
         // get no MIDI, but processBlock requires a buffer regardless.
         midi_.ensureSize(256);
+
+        // Automatable parameters by the plugin's own id, which (unlike the
+        // index) is meant to survive a plugin update. Built here so the audio
+        // thread only ever searches it.
+        if (instance_ != nullptr)
+            for (int i = 0; i < instance_->getParameters().size(); ++i)
+                if (auto* param = instance_->getHostedParameter(i); param != nullptr && param->isAutomatable())
+                    params_.push_back({ param->getParameterID().toStdString(), param, param->getValue() });
+    }
+
+    /** One automatable parameter, as the automation pane lists it. */
+    struct ParameterInfo
+    {
+        std::string id;
+        std::string name;
+        std::string lowest, highest; // the plugin's own text at 0 and 1
+        float       value = 0.0f;    // now, 0..1
+    };
+
+    /** Message thread. Empty for a plugin that didn't load. */
+    std::vector<ParameterInfo> parameters() const
+    {
+        std::vector<ParameterInfo> infos;
+        for (const auto& entry : params_)
+            infos.push_back({ entry.id, entry.param->getName(64).toStdString(),
+                              entry.param->getText(0.0f, 32).toStdString(),
+                              entry.param->getText(1.0f, 32).toStdString(), entry.param->getValue() });
+        return infos;
+    }
+
+    /** Automation: a parameter's normalised 0..1 value, by the plugin's id.
+        Only passed on when it changes, since a plugin may do real work per
+        change and a held lane repeats itself every block. */
+    bool setParam(std::string_view id, float value) override
+    {
+        for (auto& entry : params_)
+            if (entry.id == id)
+            {
+                value = juce::jlimit(0.0f, 1.0f, value);
+                if (value != entry.lastSet)
+                {
+                    entry.lastSet = value;
+                    entry.param->setValue(value);
+                }
+                return true;
+            }
+        return false;
     }
 
     ~PluginNode() override
@@ -118,7 +168,15 @@ public:
     juce::AudioPluginInstance* instance() const noexcept { return instance_.get(); }
 
 private:
+    struct Param
+    {
+        std::string                    id;
+        juce::AudioProcessorParameter* param   = nullptr;
+        float                          lastSet = -1.0f;
+    };
+
     std::unique_ptr<juce::AudioPluginInstance> instance_;
+    std::vector<Param>                         params_;
     juce::MidiBuffer                           midi_;
     juce::AudioBuffer<float>                   scratch_;
     bool                                       prepared_ = false;
