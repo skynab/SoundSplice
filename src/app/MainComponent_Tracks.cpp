@@ -1682,12 +1682,35 @@ void MainComponent::refreshAutomationPaneForSelected()
     }
 
     const auto& track = history_.current().tracks[(size_t) selectedTrackIndex_];
-    const auto  param = automationPane_.param();
+
+    // The picker: the track's own parameters, then every parameter of every
+    // built-in in its chain, a section per effect. A plugin's parameters are
+    // its own and aren't offered yet.
+    auto targets = AutomationPane::trackTargets();
+    for (size_t s = 0; s < track.effectChain.size(); ++s)
+    {
+        const auto& slot   = track.effectChain[s];
+        const auto* effect = model::descriptorFor(slot.kind);
+        if (effect == nullptr)
+            continue;
+
+        const auto heading = juce::String((int) s + 1) + ". " + effect->name;
+        for (size_t p = 0; p < effect->params.size(); ++p)
+        {
+            const auto& param = effect->params[p];
+            targets.push_back({ AutomationTarget::effect((int) s, slot.kind, param.id),
+                                juce::String(automationParamName(*effect, p)), heading,
+                                automationRangeFor(param, model::paramValue(slot, param)) });
+        }
+    }
+    automationPane_.setTargets(std::move(targets));
 
     // A track with no lane for this parameter gets an empty one rather than
     // nothing: an empty lane is a real state (no automation, sitting at the
     // static value) and is the one you start drawing into.
-    const auto* lane = track.lane(param);
+    const auto& target = automationPane_.target();
+    const auto* lane   = target.isEffect() ? track.effectChain[(size_t) target.slot].lane(target.paramId)
+                                           : track.lane(target.trackParam);
 
     automationPane_.setLane(track.name.empty()
                                 ? ("Track " + juce::String(selectedTrackIndex_ + 1))
@@ -1702,7 +1725,7 @@ void MainComponent::refreshAutomationPaneForSelected()
     One undo step per gesture, not per breakpoint: the pane reports the whole
     lane when a drag ends, which is the same "a drag is one edit" rule the
     mixer faders follow. */
-void MainComponent::applyEditedAutomationLane(model::TrackParam param,
+void MainComponent::applyEditedAutomationLane(const AutomationTarget& target,
                                               const model::AutomationLane& lane)
 {
     if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
@@ -1710,7 +1733,7 @@ void MainComponent::applyEditedAutomationLane(model::TrackParam param,
 
     const int index = selectedTrackIndex_;
 
-    history_.edit("Edit automation", [index, param, &lane](model::Song& s)
+    history_.edit("Edit automation", [index, &target, &lane](model::Song& s)
     {
         if (index < 0 || index >= (int) s.tracks.size())
             return;
@@ -1720,10 +1743,23 @@ void MainComponent::applyEditedAutomationLane(model::TrackParam param,
         // An emptied lane is erased rather than stored empty, so a track with
         // no automation carries no lanes at all — the state every serialization
         // and playback path already treats as "use the static value".
-        if (lane.empty())
-            track.automation.erase((int) param);
+        if (target.isEffect())
+        {
+            // The slot has to still be the effect the lane was drawn for.
+            if (target.slot >= (int) track.effectChain.size()
+                || track.effectChain[(size_t) target.slot].kind != target.kind)
+                return;
+
+            auto& lanes = track.effectChain[(size_t) target.slot].automation;
+            if (lane.empty())
+                lanes.erase(target.paramId);
+            else
+                lanes[target.paramId] = lane;
+        }
+        else if (lane.empty())
+            track.automation.erase((int) target.trackParam);
         else
-            track.laneFor(param) = lane;
+            track.laneFor(target.trackParam) = lane;
     });
 
     syncEngineTracks();

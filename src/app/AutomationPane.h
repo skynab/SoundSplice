@@ -41,25 +41,45 @@ public:
         The lane is passed whole rather than as a delta: the edits here are
         add/move/remove on a sorted list, and replaying those against the
         document would mean implementing the same sort twice. */
-    std::function<void(model::TrackParam, const model::AutomationLane&)> onLaneEdited;
+    std::function<void(const AutomationTarget&, const model::AutomationLane&)> onLaneEdited;
 
     /** A drag is starting/ending. Used to make a whole drag one undo step, the
         same technique the mixer faders use. */
     std::function<void()> onEditGestureStart;
     std::function<void()> onEditGestureEnd;
 
+    /** One entry in the parameter picker. */
+    struct Target
+    {
+        AutomationTarget target;
+        juce::String     name;
+        juce::String     heading; // the picker's section, "" for the track's own
+        AutomationRange  range;
+    };
+
+    /** The track's own parameters: what the picker offers before the owner
+        hands over a track's effects. */
+    static std::vector<Target> trackTargets()
+    {
+        return { { AutomationTarget::track(model::TrackParam::Gain), "Volume", {},
+                   automationRangeFor(model::TrackParam::Gain) },
+                 { AutomationTarget::track(model::TrackParam::Pan), "Pan", {},
+                   automationRangeFor(model::TrackParam::Pan) } };
+    }
+
     AutomationPane()
     {
-        paramBox_.addItem("Volume", 1 + (int) model::TrackParam::Gain);
-        paramBox_.addItem("Pan",    1 + (int) model::TrackParam::Pan);
-        paramBox_.setSelectedId(1 + (int) model::TrackParam::Gain, juce::dontSendNotification);
         paramBox_.onChange = [this]
         {
-            param_ = (model::TrackParam) (paramBox_.getSelectedId() - 1);
+            const int id = paramBox_.getSelectedId();
+            if (id < 1 || id > (int) targets_.size())
+                return;
+            selected_ = (size_t) (id - 1);
             if (onParamChanged)
-                onParamChanged(param_);
+                onParamChanged(target());
             repaint();
         };
+        setTargets(trackTargets());
         addAndMakeVisible(paramBox_);
 
         clearButton_.setButtonText("Clear");
@@ -89,9 +109,42 @@ public:
 
     /** Fired when the parameter picker changes, so the owner can hand over
         that parameter's lane. */
-    std::function<void(model::TrackParam)> onParamChanged;
+    std::function<void(const AutomationTarget&)> onParamChanged;
 
-    model::TrackParam param() const noexcept { return param_; }
+    /** Replaces what the picker offers - the track's own parameters and its
+        effects'. The selection stays on the same target if it's still
+        offered, and falls back to the first otherwise. */
+    void setTargets(std::vector<Target> targets)
+    {
+        const auto previous = targets_.empty() ? AutomationTarget {} : target();
+        targets_  = targets.empty() ? trackTargets() : std::move(targets);
+        selected_ = 0;
+        for (size_t i = 0; i < targets_.size(); ++i)
+            if (targets_[i].target == previous)
+                selected_ = i;
+
+        paramBox_.clear(juce::dontSendNotification);
+        juce::String heading;
+        for (size_t i = 0; i < targets_.size(); ++i)
+        {
+            if (targets_[i].heading.isNotEmpty() && targets_[i].heading != heading)
+                paramBox_.addSectionHeading(targets_[i].heading);
+            heading = targets_[i].heading;
+            paramBox_.addItem(targets_[i].name, (int) i + 1);
+        }
+        paramBox_.setSelectedId((int) selected_ + 1, juce::dontSendNotification);
+        repaint();
+    }
+
+    const AutomationTarget& target() const noexcept { return targets_[selected_].target; }
+
+    /** Selects @p wanted if the picker offers it. */
+    void selectTarget(const AutomationTarget& wanted)
+    {
+        for (size_t i = 0; i < targets_.size(); ++i)
+            if (targets_[i].target == wanted)
+                paramBox_.setSelectedId((int) i + 1, juce::sendNotificationSync);
+    }
 
     /** Shows @p lane for @p trackName. @p totalBeats sizes the view. */
     void setLane(const juce::String& trackName, model::TrackType type,
@@ -148,7 +201,7 @@ public:
         }
 
         const auto lane  = laneBounds();
-        const auto range = automationRangeFor(param_);
+        const auto& range = currentRange();
 
         g.setColour(juce::Colour(0xff141417));
         g.fillRect(lane);
@@ -159,16 +212,16 @@ public:
 
         g.setColour(juce::Colours::white.withAlpha(0.5f));
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
-        g.drawText(range.topLabel, lane.getX() + 4, lane.getY() + 2, 60, 14,
+        g.drawText(juce::String(range.topLabel), lane.getX() + 4, lane.getY() + 2, 120, 14,
                    juce::Justification::centredLeft);
-        g.drawText(range.bottomLabel, lane.getX() + 4, lane.getBottom() - 16, 60, 14,
+        g.drawText(juce::String(range.bottomLabel), lane.getX() + 4, lane.getBottom() - 16, 120, 14,
                    juce::Justification::centredLeft);
     }
 
     void resized() override
     {
         auto toolbar = getLocalBounds().removeFromTop(kToolbarHeight).reduced(4, 3);
-        paramBox_.setBounds(toolbar.removeFromLeft(110));
+        paramBox_.setBounds(toolbar.removeFromLeft(190));
         toolbar.removeFromLeft(6);
         clearButton_.setBounds(toolbar.removeFromLeft(60));
         toolbar.removeFromLeft(10);
@@ -182,7 +235,7 @@ public:
         if (! hasTrack_ || ! laneBounds().contains(event.getPosition()))
             return;
 
-        const auto range = automationRangeFor(param_);
+        const auto& range = currentRange();
         const auto lane  = laneBounds();
 
         const double beat  = beatForX((float) event.position.x);
@@ -227,7 +280,7 @@ public:
         if (dragging_ < 0)
             return;
 
-        const auto range = automationRangeFor(param_);
+        const auto& range = currentRange();
         const auto lane  = laneBounds();
 
         const double beat  = juce::jmax(0.0, beatForX((float) event.position.x));
@@ -263,6 +316,8 @@ public:
 private:
     static constexpr int kToolbarHeight = 28;
 
+    const AutomationRange& currentRange() const noexcept { return targets_[selected_].range; }
+
     juce::Rectangle<int> laneBounds() const
     {
         return getLocalBounds().withTrimmedTop(kToolbarHeight).reduced(2);
@@ -292,7 +347,7 @@ private:
     {
         repaint();
         if (onLaneEdited)
-            onLaneEdited(param_, lane_);
+            onLaneEdited(target(), lane_);
     }
 
     void drawGrid(juce::Graphics& g, juce::Rectangle<int> lane, const AutomationRange& range) const
@@ -389,7 +444,8 @@ private:
     TimelineGeometry   timeline_;
     AutomationGeometry automation_;
 
-    model::TrackParam    param_ = model::TrackParam::Gain;
+    std::vector<Target>  targets_;
+    size_t               selected_ = 0;
     model::AutomationLane lane_;
     juce::String         trackName_;
     model::TrackType     trackType_ = model::TrackType::Instrument;

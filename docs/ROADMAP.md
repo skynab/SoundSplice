@@ -205,7 +205,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ⬜ **Take lanes and swipe comping** with A/B comparison (REAPER, Audition)
 - ⬜ **Razor/range edits** across tracks (REAPER)
 - ⬜ **Track edit groups** and **folder tracks** (folders as organization only; see the 🔁 note below)
-- ⬜ **Automation for any effect or plugin parameter**, with curve shapes and automation modes
+- 🟡 **Automation for any effect or plugin parameter** ✅ for every built-in effect parameter (pick it in the Automation pane; the lanes live on the effect, so they move with it) · ⬜ plugin parameters · ⬜ curve shapes · ⬜ automation modes
   (read, touch, latch, write)
 - ⬜ **Plugin delay compensation**
 - ⬜ Clip-level effects (an effect chain on one clip rather than the whole track)

@@ -135,7 +135,7 @@ TEST_CASE("An edit is reported once, when the gesture ends", "[gui][automation]"
     int edits = 0;
     int starts = 0;
     int ends   = 0;
-    pane.onLaneEdited       = [&](model::TrackParam, const model::AutomationLane&) { ++edits; };
+    pane.onLaneEdited       = [&](const AutomationTarget&, const model::AutomationLane&) { ++edits; };
     pane.onEditGestureStart = [&] { ++starts; };
     pane.onEditGestureEnd   = [&] { ++ends; };
 
@@ -167,7 +167,7 @@ TEST_CASE("Clear empties the lane and reports it", "[gui][automation]")
     REQUIRE(pane.laneForTesting().points().size() == 2);
 
     int edits = 0;
-    pane.onLaneEdited = [&](model::TrackParam, const model::AutomationLane& lane)
+    pane.onLaneEdited = [&](const AutomationTarget&, const model::AutomationLane& lane)
     {
         ++edits;
         REQUIRE(lane.empty());
@@ -206,4 +206,36 @@ TEST_CASE("The pane parents and sizes its controls", "[gui][automation]")
     }
 
     REQUIRE_FALSE(pane.laneBoundsForTesting().isEmpty());
+}
+
+TEST_CASE("The picker offers effect parameters and reports edits against them", "[gui][automation]")
+{
+    JuceFixture fixture;
+    AutomationPane pane;
+    prepare(pane);
+
+    const auto cutoff = AutomationTarget::effect(0, model::EffectKind::Filter, "cutoff");
+    auto       targets = AutomationPane::trackTargets();
+    targets.push_back({ cutoff, "Cutoff", "1. Filter", { 20.0f, 18000.0f, "18000 Hz", "20 Hz", 1000.0f } });
+    pane.setTargets(targets);
+    REQUIRE(pane.target() == AutomationTarget::track(model::TrackParam::Gain));
+
+    pane.selectTarget(cutoff);
+    REQUIRE(pane.target() == cutoff);
+
+    AutomationTarget edited;
+    pane.onLaneEdited = [&](const AutomationTarget& target, const model::AutomationLane&) { edited = target; };
+    const auto lane = pane.laneBoundsForTesting();
+    const juce::Point<float> at { (float) lane.getCentreX(), (float) lane.getY() + 8.0f };
+    pane.mouseDown(eventAt(pane, at));
+    pane.mouseUp(eventAt(pane, at));
+    REQUIRE(edited == cutoff);
+    REQUIRE(pane.laneForTesting().points().front().value > 17000.0f); // near the top of its own range
+
+    // Rebuilt with the same effect still there, the selection stays; with it
+    // gone, it falls back to Volume rather than pointing at nothing.
+    pane.setTargets(targets);
+    REQUIRE(pane.target() == cutoff);
+    pane.setTargets(AutomationPane::trackTargets());
+    REQUIRE(pane.target() == AutomationTarget::track(model::TrackParam::Gain));
 }

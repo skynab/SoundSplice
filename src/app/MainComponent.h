@@ -207,7 +207,7 @@ private:
 
     void                   refreshAutomationPaneForSelected();
     /** Commits an edited lane for the selected track as one undo step. */
-    void                   applyEditedAutomationLane(model::TrackParam param,
+    void                   applyEditedAutomationLane(const AutomationTarget& target,
                                                      const model::AutomationLane& lane);
     void                   toggleRecording();
     void                   finishRecordingIfReady();

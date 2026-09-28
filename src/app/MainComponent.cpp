@@ -765,14 +765,14 @@ MainComponent::MainComponent()
     openFilesPane_.onClosed   = [this](int clipId) { closeOpenFile(clipId); };
     openFilesPane_.onCloseAll = [this] { closeAllOpenFiles(); };
 
-    automationPane_.onLaneEdited = [this](model::TrackParam param, const model::AutomationLane& lane)
+    automationPane_.onLaneEdited = [this](const AutomationTarget& target, const model::AutomationLane& lane)
     {
-        applyEditedAutomationLane(param, lane);
+        applyEditedAutomationLane(target, lane);
     };
     // The parameter picker changing means a different lane entirely, so the
     // pane has to be handed the new one rather than keeping the old one on
     // screen under a new name.
-    automationPane_.onParamChanged = [this](model::TrackParam) { refreshAutomationPaneForSelected(); };
+    automationPane_.onParamChanged = [this](const AutomationTarget&) { refreshAutomationPaneForSelected(); };
     audioEditor_.onSampleDetailNeeded = [this](double fromSeconds, double toSeconds)
     {
         sendSampleDetailToEditor(fromSeconds, toSeconds);

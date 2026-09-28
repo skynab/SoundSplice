@@ -130,3 +130,33 @@ TEST_CASE("A zero-height lane doesn't divide by zero", "[app][automationgeometry
     REQUIRE(std::isfinite(y));
     REQUIRE(std::isfinite(geometry.valueForY(y, range, kLaneTop, 0.0f)));
 }
+
+TEST_CASE("An effect parameter's range and labels come from its descriptor", "[app][automation]")
+{
+    const auto* filter = model::descriptorFor(model::EffectKind::Filter);
+    const auto& cutoff = *model::paramFor(*filter, "cutoff");
+    const auto  range  = automationRangeFor(cutoff, 440.0);
+    REQUIRE(range.minValue == 20.0f);
+    REQUIRE(range.maxValue == 18000.0f);
+    REQUIRE(range.defaultValue == 440.0f); // a new lane starts where the knob is
+    REQUIRE(range.topLabel == "18000 Hz");
+    REQUIRE(range.bottomLabel == "20 Hz");
+
+    const auto* delay = model::descriptorFor(model::EffectKind::Delay);
+    REQUIRE(automationRangeFor(*model::paramFor(*delay, "mix"), 0.3).topLabel == "100 %");
+
+    const auto mode = automationRangeFor(*model::paramFor(*filter, "mode"), 0.0);
+    REQUIRE(mode.topLabel == "Band-pass");
+    REQUIRE(mode.bottomLabel == "Low-pass");
+}
+
+TEST_CASE("An indented parameter is named with its heading", "[app][automation]")
+{
+    const auto* eq = model::descriptorFor(model::EffectKind::ParametricEq);
+    REQUIRE(automationParamName(*eq, 0) == "Band 1");
+    REQUIRE(automationParamName(*eq, 1) == "Band 1 Frequency");
+    REQUIRE(automationParamName(*eq, 6) == "Band 2 Gain");
+
+    const auto* filter = model::descriptorFor(model::EffectKind::Filter);
+    REQUIRE(automationParamName(*filter, 1) == "Cutoff");
+}

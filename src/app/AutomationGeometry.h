@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <string>
 
+#include "model/EffectParams.h"
 #include "model/Track.h"
 
 namespace soundsplice
@@ -28,8 +31,8 @@ struct AutomationRange
     float maxValue = 1.0f;
 
     /** Label for the top of the lane, then the bottom. */
-    const char* topLabel    = "1";
-    const char* bottomLabel = "0";
+    std::string topLabel    = "1";
+    std::string bottomLabel = "0";
 
     /** What an empty lane sits at — the value the parameter has when nothing
         is automating it, so a fresh lane starts flat where the sound already
@@ -55,6 +58,87 @@ inline AutomationRange automationRangeFor(model::TrackParam param)
             return { -1.0f, 1.0f, "R", "L", 0.0f };
     }
     return { 0.0f, 1.0f, "1", "0", 0.0f };
+}
+
+/** What an automation lane drives: one of the track's own parameters, or
+    one parameter of one effect in its chain. The effect is named by its
+    position and kind, so a lane shown for a slot that has since become
+    another effect is recognised as stale rather than edited. */
+struct AutomationTarget
+{
+    model::TrackParam trackParam = model::TrackParam::Gain; // when slot < 0
+    int               slot       = -1;
+    model::EffectKind kind       = model::EffectKind::Filter;
+    std::string       paramId;
+
+    bool isEffect() const noexcept { return slot >= 0; }
+    bool operator==(const AutomationTarget&) const = default;
+
+    static AutomationTarget track(model::TrackParam param) { return { param, -1, {}, {} }; }
+    static AutomationTarget effect(int slot, model::EffectKind kind, std::string paramId)
+    {
+        return { model::TrackParam::Gain, slot, kind, std::move(paramId) };
+    }
+};
+
+namespace automationdetail
+{
+    /** @p value as the effect panel shows it: scaled, trimmed, with its unit. */
+    inline std::string displayed(const model::EffectParam& param, double value)
+    {
+        char buffer[48];
+        std::snprintf(buffer, sizeof(buffer), "%g", value * param.displayScale);
+        return buffer + std::string(param.unit);
+    }
+}
+
+/**
+    The range for an effect parameter: its descriptor's, labelled the way the
+    effect panel shows values, with @p staticValue - what the parameter is set
+    to when nothing automates it - as where a fresh lane sits.
+*/
+inline AutomationRange automationRangeFor(const model::EffectParam& param, double staticValue)
+{
+    AutomationRange range;
+    range.minValue     = (float) param.min;
+    range.maxValue     = (float) param.max;
+    range.defaultValue = (float) staticValue;
+
+    if (param.control == model::ParamControl::Toggle)
+    {
+        range.topLabel    = "On";
+        range.bottomLabel = "Off";
+    }
+    else if (param.control == model::ParamControl::Choice && ! param.choices.empty())
+    {
+        range.topLabel    = param.choices.back();
+        range.bottomLabel = param.choices.front();
+    }
+    else
+    {
+        range.topLabel    = automationdetail::displayed(param, param.max);
+        range.bottomLabel = automationdetail::displayed(param, param.min);
+    }
+    return range;
+}
+
+/** A name for @p effect's parameter @p index that stands on its own in a
+    list. Parameters shown indented under a heading in the effect panel
+    ("Band 2", then "  Gain") take the heading with them: "Band 2 Gain". */
+inline std::string automationParamName(const model::EffectDescriptor& effect, size_t index)
+{
+    const std::string name = effect.params[index].name;
+    const auto        text = name.find_first_not_of(' ');
+    if (text == 0 || text == std::string::npos)
+        return name;
+
+    for (size_t i = index; i-- > 0;)
+    {
+        const std::string heading = effect.params[i].name;
+        if (heading.find_first_not_of(' ') == 0)
+            return heading + " " + name.substr(text);
+    }
+    return name.substr(text);
 }
 
 struct AutomationGeometry
