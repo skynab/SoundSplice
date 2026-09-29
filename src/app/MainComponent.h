@@ -745,8 +745,24 @@ private:
     // controls started, so the whole gesture can commit as one undo step —
     // same reasoning as the fader-drag members above, but for a whole
     // model::EffectSlot rather than one float (see commitStructDrag).
+    /** Which effect chain the effects panel edits: a track's own (clip -1)
+        or one of its clips'. By index, so it can be found again in whichever
+        copy of the song an undoable edit is working on. */
+    struct EffectChainRef
+    {
+        int  track = -1;
+        int  clip  = -1;
+        bool isClip() const noexcept { return clip >= 0; }
+        bool operator==(const EffectChainRef&) const = default;
+    };
+
+    EffectChainRef                         editedChainRef() const;
+    static std::vector<model::EffectSlot>* chainAt(model::Song& song, const EffectChainRef& ref);
+    const std::vector<model::EffectSlot>*  editedChain() const;
+    void pushEffectSlotToEngine(const EffectChainRef& ref, int slotIndex, const model::EffectSlot& slot);
+
     bool              effectSlotDragging_ = false;
-    int               effectSlotDragTrack_ = -1;
+    EffectChainRef    effectSlotDragChain_;
     int               effectSlotDragIndex_ = -1;
     model::EffectSlot effectSlotDragFrom_;
 

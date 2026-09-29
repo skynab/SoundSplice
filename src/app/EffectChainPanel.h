@@ -69,8 +69,24 @@ public:
     /** Fired when one of the user's presets is picked from Delete Preset. */
     std::function<void(const std::string& effectId, const std::string& name)> onUserPresetDeleted;
 
+    /** The Track/Clip switch changed: the owner hands over the other chain. */
+    std::function<void(bool clipScope)> onScopeChanged;
+
     EffectChainPanel()
     {
+        // Which chain this edits: the track's, or the selected clip's alone.
+        scopeButton_.setTooltip("Which effects this edits: the selected track's, "
+                                "or the selected audio clip's own, which run on that clip alone");
+        scopeButton_.onClick = [this]
+        {
+            clipScope_ = ! clipScope_;
+            updateScopeButton();
+            if (onScopeChanged)
+                onScopeChanged(clipScope_);
+        };
+        updateScopeButton();
+        addChildComponent(scopeButton_);
+
         placeholder_.setText("Select a track to edit its effects", juce::dontSendNotification);
         placeholder_.setJustificationType(juce::Justification::centred);
         placeholder_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
@@ -175,13 +191,30 @@ public:
 
     void setChain(const std::vector<model::EffectSlot>& chain)
     {
+        scopeButton_.setVisible(true);
         chain_ = chain;
         selected_ = chain_.empty() ? -1 : juce::jlimit(0, (int) chain_.size() - 1, juce::jmax(0, selected_));
         refreshParamControls();
         setContentVisible(true);
     }
 
-    void setNoTrackSelected() { setContentVisible(false); }
+    void setNoTrackSelected()
+    {
+        placeholder_.setText("Select a track to edit its effects", juce::dontSendNotification);
+        scopeButton_.setVisible(false);
+        setContentVisible(false);
+    }
+
+    /** In Clip scope with no audio clip selected: nothing to edit, but the
+        switch stays, so Track scope is one click away. */
+    void setNoClipSelected()
+    {
+        placeholder_.setText("Select an audio clip to give it effects of its own", juce::dontSendNotification);
+        scopeButton_.setVisible(true);
+        setContentVisible(false);
+    }
+
+    bool clipScope() const noexcept { return clipScope_; }
 
     /** Selects a slot, so a test can walk every effect kind's controls. The
         app selects by clicking the list, which a headless test can't do. */
@@ -257,10 +290,10 @@ public:
     void resized() override
     {
         placeholder_.setBounds(getLocalBounds());
+        auto area = getLocalBounds().reduced(6);
+        scopeButton_.setBounds(area.getRight() - kScopeButtonWidth, area.getY() + 2, kScopeButtonWidth, kToolbarHeight - 4);
         if (! contentVisible_)
             return;
-
-        auto area = getLocalBounds().reduced(6);
 
         // Four fixed-width buttons in a row: in a narrow pane the later ones
         // run past the right edge and used to end up zero wide. Dropping the
@@ -268,6 +301,7 @@ public:
         // pane is widened. Add is first because it's the one that has to work
         // for the panel to be worth anything.
         auto toolbar = area.removeFromTop(kToolbarHeight);
+        toolbar.removeFromRight(kScopeButtonWidth + 4);
         setBoundsOrHide(addButton_, toolbar.removeFromLeft(64).reduced(2));
         setBoundsOrHide(removeButton_, toolbar.removeFromLeft(70).reduced(2));
         setBoundsOrHide(upButton_, toolbar.removeFromLeft(44).reduced(2));
@@ -328,6 +362,7 @@ public:
 private:
     static constexpr int kRowHeight     = 26;
     static constexpr int kToolbarHeight = 26;
+    static constexpr int kScopeButtonWidth = 70;
     static constexpr int kBypassWidth   = 26;
     static constexpr int kLabelWidth    = 90;
     static constexpr int kPresetsButtonWidth = 110;
@@ -420,14 +455,16 @@ private:
 
         for (auto& [name, submenu] : groups)
             menu.addSubMenu(name, submenu);
-        menu.addSeparator();
-
-        if (plugins_.empty())
+        // Plugins go on a track's chain; a clip's is built-ins only for now
+        // (see model::Clip::effects).
+        if (! clipScope_ && plugins_.empty())
         {
+            menu.addSeparator();
             menu.addItem(kScanId, "Scan for plugins...");
         }
-        else
+        else if (! clipScope_)
         {
+            menu.addSeparator();
             juce::PopupMenu pluginMenu;
             for (int i = 0; i < (int) plugins_.size(); ++i)
                 pluginMenu.addItem(kFirstPluginId + i,
@@ -790,6 +827,8 @@ private:
         onSlotParamsChanged(slot, selected_);
     }
 
+    void updateScopeButton() { scopeButton_.setButtonText(clipScope_ ? "Clip FX" : "Track FX"); }
+
     void setContentVisible(bool visible)
     {
         contentVisible_ = visible;
@@ -812,6 +851,8 @@ private:
     std::vector<engine::PluginEntry> plugins_;
     int                              selected_       = 0;
     bool                             contentVisible_ = false;
+    bool                             clipScope_      = false;
+    juce::TextButton                 scopeButton_;
     bool                             updating_       = false;
 
     juce::Label      placeholder_;

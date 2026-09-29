@@ -322,3 +322,41 @@ TEST_CASE("The analyser pane asks for loudness and shows what was measured", "[g
     REQUIRE(text.contains("True peak 0.7 dBTP"));
     REQUIRE(text.contains("Max momentary -inf LUFS"));
 }
+
+TEST_CASE("The effect panel's Track/Clip switch is wired and survives an empty clip scope", "[gui][wiring]")
+{
+    JuceFixture fixture;
+
+    EffectChainPanel panel;
+    panel.setVisible(true);
+    panel.setBounds(0, 0, 700, 420);
+    panel.setChain({ model::makeEffectSlot(model::EffectKind::Filter) });
+
+    juce::TextButton* scope = nullptr;
+    for (auto* child : panel.getChildren())
+        if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr && button->getButtonText() == "Track FX")
+            scope = button;
+    REQUIRE(scope != nullptr);
+    REQUIRE(paneaudit::effectivelyVisible(panel, scope));
+
+    int  changes = 0;
+    bool toClip  = false;
+    panel.onScopeChanged = [&](bool clip) { ++changes; toClip = clip; };
+
+    scope->triggerClick();
+    pump();
+    REQUIRE(changes == 1);
+    REQUIRE(toClip);
+    REQUIRE(panel.clipScope());
+    REQUIRE(scope->getButtonText() == "Clip FX");
+
+    // No audio clip to edit: the list goes, the way back to Track doesn't.
+    panel.setNoClipSelected();
+    REQUIRE(scope->isVisible());
+    scope->triggerClick();
+    pump();
+    REQUIRE_FALSE(panel.clipScope());
+
+    panel.setNoTrackSelected();
+    REQUIRE_FALSE(scope->isVisible());
+}

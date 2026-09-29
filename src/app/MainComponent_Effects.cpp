@@ -6,8 +6,57 @@
 
 namespace soundsplice
 {
-/** Shows the selected track's insert effects. Applies to *every* track
-    type — an audio track wants a filter as much as an instrument one does. */
+/** The chain the effects panel is editing: the selected track's, or, with
+    the panel switched to Clip, the selected clip's own. Clip -1 when that's
+    the track's; track -1 when there's nothing to edit. */
+MainComponent::EffectChainRef MainComponent::editedChainRef() const
+{
+    const auto& song = history_.current();
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
+        return {};
+    if (! effectChain_.clipScope())
+        return { selectedTrackIndex_, -1 };
+
+    const auto& clips = song.tracks[(size_t) selectedTrackIndex_].clips;
+    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) clips.size()
+        || clips[(size_t) selectedClipIndex_].type != model::ClipType::Audio)
+        return {};
+    return { selectedTrackIndex_, selectedClipIndex_ };
+}
+
+std::vector<model::EffectSlot>* MainComponent::chainAt(model::Song& song, const EffectChainRef& ref)
+{
+    if (ref.track < 0 || ref.track >= (int) song.tracks.size())
+        return nullptr;
+    auto& track = song.tracks[(size_t) ref.track];
+    if (! ref.isClip())
+        return &track.effectChain;
+    return ref.clip < (int) track.clips.size() ? &track.clips[(size_t) ref.clip].effects : nullptr;
+}
+
+const std::vector<model::EffectSlot>* MainComponent::editedChain() const
+{
+    return chainAt(const_cast<model::Song&>(history_.current()), editedChainRef());
+}
+
+/** A slot's settings, to the engine, without rebuilding anything: the
+    track's live chain, or the chain the engine keeps for the clip. A track's
+    automated parameters are left to their lanes. */
+void MainComponent::pushEffectSlotToEngine(const EffectChainRef& ref, int slotIndex, const model::EffectSlot& slot)
+{
+    if (ref.isClip())
+    {
+        const auto& clips = history_.current().tracks[(size_t) ref.track].clips;
+        if (ref.clip < (int) clips.size())
+            engine_.setClipEffectParams(clips[(size_t) ref.clip].id, slotIndex, model::effectParamValues(slot));
+        return;
+    }
+    engine_.setTrackEffectSlotParams(ref.track, slotIndex, model::effectParamValues(slot, true));
+}
+
+/** Shows the selected track's insert effects, or its selected clip's own.
+    Applies to *every* track type — an audio track wants a filter as much as
+    an instrument one does. */
 void MainComponent::refreshEffectChainForSelected()
 {
     if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
@@ -16,7 +65,10 @@ void MainComponent::refreshEffectChainForSelected()
         return;
     }
 
-    effectChain_.setChain(history_.current().tracks[(size_t) selectedTrackIndex_].effectChain);
+    if (const auto* chain = editedChain())
+        effectChain_.setChain(*chain);
+    else
+        effectChain_.setNoClipSelected();
 }
 
 // Turning a slot into its configured node used to live here. It moved to
@@ -30,15 +82,16 @@ void MainComponent::refreshEffectChainForSelected()
     which is what instantiates it. */
 void MainComponent::addEffectSlot(model::EffectKind kind, const model::PluginRef& plugin)
 {
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
+    const auto ref = editedChainRef();
+    if (ref.track < 0 || (ref.isClip() && kind == model::EffectKind::Plugin))
         return;
 
-    const int index = selectedTrackIndex_;
-    history_.edit("Add effect", [index, kind, &plugin](model::Song& s)
+    history_.edit(ref.isClip() ? "Add clip effect" : "Add effect", [ref, kind, &plugin](model::Song& s)
     {
         auto slot   = model::makeEffectSlot(kind);
         slot.plugin = plugin;
-        s.tracks[(size_t) index].effectChain.push_back(std::move(slot));
+        if (auto* chain = chainAt(s, ref))
+            chain->push_back(std::move(slot));
     });
 
     // Any open editor belongs to a node the rebuild is about to delete.
@@ -51,15 +104,15 @@ void MainComponent::addEffectSlot(model::EffectKind kind, const model::PluginRef
 
 void MainComponent::removeEffectSlot(int slotIndex)
 {
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
+    const auto ref = editedChainRef();
+    if (ref.track < 0)
         return;
 
-    const int index = selectedTrackIndex_;
-    history_.edit("Remove effect", [index, slotIndex](model::Song& s)
+    history_.edit("Remove effect", [ref, slotIndex](model::Song& s)
     {
-        auto& chain = s.tracks[(size_t) index].effectChain;
-        if (slotIndex >= 0 && slotIndex < (int) chain.size())
-            chain.erase(chain.begin() + slotIndex);
+        auto* chain = chainAt(s, ref);
+        if (chain != nullptr && slotIndex >= 0 && slotIndex < (int) chain->size())
+            chain->erase(chain->begin() + slotIndex);
     });
 
     closePluginEditors();
@@ -73,17 +126,18 @@ void MainComponent::removeEffectSlot(int slotIndex)
     this is a real document edit rather than a view-only sort. */
 void MainComponent::moveEffectSlot(int slotIndex, int delta)
 {
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
+    const auto ref = editedChainRef();
+    if (ref.track < 0)
         return;
 
-    const int index = selectedTrackIndex_;
-    history_.edit("Reorder effects", [index, slotIndex, delta](model::Song& s)
+    history_.edit("Reorder effects", [ref, slotIndex, delta](model::Song& s)
     {
-        auto&     chain  = s.tracks[(size_t) index].effectChain;
+        auto*     chain  = chainAt(s, ref);
         const int target = slotIndex + delta;
-        if (slotIndex < 0 || slotIndex >= (int) chain.size() || target < 0 || target >= (int) chain.size())
+        if (chain == nullptr || slotIndex < 0 || slotIndex >= (int) chain->size() || target < 0
+            || target >= (int) chain->size())
             return;
-        std::swap(chain[(size_t) slotIndex], chain[(size_t) target]);
+        std::swap((*chain)[(size_t) slotIndex], (*chain)[(size_t) target]);
     });
 
     closePluginEditors();
@@ -98,21 +152,18 @@ void MainComponent::moveEffectSlot(int slotIndex, int delta)
     plugin reinstantiation. */
 void MainComponent::setEffectSlotBypass(int slotIndex, bool enabled)
 {
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
+    const auto  ref   = editedChainRef();
+    const auto* chain = editedChain();
+    if (chain == nullptr || slotIndex < 0 || slotIndex >= (int) chain->size())
         return;
 
-    const auto& chain = history_.current().tracks[(size_t) selectedTrackIndex_].effectChain;
-    if (slotIndex < 0 || slotIndex >= (int) chain.size())
-        return;
-
-    const int index = selectedTrackIndex_;
-    history_.edit(enabled ? "Enable effect" : "Bypass effect", [index, slotIndex, enabled](model::Song& s)
+    history_.edit(enabled ? "Enable effect" : "Bypass effect", [ref, slotIndex, enabled](model::Song& s)
     {
-        s.tracks[(size_t) index].effectChain[(size_t) slotIndex].enabled = enabled;
+        if (auto* c = chainAt(s, ref); c != nullptr && slotIndex < (int) c->size())
+            (*c)[(size_t) slotIndex].enabled = enabled;
     });
 
-    const auto& updatedChain = history_.current().tracks[(size_t) selectedTrackIndex_].effectChain;
-    engine_.setTrackEffectSlotParams(selectedTrackIndex_, slotIndex, model::effectParamValues(updatedChain[(size_t) slotIndex], true));
+    pushEffectSlotToEngine(ref, slotIndex, (*editedChain())[(size_t) slotIndex]);
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
@@ -122,12 +173,19 @@ void MainComponent::setEffectSlotBypass(int slotIndex, bool enabled)
     mixer faders. */
 void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotIndex)
 {
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
+    const auto ref = editedChainRef();
+    auto*      live = chainAt(history_.mutableCurrent(), ref);
+    if (live == nullptr || slotIndex < 0 || slotIndex >= (int) live->size())
         return;
 
-    auto& chain = history_.mutableCurrent().tracks[(size_t) selectedTrackIndex_].effectChain;
-    if (slotIndex < 0 || slotIndex >= (int) chain.size())
+    auto& chain = *live;
+    if (ref.isClip())
+    {
+        // A clip's effects aren't automated: the settings are all there is.
+        chain[(size_t) slotIndex] = slot;
+        pushEffectSlotToEngine(ref, slotIndex, slot);
         return;
+    }
 
     // Which parameters this move changed, for recording automation: the panel
     // hands over the whole slot, not the one control that moved.
@@ -385,17 +443,14 @@ void MainComponent::updateEqControls()
     started — see EffectChainPanel::onSlotParamsDragStart. */
 void MainComponent::beginEffectSlotParamsDrag(int slotIndex)
 {
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
-        return;
-
-    const auto& chain = history_.current().tracks[(size_t) selectedTrackIndex_].effectChain;
-    if (slotIndex < 0 || slotIndex >= (int) chain.size())
+    const auto* chain = editedChain();
+    if (chain == nullptr || slotIndex < 0 || slotIndex >= (int) chain->size())
         return;
 
     effectSlotDragging_  = true;
-    effectSlotDragTrack_ = selectedTrackIndex_;
+    effectSlotDragChain_ = editedChainRef();
     effectSlotDragIndex_ = slotIndex;
-    effectSlotDragFrom_  = chain[(size_t) slotIndex];
+    effectSlotDragFrom_  = (*chain)[(size_t) slotIndex];
 }
 
 /** Commits a whole effect-slot-parameters drag as one undo step, the
@@ -405,14 +460,16 @@ void MainComponent::beginEffectSlotParamsDrag(int slotIndex)
     commits, equality is the whole test. */
 void MainComponent::endEffectSlotParamsDrag(int slotIndex)
 {
-    if (! effectSlotDragging_ || effectSlotDragTrack_ != selectedTrackIndex_ || effectSlotDragIndex_ != slotIndex)
+    const auto ref = editedChainRef();
+    if (! effectSlotDragging_ || effectSlotDragChain_ != ref || effectSlotDragIndex_ != slotIndex)
         return;
 
     effectSlotDragging_ = false;
 
-    const auto& chain = history_.current().tracks[(size_t) selectedTrackIndex_].effectChain;
-    if (slotIndex < 0 || slotIndex >= (int) chain.size())
+    const auto* edited = editedChain();
+    if (edited == nullptr || slotIndex < 0 || slotIndex >= (int) edited->size())
         return;
+    const auto& chain = *edited;
 
     // Every parameter of this slot being written was held by this drag.
     std::vector<AutomationWriteKey> held;
@@ -422,15 +479,14 @@ void MainComponent::endEffectSlotParamsDrag(int slotIndex)
     for (const auto& key : held)
         automationControlReleased(key);
 
-    const auto landedOn   = chain[(size_t) slotIndex];
-    const int  trackIndex = selectedTrackIndex_;
+    const auto landedOn = chain[(size_t) slotIndex];
 
     commitStructDrag(history_, "Set effect parameters", effectSlotDragFrom_, landedOn,
-                     [trackIndex, slotIndex](model::Song& s, const model::EffectSlot& value)
+                     [ref, slotIndex](model::Song& s, const model::EffectSlot& value)
     {
-        auto& c = s.tracks[(size_t) trackIndex].effectChain;
-        if (slotIndex >= 0 && slotIndex < (int) c.size())
-            c[(size_t) slotIndex] = value;
+        auto* c = chainAt(s, ref);
+        if (c != nullptr && slotIndex >= 0 && slotIndex < (int) c->size())
+            (*c)[(size_t) slotIndex] = value;
     });
 }
 
@@ -470,16 +526,16 @@ void MainComponent::chooseImpulseResponse(int slotIndex, bool browse)
 
 void MainComponent::setImpulseResponse(int slotIndex, const juce::File& file)
 {
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
+    const auto ref = editedChainRef();
+    if (ref.track < 0)
         return;
 
-    const int         index = selectedTrackIndex_;
-    const std::string path  = file == juce::File{} ? std::string() : file.getFullPathName().toStdString();
-    history_.edit(path.empty() ? "Use built-in reverb hall" : "Load impulse response", [index, slotIndex, path](model::Song& s)
+    const std::string path = file == juce::File{} ? std::string() : file.getFullPathName().toStdString();
+    history_.edit(path.empty() ? "Use built-in reverb hall" : "Load impulse response", [ref, slotIndex, path](model::Song& s)
     {
-        auto& chain = s.tracks[(size_t) index].effectChain;
-        if (slotIndex >= 0 && slotIndex < (int) chain.size())
-            chain[(size_t) slotIndex].convolution.irFile = path;
+        auto* chain = chainAt(s, ref);
+        if (chain != nullptr && slotIndex >= 0 && slotIndex < (int) chain->size())
+            (*chain)[(size_t) slotIndex].convolution.irFile = path;
     });
 
     syncEngineTracks();
