@@ -141,3 +141,44 @@ TEST_CASE("Overlapping clips on a track mix, and each stops at the end of its wi
     REQUIRE(out.getSample(0, 47998) == 0.5f);
     REQUIRE(out.getSample(0, 48002) == 0.0f);          // and the second at 2.0
 }
+
+TEST_CASE("A clip's own effects touch that clip and not the one overlapping it", "[gui][envelope][effects]")
+{
+    AudioFilePlayerNode player;
+    player.prepare(kRate, kBlock);
+
+    // Polarity flipped on both sides: exact, so the mix can be checked to the bit.
+    auto chain = std::make_shared<EffectChain>();
+    chain->add(makeBuiltInNode(EffectKind::Invert));
+    chain->prepare(kRate, kBlock);
+    EffectParamValues invert;
+    invert.kind    = EffectKind::Invert;
+    invert.enabled = true;
+    invert.set("left", 1.0);
+    invert.set("right", 1.0);
+    chain->applyParams(0, invert);
+
+    AudioClipSlot first;
+    first.clipData    = fullScale(2.0);
+    first.startBeats  = 0.0;
+    first.lengthBeats = 1.1;
+    first.gain        = 0.25f;
+    first.effects     = chain;
+
+    AudioClipSlot second = first;
+    second.startBeats    = 1.0;
+    second.lengthBeats   = 1.0;
+    second.gain          = 0.5f;
+    second.effects       = nullptr;
+
+    auto* clips = new AudioFilePlayerNode::ClipList();
+    clips->push_back(first);
+    clips->push_back(second);
+    player.submitClips(clips);
+
+    const auto out = play(player, 120);
+    REQUIRE(out.getSample(0, 23998) == -0.25f); // the first, inverted
+    REQUIRE(out.getSample(1, 23998) == -0.25f);
+    REQUIRE(out.getSample(0, 24002) == 0.25f);  // with the second, which isn't
+    REQUIRE(out.getSample(0, 26402) == 0.5f);   // the second alone
+}

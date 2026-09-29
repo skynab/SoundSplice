@@ -1562,6 +1562,9 @@ void MainComponent::syncEngineTracks()
             spec.fades               = clip.fades;
             spec.channels            = clip.channels;
             spec.envelope            = clip.envelope;
+            spec.clipId              = clip.id;
+            for (const auto& slot : clip.effects)
+                spec.effects.push_back(model::effectParamValues(slot));
             audioSpecs.push_back(spec);
         }
         // Submitted even when empty, which the guard here used to skip: the

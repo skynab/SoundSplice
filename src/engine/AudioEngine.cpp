@@ -270,6 +270,14 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
     slots->reserve(clips.size());
     bool allOk = true;
 
+    // Chains of clips this track no longer has go; the rest are reused.
+    for (auto it = clipChains_.begin(); it != clipChains_.end();)
+    {
+        const bool kept = std::any_of(clips.begin(), clips.end(),
+                                      [&](const AudioClipSpec& spec) { return spec.clipId == it->first && ! spec.effects.empty(); });
+        it = (it->second.track == index && ! kept) ? clipChains_.erase(it) : std::next(it);
+    }
+
     for (const auto& spec : clips)
     {
         auto decoded = decodeOrGetCached(spec.file);
@@ -280,13 +288,59 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
         }
         slots->push_back({ decoded, spec.startBeats, spec.lengthBeats,
                            juce::Decibels::decibelsToGain(spec.gainDb), spec.sourceOffsetSeconds,
-                           spec.fades, spec.channels, spec.envelope });
+                           spec.fades, spec.channels, spec.envelope, clipChainFor(index, spec) });
     }
 
     auto& track = tracks_[(size_t) index];
     track.audioPlayer.collectRetiredClips();
     track.audioPlayer.submitClips(slots);
     return allOk;
+}
+
+/** The chain for @p spec's effects: the one it already had if the kinds in
+    it are the same, otherwise a new one, prepared here where allocating is
+    allowed. Either way, set to the settings @p spec carries. Null for a clip
+    with none. */
+std::shared_ptr<EffectChain> AudioEngine::clipChainFor(int trackIndex, const AudioClipSpec& spec)
+{
+    if (spec.effects.empty())
+        return nullptr;
+
+    std::vector<EffectKind> kinds;
+    for (const auto& values : spec.effects)
+        kinds.push_back(values.kind);
+
+    auto& entry = clipChains_[spec.clipId];
+    if (entry.chain == nullptr || entry.kinds != kinds)
+    {
+        auto chain = std::make_shared<EffectChain>();
+        for (const auto kind : kinds)
+        {
+            // Built-ins only on a clip for now; a plugin's place is kept by a
+            // node that passes audio through, so later slots stay aligned.
+            auto node = makeBuiltInNode(kind);
+            chain->add(node != nullptr ? std::move(node) : std::make_unique<PluginNode>(nullptr));
+        }
+
+        const double rate = sampleRate_.load(std::memory_order_relaxed);
+        if (rate > 0.0)
+            chain->prepare(rate, currentBlockSize_);
+
+        entry.kinds = std::move(kinds);
+        entry.chain = std::move(chain);
+    }
+    entry.track = trackIndex;
+
+    for (size_t i = 0; i < spec.effects.size(); ++i)
+        entry.chain->applyParams(i, spec.effects[i]);
+    return entry.chain;
+}
+
+void AudioEngine::setClipEffectParams(int clipId, int slotIndex, const EffectParamValues& values)
+{
+    const auto it = clipChains_.find(clipId);
+    if (it != clipChains_.end() && slotIndex >= 0)
+        it->second.chain->applyParams((size_t) slotIndex, values);
 }
 
 int64_t AudioEngine::countInLeadInSamples() const
@@ -1091,6 +1145,11 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
     // it; device starts are rare enough that the cost doesn't matter.
     for (int i = 0; i < kMaxTracks; ++i)
         rebuildTrackEffectChain(i);
+
+    // Clips' chains are prepared again rather than rebuilt: nothing is playing
+    // them while this runs, and rebuilding would lose their settings.
+    for (auto& [clipId, entry] : clipChains_)
+        entry.chain->prepare(sampleRate, blockSize);
 
     filePlayer_.prepare(sampleRate, blockSize);
     audition_.prepare(sampleRate);

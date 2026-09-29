@@ -6,6 +6,7 @@
 #include "engine/ClipData.h"
 #include "engine/ClipEnvelope.h"
 #include "engine/ClipFade.h"
+#include "engine/EffectChain.h"
 
 namespace soundsplice::engine
 {
@@ -53,6 +54,13 @@ struct AudioClipSlot
         message thread with the rest of the slot; only read on the audio
         thread. */
     ClipEnvelope envelope;
+
+    /** The clip's own effects (model::Clip::effects), run on its audio before
+        it's mixed into the track, or null for none. Shared with the engine's
+        cache of clip chains so resubmitting the clip list keeps the same
+        chain, and its tails, rather than building a new one; the audio thread
+        only reads it through the raw pointer, like clipData. */
+    std::shared_ptr<EffectChain> effects;
 };
 
 } // namespace soundsplice::engine

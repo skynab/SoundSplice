@@ -46,7 +46,14 @@ public:
             delete straggler;
     }
 
-    void prepare(double sampleRate, int /*maxBlockSize*/) override { deviceSampleRate_ = sampleRate; }
+    void prepare(double sampleRate, int maxBlockSize) override
+    {
+        deviceSampleRate_ = sampleRate;
+
+        // Where a clip with effects is rendered before its chain runs, so the
+        // chain sees that clip alone. Sized here, never on the audio thread.
+        clipScratch_.setSize(2, juce::jmax(1, maxBlockSize));
+    }
 
     /** Which of a stream's reader slots this player reports its position in
         (ClipStream::noteReading): distinct per player, so two tracks playing
@@ -118,7 +125,24 @@ public:
             // Window tested in beats, where the clip is actually placed; the
             // offset into the file is then a real-time distance in samples.
             if (blockEndBeats > slot.startBeats && startedBeatsAgo < slot.lengthBeats && slot.clipData != nullptr)
-                renderSlot(slot, startedBeatsAgo * samplesPerBeat, samplesPerBeat, buffer, context);
+            {
+                auto* effects = slot.effects.get();
+                if (effects == nullptr || effects->empty() || numSamples > clipScratch_.getNumSamples())
+                {
+                    renderSlot(slot, startedBeatsAgo * samplesPerBeat, samplesPerBeat, buffer, context);
+                    continue;
+                }
+
+                // The clip alone, through its own chain, then into the track.
+                const int channels = juce::jmin(buffer.getNumChannels(), clipScratch_.getNumChannels());
+                juce::AudioBuffer<float> clipAudio(clipScratch_.getArrayOfWritePointers(), channels, numSamples);
+                clipAudio.clear();
+                renderSlot(slot, startedBeatsAgo * samplesPerBeat, samplesPerBeat, clipAudio, context);
+                effects->setBpm(context.transport.bpm);
+                effects->process(clipAudio);
+                for (int ch = 0; ch < channels; ++ch)
+                    buffer.addFrom(ch, 0, clipAudio, ch, 0, numSamples);
+            }
         }
     }
 
@@ -217,6 +241,7 @@ private:
 
     double    deviceSampleRate_ = 0.0;
     int       readerIndex_      = 0;
+    juce::AudioBuffer<float> clipScratch_;
     ClipList* current_          = nullptr; // audio-thread owned
 
     rt::SpscRingBuffer<ClipList*> inbox_   { 16 }; // message -> audio

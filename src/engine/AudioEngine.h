@@ -51,6 +51,12 @@ struct AudioClipSpec
     ClipFades  fades;                     // see model::Clip::fades
     ClipChannels channels = ClipChannels::Both; // see model::Clip::channels
     ClipEnvelope envelope;                      // see model::Clip::envelope
+
+    /** The clip's own effects, one entry per slot in order, each carrying its
+        kind (model::Clip::effects). With @c clipId, which names the clip across
+        resubmissions so it keeps its chain - see AudioEngine::clipChains_. */
+    int                            clipId = 0;
+    std::vector<EffectParamValues> effects;
 };
 
 /**
@@ -103,6 +109,10 @@ public:
         other gating" behaviour. Message thread. Returns false if any clip's
         file couldn't be read (the others still load). */
     bool setTrackAudioClips(int index, const std::vector<AudioClipSpec>& clips);
+
+    /** A live change to one of a clip's effects, as a knob turns: applied to
+        the chain it already has, with no resubmission. Message thread. */
+    void setClipEffectParams(int clipId, int slotIndex, const EffectParamValues& values);
 
     // Metronome (thread-safe atomics). Summed in after the master chain, so
     // it never passes through the master effects or reaches the meter — and
@@ -641,6 +651,21 @@ private:
     // parameter setters reach live nodes — safe because the newest chain is
     // never the one being reclaimed.
     std::array<std::vector<EffectSlotSpec>, kMaxTracks> chainStructure_;
+
+    /** Each clip's effect chain, by clip id: kept across clip-list
+        resubmissions, so an unrelated edit doesn't rebuild a clip's effects
+        and cut their tails, and rebuilt only when the kinds in it change.
+        Message thread; the audio thread sees a chain only through the slot
+        that shares it. */
+    struct ClipChain
+    {
+        int                          track = -1;
+        std::vector<EffectKind>      kinds;
+        std::shared_ptr<EffectChain> chain;
+    };
+    std::map<int, ClipChain> clipChains_;
+
+    std::shared_ptr<EffectChain> clipChainFor(int trackIndex, const AudioClipSpec& spec);
     PluginHost                                         pluginHost_;
     std::array<EffectChain*, kMaxTracks>                submittedChain_ {};
     int                                                 currentBlockSize_ = 512;
