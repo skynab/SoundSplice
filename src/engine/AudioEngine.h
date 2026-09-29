@@ -343,6 +343,11 @@ public:
         with two filters is editable at all. */
     void setTrackEffectSlotParams(int index, int slotIndex, const EffectParamValues& values);
 
+    /** The latest any active track's effects make it, in samples: what every
+        track is delayed to line up with. Audio thread, or with the device
+        suspended. */
+    int latestTrackLatency() noexcept;
+
     /** One parameter of one slot, by id, if that slot is still @p kind.
         For a parameter being written while its lane is set aside, which the
         slot's static values leave out. */

@@ -75,6 +75,13 @@ struct InstrumentTrack
     std::atomic<float>       channelPeak_[2] {};
 
     TrackAutomation*                     automation_ = nullptr; // audio-thread owned
+
+    // Delay compensation (see compensate): a ring of the track's recent
+    // output, and how far behind it the track is being played.
+    juce::AudioBuffer<float> compensation_;
+    int                      compensationWrite_ = 0;
+    int                      compensationDelay_ = 0;
+    bool                     compensationStale_ = false;
     rt::SpscRingBuffer<TrackAutomation*> automationInbox_   { 8 };  // message -> audio
     rt::SpscRingBuffer<TrackAutomation*> automationReclaim_ { 16 }; // audio -> message
 
@@ -134,6 +141,25 @@ struct InstrumentTrack
         audioPlayer.prepare(sampleRate, blockSize);
         trackMidi.ensureSize(2048);
         scratch.setSize(2, juce::jmax(1, blockSize));
+        compensation_.setSize(2, kMaxCompensation);
+        compensation_.clear();
+        compensationWrite_ = 0;
+        compensationDelay_ = 0;
+    }
+
+    /** The most delay compensation a track can apply, in samples: about 0.7 s
+        at 48 kHz, far more than any sane plugin reports. A chain later than
+        this is aligned as far as it can be. */
+    static constexpr int kMaxCompensation = 1 << 15;
+
+    /** How late this track's effects make it, in samples. Audio thread,
+        before render(): the engine takes the latest of these and delays every
+        other track to match. Picks up a newly submitted chain first, so the
+        figure is for the chain that's about to play. */
+    int chainLatency() noexcept
+    {
+        adoptIncomingChain();
+        return effectChain_ != nullptr ? effectChain_->latencySamples() : 0;
     }
 
     /** Unity-centre linear pan law — see the note in render().
@@ -163,6 +189,61 @@ private:
         return juce::Decibels::decibelsToGain(curve != nullptr ? curve->valueAt(beat, staticDb) : staticDb);
     }
 
+    void adoptIncomingChain() noexcept
+    {
+        EffectChain* incomingChain = nullptr;
+        while (effectChainInbox_.pop(incomingChain))
+        {
+            if (effectChain_ != nullptr)
+                effectChainReclaim_.push(effectChain_);
+            effectChain_ = incomingChain;
+        }
+    }
+
+    /** Delays the first @p numSamples of scratch by @p delay samples, through
+        a ring prepared in advance. Always written, so a delay that changes
+        finds the track's recent audio already there; cleared once when that
+        audio is stale (after the track was silent), rather than letting a
+        moment from before the silence play. */
+    void compensate(int numSamples, int delay) noexcept
+    {
+        const int size = compensation_.getNumSamples();
+        if (size <= 0)
+            return;
+
+        delay = juce::jlimit(0, size - 1, delay);
+        if (compensationStale_ || delay != compensationDelay_)
+        {
+            if (compensationStale_)
+                compensation_.clear();
+            compensationStale_ = false;
+            compensationDelay_ = delay;
+        }
+
+        const int channels = juce::jmin(scratch.getNumChannels(), compensation_.getNumChannels());
+        int       write    = compensationWrite_;
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            auto* line    = compensation_.getWritePointer(ch);
+            auto* samples = scratch.getWritePointer(ch);
+            write         = compensationWrite_;
+            for (int i = 0; i < numSamples; ++i)
+            {
+                line[write] = samples[i];
+                if (delay > 0)
+                {
+                    int read = write - delay;
+                    if (read < 0)
+                        read += size;
+                    samples[i] = line[read];
+                }
+                if (++write == size)
+                    write = 0;
+            }
+        }
+        compensationWrite_ = write;
+    }
+
     static double beatsPerBlock(const ProcessContext& context) noexcept
     {
         if (context.sampleRate <= 0.0 || context.transport.bpm <= 0.0)
@@ -179,11 +260,13 @@ public:
             : 0.0f;
     }
 
-    /** Audio thread: render this track (post-gain) additively into @p mix. */
+    /** Audio thread: render this track (post-gain) additively into @p mix,
+        delayed so it lands as late as @p alignToLatency - the latest any
+        track's effects make it - and so lines up with every other track. */
     void render(juce::AudioBuffer<float>& mix,
                 const juce::MidiBuffer& liveMidi,
                 const ProcessContext& context, bool receivesLiveMidi, bool anySoloActive,
-                double launchQuantumSamples = 0.0)
+                double launchQuantumSamples = 0.0, int alignToLatency = 0)
     {
         TrackAutomation* incoming = nullptr;
         while (automationInbox_.pop(incoming))
@@ -215,6 +298,7 @@ public:
         {
             channelPeak_[0].store(0.0f, std::memory_order_relaxed);
             channelPeak_[1].store(0.0f, std::memory_order_relaxed);
+            compensationStale_ = true; // what it holds is from before the silence
             return;
         }
 
@@ -228,13 +312,7 @@ public:
 
         // Inserts run on the summed track output, before gain — so lowering
         // the fader doesn't change the effect.
-        EffectChain* incomingChain = nullptr;
-        while (effectChainInbox_.pop(incomingChain))
-        {
-            if (effectChain_ != nullptr)
-                effectChainReclaim_.push(effectChain_);
-            effectChain_ = incomingChain;
-        }
+        adoptIncomingChain();
 
         if (effectChain_ != nullptr)
         {
@@ -247,6 +325,8 @@ public:
                 applyEffectAutomation(*effectChain_, *automation_, context.transport.ppqPosition);
             effectChain_->process(scratch);
         }
+
+        compensate(numSamples, alignToLatency - (effectChain_ != nullptr ? effectChain_->latencySamples() : 0));
 
         const float staticGainDb = gainDb.load(std::memory_order_relaxed);
         const float staticPan    = pan.load(std::memory_order_relaxed);

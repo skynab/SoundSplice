@@ -945,6 +945,15 @@ void AudioEngine::mixInputMonitoring(juce::AudioBuffer<float>& output,
     monitorGainRamp_ = target;
 }
 
+int AudioEngine::latestTrackLatency() noexcept
+{
+    int latest = 0;
+    for (auto& track : tracks_)
+        if (track.active.load(std::memory_order_relaxed))
+            latest = juce::jmax(latest, track.chainLatency());
+    return juce::jmin(latest, InstrumentTrack::kMaxCompensation - 1);
+}
+
 void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffer& midi,
                                const ProcessContext& context,
                                int soloTrack, bool applyMasterBus) noexcept
@@ -965,6 +974,12 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
 
     const int armed = armedTrack_.load(std::memory_order_relaxed);
 
+    // Delay compensation: every track is played as late as the latest one's
+    // effects make it, so a plugin with latency on one track doesn't leave it
+    // behind the others. Taken over every active track even for a stem, so a
+    // stem lines up with the mix it came from.
+    const int latest = latestTrackLatency();
+
     for (int i = 0; i < kMaxTracks; ++i)
     {
         // A stem renders one track. Note that anySolo is still whatever the
@@ -977,7 +992,7 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
         if (! tracks_[(size_t) i].active.load(std::memory_order_relaxed))
             continue;
 
-        tracks_[(size_t) i].render(output, midi, context, i == armed, anySolo, launchQuantumSamples);
+        tracks_[(size_t) i].render(output, midi, context, i == armed, anySolo, launchQuantumSamples, latest);
     }
 
     if (applyMasterBus)
@@ -1048,7 +1063,14 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
     transport_.seek(startSample);
     transport_.setPlaying(true);
 
-    output.setSize(2, totalSamples);
+    // The tracks are played as late as their latest effects make them, and
+    // the mastering rack's lookahead adds to that: rendered that much longer
+    // and trimmed from the start below, so the file lines up with the song
+    // rather than starting late.
+    const int latency = latestTrackLatency() + (options.applyMasterBus ? mastering_.latencySamples() : 0);
+    const int rendered = totalSamples + latency;
+
+    output.setSize(2, rendered);
     output.clear();
 
     juce::MidiBuffer noLiveMidi;
@@ -1061,9 +1083,9 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
     bool cancelled = false;
     int  blockIndex = 0;
 
-    for (int pos = 0; pos < totalSamples; pos += blockSize, ++blockIndex)
+    for (int pos = 0; pos < rendered; pos += blockSize, ++blockIndex)
     {
-        const int n = juce::jmin(blockSize, totalSamples - pos);
+        const int n = juce::jmin(blockSize, rendered - pos);
 
         ProcessContext context;
         context.sampleRate = sampleRate;
@@ -1082,7 +1104,7 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
 
         if (options.onProgress != nullptr && blockIndex % kBlocksPerProgressReport == 0)
         {
-            if (! options.onProgress((double) (pos + n) / (double) totalSamples))
+            if (! options.onProgress((double) (pos + n) / (double) rendered))
             {
                 cancelled = true;
                 break; // the restore below still runs — that is the point of breaking rather than returning
@@ -1109,6 +1131,13 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
 
     if (cancelled)
         output.setSize(2, 0); // see OfflineRenderOptions::onProgress
+    else if (latency > 0)
+    {
+        juce::AudioBuffer<float> aligned(2, totalSamples);
+        for (int ch = 0; ch < 2; ++ch)
+            aligned.copyFrom(ch, 0, output, ch, latency, totalSamples);
+        return aligned;
+    }
 
     return output;
 }

@@ -265,12 +265,9 @@ inline EffectRenderResult renderEffectChain(const std::vector<model::EffectSlot>
     built.setBpm(bpm); // the wobble pedal is tempo-locked
 
     // Only known once prepared: a plugin may report a different latency for
-    // a different rate or block size.
-    int latency = 0;
-    for (size_t i = 0; i < built.size(); ++i)
-        if (auto* pluginNode = dynamic_cast<engine::PluginNode*>(built.nodeAt(i)))
-            if (auto* instance = pluginNode->instance())
-                latency += juce::jmax(0, instance->getLatencySamples());
+    // a different rate or block size. The whole chain's, so a limiter's
+    // lookahead is taken out as a plugin's is.
+    const int latency = built.latencySamples();
 
     const int numChannels = block.getNumChannels();
     const int length      = block.getNumSamples();

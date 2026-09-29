@@ -207,7 +207,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ⬜ **Track edit groups** and **folder tracks** (folders as organization only; see the 🔁 note below)
 - ✅ **Automation for any effect or plugin parameter** ✅ for every built-in effect parameter and every automatable parameter of a loaded plugin (pick it in the Automation pane; the lanes live on the effect, so they move with it) · ✅ curve shapes (right-click a point: Linear, Hold, Fast Start, Slow Start, S-Curve) · ✅ automation modes (the master panel's Automation picker; one mode for the whole mix, per-track modes not yet)
   (read, touch, latch, write)
-- ⬜ **Plugin delay compensation**
+- ✅ **Plugin delay compensation**: every track is delayed to meet the latest one (plugins and the limiter report their latency), and exports are trimmed so they start on time · ⬜ latency of a clip's own effects · ⬜ recorded input (see Phase 4)
 - ✅ Clip-level effects (an effect chain on one clip rather than the whole track): the effects panels Track FX / Clip FX switch; played live, before the tracks chain · ⬜ plugins on a clip · ⬜ clip effect tails past the clips end
 - ⬜ **Hosting LV2 and CLAP** (CLAP needs `clap-juce-extensions` or a newer JUCE; research first),
   plus a plugin manager with enable/disable, a blocklist and crash-safe scanning

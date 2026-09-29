@@ -77,6 +77,12 @@ struct EffectProcessor
         allocated. False if this node has no such parameter. */
     virtual bool setParam(std::string_view /*id*/, float /*value*/) { return false; }
 
+    /** How late this node's output is against its input, in samples, as
+        things stand (a bypassed node adds none). Most add none at all; a
+        lookahead limiter and many plugins do. The track compensates for it -
+        see InstrumentTrack's delay compensation. Audio thread safe. */
+    virtual int latencySamples() const noexcept { return 0; }
+
     /** Bypass and every parameter, from one slot's settings. Message thread:
         the setters behind it store atomics the audio thread reads.
 
@@ -317,6 +323,8 @@ struct DcOffsetNode final : BuiltInNode<DcOffsetNode, DcOffsetEffect, EffectKind
 
 struct LimiterNode final : BuiltInNode<LimiterNode, LimiterEffect, EffectKind::Limiter>
 {
+    int latencySamples() const noexcept override { return effect.latencySamples(); }
+
     static constexpr Param kParams[] {
         { "input", [](LimiterEffect& e, int, float v) { e.setInputGainDb(v); } },
         { "ceiling", [](LimiterEffect& e, int, float v) { e.setCeilingDb(v); } },
@@ -614,6 +622,15 @@ public:
 
     bool   empty() const noexcept { return nodes_.empty(); }
     size_t size() const noexcept  { return nodes_.size(); }
+
+    /** How late the whole chain's output is: its nodes' latencies added up. */
+    int latencySamples() const noexcept
+    {
+        int total = 0;
+        for (const auto& node : nodes_)
+            total += node->latencySamples();
+        return total;
+    }
 
     /** Tempo, forwarded to every node once per block — see
         EffectProcessor::setBpm for why this exists instead of widening

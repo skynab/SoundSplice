@@ -72,6 +72,12 @@ public:
 
     void setEnabled(bool on)          { enabled_.store(on, std::memory_order_relaxed); }
 
+    /** The maximizer's lookahead, while the rack is on. */
+    int latencySamples() const noexcept
+    {
+        return enabled_.load(std::memory_order_relaxed) ? maximizer_.latencySamples() : 0;
+    }
+
     void setLowShelf(float hz, float db)  { lowHz_.store(hz, std::memory_order_relaxed);
                                             lowDb_.store(db, std::memory_order_relaxed); }
     void setPeak(float hz, float db, float q) { peakHz_.store(hz, std::memory_order_relaxed);

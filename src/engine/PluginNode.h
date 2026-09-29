@@ -136,6 +136,13 @@ public:
     }
 
     void setEnabled(bool enabled) override { bypassed_ = ! enabled; }
+
+    /** What the plugin reports, while it's running; bypassed or missing it
+        processes nothing, so it delays nothing. */
+    int latencySamples() const noexcept override
+    {
+        return instance_ != nullptr && prepared_ && ! bypassed_ ? juce::jmax(0, instance_->getLatencySamples()) : 0;
+    }
     void setBypassed(bool shouldBypass) noexcept { bypassed_ = shouldBypass; }
 
     /** The plugin's own opaque state, for saving into the document. Message

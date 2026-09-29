@@ -116,7 +116,12 @@ public:
     void setCeilingDb(float db)    { ceilingDb_.store(db, std::memory_order_relaxed); }
     void setReleaseMs(float ms)    { releaseMs_.store(ms, std::memory_order_relaxed); }
 
-    int latencySamples() const noexcept { return limiter_.latencySamples(); }
+    /** What passes through is delayed by this much, while enabled; bypassed
+        it passes straight through. */
+    int latencySamples() const noexcept
+    {
+        return enabled_.load(std::memory_order_relaxed) ? limiter_.latencySamples() : 0;
+    }
 
     void process(juce::AudioBuffer<float>& buffer)
     {
