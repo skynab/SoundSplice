@@ -1,12 +1,14 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "engine/ClipChannels.h"
 #include "engine/ClipEnvelope.h"
 #include "engine/ClipFade.h"
 #include "engine/ClipSpectralEdits.h"
 #include "engine/Pattern.h"
+#include "model/Effects.h"
 
 namespace soundsplice::model
 {
@@ -71,6 +73,13 @@ struct Clip
         to a cache (app/SpectralRender.h), so any can be removed later.
         Audio clips only. */
     engine::SpectralRegions spectralEdits;
+
+    /** Effects on this clip alone, in order, before its track's own chain:
+        the take's reverb or EQ, which shouldn't touch the rest of the track.
+        Played live, like the track's, so a change is heard at once; a tail
+        stops where the clip does. Built-in effects only for now. Audio
+        clips only. */
+    std::vector<EffectSlot> effects;
 
     bool operator==(const Clip&) const = default;
 };

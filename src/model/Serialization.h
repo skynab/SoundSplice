@@ -65,6 +65,9 @@ namespace detail
         }
     }
 
+    inline void writeEffectSlot(std::ostringstream& out, const EffectSlot& slot);
+    inline void writeEffectParams(std::ostringstream& out, const EffectSlot& slot);
+
     /** One clip record: its header plus its note list. Shared by the
         arrangement's clips and the session grid's, so the two can't drift. */
     inline void writeClip(std::ostringstream& out, const Clip& clip)
@@ -102,6 +105,14 @@ namespace detail
                     << " " << num(region.highHz) << " " << num((double) region.gainDb);
             out << "\n";
         }
+        // The clip's own effects, when it has any.
+        if (! clip.effects.empty())
+        {
+            out << "CLIPFX " << clip.effects.size() << "\n";
+            for (const auto& slot : clip.effects)
+                writeEffectSlot(out, slot);
+        }
+
         out << "PEDALS " << clip.pattern.pedals.size() << "\n";
         for (const auto& pedal : clip.pattern.pedals)
             out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
@@ -129,6 +140,52 @@ namespace detail
         if (point.shape != CurveShape::Linear)
             out << " " << (int) point.shape;
         out << "\n";
+    }
+
+    /** One effect slot's records: FXSLOT, its settings by name, then any
+        impulse response, plugin identity and automation. Shared by a track's
+        chain and a clip's, so the two are saved alike. */
+    inline void writeEffectSlot(std::ostringstream& out, const EffectSlot& slot)
+    {
+        out << "FXSLOT " << (int) slot.kind << " " << (slot.enabled ? 1 : 0) << "\n";
+        out << "FXPARAMS";
+        writeEffectParams(out, slot);
+        out << "\n";
+
+        // A path takes the rest of its own line, as a plugin's name does.
+        if (! slot.convolution.irFile.empty())
+            out << "FXIR " << slot.convolution.irFile << "\n";
+
+        if (slot.kind == EffectKind::Plugin)
+        {
+            // Split across lines because identifier, name and state are all
+            // free-form: each takes the rest of its own line rather than
+            // needing escaping.
+            out << "FXPLUGFMT " << (int) slot.plugin.format << "\n";
+            out << "FXPLUGID " << slot.plugin.identifier << "\n";
+            out << "FXPLUGNAME " << slot.plugin.name << "\n";
+            out << "FXPLUGSTATE " << slot.plugin.state << "\n";
+        }
+
+        // Only lanes with points, and only when there are some, as for
+        // the track's own lanes.
+        size_t effectLanes = 0;
+        for (const auto& [paramId, lane] : slot.automation)
+            if (! lane.empty())
+                ++effectLanes;
+
+        if (effectLanes > 0)
+        {
+            out << "FXAUTOS " << effectLanes << "\n";
+            for (const auto& [paramId, lane] : slot.automation)
+            {
+                if (lane.empty())
+                    continue;
+                out << "FXLANE " << paramId << " " << lane.points().size() << "\n";
+                for (const auto& pt : lane.points())
+                    writePoint(out, "TAPT", pt);
+            }
+        }
     }
 
     /** The mirror of writePoint: adds the record's point to @p lane. */
@@ -372,45 +429,7 @@ inline std::string serialize(const Song& song)
         out << "FXCHAIN " << track.effectChain.size() << "\n";
         for (const auto& slot : track.effectChain)
         {
-            out << "FXSLOT " << (int) slot.kind << " " << (slot.enabled ? 1 : 0) << "\n";
-            out << "FXPARAMS";
-            detail::writeEffectParams(out, slot);
-            out << "\n";
-
-            // A path takes the rest of its own line, as a plugin's name does.
-            if (! slot.convolution.irFile.empty())
-                out << "FXIR " << slot.convolution.irFile << "\n";
-
-            if (slot.kind == EffectKind::Plugin)
-            {
-                // Split across lines because identifier, name and state are all
-                // free-form: each takes the rest of its own line rather than
-                // needing escaping.
-                out << "FXPLUGFMT " << (int) slot.plugin.format << "\n";
-                out << "FXPLUGID " << slot.plugin.identifier << "\n";
-                out << "FXPLUGNAME " << slot.plugin.name << "\n";
-                out << "FXPLUGSTATE " << slot.plugin.state << "\n";
-            }
-
-            // Only lanes with points, and only when there are some, as for
-            // the track's own lanes.
-            size_t effectLanes = 0;
-            for (const auto& [paramId, lane] : slot.automation)
-                if (! lane.empty())
-                    ++effectLanes;
-
-            if (effectLanes > 0)
-            {
-                out << "FXAUTOS " << effectLanes << "\n";
-                for (const auto& [paramId, lane] : slot.automation)
-                {
-                    if (lane.empty())
-                        continue;
-                    out << "FXLANE " << paramId << " " << lane.points().size() << "\n";
-                    for (const auto& pt : lane.points())
-                        detail::writePoint(out, "TAPT", pt);
-                }
-            }
+            detail::writeEffectSlot(out, slot);
         }
 
         // The session grid's column for this track. Slots are written by index
@@ -479,6 +498,62 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
     };
 
     std::string rest;
+
+    /** One effect slot, the mirror of detail::writeEffectSlot. Returns why
+        it couldn't be read, or nullptr. */
+    auto readEffectSlot = [&](EffectSlot& slot) -> const char*
+    {
+        if (! readTagged("FXSLOT", rest)) return "truncated effect chain";
+
+        std::istringstream fields(rest);
+        fields.imbue(std::locale::classic());
+        int kind = 0, enabled = 0;
+        fields >> kind >> enabled;
+        slot.kind    = (EffectKind) kind;
+        slot.enabled = enabled != 0;
+
+        // Settings by name; a file from before that has them all on
+        // this line instead, by position.
+        detail::readPositionalEffectParams(fields, slot);
+        if (readTagged("FXPARAMS", rest))
+            detail::readEffectParams(rest, slot);
+
+        if (readTagged("FXIR", rest))
+            slot.convolution.irFile = rest;
+
+        if (slot.kind == EffectKind::Plugin)
+        {
+            if (! readTagged("FXPLUGFMT", rest))   return "truncated plugin slot";
+            slot.plugin.format = (PluginFormat) std::atoi(rest.c_str());
+            if (! readTagged("FXPLUGID", rest))    return "truncated plugin slot";
+            slot.plugin.identifier = rest;
+            if (! readTagged("FXPLUGNAME", rest))  return "truncated plugin slot";
+            slot.plugin.name = rest;
+            if (! readTagged("FXPLUGSTATE", rest)) return "truncated plugin slot";
+            slot.plugin.state = rest;
+        }
+
+        if (readTagged("FXAUTOS", rest))
+        {
+            const int laneCount = std::atoi(rest.c_str());
+            for (int l = 0; l < laneCount; ++l)
+            {
+                if (! readTagged("FXLANE", rest)) return "truncated effect automation";
+                std::istringstream ls(rest);
+                std::string        paramId;
+                int                pointCount = 0;
+                ls >> paramId >> pointCount;
+
+                auto& lane = slot.automation[paramId];
+                for (int p = 0; p < pointCount; ++p)
+                {
+                    if (! readTagged("TAPT", rest)) return "truncated effect automation";
+                    detail::readPoint(rest, lane);
+                }
+            }
+        }
+        return nullptr;
+    };
 
     /** One clip record, the mirror of detail::writeClip — used for both the
         arrangement's clips and the session grid's, so the two can't drift
@@ -555,6 +630,18 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                     break;
                 region.gainDb = (float) gainDb;
                 clip.spectralEdits.push_back(region);
+            }
+        }
+
+        if (readTagged("CLIPFX", rest))
+        {
+            const int slotCount = std::atoi(rest.c_str());
+            for (int s = 0; s < slotCount; ++s)
+            {
+                EffectSlot slot;
+                if (readEffectSlot(slot) != nullptr)
+                    return false;
+                clip.effects.push_back(std::move(slot));
             }
         }
 
@@ -852,57 +939,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             const int slotCount = std::atoi(rest.c_str());
             for (int s = 0; s < slotCount; ++s)
             {
-                if (! readTagged("FXSLOT", rest)) return fail("truncated effect chain");
-
-                std::istringstream fields(rest);
-                fields.imbue(std::locale::classic());
                 EffectSlot slot;
-                int        kind = 0, enabled = 0;
-                fields >> kind >> enabled;
-                slot.kind    = (EffectKind) kind;
-                slot.enabled = enabled != 0;
-
-                // Settings by name; a file from before that has them all on
-                // this line instead, by position.
-                detail::readPositionalEffectParams(fields, slot);
-                if (readTagged("FXPARAMS", rest))
-                    detail::readEffectParams(rest, slot);
-
-                if (readTagged("FXIR", rest))
-                    slot.convolution.irFile = rest;
-
-                if (slot.kind == EffectKind::Plugin)
-                {
-                    if (! readTagged("FXPLUGFMT", rest))   return fail("truncated plugin slot");
-                    slot.plugin.format = (PluginFormat) std::atoi(rest.c_str());
-                    if (! readTagged("FXPLUGID", rest))    return fail("truncated plugin slot");
-                    slot.plugin.identifier = rest;
-                    if (! readTagged("FXPLUGNAME", rest))  return fail("truncated plugin slot");
-                    slot.plugin.name = rest;
-                    if (! readTagged("FXPLUGSTATE", rest)) return fail("truncated plugin slot");
-                    slot.plugin.state = rest;
-                }
-
-                if (readTagged("FXAUTOS", rest))
-                {
-                    const int laneCount = std::atoi(rest.c_str());
-                    for (int l = 0; l < laneCount; ++l)
-                    {
-                        if (! readTagged("FXLANE", rest)) return fail("truncated effect automation");
-                        std::istringstream ls(rest);
-                        std::string        paramId;
-                        int                pointCount = 0;
-                        ls >> paramId >> pointCount;
-
-                        auto& lane = slot.automation[paramId];
-                        for (int p = 0; p < pointCount; ++p)
-                        {
-                            if (! readTagged("TAPT", rest)) return fail("truncated effect automation");
-                            detail::readPoint(rest, lane);
-                        }
-                    }
-                }
-
+                if (const char* error = readEffectSlot(slot))
+                    return fail(error);
                 track.effectChain.push_back(std::move(slot));
             }
         }

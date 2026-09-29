@@ -800,3 +800,36 @@ TEST_CASE("Automation curve shapes round-trip, and an unknown one reads as linea
     REQUIRE(deserialize(text, unknown));
     REQUIRE(unknown.tracks[0].lane(TrackParam::Gain)->points()[0].shape == CurveShape::Linear);
 }
+
+TEST_CASE("A clip's own effects round-trip, and a clip without any writes none", "[model][io]")
+{
+    Song      song;
+    const int id = addTrack(song, TrackType::Audio, "Vox").id;
+
+    Clip clip;
+    clip.type      = ClipType::Audio;
+    clip.audioFile = "takes/line one.wav";
+    auto eq        = makeEffectSlot(EffectKind::ParametricEq);
+    eq.parametricEq.band3GainDb = -4.5f;
+    auto reverb    = makeEffectSlot(EffectKind::Convolution);
+    reverb.convolution.irFile = "C:/Impulses/Small Room.wav";
+    reverb.enabled            = false;
+    clip.effects = { eq, reverb };
+    addClip(song, id, clip);
+
+    Clip plain;
+    plain.type      = ClipType::Audio;
+    plain.audioFile = "takes/line two.wav";
+    plain.startBeats = 16.0;
+    addClip(song, id, plain);
+
+    const auto text = serialize(song);
+    REQUIRE(text.find("CLIPFX 2") != std::string::npos);
+    REQUIRE(text.find("CLIPFX", text.find("line two.wav")) == std::string::npos);
+
+    Song restored;
+    REQUIRE(deserialize(text, restored));
+    REQUIRE(restored == song);
+    REQUIRE(restored.tracks[0].clips[0].effects[1].convolution.irFile == "C:/Impulses/Small Room.wav");
+    REQUIRE(restored.tracks[0].effectChain.empty()); // the track's own chain is untouched
+}
