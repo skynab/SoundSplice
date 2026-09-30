@@ -1,5 +1,6 @@
 #include "PaneAudit.h"
 
+#include <app/LevelMeter.h>
 #include <app/AnalyserPane.h>
 #include <app/ApplyEffectsDialog.h>
 #include <app/AudioEditorPane.h>
@@ -359,4 +360,38 @@ TEST_CASE("The effect panel's Track/Clip switch is wired and survives an empty c
 
     panel.setNoTrackSelected();
     REQUIRE_FALSE(scope->isVisible());
+}
+
+TEST_CASE("The input meter's clip light stays lit until it's clicked", "[gui][wiring]")
+{
+    JuceFixture fixture;
+
+    LevelMeter meter;
+    meter.setShowsClipping(true);
+    meter.setBounds(0, 0, 90, 16);
+    bool clicks = false, childClicks = false;
+    meter.getInterceptsMouseClicks(clicks, childClicks);
+    REQUIRE(clicks); // the click has to reach it
+
+    meter.setClipped(1);
+    for (int i = 0; i < 100; ++i) // long after the level itself has fallen
+        meter.setLevel(1, 0.0f);
+    REQUIRE(meter.isClipped(1));
+    REQUIRE_FALSE(meter.isClipped(0));
+
+    meter.mouseDown(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), {}, {}, 1.0f, 0.0f, 0.0f,
+                                     0.0f, 0.0f, &meter, &meter, juce::Time::getCurrentTime(), {},
+                                     juce::Time::getCurrentTime(), 1, false));
+    REQUIRE_FALSE(meter.isClipped(1));
+
+    // Both ways round draw without trouble, clip light and all.
+    juce::Image image(juce::Image::ARGB, 90, 60, true);
+    juce::Graphics g(image);
+    meter.setClipped(0);
+    meter.setLevel(0, 0.5f);
+    meter.setHorizontal(true);
+    meter.paint(g);
+    meter.setHorizontal(false);
+    meter.setBounds(0, 0, 20, 60);
+    meter.paint(g);
 }

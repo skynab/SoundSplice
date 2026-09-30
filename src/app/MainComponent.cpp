@@ -218,6 +218,13 @@ MainComponent::MainComponent()
     engine_.setCountInBars(juce::jmax(0, countInBox_.getSelectedId() - 1));
     leftPane_.addAndMakeVisible(countInBox_);
 
+    // What's coming in, left over right, with a light that stays red after a
+    // clip until it's clicked - the level to check before a take.
+    inputMeter_.setHorizontal(true);
+    inputMeter_.setShowsClipping(true);
+    inputMeter_.setTooltip("Input level. A red light means the input clipped - click to clear it");
+    leftPane_.addAndMakeVisible(inputMeter_);
+
     leftPane_.onResized = [this] { layoutLeftPane(); };
     applyTransportCollapse(); // apply whatever state was restored above
 
@@ -1249,6 +1256,13 @@ void MainComponent::timerCallback()
     {
         trackStrips_[i]->setLevel(0, engine_.trackPeak(i, 0));
         trackStrips_[i]->setLevel(1, engine_.trackPeak(i, 1));
+    }
+
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        inputMeter_.setLevel(ch, engine_.takeInputPeak(ch));
+        if (engine_.takeInputClipped(ch))
+            inputMeter_.setClipped(ch);
     }
 
     arrangementView_.setPlayheadBeats(uiTempoMap_.ppqFromSamples(playhead));

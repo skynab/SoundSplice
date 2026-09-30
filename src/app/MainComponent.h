@@ -820,6 +820,7 @@ private:
     juce::ToggleButton metronomeButton { "Click" };
     juce::ToggleButton monitorButton { "Monitor" };
     juce::ComboBox     countInBox_;
+    LevelMeter         inputMeter_; // what's coming in, with a clip light
     juce::ComboBox     timeSigBox_;
     juce::Label        timeSigLabel_;
 

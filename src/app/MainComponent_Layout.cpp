@@ -33,12 +33,13 @@ void MainComponent::layoutLeftPane()
         { 64, 12, { 0, 0 } }, // click
         { 78,  6, { 0, 0 } }, // monitor
         { 110, 6, { 0, 2 } }, // count-in
+        { 90,  8, { 7, 7 } }, // input meter
     };
 
     juce::Component* const controls[] {
         &firstFrameButton, &previousFrameButton, &playPauseButton,
         &nextFrameButton, &lastFrameButton, &loopButton, &recordButton,
-        &metronomeButton, &monitorButton, &countInBox_
+        &metronomeButton, &monitorButton, &countInBox_, &inputMeter_
     };
 
     // The rows the buttons need, taken off the top before anything below is

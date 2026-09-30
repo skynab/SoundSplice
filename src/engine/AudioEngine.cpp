@@ -343,6 +343,34 @@ void AudioEngine::setClipEffectParams(int clipId, int slotIndex, const EffectPar
         it->second.chain->applyParams((size_t) slotIndex, values);
 }
 
+/** Raises the input meter's peaks, and flags a channel that reached full
+    scale: a converter clips there, and a sample at 0.999 is already one. A
+    mono input shows on both sides. Audio thread. */
+void AudioEngine::meterInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept
+{
+    if (inputChannelData == nullptr || numInputChannels <= 0 || numSamples <= 0)
+        return;
+
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        const float* samples = inputChannelData[juce::jmin(ch, numInputChannels - 1)];
+        if (samples == nullptr)
+            continue;
+
+        float peak = 0.0f;
+        for (int n = 0; n < numSamples; ++n)
+            peak = juce::jmax(peak, std::abs(samples[n]));
+
+        auto& stored = inputPeak_[(size_t) ch];
+        float before = stored.load(std::memory_order_relaxed);
+        while (peak > before && ! stored.compare_exchange_weak(before, peak, std::memory_order_relaxed))
+        {
+        }
+        if (peak >= 0.999f)
+            inputClipped_[(size_t) ch].store(true, std::memory_order_relaxed);
+    }
+}
+
 int AudioEngine::reportedRoundTripSamples()
 {
     auto* device = deviceManager_.getCurrentAudioDevice();
@@ -773,6 +801,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
     recorder_.process(inputChannelData, numInputChannels, numSamples,
                       context.transport.playing, context.transport.playheadSamples);
+    meterInput(inputChannelData, numInputChannels, numSamples);
 
     // Before processBlock, so what is captured is exactly what the armed track
     // is about to play — the take and the monitoring can't disagree. Capturing

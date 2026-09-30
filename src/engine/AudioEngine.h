@@ -201,6 +201,21 @@ public:
         device open. Message thread. */
     int reportedRoundTripSamples();
 
+    /** The loudest input sample on @p channel (0 or 1) since this was last
+        asked, as a linear peak, and resets it: what the input meter shows.
+        Message thread; the audio thread only raises it. */
+    float takeInputPeak(int channel) noexcept
+    {
+        return channel >= 0 && channel < 2 ? inputPeak_[(size_t) channel].exchange(0.0f, std::memory_order_relaxed) : 0.0f;
+    }
+
+    /** Whether @p channel's input reached full scale since this was last
+        asked - clipped, or about to - and resets it. */
+    bool takeInputClipped(int channel) noexcept
+    {
+        return channel >= 0 && channel < 2 && inputClipped_[(size_t) channel].exchange(false, std::memory_order_relaxed);
+    }
+
     /** Closes the take's file and returns it; empty if nothing was captured.
         Valid only after isRecordingFinished() is observed true. */
     juce::File finishRecordedTake() { return recorder_.finishTake(); }
@@ -675,6 +690,12 @@ private:
         std::shared_ptr<EffectChain> chain;
     };
     std::map<int, ClipChain> clipChains_;
+
+    // The input meter's readings, raised by the audio thread each block and
+    // taken (and reset) by the UI: see takeInputPeak.
+    std::array<std::atomic<float>, 2> inputPeak_ {};
+    std::array<std::atomic<bool>, 2>  inputClipped_ {};
+    void meterInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
 
     std::shared_ptr<EffectChain> clipChainFor(int trackIndex, const AudioClipSpec& spec);
     PluginHost                                         pluginHost_;
