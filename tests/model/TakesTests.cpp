@@ -91,3 +91,46 @@ TEST_CASE("Comping plays another take over a range, and comping back joins it ag
     REQUIRE(song.tracks[0].clips[0].lengthBeats == 5.0);
     REQUIRE(song.tracks[0].clips[0].sourceOffsetSeconds == Approx(1.5));
 }
+
+TEST_CASE("A loop recording's passes are found in its one file", "[model][takes]")
+{
+    // A 4-second loop from 10 s, capture starting at 9 s (a second of
+    // pre-roll), 13.5 s recorded: the first pass, two more full passes - at
+    // 5 and 9 s into the file - and a half-second scrap at 13 s.
+    auto offsets = takeedit::loopPassOffsets(9.0, 10.0, 14.0, 13.5, 1.0);
+    REQUIRE(offsets.size() == 3);
+    REQUIRE(offsets[0] == Approx(1.0));  // the loop starts a second into the file
+    REQUIRE(offsets[1] == Approx(5.0));
+    REQUIRE(offsets[2] == Approx(9.0));
+
+    // With the scrap long enough to keep, it's a take too.
+    REQUIRE(takeedit::loopPassOffsets(9.0, 10.0, 14.0, 13.5, 0.25).size() == 4);
+
+    // Started inside the loop: the first pass has nothing before that.
+    offsets = takeedit::loopPassOffsets(12.0, 10.0, 14.0, 10.0, 1.0);
+    REQUIRE(offsets.size() == 3);
+    REQUIRE(offsets[0] == Approx(-2.0));
+    REQUIRE(offsets[1] == Approx(2.0));
+
+    // Never went round, or started after the loop: an ordinary recording.
+    REQUIRE(takeedit::loopPassOffsets(10.0, 10.0, 14.0, 3.0, 1.0).empty());
+    REQUIRE(takeedit::loopPassOffsets(15.0, 10.0, 14.0, 30.0, 1.0).empty());
+}
+
+TEST_CASE("A loop recording becomes one clip over the loop with a take per pass", "[model][takes]")
+{
+    Clip clip;
+    clip.type = ClipType::Audio;
+    takeedit::makeLoopTakes(clip, "rec.wav", { -2.0, 2.0, 6.0 }, 16.0, 8.0);
+
+    REQUIRE(clip.startBeats == 16.0);
+    REQUIRE(clip.lengthBeats == 8.0);
+    REQUIRE(clip.takes.size() == 3);
+    REQUIRE(clip.activeTake == 2);                   // the last pass plays
+    REQUIRE(clip.sourceOffsetSeconds == Approx(6.0));
+
+    REQUIRE(takeedit::setActiveTake(clip, 0));
+    REQUIRE(clip.sourceOffsetSeconds == Approx(-2.0)); // each pass lines up with the loop
+    REQUIRE(clip.audioFile == "rec.wav");
+    REQUIRE(clip.takes[1].name == "Pass 2");
+}

@@ -212,6 +212,7 @@ private:
                                                      const model::AutomationLane& lane);
     void                   toggleRecording();
     void                   finishRecordingIfReady();
+    int                    makeLoopTakesFromRecording(const juce::File& file, int64_t startedAt);
 
     /**
         Decides what pressing Record captures, from the armed track's type
@@ -678,6 +679,12 @@ private:
     model::Song                  automationPassBefore_;
     double                       automationPassBeat_ = 0.0;
     bool                        awaitingRecordedTake_ = false;
+
+    // A take recorded round the loop (Loop on, and a time selection to loop):
+    // its passes become the takes of one clip. See MainComponent_Recording.cpp.
+    bool   loopRecording_       = false;
+    double loopRecordFromBeats_ = 0.0;
+    double loopRecordToBeats_   = 0.0;
 
     // Chosen when the take is armed, not when it ends: the destination has to
     // exist before a note is played now that recording streams to it, and the

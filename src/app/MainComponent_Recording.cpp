@@ -1,5 +1,7 @@
 #include "MainComponentInternal.h"
 
+#include "model/Takes.h"
+
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // Recording audio and MIDI takes.
 
@@ -199,6 +201,20 @@ void MainComponent::toggleRecording()
 
     if (! awaitingRecordedTake_)
     {
+        // With Loop on and a time selection to loop, the take goes round it
+        // and each pass becomes a take of one clip. Started from inside the
+        // loop - from its start if the playhead is elsewhere - so there is a
+        // loop to go round. Before arming, which reads where the playhead is.
+        loopRecording_       = loopButton.getToggleState() && ! timeSelection_.isEmpty();
+        loopRecordFromBeats_ = timeSelection_.startBeats;
+        loopRecordToBeats_   = timeSelection_.endBeats;
+        if (loopRecording_)
+        {
+            const double at = playheadBeat();
+            if (at < loopRecordFromBeats_ || at >= loopRecordToBeats_)
+                seekToBeat(loopRecordFromBeats_);
+        }
+
         // Into the saved project's audio folder, or the scratch folder until
         // there is one (see app/ProjectMedia.h).
         const auto file = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
@@ -238,9 +254,12 @@ void MainComponent::toggleRecording()
         // it at the end of what is already arranged, which is precisely where
         // a recording needs to keep going — you are recording the part that
         // isn't there yet. The button's own state is left alone and restored
-        // when the take ends, so the user's setting survives.
-        post(Cmd::SetLooping, 0.0);
+        // when the take ends, so the user's setting survives. A loop
+        // recording is the exception: going round is the point.
+        post(Cmd::SetLooping, loopRecording_ ? 1.0 : 0.0);
         post(Cmd::SetPlaying, 1.0);
+        if (loopRecording_)
+            showStatus("Loop recording - every pass round the selection becomes a take");
     }
     else
     {
@@ -292,6 +311,9 @@ void MainComponent::finishRecordingIfReady()
     recordingFile_        = juce::File{};
     recordingTargetTrack_ = -1;
 
+    const int passes = loopRecording_ ? makeLoopTakesFromRecording(file, startedAt) : 0;
+    loopRecording_   = false;
+
     // Reported after the import, so the take is on the timeline either way —
     // a recording with a gap is still worth keeping, it just must not be
     // presented as a clean one.
@@ -316,7 +338,42 @@ void MainComponent::finishRecordingIfReady()
         return;
     }
 
-    showStatus("Recorded: " + file.getFileName());
+    if (passes >= 2)
+        showStatus("Recorded " + juce::String(passes) + " passes as takes - right-click the clip to choose one");
+    else
+        showStatus("Recorded: " + file.getFileName());
+}
+
+/** Turns the clip a loop recording was just imported as (the selected one)
+    into a clip over the loop with a take for each pass. Folded into the
+    import's undo step: the recording is one thing to undo, however many
+    passes it had. Returns how many passes there were, or 0 if it never went
+    round and so stays an ordinary clip. */
+int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t startedAt)
+{
+    const double rate = engine_.sampleRate();
+    if (rate <= 0.0 || startedAt < 0)
+        return 0;
+
+    const double loopStart = (double) uiTempoMap_.samplesFromPpq(loopRecordFromBeats_) / rate;
+    const double loopEnd   = (double) uiTempoMap_.samplesFromPpq(loopRecordToBeats_) / rate;
+    const auto   offsets   = model::takeedit::loopPassOffsets((double) startedAt / rate, loopStart, loopEnd,
+                                                              engine_.probeDurationSeconds(file), 1.0);
+    if (offsets.empty())
+        return 0;
+
+    auto& song = history_.mutableCurrent();
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
+        return 0;
+    auto& clips = song.tracks[(size_t) selectedTrackIndex_].clips;
+    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) clips.size()
+        || clips[(size_t) selectedClipIndex_].audioFile != file.getFullPathName().toStdString())
+        return 0;
+
+    model::takeedit::makeLoopTakes(clips[(size_t) selectedClipIndex_], file.getFullPathName().toStdString(), offsets,
+                                   loopRecordFromBeats_, loopRecordToBeats_ - loopRecordFromBeats_);
+    refreshAfterArrangementEdit();
+    return (int) offsets.size();
 }
 
 /** Starts or stops a MIDI take. The mirror of toggleRecording's audio path,

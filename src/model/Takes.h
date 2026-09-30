@@ -179,6 +179,58 @@ namespace takeedit
         arrangeedit::joinClips(song, { trackId }, from, to);
         return true;
     }
+
+    /**
+        The passes of a recording made while the transport looped: one file,
+        captured continuously while the playhead went round the loop
+        [@p loopStart, @p loopEnd) again and again. For each pass, where in the
+        file the loop's start is, in seconds - negative for a first pass that
+        began inside the loop, which has nothing before where it began.
+
+        Times are in seconds on the song's clock: @p startedAt is where
+        capture began, @p recorded how long the file is. A last pass shorter
+        than @p minSeconds is left out, as the scrap of a stop. Fewer than two
+        passes (the take never went round, or wasn't in the loop) comes back
+        empty: it's an ordinary recording.
+    */
+    inline std::vector<double> loopPassOffsets(double startedAt, double loopStart, double loopEnd, double recorded,
+                                               double minSeconds)
+    {
+        const double loop = loopEnd - loopStart;
+        if (loop <= 0.0 || startedAt >= loopEnd)
+            return {};
+
+        const double firstWrap = loopEnd - startedAt; // where in the file the first pass ends
+        if (recorded <= firstWrap)
+            return {};
+
+        std::vector<double> offsets { loopStart - startedAt };
+        for (double at = firstWrap; at < recorded; at += loop)
+            if (std::min(loop, recorded - at) >= minSeconds)
+                offsets.push_back(at);
+
+        return offsets.size() >= 2 ? offsets : std::vector<double> {};
+    }
+
+    /** Makes @p clip, which plays @p file, the loop [@p loopStartBeats,
+        + @p loopBeats) with a take for each pass at @p offsets (from
+        loopPassOffsets), the last playing: the latest attempt is usually
+        the one worth hearing first. */
+    inline void makeLoopTakes(Clip& clip, const std::string& file, const std::vector<double>& offsets,
+                              double loopStartBeats, double loopBeats)
+    {
+        if (offsets.empty())
+            return;
+
+        clip.startBeats          = loopStartBeats;
+        clip.lengthBeats         = loopBeats;
+        clip.audioFile           = file;
+        clip.sourceOffsetSeconds = offsets.back();
+        clip.takes.clear();
+        for (size_t i = 0; i < offsets.size(); ++i)
+            clip.takes.push_back({ file, offsets[i] - offsets.back(), "Pass " + std::to_string(i + 1) });
+        clip.activeTake = (int) offsets.size() - 1;
+    }
 }
 
 } // namespace soundsplice::model

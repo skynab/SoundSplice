@@ -190,7 +190,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 ### Phase 4 — Recording parity
 
 - ✅ Count-in, metronome, monitoring · ⬜ **Punch in/out** with pre-roll and crossfade ·
-  ⬜ **Loop recording into takes** · ⬜ **Record several inputs at once to several tracks** ·
+  ✅ **Loop recording into takes** (Loop on and a time selection: each pass round it is a take of one clip) · ⬜ **Record several inputs at once to several tracks** ·
   ⬜ **Append record** (continue at the end of the track, as Audacity does)
 - ⬜ **Sound-activated recording** and **timer record** (Audacity)
 - ⬜ Record formats: 24-bit and 32-bit float WAV/RF64, mono vs. stereo per track, input-channel mapping
@@ -202,7 +202,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 ### Phase 5 — Multitrack and mixing parity (Audition, REAPER)
 
-- 🟡 **Take lanes and swipe comping** with A/B comparison (REAPER, Audition): ✅ takes on a clip (Combine Overlapping Clips into Takes), ✅ switching takes to compare them and comping a time selection to a take (right-click the clip) · ⬜ take lanes drawn under the clip, and swiping across them to comp · ⬜ recording new takes over a clip (Phase 4 loop recording)
+- 🟡 **Take lanes and swipe comping** with A/B comparison (REAPER, Audition): ✅ takes on a clip (Combine Overlapping Clips into Takes), ✅ switching takes to compare them and comping a time selection to a take (right-click the clip) · ⬜ take lanes drawn under the clip, and swiping across them to comp · ✅ recording takes by looping (Phase 4)
 - ⬜ **Razor/range edits** across tracks (REAPER)
 - ⬜ **Track edit groups** and **folder tracks** (folders as organization only; see the 🔁 note below)
 - ✅ **Automation for any effect or plugin parameter** ✅ for every built-in effect parameter and every automatable parameter of a loaded plugin (pick it in the Automation pane; the lanes live on the effect, so they move with it) · ✅ curve shapes (right-click a point: Linear, Hold, Fast Start, Slow Start, S-Curve) · ✅ automation modes (the master panel's Automation picker; one mode for the whole mix, per-track modes not yet)
