@@ -208,6 +208,12 @@ void MainComponent::toggleRecording()
         loopRecording_       = loopButton.getToggleState() && ! timeSelection_.isEmpty();
         loopRecordFromBeats_ = timeSelection_.startBeats;
         loopRecordToBeats_   = timeSelection_.endBeats;
+
+        // Punching: the take replaces only the time selection. The transport
+        // still rolls from the playhead, so there's a lead-up to play along
+        // to; what's recorded before the selection is dropped when it's done.
+        punchRecording_ = ! loopRecording_ && ! timeSelection_.isEmpty()
+                       && settings_.getBoolValue("punchRecording", false);
         if (loopRecording_)
         {
             const double at = playheadBeat();
@@ -317,7 +323,9 @@ void MainComponent::finishRecordingIfReady()
     const int passes  = loopRecording_ ? makeLoopTakesFromRecording(file, startedAt, latency) : 0;
     if (passes == 0)
         compensateRecordingLatency(file, latency);
-    loopRecording_ = false;
+    const bool punched = punchRecording_ && punchRecordedClip(file);
+    loopRecording_  = false;
+    punchRecording_ = false;
 
     // Reported after the import, so the take is on the timeline either way —
     // a recording with a gap is still worth keeping, it just must not be
@@ -345,6 +353,8 @@ void MainComponent::finishRecordingIfReady()
 
     if (passes >= 2)
         showStatus("Recorded " + juce::String(passes) + " passes as takes - right-click the clip to choose one");
+    else if (punched)
+        showStatus("Punched in over the selection");
     else
         showStatus("Recorded: " + file.getFileName());
 }
@@ -553,6 +563,42 @@ void MainComponent::commitMidiTake(int targetTrack, int64_t startSample, int64_t
     updateEditingLabel();
 
     showStatus("Recorded " + juce::String(noteCount) + " note(s)");
+}
+
+/** Punches the clip a recording was just imported as (the selected one) in
+    over the selection it was started with: it replaces what the track had
+    there, and its lead-up is dropped. Folded into the recording's undo step.
+    False, leaving the clip as recorded, if it never reached the selection. */
+bool MainComponent::punchRecordedClip(const juce::File& file)
+{
+    auto& song = history_.mutableCurrent();
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
+        return false;
+
+    auto& track = song.tracks[(size_t) selectedTrackIndex_];
+    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) track.clips.size()
+        || track.clips[(size_t) selectedClipIndex_].audioFile != file.getFullPathName().toStdString())
+        return false;
+
+    const auto recorded = track.clips[(size_t) selectedClipIndex_];
+    const int  trackId  = track.id;
+    track.clips.erase(track.clips.begin() + selectedClipIndex_);
+
+    const int id = model::takeedit::punchIn(song, trackId, recorded, loopRecordFromBeats_, loopRecordToBeats_, 0.01);
+    auto&     clips = song.tracks[(size_t) selectedTrackIndex_].clips;
+    if (id == 0)
+    {
+        clips.push_back(recorded); // put back as it was
+        selectedClipIndex_ = (int) clips.size() - 1;
+        return false;
+    }
+
+    for (int i = 0; i < (int) clips.size(); ++i)
+        if (clips[(size_t) i].id == id)
+            selectedClipIndex_ = i;
+    refreshAfterArrangementEdit();
+    arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
+    return true;
 }
 
 /** How late a recording is: the device's reported round trip, adjusted by

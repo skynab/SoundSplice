@@ -51,6 +51,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(followSystemOutput_);
             break;
 
+        case commands::punchRecording:
+            info.setTicked(settings_.getBoolValue("punchRecording", false));
+            break;
+
         // "Undo Delete track" rather than a bare "Undo": every edit already
         // records what it was.
         case commands::undo:
@@ -363,6 +367,16 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::setProjectRoot:   setProjectRootFolderDialog(); break;
         case commands::audioSettings:    showAudioSettings(); break;
         case commands::recordingLatency: showRecordingLatencyDialog(); break;
+
+        case commands::punchRecording:
+        {
+            const bool on = ! settings_.getBoolValue("punchRecording", false);
+            settings_.setValue("punchRecording", on);
+            settings_.saveIfNeeded();
+            showStatus(on ? "Punch recording: a take replaces what's in the time selection, and only that"
+                          : "Punch recording off");
+            break;
+        }
 
         case commands::followSystemOutput:
             followSystemOutput_ = ! followSystemOutput_;
@@ -872,6 +886,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::playPause);
         add(commands::loop);
         add(commands::record);
+        add(commands::punchRecording);
         menu.addSeparator();
         add(commands::goToStart);
         add(commands::goToEnd);

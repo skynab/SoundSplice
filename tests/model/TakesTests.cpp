@@ -134,3 +134,54 @@ TEST_CASE("A loop recording becomes one clip over the loop with a take per pass"
     REQUIRE(clip.audioFile == "rec.wav");
     REQUIRE(clip.takes[1].name == "Pass 2");
 }
+
+TEST_CASE("Punching in replaces the range and nothing either side of it", "[model][takes]")
+{
+    Song song;
+    song.bpm          = 120.0;
+    const int trackId = addTrack(song, TrackType::Audio, "Vox").id;
+
+    Clip original;
+    original.type        = ClipType::Audio;
+    original.audioFile   = "verse.wav";
+    original.lengthBeats = 16.0;
+    addClip(song, trackId, original);
+
+    // Recorded from beat 4 with a bar of pre-roll, punched over beats 8 to 12.
+    Clip recorded;
+    recorded.type        = ClipType::Audio;
+    recorded.audioFile   = "fix.wav";
+    recorded.startBeats  = 4.0;
+    recorded.lengthBeats = 12.0;
+
+    const int id = takeedit::punchIn(song, trackId, recorded, 8.0, 12.0, 0.01);
+    REQUIRE(id != 0);
+
+    const auto& clips = song.tracks[0].clips;
+    REQUIRE(clips.size() == 3);
+
+    const auto at = [&](double beat) -> const Clip*
+    {
+        for (const auto& clip : clips)
+            if (beat >= clip.startBeats && beat < clip.startBeats + clip.lengthBeats)
+                return &clip;
+        return nullptr;
+    };
+    REQUIRE(at(2.0)->audioFile == "verse.wav");
+    REQUIRE(at(10.0)->audioFile == "fix.wav");
+    REQUIRE(at(10.0)->id == id);
+    REQUIRE(at(10.0)->sourceOffsetSeconds == Approx(2.0)); // four beats past where it was recorded from
+    REQUIRE(at(14.0)->audioFile == "verse.wav");
+    REQUIRE(at(14.0)->sourceOffsetSeconds == Approx(6.0)); // the original, carrying on where it was
+
+    // Every edge of the punch fades.
+    REQUIRE(at(2.0)->fades.outSeconds == Approx(0.01));
+    REQUIRE(at(10.0)->fades.inSeconds == Approx(0.01));
+    REQUIRE(at(10.0)->fades.outSeconds == Approx(0.01));
+    REQUIRE(at(14.0)->fades.inSeconds == Approx(0.01));
+
+    // A recording that stops before the range punches nothing.
+    Clip short_ = recorded;
+    short_.lengthBeats = 2.0;
+    REQUIRE(takeedit::punchIn(song, trackId, short_, 8.0, 12.0, 0.01) == 0);
+}

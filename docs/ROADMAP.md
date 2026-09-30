@@ -189,7 +189,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 ### Phase 4 — Recording parity
 
-- ✅ Count-in, metronome, monitoring · ⬜ **Punch in/out** with pre-roll and crossfade ·
+- ✅ Count-in, metronome, monitoring · ✅ **Punch in/out** with pre-roll and crossfade (Transport > Punch Recording, over the time selection) ·
   ✅ **Loop recording into takes** (Loop on and a time selection: each pass round it is a take of one clip) · ⬜ **Record several inputs at once to several tracks** ·
   ⬜ **Append record** (continue at the end of the track, as Audacity does)
 - ⬜ **Sound-activated recording** and **timer record** (Audacity)

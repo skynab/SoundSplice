@@ -199,6 +199,7 @@ enum Id : int
     autoCrossfades,
     resetLayout,
     recordingLatency,
+    punchRecording,
 };
 
 /** One command's fixed description. */
@@ -329,6 +330,7 @@ inline const std::vector<Definition>& all()
         { forwardOneBar,    "Forward One Bar",      "Transport", "Move the playhead forward a bar.", { keys::onOneBar } },
         { record,           "Record",               "Transport", "Start or stop recording onto the selected track.", { keys::record } },
         { loop,             "Loop",                 "Transport", "Loop playback over the time selection, or over what's arranged.", { keys::loop } },
+        { punchRecording,   "Punch Recording",      "Transport", "Record only over the time selection, replacing what's there, with the lead-up to play along to.", {} },
 
         { addMarker,              "Add Marker",                  "Markers", "Put a marker at the playhead.", { keys::addMarker } },
         { addMarkerFromSelection, "Add Marker from Selection",   "Markers", "Mark the audio editor's selection as a range.", {} },

@@ -216,6 +216,7 @@ private:
     int                    recordingLatencySamples();
     void                   compensateRecordingLatency(const juce::File& file, int latencySamples);
     void                   showRecordingLatencyDialog();
+    bool                   punchRecordedClip(const juce::File& file);
 
     /**
         Decides what pressing Record captures, from the armed track's type
@@ -686,6 +687,7 @@ private:
     // A take recorded round the loop (Loop on, and a time selection to loop):
     // its passes become the takes of one clip. See MainComponent_Recording.cpp.
     bool   loopRecording_       = false;
+    bool   punchRecording_      = false; // over loopRecordFrom/ToBeats_, when not looping
     double loopRecordFromBeats_ = 0.0;
     double loopRecordToBeats_   = 0.0;
 

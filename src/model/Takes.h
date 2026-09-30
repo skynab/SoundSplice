@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -210,6 +211,44 @@ namespace takeedit
                 offsets.push_back(at);
 
         return offsets.size() >= 2 ? offsets : std::vector<double> {};
+    }
+
+    /**
+        Punches a recording in: the part of @p recorded (an audio clip, not on
+        any track) inside [@p fromBeats, @p toBeats) replaces whatever track
+        @p trackId had there, which is cut out rather than mixed under it. The
+        recording outside the range - the pre-roll it was played along to -
+        is dropped. Each side of both joins gets a @p fadeSeconds fade, so
+        neither clicks. Returns the punched clip's id, or 0 if the recording
+        doesn't reach into the range.
+    */
+    inline int punchIn(Song& song, int trackId, const Clip& recorded, double fromBeats, double toBeats,
+                       double fadeSeconds)
+    {
+        auto* track = findTrack(song, trackId);
+        auto  piece = rangeedit::pieceOf(recorded, fromBeats, toBeats, song.bpm);
+        if (track == nullptr || ! piece)
+            return 0;
+
+        TimeSelection range;
+        range.startBeats = piece->startBeats;
+        range.endBeats   = piece->startBeats + piece->lengthBeats;
+        range.trackIds   = { trackId };
+        rangeedit::removeRange(song, range, false);
+
+        for (auto& clip : track->clips)
+        {
+            if (std::abs(clip.startBeats + clip.lengthBeats - range.startBeats) < 1.0e-9)
+                clip.fades.outSeconds = std::max(clip.fades.outSeconds, fadeSeconds);
+            if (std::abs(clip.startBeats - range.endBeats) < 1.0e-9)
+                clip.fades.inSeconds = std::max(clip.fades.inSeconds, fadeSeconds);
+        }
+
+        piece->id               = allocateId(song);
+        piece->fades.inSeconds  = fadeSeconds;
+        piece->fades.outSeconds = fadeSeconds;
+        track->clips.push_back(*piece);
+        return piece->id;
     }
 
     /** Makes @p clip, which plays @p file, the loop [@p loopStartBeats,
