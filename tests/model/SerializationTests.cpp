@@ -833,3 +833,21 @@ TEST_CASE("A clip's own effects round-trip, and a clip without any writes none",
     REQUIRE(restored.tracks[0].clips[0].effects[1].convolution.irFile == "C:/Impulses/Small Room.wav");
     REQUIRE(restored.tracks[0].effectChain.empty()); // the track's own chain is untouched
 }
+
+TEST_CASE("A clip's takes round-trip, names and files with spaces included", "[model][io]")
+{
+    Song      song;
+    const int id = addTrack(song, TrackType::Audio, "Vox").id;
+
+    Clip clip;
+    clip.type      = ClipType::Audio;
+    clip.audioFile = "takes/pass two.wav";
+    clip.takes     = { { "takes/pass one.wav", -0.25, "Pass 1" }, { "takes/pass two.wav", 0.0, "Pass 2 (keeper)" } };
+    clip.activeTake = 1;
+    addClip(song, id, clip);
+
+    Song restored;
+    REQUIRE(deserialize(serialize(song), restored));
+    REQUIRE(restored == song);
+    REQUIRE(restored.tracks[0].clips[0].takes[0].audioFile == "takes/pass one.wav");
+}

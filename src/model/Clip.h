@@ -18,6 +18,20 @@ enum class ClipType
     Audio       // references an audio file
 };
 
+/** One recording of a stretch of an audio clip: the clip can play any of its
+    takes (model/Takes.h). @c shiftSeconds places it against the other takes -
+    where in this take's file the clip is, minus where in the active take's -
+    so each keeps the timing it was recorded with, and trimming or splitting
+    the clip, which moves only the clip's own offset, moves every take alike. */
+struct ClipTake
+{
+    std::string audioFile;
+    double      shiftSeconds = 0.0;
+    std::string name;
+
+    bool operator==(const ClipTake&) const = default;
+};
+
 /** A clip placed on a track's timeline. Times are in quarter-note beats. */
 struct Clip
 {
@@ -80,6 +94,14 @@ struct Clip
         stops where the clip does. Built-in effects only for now. Audio
         clips only. */
     std::vector<EffectSlot> effects;
+
+    /** Every take of this stretch, when there's more than the one playing:
+        the active one is takes[activeTake], and audioFile and
+        sourceOffsetSeconds above are always its, so nothing that plays a clip
+        needs to know about takes. Empty for an ordinary clip. Audio clips
+        only; see model/Takes.h. */
+    std::vector<ClipTake> takes;
+    int                   activeTake = 0;
 
     bool operator==(const Clip&) const = default;
 };

@@ -105,6 +105,18 @@ namespace detail
                     << " " << num(region.highHz) << " " << num((double) region.gainDb);
             out << "\n";
         }
+        // Its takes, when it has more than the one it plays. The file and the
+        // name each take the rest of their own line.
+        if (! clip.takes.empty())
+        {
+            out << "CLIPTAKES " << clip.takes.size() << " " << clip.activeTake << "\n";
+            for (const auto& take : clip.takes)
+            {
+                out << "CLIPTAKE " << num(take.shiftSeconds) << " " << take.audioFile << "\n";
+                out << "CLIPTAKENAME " << take.name << "\n";
+            }
+        }
+
         // The clip's own effects, when it has any.
         if (! clip.effects.empty())
         {
@@ -631,6 +643,29 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 region.gainDb = (float) gainDb;
                 clip.spectralEdits.push_back(region);
             }
+        }
+
+        if (readTagged("CLIPTAKES", rest))
+        {
+            std::istringstream ts(rest);
+            int count = 0, active = 0;
+            ts >> count >> active;
+            for (int t = 0; t < count; ++t)
+            {
+                if (! readTagged("CLIPTAKE", rest))
+                    return false;
+                std::istringstream fields(rest);
+                fields.imbue(std::locale::classic());
+                ClipTake take;
+                fields >> take.shiftSeconds;
+                std::string file;
+                std::getline(fields, file);
+                take.audioFile = detail::trimLeadingSpace(std::move(file));
+                if (readTagged("CLIPTAKENAME", rest))
+                    take.name = rest;
+                clip.takes.push_back(std::move(take));
+            }
+            clip.activeTake = clip.takes.empty() ? 0 : std::clamp(active, 0, (int) clip.takes.size() - 1);
         }
 
         if (readTagged("CLIPFX", rest))
