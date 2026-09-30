@@ -371,6 +371,25 @@ void AudioEngine::meterInput(const float* const* inputChannelData, int numInputC
     }
 }
 
+void AudioEngine::setRetroactiveSeconds(double seconds)
+{
+    retroSeconds_ = juce::jmax(0.0, seconds);
+
+    // The ring is reallocated, so the audio thread must not be in it: the
+    // device is taken off for the moment it takes, as an export does.
+    deviceManager_.removeAudioCallback(this);
+    retro_.prepare(sampleRate_.load(std::memory_order_relaxed), retroSeconds_);
+    deviceManager_.addAudioCallback(this);
+}
+
+bool AudioEngine::copyRecentInput(juce::AudioBuffer<float>& out, int64_t& startPlayhead) const
+{
+    // While playing, a second at the oldest end may be written over during
+    // the copy, so it's left out.
+    const int margin = transport_.isPlaying() ? (int) retro_.sampleRate() : 0;
+    return retro_.copyLatestRun(out, startPlayhead, margin);
+}
+
 int AudioEngine::reportedRoundTripSamples()
 {
     auto* device = deviceManager_.getCurrentAudioDevice();
@@ -802,6 +821,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     recorder_.process(inputChannelData, numInputChannels, numSamples,
                       context.transport.playing, context.transport.playheadSamples);
     meterInput(inputChannelData, numInputChannels, numSamples);
+    retro_.process(inputChannelData, numInputChannels, numSamples, context.transport.playing,
+                   context.transport.playheadSamples);
 
     // Before processBlock, so what is captured is exactly what the armed track
     // is about to play — the take and the monitoring can't disagree. Capturing
@@ -1186,6 +1207,10 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
 
     sampleRate_.store(sampleRate, std::memory_order_relaxed);
     midiCollector_.reset(sampleRate);
+
+    // Before the callback starts: the room is for this rate, and what was
+    // kept at another one can't be placed any more.
+    retro_.prepare(sampleRate, retroSeconds_);
     incomingMidi_.ensureSize(2048);
 
     prepareAll(sampleRate, blockSize);

@@ -55,6 +55,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(settings_.getBoolValue("punchRecording", false));
             break;
 
+        case commands::keepRecentInput:
+            info.setTicked(engine_.retroactiveSeconds() > 0.0);
+            break;
+
+        case commands::saveRecentInput:
+            info.setActive(engine_.retroactiveSeconds() > 0.0 && ! awaitingRecordedTake_);
+            break;
+
         // "Undo Delete track" rather than a bare "Undo": every edit already
         // records what it was.
         case commands::undo:
@@ -367,6 +375,19 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::setProjectRoot:   setProjectRootFolderDialog(); break;
         case commands::audioSettings:    showAudioSettings(); break;
         case commands::recordingLatency: showRecordingLatencyDialog(); break;
+
+        case commands::keepRecentInput:
+        {
+            const bool on = engine_.retroactiveSeconds() <= 0.0;
+            engine_.setRetroactiveSeconds(on ? kRecentInputSeconds : 0.0);
+            settings_.setValue("keepRecentInput", on);
+            settings_.saveIfNeeded();
+            showStatus(on ? "Keeping the last two minutes of input while playing - Transport > Save Recent Input keeps it"
+                          : "No longer keeping recent input");
+            break;
+        }
+
+        case commands::saveRecentInput: saveRecentInput(); break;
 
         case commands::punchRecording:
         {
@@ -887,6 +908,9 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::loop);
         add(commands::record);
         add(commands::punchRecording);
+        menu.addSeparator();
+        add(commands::keepRecentInput);
+        add(commands::saveRecentInput);
         menu.addSeparator();
         add(commands::goToStart);
         add(commands::goToEnd);

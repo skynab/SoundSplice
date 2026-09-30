@@ -30,6 +30,7 @@
 #include "engine/Metronome.h"
 #include "engine/PluginHost.h"
 #include "engine/PluginNode.h"
+#include "engine/RetroRecorder.h"
 #include "engine/Pattern.h"
 #include "engine/Transport.h"
 
@@ -211,6 +212,18 @@ public:
 
     /** Whether @p channel's input reached full scale since this was last
         asked - clipped, or about to - and resets it. */
+    /** Keeps the last @p seconds of input while the transport plays, so a
+        take nobody recorded can be saved afterwards (0 turns it off, and
+        frees the room). Pauses the audio device while the room is made.
+        Message thread. */
+    void setRetroactiveSeconds(double seconds);
+    double retroactiveSeconds() const noexcept { return retroSeconds_; }
+
+    /** The input kept since playback last started or jumped (see
+        RetroRecorder), and where it starts on the timeline in samples.
+        False if nothing is kept. Message thread. */
+    bool copyRecentInput(juce::AudioBuffer<float>& out, int64_t& startPlayhead) const;
+
     bool takeInputClipped(int channel) noexcept
     {
         return channel >= 0 && channel < 2 && inputClipped_[(size_t) channel].exchange(false, std::memory_order_relaxed);
@@ -695,6 +708,9 @@ private:
     // taken (and reset) by the UI: see takeInputPeak.
     std::array<std::atomic<float>, 2> inputPeak_ {};
     std::array<std::atomic<bool>, 2>  inputClipped_ {};
+
+    RetroRecorder retro_;
+    double        retroSeconds_ = 0.0;
     void meterInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
 
     std::shared_ptr<EffectChain> clipChainFor(int trackIndex, const AudioClipSpec& spec);

@@ -601,6 +601,43 @@ bool MainComponent::punchRecordedClip(const juce::File& file)
     return true;
 }
 
+/** Retroactive recording: what came in since playback last started (or
+    jumped), kept by the engine, saved as a recording and put on the selected
+    audio track (a new one otherwise) where it was played - as if Record had
+    been pressed when it started, latency compensation and all. */
+void MainComponent::saveRecentInput()
+{
+    juce::AudioBuffer<float> kept;
+    int64_t                  startedAt = -1;
+    if (! engine_.copyRecentInput(kept, startedAt))
+    {
+        showError("Nothing kept yet - the input is kept while playing");
+        return;
+    }
+
+    if (kept.getMagnitude(0, kept.getNumSamples()) <= 0.0f)
+    {
+        showError("What was kept is silence - check the input device");
+        return;
+    }
+
+    const double rate = engine_.sampleRate();
+    const auto   file = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recovered", ".wav");
+    if (rate <= 0.0 || ! engine::OfflineRenderer::writeWav(file, kept, rate))
+    {
+        showError("Could not write " + file.getFileName());
+        return;
+    }
+
+    const auto& song         = history_.current();
+    const bool  canHoldAudio = selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) song.tracks.size()
+                            && song.tracks[(size_t) selectedTrackIndex_].type == model::TrackType::Audio;
+    importAudioFileAtBeat(file, juce::jmax(0.0, uiTempoMap_.ppqFromSamples(startedAt)),
+                          canHoldAudio ? selectedTrackIndex_ : -1);
+    compensateRecordingLatency(file, recordingLatencySamples());
+    showStatus("Saved " + juce::String((double) kept.getNumSamples() / rate, 1) + " s of recent input");
+}
+
 /** How late a recording is: the device's reported round trip, adjusted by
     the Recording Latency setting (a driver's figure is often a little off),
     or nothing with compensation turned off. */

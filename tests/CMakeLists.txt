@@ -133,6 +133,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/IconsTests.cpp
     gui/PianoRollTests.cpp
     gui/AutomationPaneTests.cpp
+    gui/RetroRecorderTests.cpp
     gui/ShortcutsTests.cpp
     gui/CommandTableTests.cpp
     gui/WaveformCacheTests.cpp

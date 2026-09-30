@@ -200,6 +200,8 @@ enum Id : int
     resetLayout,
     recordingLatency,
     punchRecording,
+    keepRecentInput,
+    saveRecentInput,
 };
 
 /** One command's fixed description. */
@@ -330,6 +332,8 @@ inline const std::vector<Definition>& all()
         { forwardOneBar,    "Forward One Bar",      "Transport", "Move the playhead forward a bar.", { keys::onOneBar } },
         { record,           "Record",               "Transport", "Start or stop recording onto the selected track.", { keys::record } },
         { loop,             "Loop",                 "Transport", "Loop playback over the time selection, or over what's arranged.", { keys::loop } },
+        { keepRecentInput,  "Keep Recent Input",    "Transport", "Keep the last two minutes of input while playing, so a take nobody recorded can still be saved.", {} },
+        { saveRecentInput,  "Save Recent Input",    "Transport", "Save what came in since playback last started, onto the selected track where it was played.", {} },
         { punchRecording,   "Punch Recording",      "Transport", "Record only over the time selection, replacing what's there, with the lead-up to play along to.", {} },
 
         { addMarker,              "Add Marker",                  "Markers", "Put a marker at the playhead.", { keys::addMarker } },
