@@ -574,6 +574,8 @@ private:
     void                   setClipFades(int trackIndex, int clipIndex, const engine::ClipFades& fades,
                                         const juce::String& label);
     void                   showClipMenu(int trackIndex, int clipIndex);
+    void                   useClipTake(int trackIndex, int clipId, double fromBeats, double toBeats, int take);
+    void                   combineOverlappingClipsIntoTakes(int trackIndex, int clipIndex);
     void                   copyNotes();
     void                   pasteNotes();
     void                   copyClip();

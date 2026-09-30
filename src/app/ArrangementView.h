@@ -881,6 +881,25 @@ private:
         different music don't look identical. Audio clips are left plain:
         there is no waveform cached here, and reading the file at paint time
         is not something a paint routine should do. */
+    /** Which take a clip that has several plays, in its bottom-left corner:
+        a comped stretch reads as the take each piece came from. */
+    void paintClipTake(juce::Graphics& g, const model::Clip& clip, juce::Rectangle<float> bounds)
+    {
+        if (clip.takes.size() < 2 || bounds.getWidth() < 40.0f || bounds.getHeight() < 24.0f)
+            return;
+
+        const auto& take  = clip.takes[(size_t) juce::jlimit(0, (int) clip.takes.size() - 1, clip.activeTake)];
+        const auto  label = (take.name.empty() ? "Take " + juce::String(clip.activeTake + 1) : juce::String(take.name))
+                          + " / " + juce::String((int) clip.takes.size());
+
+        g.setFont(juce::FontOptions(10.0f));
+        const auto area = bounds.reduced(4.0f, 3.0f).removeFromBottom(12.0f);
+        g.setColour(juce::Colours::black.withAlpha(0.45f));
+        g.fillRect(area.withWidth(juce::jmin(area.getWidth(), 8.0f + 6.0f * (float) label.length())));
+        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.drawText(label, area.reduced(3.0f, 0.0f), juce::Justification::centredLeft, true);
+    }
+
     void paintClipContents(juce::Graphics& g, const model::Clip& clip,
                            juce::Rectangle<float> bounds)
     {
@@ -888,6 +907,7 @@ private:
         {
             paintAudioClipContents(g, clip, bounds);
             paintClipFades(g, clip, bounds);
+            paintClipTake(g, clip, bounds);
             return;
         }
 

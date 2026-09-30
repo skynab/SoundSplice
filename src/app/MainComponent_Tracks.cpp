@@ -1,6 +1,7 @@
 #include "MainComponentInternal.h"
 
 #include "model/ArrangementEdits.h"
+#include "model/Takes.h"
 #include "SpectralRender.h"
 #include "engine/Resample.h"
 #include "model/TrackResample.h"
@@ -1424,11 +1425,63 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
     menu.addSubMenu("Fade Out Shape", fadeOutMenu);
     menu.addItem(kRemoveFades, "Remove Fades", ! fades.isNone());
 
+    // Takes: which one the clip plays, which one plays over the time
+    // selection (comping), and making overlapping clips into takes.
+    static constexpr int kTakeBase          = 1000;
+    static constexpr int kSelectionTakeBase = 2000;
+    static constexpr int kCombineTakes      = 3;
+
+    const auto& clip  = clips[(size_t) clipIndex];
+    const int   clipId = clip.id;
+    const auto& track = song.tracks[(size_t) trackIndex];
+    const bool  selectionOnClip = ! timeSelection_.isEmpty() && timeSelection_.includes(track.id)
+                               && timeSelection_.startBeats < clip.startBeats + clip.lengthBeats
+                               && timeSelection_.endBeats > clip.startBeats;
+    const double selectionFrom = timeSelection_.startBeats, selectionTo = timeSelection_.endBeats;
+
+    menu.addSeparator();
+    if (! clip.takes.empty())
+    {
+        juce::PopupMenu takeMenu, selectionMenu;
+        for (int t = 0; t < (int) clip.takes.size(); ++t)
+        {
+            const auto name = juce::String(clip.takes[(size_t) t].name);
+            takeMenu.addItem(kTakeBase + t, name, true, t == clip.activeTake);
+            selectionMenu.addItem(kSelectionTakeBase + t, name);
+        }
+        menu.addSubMenu("Takes", takeMenu);
+        menu.addSubMenu("Use Take for Selection", selectionMenu, selectionOnClip);
+    }
+
+    int overlapping = 0;
+    for (const auto& other : track.clips)
+        if (other.type == model::ClipType::Audio && other.startBeats < clip.startBeats + clip.lengthBeats
+            && other.startBeats + other.lengthBeats > clip.startBeats)
+            ++overlapping;
+    menu.addItem(kCombineTakes, "Combine Overlapping Clips into Takes", overlapping > 1);
+
     menu.showMenuAsync(juce::PopupMenu::Options(),
-        [self = juce::Component::SafePointer<MainComponent>(this), trackIndex, clipIndex, fades](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), trackIndex, clipIndex, fades, clipId,
+         clipStart = clip.startBeats, clipEnd = clip.startBeats + clip.lengthBeats, selectionFrom, selectionTo](int result)
         {
             if (self == nullptr || result == 0)
                 return;
+
+            if (result == kCombineTakes)
+            {
+                self->combineOverlappingClipsIntoTakes(trackIndex, clipIndex);
+                return;
+            }
+            if (result >= kSelectionTakeBase)
+            {
+                self->useClipTake(trackIndex, clipId, selectionFrom, selectionTo, result - kSelectionTakeBase);
+                return;
+            }
+            if (result >= kTakeBase)
+            {
+                self->useClipTake(trackIndex, clipId, clipStart, clipEnd, result - kTakeBase);
+                return;
+            }
 
             auto         updated = fades;
             juce::String label;
@@ -1454,6 +1507,59 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
 
             self->setClipFades(trackIndex, clipIndex, updated, label);
         });
+}
+
+/** Plays take @p take of clip @p clipId over [@p fromBeats, @p toBeats):
+    the whole clip, or, comping, a stretch of it. One undo step. */
+void MainComponent::useClipTake(int trackIndex, int clipId, double fromBeats, double toBeats, int take)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const int trackId = song.tracks[(size_t) trackIndex].id;
+    auto      trial   = song;
+    if (! model::takeedit::compRange(trial, trackId, clipId, fromBeats, toBeats, take))
+        return;
+
+    history_.edit("Choose take", [trackId, clipId, fromBeats, toBeats, take](model::Song& s)
+    {
+        model::takeedit::compRange(s, trackId, clipId, fromBeats, toBeats, take);
+    });
+    refreshAfterArrangementEdit();
+}
+
+/** Makes every audio clip on the track that overlaps clip @p clipIndex,
+    and that clip, into one clip with a take for each. */
+void MainComponent::combineOverlappingClipsIntoTakes(int trackIndex, int clipIndex)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const auto& track = song.tracks[(size_t) trackIndex];
+    if (clipIndex < 0 || clipIndex >= (int) track.clips.size())
+        return;
+
+    const auto&      clip = track.clips[(size_t) clipIndex];
+    std::vector<int> ids;
+    for (const auto& other : track.clips)
+        if (other.type == model::ClipType::Audio && other.startBeats < clip.startBeats + clip.lengthBeats
+            && other.startBeats + other.lengthBeats > clip.startBeats)
+            ids.push_back(other.id);
+
+    const int trackId = track.id;
+    int       made    = 0;
+    history_.edit("Combine into takes", [trackId, &ids, &made](model::Song& s)
+    {
+        made = model::takeedit::combineIntoTakes(s, trackId, ids);
+    });
+    if (made == 0)
+        return;
+
+    refreshAfterArrangementEdit();
+    showStatus("Combined " + juce::String((int) ids.size()) + " clips into takes - right-click to choose one, "
+               "or select a range and use a take for it");
 }
 
 /** Sets how many bars the open clip's pattern loops over. Growing the pattern
