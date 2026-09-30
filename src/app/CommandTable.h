@@ -198,6 +198,7 @@ enum Id : int
     snapToClipEdges,
     autoCrossfades,
     resetLayout,
+    recordingLatency,
 };
 
 /** One command's fixed description. */
@@ -228,6 +229,7 @@ inline const std::vector<Definition>& all()
         { setProjectRoot,   "Set Project Root Folder...", "File", "Choose the folder the file browser starts in.", {} },
         { audioSettings,    "Audio Settings...",    "File", "Choose the audio and MIDI devices.", {} },
         { followSystemOutput, "Follow System Output Device", "File", "Switch output when the system's default device changes.", {} },
+        { recordingLatency, "Recording Latency...", "File", "Line recordings up with what was playing, allowing for the device's delay.", {} },
 
         { undo,             "Undo",                 "Edit", "Undo the last edit.", { keys::undo } },
         { redo,             "Redo",                 "Edit", "Redo the last undone edit.", { keys::redo, keys::redoAlt } },

@@ -212,7 +212,10 @@ private:
                                                      const model::AutomationLane& lane);
     void                   toggleRecording();
     void                   finishRecordingIfReady();
-    int                    makeLoopTakesFromRecording(const juce::File& file, int64_t startedAt);
+    int                    makeLoopTakesFromRecording(const juce::File& file, int64_t startedAt, int latencySamples);
+    int                    recordingLatencySamples();
+    void                   compensateRecordingLatency(const juce::File& file, int latencySamples);
+    void                   showRecordingLatencyDialog();
 
     /**
         Decides what pressing Record captures, from the armed track's type

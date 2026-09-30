@@ -311,8 +311,13 @@ void MainComponent::finishRecordingIfReady()
     recordingFile_        = juce::File{};
     recordingTargetTrack_ = -1;
 
-    const int passes = loopRecording_ ? makeLoopTakesFromRecording(file, startedAt) : 0;
-    loopRecording_   = false;
+    // The recording came back late by the device's round trip: the clip
+    // plays from that far into its file, so it lines up with what was playing.
+    const int latency = recordingLatencySamples();
+    const int passes  = loopRecording_ ? makeLoopTakesFromRecording(file, startedAt, latency) : 0;
+    if (passes == 0)
+        compensateRecordingLatency(file, latency);
+    loopRecording_ = false;
 
     // Reported after the import, so the take is on the timeline either way —
     // a recording with a gap is still worth keeping, it just must not be
@@ -349,7 +354,7 @@ void MainComponent::finishRecordingIfReady()
     import's undo step: the recording is one thing to undo, however many
     passes it had. Returns how many passes there were, or 0 if it never went
     round and so stays an ordinary clip. */
-int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t startedAt)
+int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t startedAt, int latencySamples)
 {
     const double rate = engine_.sampleRate();
     if (rate <= 0.0 || startedAt < 0)
@@ -357,8 +362,10 @@ int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t st
 
     const double loopStart = (double) uiTempoMap_.samplesFromPpq(loopRecordFromBeats_) / rate;
     const double loopEnd   = (double) uiTempoMap_.samplesFromPpq(loopRecordToBeats_) / rate;
-    const auto   offsets   = model::takeedit::loopPassOffsets((double) startedAt / rate, loopStart, loopEnd,
-                                                              engine_.probeDurationSeconds(file), 1.0);
+    // The file starts the round trip before capture began, in what was
+    // playing: that's where its passes are counted from.
+    const auto   offsets   = model::takeedit::loopPassOffsets((double) (startedAt - latencySamples) / rate, loopStart,
+                                                              loopEnd, engine_.probeDurationSeconds(file), 1.0);
     if (offsets.empty())
         return 0;
 
@@ -546,6 +553,89 @@ void MainComponent::commitMidiTake(int targetTrack, int64_t startSample, int64_t
     updateEditingLabel();
 
     showStatus("Recorded " + juce::String(noteCount) + " note(s)");
+}
+
+/** How late a recording is: the device's reported round trip, adjusted by
+    the Recording Latency setting (a driver's figure is often a little off),
+    or nothing with compensation turned off. */
+int MainComponent::recordingLatencySamples()
+{
+    if (! settings_.getBoolValue("compensateRecordingLatency", true))
+        return 0;
+
+    const double adjustMs = settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0);
+    const int    adjust   = (int) std::lround(adjustMs * 0.001 * engine_.sampleRate());
+    return juce::jmax(0, engine_.reportedRoundTripSamples() + adjust);
+}
+
+/** Moves the clip a recording was just imported as (the selected one) that
+    far into its file, keeping it where it is on the timeline: what it holds
+    at that point is what was played there. Folded into the import's undo
+    step, like the loop takes. */
+void MainComponent::compensateRecordingLatency(const juce::File& file, int latencySamples)
+{
+    const double rate = engine_.sampleRate();
+    if (latencySamples <= 0 || rate <= 0.0)
+        return;
+
+    auto& song = history_.mutableCurrent();
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
+        return;
+    auto& clips = song.tracks[(size_t) selectedTrackIndex_].clips;
+    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) clips.size())
+        return;
+
+    auto& clip = clips[(size_t) selectedClipIndex_];
+    if (clip.audioFile != file.getFullPathName().toStdString())
+        return;
+
+    const double seconds     = (double) latencySamples / rate;
+    clip.sourceOffsetSeconds += seconds;
+    clip.lengthBeats          = juce::jmax(0.0, clip.lengthBeats - engine::beatsForSeconds(seconds, song.bpm));
+    refreshAfterArrangementEdit();
+}
+
+/** Recording Latency: whether recordings are moved back by the device's
+    round trip, and by how much more or less than it reports. */
+void MainComponent::showRecordingLatencyDialog()
+{
+    const double rate     = engine_.sampleRate();
+    const int    reported = engine_.reportedRoundTripSamples();
+    const auto   reportedText = rate > 0.0
+                                  ? juce::String((double) reported * 1000.0 / rate, 1) + " ms ("
+                                        + juce::String(reported) + " samples)"
+                                  : juce::String("no device open");
+
+    auto* window = new juce::AlertWindow("Recording Latency",
+        "A recording comes back late by the time sound takes to leave the device and return to it. "
+        "The device reports " + reportedText + "; recordings are moved back by that, plus any "
+        "adjustment below.\n\nTo measure it, record the metronome's click through a cable from an "
+        "output to an input, and set the adjustment so the recorded click lands on the beat.",
+        juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("adjust", juce::String(settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0), 1),
+                          "Adjustment (ms, + moves recordings earlier):");
+    window->addComboBox("compensate", { "Compensate recordings", "Leave recordings where they land" });
+    if (auto* box = window->getComboBoxComponent("compensate"))
+        box->setSelectedItemIndex(settings_.getBoolValue("compensateRecordingLatency", true) ? 0 : 1);
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double adjust = juce::jlimit(-500.0, 500.0, window->getTextEditorContents("adjust").getDoubleValue());
+            const bool   on     = window->getComboBoxComponent("compensate")->getSelectedItemIndex() == 0;
+            self->settings_.setValue("recordingLatencyAdjustMs", adjust);
+            self->settings_.setValue("compensateRecordingLatency", on);
+            self->settings_.saveIfNeeded();
+            self->showStatus(on ? "Recordings are moved back by " + juce::String(self->recordingLatencySamples())
+                                      + " samples"
+                                : juce::String("Recordings are left where they land"));
+        }), false);
 }
 
 juce::File MainComponent::recordingsDirectory() const

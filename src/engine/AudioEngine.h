@@ -195,6 +195,12 @@ public:
     /** Where the transport was when capture began, in samples, or -1. */
     int64_t recordedTakeStartSample() const noexcept { return recorder_.startPlayheadSamples(); }
 
+    /** How late a recording is against what was playing, as the device
+        reports it: its input latency plus its output latency - the sound
+        leaves late, is played along to, and comes back in late. 0 with no
+        device open. Message thread. */
+    int reportedRoundTripSamples();
+
     /** Closes the take's file and returns it; empty if nothing was captured.
         Valid only after isRecordingFinished() is observed true. */
     juce::File finishRecordedTake() { return recorder_.finishTake(); }

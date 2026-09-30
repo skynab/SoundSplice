@@ -343,6 +343,14 @@ void AudioEngine::setClipEffectParams(int clipId, int slotIndex, const EffectPar
         it->second.chain->applyParams((size_t) slotIndex, values);
 }
 
+int AudioEngine::reportedRoundTripSamples()
+{
+    auto* device = deviceManager_.getCurrentAudioDevice();
+    return device != nullptr
+             ? juce::jmax(0, device->getInputLatencyInSamples()) + juce::jmax(0, device->getOutputLatencyInSamples())
+             : 0;
+}
+
 int64_t AudioEngine::countInLeadInSamples() const
 {
     // The count-in is expressed in samples here, on the message thread, from
