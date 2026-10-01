@@ -351,6 +351,26 @@ void AudioEngine::meterInput(const float* const* inputChannelData, int numInputC
     if (inputChannelData == nullptr || numInputChannels <= 0 || numSamples <= 0)
         return;
 
+    // Every input, for the armed tracks' meters, each of which may take any.
+    for (int ch = 0; ch < juce::jmin(numInputChannels, kMeteredInputs); ++ch)
+    {
+        const float* samples = inputChannelData[ch];
+        if (samples == nullptr)
+            continue;
+
+        float peak = 0.0f;
+        for (int n = 0; n < numSamples; ++n)
+            peak = juce::jmax(peak, std::abs(samples[n]));
+
+        auto& stored = channelPeak_[(size_t) ch];
+        float before = stored.load(std::memory_order_relaxed);
+        while (peak > before && ! stored.compare_exchange_weak(before, peak, std::memory_order_relaxed))
+        {
+        }
+        if (peak >= 0.999f)
+            channelClipped_[(size_t) ch].store(true, std::memory_order_relaxed);
+    }
+
     // The inputs a take would record: a mono one shows on both sides.
     const int first    = meterFirstInput_.load(std::memory_order_relaxed);
     const int channels = meterChannels_.load(std::memory_order_relaxed);

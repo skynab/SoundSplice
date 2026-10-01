@@ -292,6 +292,28 @@ public:
         False if nothing is kept. Message thread. */
     bool copyRecentInput(juce::AudioBuffer<float>& out, int64_t& startPlayhead) const;
 
+    /** The loudest sample on device input @p channel since the last
+        resetInputChannelPeaks(), for an armed track's meter: read every
+        channel a frame needs, then reset once, so two tracks on one input
+        both see it. Message thread. */
+    float inputChannelPeak(int channel) const noexcept
+    {
+        return channel >= 0 && channel < kMeteredInputs ? channelPeak_[(size_t) channel].load(std::memory_order_relaxed) : 0.0f;
+    }
+    bool inputChannelClipped(int channel) const noexcept
+    {
+        return channel >= 0 && channel < kMeteredInputs && channelClipped_[(size_t) channel].load(std::memory_order_relaxed);
+    }
+    void resetInputChannelPeaks() noexcept
+    {
+        for (int ch = 0; ch < kMeteredInputs; ++ch)
+        {
+            channelPeak_[(size_t) ch].store(0.0f, std::memory_order_relaxed);
+            channelClipped_[(size_t) ch].store(false, std::memory_order_relaxed);
+        }
+    }
+    static constexpr int kMeteredInputs = 32;
+
     bool takeInputClipped(int channel) noexcept
     {
         return channel >= 0 && channel < 2 && inputClipped_[(size_t) channel].exchange(false, std::memory_order_relaxed);
@@ -777,6 +799,8 @@ private:
     // taken (and reset) by the UI: see takeInputPeak.
     std::array<std::atomic<float>, 2> inputPeak_ {};
     std::array<std::atomic<bool>, 2>  inputClipped_ {};
+    std::array<std::atomic<float>, 32> channelPeak_ {};    // per device input: see inputChannelPeak
+    std::array<std::atomic<bool>, 32>  channelClipped_ {};
     std::atomic<int>                  meterFirstInput_ { 0 };
     std::atomic<int>                  meterChannels_ { 2 };
 

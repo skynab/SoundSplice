@@ -195,7 +195,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ✅ **Sound-activated recording** and **timer record** (Audacity): Transport > Sound-Activated Recording... (a threshold to start on, a silence to stop on) and Timer Record...
 - ✅ Record formats: 16-bit, 24-bit and 32-bit float WAV (RF64 past 4 GB), mono or stereo, from any input or pair (File > Recording Format...) · ⬜ per track rather than for every take
 - ✅ **Latency compensation** for recordings (measured round-trip, applied as an offset): the device's reported round trip, or one measured with a click through a loopback cable (File > Measure Recording Latency...), plus a manual adjustment (File > Recording Latency...), applied to every recording and loop take
-- 🟡 Input level meter with a peak hold and a clip indicator on every armed track: ✅ one input meter in the Transport panel (peak hold, and a clip light that stays lit until clicked) · ⬜ per armed track, once several tracks can record at once
+- ✅ Input level meter with a peak hold and a clip indicator on every armed track: an armed track's mixer strip meters its own input, with a clip light that stays lit until clicked, and the Transport panel meters the main take's
 - 🟡 Arm and disarm tracks while playing (REAPER): ✅ any time, for the next take · ⬜ joining or leaving a take already running
 - ✅ **Retroactive recording**: Transport > Keep Recent Input holds the last two minutes of input while playing, and Save Recent Input puts what came in since playback last started on the track where it was played (REAPER does this for MIDI; nobody does it well for audio)
 

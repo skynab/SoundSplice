@@ -110,7 +110,13 @@ public:
     void setGainDb(float db)   { gainSlider_.setValue(db, juce::dontSendNotification); }
     void setMuted(bool muted)  { muteButton_.setToggleState(muted, juce::dontSendNotification); }
     void setSoloed(bool solo)  { soloButton_.setToggleState(solo, juce::dontSendNotification); }
-    void setArmed(bool armed)  { armButton_.setToggleState(armed, juce::dontSendNotification); }
+    void setArmed(bool armed)
+    {
+        armButton_.setToggleState(armed, juce::dontSendNotification);
+        // Armed, the meter shows what's coming in, so a clip shows too.
+        meter_.setShowsClipping(armed);
+    }
+    void setClipped(int channel) { meter_.setClipped(channel); }
     void setInputName(const juce::String& name)
     {
         armButton_.setTooltip("Arm this track to record - several can be armed at once. Records from: " + name

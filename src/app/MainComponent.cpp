@@ -1263,12 +1263,29 @@ void MainComponent::timerCallback()
     audioEditor_.setPlaybackState(engine_.isPlaying(),
                                   clipSecondsForSongBeat(uiTempoMap_.ppqFromSamples(playhead)));
 
+    // An armed track's meter shows its input - what a take would record,
+    // which is the level to check before one - and any other its output.
     const int n = trackCount();
     for (int i = 0; i < n; ++i)
     {
-        trackStrips_[i]->setLevel(0, engine_.trackPeak(i, 0));
-        trackStrips_[i]->setLevel(1, engine_.trackPeak(i, 1));
+        const auto& track = history_.current().tracks[(size_t) i];
+        if (armedTrackIds_.count(track.id) == 0)
+        {
+            trackStrips_[i]->setLevel(0, engine_.trackPeak(i, 0));
+            trackStrips_[i]->setLevel(1, engine_.trackPeak(i, 1));
+            continue;
+        }
+
+        const auto format = recordFormatFor(i);
+        for (int side = 0; side < 2; ++side)
+        {
+            const int input = format.firstInput + (format.channels == 2 ? side : 0);
+            trackStrips_[i]->setLevel(side, engine_.inputChannelPeak(input));
+            if (engine_.inputChannelClipped(input))
+                trackStrips_[i]->setClipped(side);
+        }
     }
+    engine_.resetInputChannelPeaks();
 
     for (int ch = 0; ch < 2; ++ch)
     {
