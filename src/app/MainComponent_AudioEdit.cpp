@@ -787,7 +787,7 @@ void MainComponent::showApplyEffectsDialog()
     dialog->setSize(520, 460);
 
     dialog->setUserPresets(userEffectPresets_);
-    dialog->setAvailablePlugins(engine_.pluginHost().knownPlugins());
+    dialog->setAvailablePlugins(engine_.pluginHost().offeredPlugins());
     dialog->onPluginEditorRequested = [this](int slotIndex, const model::EffectSlot& slot)
     {
         openScratchPluginEditor(slotIndex, slot);

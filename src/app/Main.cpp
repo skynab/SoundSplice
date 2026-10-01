@@ -1,6 +1,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 
 #include "MainComponent.h"
+#include "PluginProbe.h"
 
 namespace soundsplice
 {
@@ -19,6 +20,15 @@ public:
 
     void initialise(const juce::String&) override
     {
+        // Run as a plugin prober by a scan (app/PluginProbe.h): probe, report
+        // and go, with no window and nothing else started.
+        if (const auto args = getCommandLineParameterArray(); args.contains(kProbePluginFlag))
+        {
+            setApplicationReturnValue(runPluginProbe(args));
+            quit();
+            return;
+        }
+
         logger.reset(juce::FileLogger::createDefaultAppLogger(
             "SoundSplice", "SoundSplice.log",
             "SoundSplice " + getApplicationVersion() + " starting up"));

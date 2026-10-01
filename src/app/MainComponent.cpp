@@ -857,9 +857,7 @@ MainComponent::MainComponent()
     effectChain_.onPluginAdded  = [this](const engine::PluginEntry& entry)
     {
         model::PluginRef ref;
-        ref.format     = entry.format == "VST3" ? model::PluginFormat::VST3
-                       : entry.format == "AudioUnit" ? model::PluginFormat::AudioUnit
-                                                     : model::PluginFormat::Unknown;
+        ref.format     = model::pluginFormatFromName(entry.format);
         ref.identifier = entry.identifier;
         ref.name       = entry.name;
         addEffectSlot(model::EffectKind::Plugin, ref);
@@ -876,7 +874,8 @@ MainComponent::MainComponent()
     // A previous scan, so launching doesn't re-probe every plugin on the
     // machine — probing instantiates each one and is slow.
     engine_.pluginHost().restoreScanCache(settings_.getValue("pluginScanCache").toStdString());
-    effectChain_.setAvailablePlugins(engine_.pluginHost().knownPlugins());
+    engine_.pluginHost().setProber(probePluginInChildProcess);
+    effectChain_.setAvailablePlugins(engine_.pluginHost().offeredPlugins());
     effectChain_.onPluginEditorRequested = [this](int slot) { openPluginEditor(slot); };
 
     // The user's saved effect presets. App settings rather than the project:

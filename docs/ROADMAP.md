@@ -208,8 +208,12 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   (read, touch, latch, write)
 - ✅ **Plugin delay compensation**: every track is delayed to meet the latest one (plugins and the limiter report their latency), and exports are trimmed so they start on time · ✅ latency of a clip's own effects (the clip is read ahead by it) · ✅ recorded input (Phase 4)
 - ✅ Clip-level effects (an effect chain on one clip rather than the whole track): the effects panels Track FX / Clip FX switch; played live, before the tracks chain · ✅ plugins on a clip · ✅ clip effect tails past the clip's end (eight seconds)
-- ⬜ **Hosting LV2 and CLAP** (CLAP needs `clap-juce-extensions` or a newer JUCE; research first),
-  plus a plugin manager with enable/disable, a blocklist and crash-safe scanning
+- 🟡 **Hosting LV2** ✅ (JUCE's own LV2 host; its lilv is ISC-licensed) and **CLAP** ⬜ (researched: JUCE
+  8.0.14 hosts VST3, AU and LV2 only, and `clap-juce-extensions` is for *making* CLAP plugins, not hosting
+  them, so hosting CLAP means a host of our own on the MIT `clap` headers, or waiting for JUCE), plus a
+  **plugin manager** ✅ (File > Plugin Manager: turn plugins off, forget them, unblock them, scan) with a
+  blocklist ✅ and crash-safe scanning ✅ (each plugin is probed in a copy of the app, `src/app/PluginProbe.h`;
+  one that crashes, hangs or won't load is blocklisted)
 - 🔁 **Buses, sends, sidechain, tempo changes, warp** exist in REAPER and Audition but were cut from
   SoundSplice on purpose. Parity would mean re-adding them, so decide per feature before Phase 5
   starts. Auto Duck (Phase 2) covers the most common sidechain use without them.

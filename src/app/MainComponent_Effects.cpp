@@ -217,9 +217,9 @@ void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotI
 }
 
 /** Probes for plugins and caches the result, so the next launch doesn't
-    re-probe everything. In-process, so a plugin that crashes on probe takes
-    the app with it — the dead man's pedal means it's skipped next time (see
-    engine::PluginHost, and §20 for what's still owed here). */
+    re-probe everything. Each plugin is probed in a copy of the app (see
+    app/PluginProbe.h), so one that crashes or hangs is blocklisted rather
+    than taking the app with it. */
 void MainComponent::scanForPlugins()
 {
     showBusy("Scanning for plugins...");
@@ -229,11 +229,77 @@ void MainComponent::scanForPlugins()
     for (const auto& format : engine_.pluginHost().availableFormats())
         engine_.pluginHost().scanFormat(format, pedal);
 
-    settings_.setValue("pluginScanCache", juce::String(engine_.pluginHost().saveScanCache()));
-    settings_.saveIfNeeded();
+    pluginListsChanged();
 
-    effectChain_.setAvailablePlugins(engine_.pluginHost().knownPlugins());
-    showStatus("Found " + juce::String((int) engine_.pluginHost().knownPlugins().size()) + " plugin(s)");
+    const int blocked = (int) engine_.pluginHost().blockedPlugins().size();
+    showStatus("Found " + juce::String((int) engine_.pluginHost().knownPlugins().size()) + " plugin(s)"
+               + (blocked > 0 ? ", " + juce::String(blocked) + " blocked - see Plugin Manager" : juce::String()));
+}
+
+/** Saves the scan with the plugin manager's lists, and shows the result
+    everywhere plugins are offered or listed. */
+void MainComponent::pluginListsChanged()
+{
+    auto& host = engine_.pluginHost();
+    settings_.setValue("pluginScanCache", juce::String(host.saveScanCache()));
+    settings_.saveIfNeeded();
+    effectChain_.setAvailablePlugins(host.offeredPlugins());
+
+    if (pluginManager_ == nullptr)
+        return;
+
+    std::vector<PluginManagerDialog::Row> rows;
+    for (const auto& entry : host.knownPlugins())
+        rows.push_back({ entry.format, entry.identifier, entry.name,
+                         entry.disabled ? PluginManagerDialog::Row::State::Off : PluginManagerDialog::Row::State::On });
+    for (const auto& [format, identifier] : host.blockedPlugins())
+        rows.push_back({ format, identifier, {}, PluginManagerDialog::Row::State::Blocked });
+    pluginManager_->setRows(std::move(rows));
+}
+
+/** The plugin manager (File > Plugin Manager): see PluginManagerDialog. */
+void MainComponent::showPluginManager()
+{
+    if (pluginManager_ != nullptr)
+    {
+        if (auto* window = pluginManager_->findParentComponentOfClass<juce::DialogWindow>())
+            window->toFront(true);
+        return;
+    }
+
+    auto  dialog = std::make_unique<PluginManagerDialog>();
+    auto& host   = engine_.pluginHost();
+
+    dialog->onSetEnabled = [this, &host](const PluginManagerDialog::Row& row, bool on)
+    {
+        host.setDisabled(row.format, row.identifier, ! on);
+        pluginListsChanged();
+    };
+    dialog->onUnblock = [this, &host](const PluginManagerDialog::Row& row)
+    {
+        host.unblock(row.format, row.identifier);
+        pluginListsChanged();
+        showStatus("Unblocked - the next scan will try it again");
+    };
+    dialog->onForget = [this, &host](const PluginManagerDialog::Row& row)
+    {
+        host.forget(row.format, row.identifier);
+        pluginListsChanged();
+    };
+    dialog->onScan = [this] { scanForPlugins(); };
+
+    pluginManager_ = dialog.get();
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog.release());
+    options.dialogTitle                  = "Plugin Manager";
+    options.dialogBackgroundColour       = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = true;
+    options.resizable                    = true;
+    options.launchAsync();
+
+    pluginListsChanged();
 }
 
 /** Opens a hosted plugin's own editor. */

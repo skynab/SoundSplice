@@ -401,6 +401,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::audioSettings:    showAudioSettings(); break;
         case commands::recordingLatency: showRecordingLatencyDialog(); break;
         case commands::measureLatency:   measureRecordingLatency(); break;
+        case commands::pluginManager:    showPluginManager(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -796,6 +797,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::recordingFormat);
         add(commands::recordingLatency);
         add(commands::measureLatency);
+        menu.addSeparator();
+        add(commands::pluginManager);
     }
     else if (topLevelMenuIndex == 1) // Edit
     {

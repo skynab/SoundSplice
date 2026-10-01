@@ -610,6 +610,11 @@ private:
     void                   combineOverlappingClipsIntoTakes(int trackIndex, int clipIndex);
     void                   swipeCompTake(int trackIndex, int take, double fromBeats, double toBeats);
     void                   capturePluginStates(const juce::String& label);
+    void                   showPluginManager();
+    void                   pluginListsChanged();
+
+    // The plugin manager while it's open, to refresh after a scan.
+    juce::Component::SafePointer<class PluginManagerDialog> pluginManager_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   toggleFolder(int trackIndex);
     void                   indentTrack(int trackIndex);

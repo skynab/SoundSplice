@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -13,12 +16,13 @@ namespace soundsplice::engine
     isn't one: it keeps the boundary in one place. */
 struct PluginEntry
 {
-    std::string format;      // "VST3", "AudioUnit"
+    std::string format;      // "VST3", "AudioUnit", "LV2"
     std::string identifier;  // what the format needs to find it again
     std::string name;
     bool        isInstrument = false;
     int         numInputs    = 0;
     int         numOutputs   = 0;
+    bool        disabled     = false; // turned off in the plugin manager: not offered
 };
 
 /**
@@ -28,13 +32,17 @@ struct PluginEntry
     an already-constructed instance inside a PluginNode, handed over by the
     same chain swap everything else uses.
 
-    **Scanning is in-process, with crash *recovery* rather than crash
-    *isolation*.** A dead man's pedal file records which plugin is being probed
-    before probing it, so a plugin that brings the app down is skipped on the
-    next run instead of killing it again — but it does bring the app down that
-    first time. True isolation needs the probe to happen in a child process;
-    §20 lists it and it is still outstanding. Saying so is better than implying
-    a safety that isn't there.
+    **Scanning can be crash-safe.** Given a prober (setProber), each plugin is
+    probed by it - the app runs a copy of itself to do it (see Main.cpp's
+    --probe-plugin), so a plugin that crashes or hangs while being probed
+    takes down only that copy, and goes on the blocklist. Without one, as in
+    the headless bounce tool, probing is in-process with crash *recovery*: a
+    dead man's pedal file records which plugin is being probed, and one that
+    brought the process down is blocklisted on the next scan.
+
+    The blocklist and the plugins turned off in the plugin manager are kept
+    with the scan cache, so neither is probed or offered again until the
+    user says so.
 
     Note this deliberately keeps its own list of descriptions rather than using
     juce::KnownPluginList: that class (and PluginDirectoryScanner) live only in
@@ -53,6 +61,14 @@ public:
         // PluginModule.h picks the one matching this target.
         SOUNDSPLICE_ADD_PLUGIN_FORMATS(formatManager_);
     }
+
+    /** Probes one plugin file or identifier somewhere safe, filling
+        @p found; false if it crashed, hung or wouldn't load, which
+        blocklists it. */
+    using Prober = std::function<bool(const std::string& format, const std::string& identifier,
+                                      std::vector<juce::PluginDescription>& found)>;
+
+    void setProber(Prober prober) { prober_ = std::move(prober); }
 
     /** Formats actually available in this build, for the UI to offer. */
     std::vector<std::string> availableFormats() const
@@ -73,14 +89,19 @@ public:
         repeat it. */
     int scanFormat(const std::string& formatName, const juce::File& deadMansPedal, int maxToProbe = 64)
     {
+        // Whatever was mid-probe when we last died is assumed to be what killed
+        // us, and goes on the blocklist.
+        if (deadMansPedal.existsAsFile())
+        {
+            const auto lastProbed = deadMansPedal.loadFileAsString().trim();
+            if (lastProbed.isNotEmpty())
+                blocked_.insert(keyFor(formatName, lastProbed.toStdString()));
+            deadMansPedal.deleteFile();
+        }
+
         auto* format = findFormat(formatName);
         if (format == nullptr)
             return 0;
-
-        // Whatever was mid-probe when we last died is assumed to be what killed
-        // us, and is skipped.
-        const auto lastProbed = deadMansPedal.existsAsFile() ? deadMansPedal.loadFileAsString().trim()
-                                                             : juce::String();
 
         const auto identifiers = format->searchPathsForPlugins(format->getDefaultLocationsToSearch(), true, true);
 
@@ -89,17 +110,19 @@ public:
         {
             if (probed >= maxToProbe)
                 break;
-            if (identifier == lastProbed || isKnown(formatName, identifier.toStdString()))
+            const auto id = identifier.toStdString();
+            if (isBlocked(formatName, id) || isKnown(formatName, id))
                 continue;
 
             // Written *before* probing: if the probe never returns, this is the
             // record of which plugin to blame.
             deadMansPedal.replaceWithText(identifier);
 
-            juce::OwnedArray<juce::PluginDescription> found;
-            format->findAllTypesForFile(found, identifier);
-            for (auto* description : found)
-                descriptions_.push_back(*description);
+            std::vector<juce::PluginDescription> found;
+            if (prober_ ? prober_(formatName, id, found) : probeInProcess(formatName, id, found))
+                descriptions_.insert(descriptions_.end(), found.begin(), found.end());
+            else
+                blocked_.insert(keyFor(formatName, id));
 
             ++probed;
         }
@@ -108,13 +131,107 @@ public:
         return probed;
     }
 
-    /** Everything scanned so far. */
+    /** Probes one plugin here, in this process: what a prober running in a
+        child process does, and the fallback without one. */
+    bool probeInProcess(const std::string& formatName, const std::string& identifier,
+                        std::vector<juce::PluginDescription>& found)
+    {
+        auto* format = findFormat(formatName);
+        if (format == nullptr)
+            return false;
+
+        juce::OwnedArray<juce::PluginDescription> descriptions;
+        format->findAllTypesForFile(descriptions, juce::String(identifier));
+        for (auto* description : descriptions)
+            found.push_back(*description);
+        return ! found.empty();
+    }
+
+    /** Descriptions as XML, and back: how a probe in a child process reports
+        what it found. */
+    static std::string descriptionsToXml(const std::vector<juce::PluginDescription>& descriptions)
+    {
+        juce::XmlElement root("FOUND");
+        for (const auto& description : descriptions)
+            root.addChildElement(description.createXml().release());
+        return root.toString().toStdString();
+    }
+
+    static std::vector<juce::PluginDescription> descriptionsFromXml(const std::string& xml)
+    {
+        std::vector<juce::PluginDescription> descriptions;
+        if (auto parsed = juce::XmlDocument::parse(juce::String(xml)))
+            for (auto* child : parsed->getChildIterator())
+            {
+                juce::PluginDescription description;
+                if (description.loadFromXml(*child))
+                    descriptions.push_back(description);
+            }
+        return descriptions;
+    }
+
+    /** Everything scanned so far, the turned-off ones marked. */
     std::vector<PluginEntry> knownPlugins() const
     {
         std::vector<PluginEntry> entries;
         for (const auto& description : descriptions_)
             entries.push_back(toEntry(description));
         return entries;
+    }
+
+    /** What to offer for adding: everything scanned and not turned off. */
+    std::vector<PluginEntry> offeredPlugins() const
+    {
+        auto entries = knownPlugins();
+        entries.erase(std::remove_if(entries.begin(), entries.end(), [](const PluginEntry& e) { return e.disabled; }),
+                      entries.end());
+        return entries;
+    }
+
+    /** Turns a plugin off (not offered for adding; a project that already
+        uses it still loads it) or back on. */
+    void setDisabled(const std::string& format, const std::string& identifier, bool disabled)
+    {
+        if (disabled)
+            disabled_.insert(keyFor(format, identifier));
+        else
+            disabled_.erase(keyFor(format, identifier));
+    }
+
+    bool isDisabled(const std::string& format, const std::string& identifier) const
+    {
+        return disabled_.count(keyFor(format, identifier)) > 0;
+    }
+
+    /** The blocklist: plugins that crashed, hung or wouldn't load while
+        being probed, as (format, identifier). Never probed again until
+        unblocked. */
+    std::vector<std::pair<std::string, std::string>> blockedPlugins() const
+    {
+        std::vector<std::pair<std::string, std::string>> entries;
+        for (const auto& key : blocked_)
+            entries.push_back(splitKey(key));
+        return entries;
+    }
+
+    bool isBlocked(const std::string& format, const std::string& identifier) const
+    {
+        return blocked_.count(keyFor(format, identifier)) > 0;
+    }
+
+    /** Takes a plugin off the blocklist, so the next scan probes it again. */
+    void unblock(const std::string& format, const std::string& identifier) { blocked_.erase(keyFor(format, identifier)); }
+
+    /** Forgets what was found for a plugin, so the next scan probes it again. */
+    void forget(const std::string& format, const std::string& identifier)
+    {
+        descriptions_.erase(std::remove_if(descriptions_.begin(), descriptions_.end(),
+                                           [&](const juce::PluginDescription& d)
+                                           {
+                                               return d.pluginFormatName == juce::String(format)
+                                                   && d.fileOrIdentifier == juce::String(identifier);
+                                           }),
+                            descriptions_.end());
     }
 
     /** Restores a previously saved scan so startup doesn't re-probe
@@ -126,8 +243,22 @@ public:
             return;
 
         descriptions_.clear();
+        blocked_.clear();
+        disabled_.clear();
         for (auto* child : parsed->getChildIterator())
         {
+            // The plugin manager's lists ride along with the scan.
+            if (child->hasTagName("BLOCKED"))
+            {
+                blocked_.insert(child->getStringAttribute("key").toStdString());
+                continue;
+            }
+            if (child->hasTagName("DISABLED"))
+            {
+                disabled_.insert(child->getStringAttribute("key").toStdString());
+                continue;
+            }
+
             juce::PluginDescription description;
             if (description.loadFromXml(*child))
                 descriptions_.push_back(description);
@@ -139,6 +270,10 @@ public:
         juce::XmlElement root("KNOWNPLUGINS");
         for (const auto& description : descriptions_)
             root.addChildElement(description.createXml().release());
+        for (const auto& key : blocked_)
+            root.createNewChildElement("BLOCKED")->setAttribute("key", juce::String(key));
+        for (const auto& key : disabled_)
+            root.createNewChildElement("DISABLED")->setAttribute("key", juce::String(key));
         return root.toString().toStdString();
     }
 
@@ -190,7 +325,21 @@ private:
         return findDescription(format, identifier) != nullptr;
     }
 
-    static PluginEntry toEntry(const juce::PluginDescription& description)
+    /** One string per plugin for the lists, format first: a format name
+        never holds the separator, an identifier (a path) may. */
+    static std::string keyFor(const std::string& format, const std::string& identifier)
+    {
+        return format + "|" + identifier;
+    }
+
+    static std::pair<std::string, std::string> splitKey(const std::string& key)
+    {
+        const auto bar = key.find('|');
+        return bar == std::string::npos ? std::pair<std::string, std::string> { {}, key }
+                                        : std::pair<std::string, std::string> { key.substr(0, bar), key.substr(bar + 1) };
+    }
+
+    PluginEntry toEntry(const juce::PluginDescription& description) const
     {
         PluginEntry entry;
         entry.format       = description.pluginFormatName.toStdString();
@@ -199,11 +348,15 @@ private:
         entry.isInstrument = description.isInstrument;
         entry.numInputs    = description.numInputChannels;
         entry.numOutputs   = description.numOutputChannels;
+        entry.disabled     = isDisabled(entry.format, entry.identifier);
         return entry;
     }
 
     juce::AudioPluginFormatManager        formatManager_;
     std::vector<juce::PluginDescription>  descriptions_;
+    std::set<std::string>                 blocked_;  // keyFor(format, identifier)
+    std::set<std::string>                 disabled_;
+    Prober                                prober_;
 };
 
 } // namespace soundsplice::engine

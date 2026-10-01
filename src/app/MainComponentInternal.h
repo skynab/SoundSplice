@@ -17,6 +17,8 @@
 #include "app/ImportRawDialog.h"
 #include "app/RowWrapLayout.h"
 #include "app/OfflineRenderJob.h"
+#include "app/PluginManagerDialog.h"
+#include "app/PluginProbe.h"
 #include "app/RenderProgress.h"
 #include "app/StemNaming.h"
 #include "app/TimelineZoom.h"
@@ -141,19 +143,7 @@ namespace mainui
     change leaves, far too short to hear as a fade. */
 inline constexpr double kEffectEdgeFadeSeconds = 0.005;
 
-/** model::PluginFormat -> the name JUCE's format manager uses. The document
-    stores an enum so the file format doesn't depend on JUCE's spelling; this
-    is the one place the two meet. */
-inline std::string pluginFormatName(model::PluginFormat format)
-{
-    switch (format)
-    {
-        case model::PluginFormat::VST3:      return "VST3";
-        case model::PluginFormat::AudioUnit: return "AudioUnit";
-        case model::PluginFormat::Unknown:   break;
-    }
-    return {};
-}
+using model::pluginFormatName;
 
 /** Converts a track's model automation lanes into the engine's curve form.
     The engine can't use model::AutomationLane directly — `model` already

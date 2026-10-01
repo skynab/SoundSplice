@@ -75,8 +75,32 @@ enum class PluginFormat
 {
     Unknown   = 0,
     VST3      = 1,
-    AudioUnit = 2
+    AudioUnit = 2,
+    LV2       = 3
 };
+
+/** A PluginFormat as JUCE's format manager names it, and back. The document
+    stores the enum so the file format doesn't depend on JUCE's spelling;
+    these are the one place the two meet. */
+inline std::string pluginFormatName(PluginFormat format)
+{
+    switch (format)
+    {
+        case PluginFormat::VST3:      return "VST3";
+        case PluginFormat::AudioUnit: return "AudioUnit";
+        case PluginFormat::LV2:       return "LV2";
+        case PluginFormat::Unknown:   break;
+    }
+    return {};
+}
+
+inline PluginFormat pluginFormatFromName(const std::string& name)
+{
+    for (const auto format : { PluginFormat::VST3, PluginFormat::AudioUnit, PluginFormat::LV2 })
+        if (pluginFormatName(format) == name)
+            return format;
+    return PluginFormat::Unknown;
+}
 
 /**
     A reference to a hosted plugin, as the *document* sees it.

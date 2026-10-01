@@ -143,9 +143,7 @@ public:
         chainPanel_.onPluginAdded = [this](const engine::PluginEntry& entry)
         {
             auto slot = model::makeEffectSlot(model::EffectKind::Plugin);
-            slot.plugin.format     = entry.format == "VST3"      ? model::PluginFormat::VST3
-                                   : entry.format == "AudioUnit" ? model::PluginFormat::AudioUnit
-                                                                 : model::PluginFormat::Unknown;
+            slot.plugin.format     = model::pluginFormatFromName(entry.format);
             slot.plugin.identifier = entry.identifier;
             slot.plugin.name       = entry.name;
             chain_.push_back(slot);

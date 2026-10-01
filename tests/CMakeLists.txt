@@ -157,6 +157,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/ParametricEqViewTests.cpp
     gui/TransferCurveViewTests.cpp
     gui/UtilityEffectsTests.cpp
+    gui/PluginManagerTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
