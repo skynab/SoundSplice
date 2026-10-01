@@ -132,6 +132,14 @@ public:
         drawing something that's gone, and has to be closed. */
     bool takeClipPluginChainsChanged() noexcept { return std::exchange(clipPluginChainsChanged_, false); }
 
+    /** The document now holds @p state for a plugin, taken from the running
+        plugin itself: noted, so the next submission doesn't restore it onto
+        the plugin it came from. A submission whose state differs from what
+        was last noted or loaded restores it - that's how undo reaches a
+        plugin. Message thread. */
+    void notePluginState(int trackIndex, int slotIndex, const std::string& state);
+    void noteClipPluginState(int clipId, int slotIndex, const std::string& state);
+
     // Metronome (thread-safe atomics). Summed in after the master chain, so
     // it never passes through the master effects or reaches the meter — and
     // the offline renderer has none at all, so it can't reach a bounce.

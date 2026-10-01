@@ -609,7 +609,12 @@ private:
     void                   useClipTake(int trackIndex, int clipId, double fromBeats, double toBeats, int take);
     void                   combineOverlappingClipsIntoTakes(int trackIndex, int clipIndex);
     void                   swipeCompTake(int trackIndex, int take, double fromBeats, double toBeats);
-    void                   capturePluginStates(const juce::String& label);
+    void                   syncOpenPluginStates();
+    void                   closePluginEditor(PluginEditorWindow* window);
+    static model::EffectSlot* pluginSlotFor(model::Song& song, const PluginSlotAddress& at);
+    engine::PluginNode*    pluginNodeFor(const PluginEditorWindow& window);
+    void                   notePluginStateToEngine(const PluginSlotAddress& at, const std::string& state);
+    int                    pluginStateSyncTicks_ = 0;
     void                   showPluginManager();
     void                   pluginListsChanged();
 

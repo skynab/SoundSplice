@@ -1372,6 +1372,14 @@ void MainComponent::timerCallback()
     // export — see bounceProject()). Master and per-track lanes both apply.
     tickAutomationWrites();
 
+    // About once a second, what open plugin editors have changed goes into
+    // the document (see syncOpenPluginStates).
+    if (! pluginWindows_.isEmpty() && ++pluginStateSyncTicks_ >= 30)
+    {
+        pluginStateSyncTicks_ = 0;
+        syncOpenPluginStates();
+    }
+
     if (engine_.isPlaying())
     {
         const double beat = uiTempoMap_.ppqFromSamples(playhead);

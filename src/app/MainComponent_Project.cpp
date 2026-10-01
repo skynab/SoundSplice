@@ -102,7 +102,7 @@ void MainComponent::updateWindowTitle()
     The project's audio travels with it: see app/ProjectMedia.h. */
 bool MainComponent::writeProjectTo(const juce::File& file)
 {
-    capturePluginStates("Change plugin settings");
+    syncOpenPluginStates(); // what an open plugin editor has been doing
     collectProjectAudio(file);
 
     // Taken after collecting, which repoints paths and so moves the state id.
@@ -417,7 +417,7 @@ void MainComponent::autosaveIfDue()
     if (file.getParentDirectory().createDirectory().failed())
         return;
 
-    capturePluginStates("Change plugin settings");
+    syncOpenPluginStates();
     const auto text = app::wrapAutosave(model::serialize(history_.current()),
                                         projectFile_.getFullPathName().toStdString());
 

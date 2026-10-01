@@ -329,72 +329,112 @@ void MainComponent::openPluginEditor(int slotIndex)
         }
 
     auto* window = pluginWindows_.add(new PluginEditorWindow(node->instance()->getName(), *node->instance()));
-    window->onCloseRequested = [this](PluginEditorWindow* w)
-    {
-        pluginWindows_.removeObject(w);
-        capturePluginStates("Change plugin settings");
-    };
+    const auto& song = history_.current();
+    window->address  = { song.tracks[(size_t) ref.track].id,
+                         ref.isClip() ? song.tracks[(size_t) ref.track].clips[(size_t) ref.clip].id : 0, slotIndex };
+    window->stateAtOpen = node->saveState();
+    window->onCloseRequested = [this](PluginEditorWindow* w) { closePluginEditor(w); };
 }
 
-/** Copies every loaded plugin's own state into the document, where it has
-    changed: what was turned in a plugin's editor is otherwise only in the
-    running instance, and lost on save, reload or a rebuild of its chain. One
-    undo step, under @p label; nothing if no plugin changed. */
-void MainComponent::capturePluginStates(const juce::String& label)
+/** The document slot at @p at, or nullptr if it's gone. */
+model::EffectSlot* MainComponent::pluginSlotFor(model::Song& song, const PluginSlotAddress& at)
 {
-    struct Change
+    auto* track = model::findTrack(song, at.trackId);
+    if (track == nullptr)
+        return nullptr;
+
+    auto* chain = &track->effectChain;
+    if (at.clipId != 0)
     {
-        int         track = 0;
-        int         clip  = -1; // -1: the track's own chain
-        int         slot  = 0;
-        std::string state;
-    };
-    std::vector<Change> changes;
-
-    const auto& song = history_.current();
-    for (int t = 0; t < (int) song.tracks.size(); ++t)
-    {
-        const auto& chain = song.tracks[(size_t) t].effectChain;
-        for (int s = 0; s < (int) chain.size(); ++s)
-        {
-            if (chain[(size_t) s].kind != model::EffectKind::Plugin)
-                continue;
-
-            const auto* node = engine_.trackPluginNode(t, s);
-            if (node == nullptr || node->instance() == nullptr)
-                continue; // not loaded here: keep what the document has
-
-            auto state = node->saveState();
-            if (state != chain[(size_t) s].plugin.state)
-                changes.push_back({ t, -1, s, std::move(state) });
-        }
-
-        // And each clip's own chain.
-        const auto& clips = song.tracks[(size_t) t].clips;
-        for (int c = 0; c < (int) clips.size(); ++c)
-            for (int s = 0; s < (int) clips[(size_t) c].effects.size(); ++s)
-            {
-                const auto& slot = clips[(size_t) c].effects[(size_t) s];
-                const auto* node = slot.kind == model::EffectKind::Plugin
-                                       ? engine_.clipPluginNode(clips[(size_t) c].id, s) : nullptr;
-                if (node == nullptr || node->instance() == nullptr)
-                    continue;
-
-                auto state = node->saveState();
-                if (state != slot.plugin.state)
-                    changes.push_back({ t, c, s, std::move(state) });
-            }
+        const auto clip = std::find_if(track->clips.begin(), track->clips.end(),
+                                       [&](const model::Clip& c) { return c.id == at.clipId; });
+        if (clip == track->clips.end())
+            return nullptr;
+        chain = &clip->effects;
     }
 
-    if (changes.empty())
+    if (at.slot < 0 || at.slot >= (int) chain->size() || (*chain)[(size_t) at.slot].kind != model::EffectKind::Plugin)
+        return nullptr;
+    return &(*chain)[(size_t) at.slot];
+}
+
+/** The running plugin @p window shows, or nullptr if its node has gone. */
+engine::PluginNode* MainComponent::pluginNodeFor(const PluginEditorWindow& window)
+{
+    const auto& tracks = history_.current().tracks;
+    const auto  track  = std::find_if(tracks.begin(), tracks.end(),
+                                      [&](const model::Track& t) { return t.id == window.address.trackId; });
+    if (track == tracks.end())
+        return nullptr;
+
+    const auto& at   = window.address;
+    auto*       node = at.clipId != 0 ? engine_.clipPluginNode(at.clipId, at.slot)
+                                      : engine_.trackPluginNode((int) std::distance(tracks.begin(), track), at.slot);
+    return node != nullptr && node->instance() == window.plugin() ? node : nullptr;
+}
+
+/** Copies the state of every plugin with an open editor into the document,
+    without an undo step: a live tweak, like a fader mid-drag, so the
+    document never falls behind what's being heard - a save, an autosave or
+    a rebuild of the chain all see it. The engine is told, so it doesn't
+    restore the state it was just given (see AudioEngine::notePluginState).
+    Only plugins being edited: some never give the same state twice. */
+void MainComponent::syncOpenPluginStates()
+{
+    for (auto* window : pluginWindows_)
+    {
+        auto* node = pluginNodeFor(*window);
+        auto* slot = pluginSlotFor(history_.mutableCurrent(), window->address);
+        if (node == nullptr || slot == nullptr)
+            continue;
+
+        auto state = node->saveState();
+        if (state == slot->plugin.state)
+            continue;
+
+        notePluginStateToEngine(window->address, state);
+        slot->plugin.state = std::move(state);
+    }
+}
+
+void MainComponent::notePluginStateToEngine(const PluginSlotAddress& at, const std::string& state)
+{
+    if (at.clipId != 0)
+    {
+        engine_.noteClipPluginState(at.clipId, at.slot, state);
+        return;
+    }
+
+    const auto& tracks = history_.current().tracks;
+    for (int t = 0; t < (int) tracks.size(); ++t)
+        if (tracks[(size_t) t].id == at.trackId)
+            engine_.notePluginState(t, at.slot, state);
+}
+
+/** A plugin's editor is closing: everything done in it becomes one undo
+    step, from its state when it opened to its state now. */
+void MainComponent::closePluginEditor(PluginEditorWindow* window)
+{
+    std::string finalState;
+    if (auto* node = pluginNodeFor(*window))
+        finalState = node->saveState();
+
+    const auto        where   = window->address;
+    const std::string from    = window->stateAtOpen;
+    const bool        changed = ! finalState.empty() && finalState != from;
+    if (changed)
+        notePluginStateToEngine(where, finalState);
+
+    pluginWindows_.removeObject(window);
+    if (! changed)
         return;
 
-    history_.edit(label.toStdString(), [&changes](model::Song& s)
+    if (auto* slot = pluginSlotFor(history_.mutableCurrent(), where))
+        slot->plugin.state = from; // rewound, so the step undoes to where it began
+    history_.edit("Change plugin settings", [where, finalState](model::Song& s)
     {
-        for (const auto& change : changes)
-            if (auto* chain = chainAt(s, { change.track, change.clip });
-                chain != nullptr && change.slot < (int) chain->size())
-                (*chain)[(size_t) change.slot].plugin.state = change.state;
+        if (auto* slot = pluginSlotFor(s, where))
+            slot->plugin.state = finalState;
     });
 }
 

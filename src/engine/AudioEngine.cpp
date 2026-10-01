@@ -344,12 +344,34 @@ std::shared_ptr<EffectChain> AudioEngine::clipChainFor(int trackIndex, const Aud
 
         entry.chain = std::move(chain);
     }
+    else
+    {
+        // As for a track's chain: a changed saved state reaches the plugin.
+        for (size_t i = 0; i < shape.size(); ++i)
+            if (shape[i].kind == EffectKind::Plugin && shape[i].pluginState != entry.shape[i].pluginState)
+                if (auto* node = dynamic_cast<PluginNode*>(entry.chain->nodeAt(i)))
+                    node->restoreState(shape[i].pluginState);
+    }
     entry.shape = std::move(shape);
     entry.track = trackIndex;
 
     for (size_t i = 0; i < spec.effects.size(); ++i)
         entry.chain->applyParams(i, spec.effects[i]);
     return entry.chain;
+}
+
+void AudioEngine::notePluginState(int trackIndex, int slotIndex, const std::string& state)
+{
+    if (trackIndex >= 0 && trackIndex < kMaxTracks && slotIndex >= 0
+        && slotIndex < (int) chainStructure_[(size_t) trackIndex].size())
+        chainStructure_[(size_t) trackIndex][(size_t) slotIndex].pluginState = state;
+}
+
+void AudioEngine::noteClipPluginState(int clipId, int slotIndex, const std::string& state)
+{
+    const auto it = clipChains_.find(clipId);
+    if (it != clipChains_.end() && slotIndex >= 0 && slotIndex < (int) it->second.shape.size())
+        it->second.shape[(size_t) slotIndex].pluginState = state;
 }
 
 PluginNode* AudioEngine::clipPluginNode(int clipId, int slotIndex)
@@ -786,13 +808,24 @@ bool AudioEngine::setTrackEffectChain(int index, const std::vector<EffectSlotSpe
     // Rebuilding resets every tail in the chain — and reinstantiates every
     // plugin — so only do it when the shape actually changed. A changed
     // preset or parameter is not a shape change.
-    const auto& existing = chainStructure_[(size_t) index];
+    auto& existing = chainStructure_[(size_t) index];
     bool sameShape = existing.size() == slots.size() && submittedChain_[(size_t) index] != nullptr;
     for (size_t i = 0; sameShape && i < slots.size(); ++i)
         sameShape = existing[i].sameShapeAs(slots[i]);
 
     if (sameShape)
+    {
+        // A plugin whose saved state changed without the plugin changing it
+        // (an undo, say) is given it.
+        for (size_t i = 0; i < slots.size(); ++i)
+            if (slots[i].kind == EffectKind::Plugin && slots[i].pluginState != existing[i].pluginState)
+            {
+                if (auto* node = trackPluginNode(index, (int) i))
+                    node->restoreState(slots[i].pluginState);
+                existing[i].pluginState = slots[i].pluginState;
+            }
         return false;
+    }
 
     chainStructure_[(size_t) index] = slots;
     rebuildTrackEffectChain(index);

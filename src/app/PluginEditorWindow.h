@@ -23,10 +23,25 @@ namespace soundsplice
       view rather than an empty window, which is the difference between "this
       plugin has no UI" and "this app failed to open it".
 */
+/** Where a plugin sits in the document: a track by id, the clip whose own
+    chain it's in by id (0 for the track's chain), and its position there. */
+struct PluginSlotAddress
+{
+    int trackId = 0;
+    int clipId  = 0;
+    int slot    = -1;
+};
+
 class PluginEditorWindow final : public juce::DocumentWindow
 {
 public:
     std::function<void(PluginEditorWindow*)> onCloseRequested;
+
+    // Which slot of the document this plugin is, and its state when the
+    // window opened, so closing it can commit everything done in it as one
+    // undo step.
+    PluginSlotAddress address;
+    std::string       stateAtOpen;
 
     PluginEditorWindow(const juce::String& title, juce::AudioPluginInstance& plugin)
         : juce::DocumentWindow(title, juce::Colours::black, juce::DocumentWindow::closeButton),
