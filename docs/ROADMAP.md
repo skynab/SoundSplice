@@ -202,7 +202,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 ### Phase 5 — Multitrack and mixing parity (Audition, REAPER)
 
 - ✅ **Take lanes and swipe comping** with A/B comparison (REAPER, Audition): ✅ takes on a clip (Combine Overlapping Clips into Takes), ✅ switching takes to compare them and comping a time selection to a take (right-click the clip) · ✅ take lanes drawn in the clip (View > Show Take Lanes: a row per take under a header; click a row to hear that take, drag along one to comp across every piece it crosses; `src/app/TakeLanes.h`, `takeedit::compTrackRange`) · ✅ recording takes by looping (Phase 4)
-- ⬜ **Razor/range edits** across tracks (REAPER)
+- ✅ **Razor/range edits** across tracks (REAPER): Ctrl+Shift-drag (Cmd on a Mac) adds an area on each lane crossed, keeping earlier ones, so each track can have its own stretches; Cut, Copy, Delete and Silence act on all of them without closing gaps, Paste puts them back in the same shape, and a drag inside one moves them in time and across lanes (`src/model/RazorEdits.h`)
 - ⬜ **Track edit groups** and **folder tracks** (folders as organization only; see the 🔁 note below)
 - ✅ **Automation for any effect or plugin parameter** ✅ for every built-in effect parameter and every automatable parameter of a loaded plugin (pick it in the Automation pane; the lanes live on the effect, so they move with it) · ✅ curve shapes (right-click a point: Linear, Hold, Fast Start, Slow Start, S-Curve) · ✅ automation modes (the master panel's Automation picker sets the mix's; each mixer strip's mode button gives a track its own, saved with the project)
   (read, touch, latch, write)

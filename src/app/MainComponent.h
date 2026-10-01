@@ -334,6 +334,16 @@ private:
         there's no time selection to act on. */
     bool                   editTimeSelection(const juce::String& label, bool copy, bool remove, bool closeGap);
     bool                   pasteAtTimeSelection();
+    bool                   editRazorAreas(const juce::String& label, bool copy, bool remove);
+    bool                   pasteRazorClipboard();
+    void                   setRazorAreas(const model::RazorAreas& areas);
+    void                   moveRazorAreas(double deltaBeats, int deltaTracks);
+
+    // Razor areas (model/RazorEdits.h), what Copy last took from them, and
+    // whether that was the last copy made, so Paste puts back the right one.
+    model::RazorAreas      razorAreas_;
+    model::RazorClipboard  razorClipboard_;
+    bool                   razorClipboardIsLatest_ = false;
     void                   refreshAfterArrangementEdit();
 
     // Edits on the arrangement itself (model/ArrangementEdits.h), on the

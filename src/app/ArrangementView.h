@@ -16,6 +16,7 @@
 #include "SnapTargets.h"
 #include "TimeFormat.h"
 #include "model/Markers.h"
+#include "model/RazorEdits.h"
 #include "model/Takes.h"
 #include "model/TimeSelection.h"
 #include "SpectrogramCache.h"
@@ -155,6 +156,13 @@ public:
         clears it. A click on an empty lane is a selection with no length: a
         cursor on that track. */
     std::function<void(const model::TimeSelection&)> onTimeSelectionChanged;
+
+    /** Razor areas (model/RazorEdits.h): fired as Ctrl+Shift-drags (Cmd on
+        a Mac) add them, and when a click elsewhere clears them. A drag
+        starting inside one asks for them to be moved, by whole lanes and by
+        beats, on release. */
+    std::function<void(const model::RazorAreas&)> onRazorAreasChanged;
+    std::function<void(double deltaBeats, int deltaTracks)> onRazorMoveRequested;
 
     void setSong(const model::Song& song)
     {
@@ -339,6 +347,18 @@ public:
     }
 
     const model::TimeSelection& timeSelection() const { return timeSelection_; }
+
+    /** Shows @p areas, as set by the owner (after a move or a paste). */
+    void setRazorAreas(const model::RazorAreas& areas)
+    {
+        if (areas == razorAreas_)
+            return;
+
+        razorAreas_ = areas;
+        repaint();
+    }
+
+    const model::RazorAreas& razorAreas() const { return razorAreas_; }
 
     void paint(juce::Graphics& g) override
     {
@@ -557,6 +577,7 @@ public:
         }
 
         paintTimeSelection(g);
+        paintRazorAreas(g);
 
         // The dragged clip's ghost, drawn once here rather than inline in
         // the loop above: a resize always stays on dragTrackIndex_'s lane, a
@@ -1119,6 +1140,38 @@ private:
             return;
         }
 
+        // Razor areas. Ctrl+Shift-drag (Cmd on a Mac) adds one on each lane
+        // it crosses, keeping those already made; a drag starting inside one
+        // moves them all; any other click on the lanes lets them go.
+        if (! e.mods.isPopupMenu() && e.position.x >= geometry_.gutterWidth && trackAtY(e.position.y) >= 0)
+        {
+            const int lane = trackAtY(e.position.y);
+            if (e.mods.isShiftDown() && e.mods.isCommandDown())
+            {
+                razorDragging_    = true;
+                razorBase_        = razorAreas_;
+                razorAnchorBeat_  = snappedBeatAt(e.position.x, e.mods.isAltDown());
+                razorAnchorTrack_ = lane;
+                return;
+            }
+
+            if (! razorAreas_.empty() && ! e.mods.isAnyModifierKeyDown()
+                && model::razoredit::areaAt(razorAreas_, song_.tracks[(size_t) lane].id,
+                                            geometry_.beatForX(e.position.x)) != nullptr)
+            {
+                razorMoving_      = true;
+                razorMoveMoved_   = false;
+                razorPressX_      = e.position.x;
+                razorGrabBeat_    = snappedBeatAt(e.position.x, false);
+                razorGrabTrack_   = lane;
+                razorDeltaBeats_  = 0.0;
+                razorDeltaTracks_ = 0;
+                return;
+            }
+
+            changeRazorAreas({});
+        }
+
         // Shift-drag selects time anywhere on the lanes, over clips as well as
         // between them: without it a selection could only start in a gap.
         if (e.mods.isShiftDown() && ! e.mods.isPopupMenu() && e.position.x >= geometry_.gutterWidth
@@ -1247,6 +1300,32 @@ private:
                 envelopePoint_             = envelopePreview_.movePoint(envelopePoint_, seconds, gain);
                 repaint();
             }
+            return;
+        }
+
+        if (razorDragging_)
+        {
+            const int last  = (int) song_.tracks.size() - 1;
+            const int track = juce::jlimit(0, juce::jmax(0, last), trackAtYUnclamped(e.position.y));
+            auto      areas = razorBase_;
+            for (const auto& area : model::razoredit::areasFromDrag(song_, razorAnchorBeat_,
+                                                                     snappedBeatAt(e.position.x, e.mods.isAltDown()),
+                                                                     razorAnchorTrack_, track))
+                areas = model::razoredit::addArea(song_, std::move(areas), area);
+            changeRazorAreas(areas);
+            return;
+        }
+
+        if (razorMoving_)
+        {
+            if (! razorMoveMoved_ && std::abs(e.position.x - razorPressX_) < kSwipeDragPixels
+                && trackAtYUnclamped(e.position.y) == razorGrabTrack_)
+                return;
+
+            razorMoveMoved_   = true;
+            razorDeltaBeats_  = snappedBeatAt(e.position.x, e.mods.isAltDown()) - razorGrabBeat_;
+            razorDeltaTracks_ = trackAtYUnclamped(e.position.y) - razorGrabTrack_;
+            repaint();
             return;
         }
 
@@ -1433,6 +1512,22 @@ private:
 
             if (dragged && onTrackDuplicateRequested)
                 onTrackDuplicateRequested(track);
+            return;
+        }
+
+        if (razorDragging_)
+        {
+            razorDragging_ = false;
+            return;
+        }
+
+        if (razorMoving_)
+        {
+            razorMoving_ = false;
+            repaint();
+            if (razorMoveMoved_ && (std::abs(razorDeltaBeats_) > 1.0e-9 || razorDeltaTracks_ != 0)
+                && onRazorMoveRequested)
+                onRazorMoveRequested(razorDeltaBeats_, razorDeltaTracks_);
             return;
         }
 
@@ -2146,6 +2241,21 @@ private:
         return std::max(0.0, app::snapPosition(geometry_.beatForX(x), magnets, tolerance, gridOn, snapUnitBeats()));
     }
 
+    // Razor areas, and the drags making or moving them: the areas before a
+    // drag that adds more began, where it began, and how far a move has gone.
+    model::RazorAreas razorAreas_;
+    model::RazorAreas razorBase_;
+    bool   razorDragging_    = false;
+    double razorAnchorBeat_  = 0.0;
+    int    razorAnchorTrack_ = 0;
+    bool   razorMoving_      = false;
+    bool   razorMoveMoved_   = false;
+    float  razorPressX_      = 0.0f;
+    double razorGrabBeat_    = 0.0;
+    int    razorGrabTrack_   = 0;
+    double razorDeltaBeats_  = 0.0;
+    int    razorDeltaTracks_ = 0;
+
     // Take lanes, and a swipe being dragged along one: which track, clip and
     // take it began on, and the stretch it covers so far (snapped beats).
     bool   showTakeLanes_    = false;
@@ -2308,6 +2418,51 @@ private:
 
         if (onTimeSelectionChanged)
             onTimeSelectionChanged(timeSelection_);
+    }
+
+    void changeRazorAreas(const model::RazorAreas& areas)
+    {
+        if (areas == razorAreas_)
+            return;
+
+        razorAreas_ = areas;
+        repaint();
+
+        if (onRazorAreasChanged)
+            onRazorAreasChanged(razorAreas_);
+    }
+
+    /** Each razor area shaded over its lane, and, while they're being
+        dragged, an outline of each where it would land. */
+    void paintRazorAreas(juce::Graphics& g)
+    {
+        const auto paintArea = [&](const model::RazorArea& area, int lane, bool ghost)
+        {
+            if (lane < 0 || lane >= (int) song_.tracks.size())
+                return;
+
+            const float left  = geometry_.xForBeat(area.startBeats);
+            const float right = geometry_.xForBeat(area.endBeats);
+            const auto  box   = juce::Rectangle<float>(left, geometry_.rulerHeight + (float) lane * geometry_.laneHeight,
+                                                       juce::jmax(1.0f, right - left), geometry_.laneHeight);
+            if (! ghost)
+            {
+                g.setColour(juce::Colour(0xffff8c42).withAlpha(0.28f));
+                g.fillRect(box);
+            }
+            g.setColour(juce::Colour(0xffff8c42).withAlpha(ghost ? 0.95f : 0.8f));
+            g.drawRect(box, ghost ? 2.0f : 1.0f);
+        };
+
+        for (const auto& area : razorAreas_)
+        {
+            const int lane = model::razoredit::trackIndexOf(song_, area.trackId);
+            paintArea(area, lane, false);
+
+            if (razorMoving_ && razorMoveMoved_)
+                paintArea({ area.trackId, area.startBeats + razorDeltaBeats_, area.endBeats + razorDeltaBeats_ },
+                          lane + razorDeltaTracks_, true);
+        }
     }
 
     /** Shaded across each selected lane, or a line on each while it's only a

@@ -434,11 +434,12 @@ namespace
         with a mouse-down position so a drag sequence (down at one point, up
         at another) is expressible, not just a single click. */
     juce::MouseEvent dragEventAt(juce::Component& target, juce::Point<float> position,
-                                 juce::Point<float> mouseDownPosition)
+                                 juce::Point<float> mouseDownPosition,
+                                 juce::ModifierKeys mods = juce::ModifierKeys())
     {
         const auto source = juce::Desktop::getInstance().getMainMouseSource();
         const auto now     = juce::Time::getCurrentTime();
-        return juce::MouseEvent(source, position, juce::ModifierKeys(), 1.0f,
+        return juce::MouseEvent(source, position, mods, 1.0f,
                                 0.0f, 0.0f, 0.0f, 0.0f, &target, &target,
                                 now, mouseDownPosition, now, 1, false);
     }
@@ -842,4 +843,54 @@ TEST_CASE("Take lanes: a click on a row chooses that take, a drag along one swip
     sendMouseDrag(*view, dragEventAt(*view, { x + 150.0f, header.y }, header));
     sendMouseUp(*view, dragEventAt(*view, { x + 150.0f, header.y }, header));
     REQUIRE(moves == 1);
+}
+
+TEST_CASE("Razor areas: Ctrl+Shift-drags add them, a drag inside moves them, a click lets them go",
+          "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = viewWith(3); // each track's one clip covers beats 0-4
+    view->setZoom(1.0f);
+
+    model::RazorAreas latest;
+    int               changes = 0, moves = 0;
+    double            movedBeats  = 0.0;
+    int               movedTracks = 0;
+    view->onRazorAreasChanged  = [&](const model::RazorAreas& a) { latest = a; ++changes; };
+    view->onRazorMoveRequested = [&](double beats, int tracks) { movedBeats = beats; movedTracks = tracks; ++moves; };
+
+    const float lane = view->laneHeightForTesting();
+    const float top  = view->rulerHeightForTesting();
+    const auto  razor = juce::ModifierKeys(juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier);
+
+    // Lanes 0 and 1, then a different stretch on lane 2.
+    const juce::Point<float> a { 300.0f, top + lane * 0.5f };
+    sendMouseDown(*view, dragEventAt(*view, a, a, razor));
+    sendMouseDrag(*view, dragEventAt(*view, { 400.0f, top + lane * 1.5f }, a, razor));
+    sendMouseUp(*view, dragEventAt(*view, { 400.0f, top + lane * 1.5f }, a, razor));
+    REQUIRE(latest.size() == 2);
+
+    const juce::Point<float> b { 500.0f, top + lane * 2.5f };
+    sendMouseDown(*view, dragEventAt(*view, b, b, razor));
+    sendMouseDrag(*view, dragEventAt(*view, { 650.0f, b.y }, b, razor));
+    sendMouseUp(*view, dragEventAt(*view, { 650.0f, b.y }, b, razor));
+    REQUIRE(latest.size() == 3);
+    REQUIRE(latest[2].startBeats > latest[0].endBeats); // its own stretch
+    REQUIRE(view->timeSelection().trackIds.empty());   // not a time selection
+
+    // A drag from inside one moves them all, a lane down.
+    const juce::Point<float> grab { 350.0f, top + lane * 0.5f };
+    sendMouseDown(*view, dragEventAt(*view, grab, grab));
+    sendMouseDrag(*view, dragEventAt(*view, { 450.0f, top + lane * 1.5f }, grab));
+    sendMouseUp(*view, dragEventAt(*view, { 450.0f, top + lane * 1.5f }, grab));
+    REQUIRE(moves == 1);
+    REQUIRE(movedBeats > 0.0);
+    REQUIRE(movedTracks == 1);
+    REQUIRE(latest.size() == 3); // moving leaves them for the owner to update
+
+    // A click elsewhere lets them go.
+    const juce::Point<float> away { 800.0f, top + lane * 0.5f };
+    sendMouseDown(*view, dragEventAt(*view, away, away));
+    sendMouseUp(*view, dragEventAt(*view, away, away));
+    REQUIRE(latest.empty());
 }

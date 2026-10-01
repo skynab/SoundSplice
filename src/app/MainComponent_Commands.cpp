@@ -93,18 +93,23 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
         // A time selection in the arrangement counts too: these act on it
         // first (see perform).
+        // Razor areas too, before either.
         case commands::cutAudio:
         case commands::copyAudio:
-            info.setActive((audioInFront && hasSelection) || ! timeSelection_.isEmpty());
+            info.setActive((audioInFront && hasSelection) || ! timeSelection_.isEmpty() || ! razorAreas_.empty());
             break;
 
         case commands::pasteAudio:
             info.setActive((audioInFront && ! audioClipboard_.empty())
-                           || (timeSelection_.hasTracks() && ! rangeClipboard_.isEmpty()));
+                           || (timeSelection_.hasTracks() && ! rangeClipboard_.isEmpty())
+                           || (razorClipboardIsLatest_ && ! razorClipboard_.isEmpty()));
             break;
 
         case commands::deleteAudio:
         case commands::silenceAudio:
+            info.setActive(hasSelection || ! timeSelection_.isEmpty() || ! razorAreas_.empty());
+            break;
+
         case commands::applyEffects:
             info.setActive(hasSelection || ! timeSelection_.isEmpty());
             break;

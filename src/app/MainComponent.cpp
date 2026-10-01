@@ -707,6 +707,8 @@ MainComponent::MainComponent()
     {
         setTimeSelection(selection);
     };
+    arrangementView_.onRazorAreasChanged  = [this](const model::RazorAreas& areas) { setRazorAreas(areas); };
+    arrangementView_.onRazorMoveRequested = [this](double beats, int tracks) { moveRazorAreas(beats, tracks); };
 
     arrangementView_.onClipMoved = [this](int trackIndex, int clipIndex, double newStartBeats)
     {

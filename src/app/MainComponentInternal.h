@@ -25,6 +25,7 @@
 #include "engine/MidiFileIO.h"
 #include "engine/OfflineRenderer.h"
 #include "engine/SequenceAudioFormat.h"
+#include "model/RazorEdits.h"
 #include "model/TrackChannels.h"
 #include "model/MasteringPresets.h"
 #include "model/Serialization.h"

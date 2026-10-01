@@ -48,6 +48,9 @@ void MainComponent::refreshAfterArrangementEdit()
     covers no track these edits work on. */
 bool MainComponent::editTimeSelection(const juce::String& label, bool copy, bool remove, bool closeGap)
 {
+    if (! razorAreas_.empty())
+        return editRazorAreas(label, copy, remove);
+
     if (timeSelection_.isEmpty())
         return false;
 
@@ -61,7 +64,10 @@ bool MainComponent::editTimeSelection(const juce::String& label, bool copy, bool
     const double seconds = timeSelection_.lengthBeats() * 60.0 / juce::jmax(1.0, song.bpm);
 
     if (copy)
-        rangeClipboard_ = model::rangeedit::copyRange(song, timeSelection_);
+    {
+        rangeClipboard_         = model::rangeedit::copyRange(song, timeSelection_);
+        razorClipboardIsLatest_ = false;
+    }
 
     if (remove)
     {
@@ -94,6 +100,9 @@ bool MainComponent::editTimeSelection(const juce::String& label, bool copy, bool
     editor. */
 bool MainComponent::pasteAtTimeSelection()
 {
+    if (razorClipboardIsLatest_ && ! razorClipboard_.isEmpty())
+        return pasteRazorClipboard();
+
     if (! timeSelection_.hasTracks() || rangeClipboard_.isEmpty())
         return false;
 
@@ -121,6 +130,117 @@ bool MainComponent::pasteAtTimeSelection()
     refreshAfterArrangementEdit();
     showStatus("Pasted");
     return true;
+}
+
+/** Razor areas, made by Ctrl+Shift-dragging in the arrangement. Making some
+    lets the time selection go: the edit commands act on one or the other. */
+void MainComponent::setRazorAreas(const model::RazorAreas& areas)
+{
+    razorAreas_ = areas;
+    arrangementView_.setRazorAreas(areas);
+
+    if (areas.empty())
+        return;
+
+    if (timeSelection_.hasTracks())
+        setTimeSelection({});
+    showStatus(juce::String((int) areas.size()) + (areas.size() == 1 ? " razor area" : " razor areas")
+               + " - Cut, Copy, Delete or drag to move");
+}
+
+/** Cut, Copy, Delete or Silence over the razor areas, as one undo step.
+    Delete and Cut leave the space empty, as Silence does: with a different
+    stretch on each track, closing the gaps would pull them out of time. */
+bool MainComponent::editRazorAreas(const juce::String& label, bool copy, bool remove)
+{
+    const auto& song = history_.current();
+    if (copy)
+    {
+        razorClipboard_         = model::razoredit::copyAreas(song, razorAreas_);
+        razorClipboardIsLatest_ = true;
+    }
+
+    if (remove)
+    {
+        const auto areas = razorAreas_;
+        history_.edit(label.toStdString(), [areas](model::Song& s) { model::razoredit::removeAreas(s, areas); });
+        refreshAfterArrangementEdit();
+    }
+
+    showStatus(label + " " + juce::String((int) razorAreas_.size())
+               + (razorAreas_.size() == 1 ? " razor area" : " razor areas"));
+    return true;
+}
+
+/** Pastes razor areas in the shape they were copied in: over the razor
+    areas if there are any, else at the time selection, else at the playhead
+    on the selected track. What was pasted is left as razor areas. */
+bool MainComponent::pasteRazorClipboard()
+{
+    const auto& song     = history_.current();
+    int         topTrack = selectedTrackIndex_;
+    double      at       = uiTempoMap_.ppqFromSamples(engine_.playheadSamples());
+
+    if (! razorAreas_.empty())
+    {
+        topTrack = (int) song.tracks.size();
+        at       = razorAreas_.front().startBeats;
+        for (const auto& area : razorAreas_)
+        {
+            topTrack = juce::jmin(topTrack, model::razoredit::trackIndexOf(song, area.trackId));
+            at       = juce::jmin(at, area.startBeats);
+        }
+    }
+    else if (timeSelection_.hasTracks())
+    {
+        at = timeSelection_.startBeats;
+        for (int i = 0; i < (int) song.tracks.size(); ++i)
+            if (timeSelection_.includes(song.tracks[(size_t) i].id))
+            {
+                topTrack = i;
+                break;
+            }
+    }
+
+    if (topTrack < 0 || topTrack >= (int) song.tracks.size())
+    {
+        showError("Select a track to paste the razor areas onto");
+        return true;
+    }
+
+    // Tried first, so a paste that lands nowhere leaves no undo step.
+    const auto clipboard = razorClipboard_;
+    auto       trial     = song;
+    if (model::razoredit::pasteAreas(trial, clipboard, topTrack, at).empty())
+    {
+        showError("Those tracks can't take what was copied - audio goes on audio tracks, notes on instrument ones");
+        return true;
+    }
+
+    model::RazorAreas landed;
+    history_.edit("Paste", [&](model::Song& s) { landed = model::razoredit::pasteAreas(s, clipboard, topTrack, at); });
+
+    setRazorAreas(landed);
+    refreshAfterArrangementEdit();
+    showStatus("Pasted");
+    return true;
+}
+
+/** Moves what the razor areas cover, as dragged in the arrangement. */
+void MainComponent::moveRazorAreas(double deltaBeats, int deltaTracks)
+{
+    if (razorAreas_.empty())
+        return;
+
+    const auto        areas = razorAreas_;
+    model::RazorAreas moved;
+    history_.edit("Move razor areas", [&](model::Song& s)
+    {
+        moved = model::razoredit::moveAreas(s, areas, deltaBeats, deltaTracks);
+    });
+
+    setRazorAreas(moved);
+    refreshAfterArrangementEdit();
 }
 
 /** Crossfade Clips over the time selection: see arrangeedit::crossfadeClips.

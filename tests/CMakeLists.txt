@@ -69,6 +69,7 @@ add_executable(soundsplice_tests
   model/SongTests.cpp
   model/SerializationTests.cpp
   model/TakesTests.cpp
+  model/RazorEditsTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp
   model/TimebaseTests.cpp
