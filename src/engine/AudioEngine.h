@@ -187,6 +187,14 @@ public:
     /** Stops capturing; the take becomes readable once isRecordingFinished(). */
     void stopRecording() { recorder_.disarm(); }
     bool isRecordingFinished() const noexcept { return recorder_.isFinished(); }
+
+    /** Sound-activated recording - see AudioRecorder::setSoundTrigger. */
+    void setSoundTrigger(float thresholdGain, int64_t stopAfterSilenceSamples)
+    {
+        recorder_.setSoundTrigger(thresholdGain, stopAfterSilenceSamples);
+    }
+    bool isWaitingForSound() const noexcept { return recorder_.isWaitingForSound(); }
+    bool recordingStoppedOnSilence() const noexcept { return recorder_.stoppedOnSilence(); }
     int64_t recordedSampleCount() const noexcept { return recorder_.recordedSampleCount(); }
 
     /** Samples lost because the disk could not keep up. Non-zero means the

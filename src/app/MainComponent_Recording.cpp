@@ -221,6 +221,9 @@ void MainComponent::toggleRecording()
                 seekToBeat(loopRecordFromBeats_);
         }
 
+        // At this device's rate, which the silence to stop on is counted in.
+        applySoundTrigger();
+
         // Into the saved project's audio folder, or the scratch folder until
         // there is one (see app/ProjectMedia.h).
         const auto file = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
@@ -266,6 +269,8 @@ void MainComponent::toggleRecording()
         post(Cmd::SetPlaying, 1.0);
         if (loopRecording_)
             showStatus("Loop recording - every pass round the selection becomes a take");
+        else if (settings_.getBoolValue("soundActivated", false))
+            showStatus("Waiting for sound - the take starts when the input passes the threshold");
     }
     else
     {
@@ -282,6 +287,13 @@ void MainComponent::finishRecordingIfReady()
     if (! awaitingRecordedTake_ || ! engine_.isRecordingFinished())
         return;
     awaitingRecordedTake_ = false;
+
+    // However it ended. A take that stopped itself on silence also stops the
+    // transport, as the Stop button would have.
+    recordButton.setToggleState(false, juce::dontSendNotification);
+    recordButton.setTooltip(withShortcut("Record", keys::record));
+    if (engine_.recordingStoppedOnSilence())
+        post(Cmd::SetPlaying, 0.0);
 
     // Every ending passes through here — the stop button, play/pause during a
     // take, or the engine finishing on its own — so this is where looping is
@@ -599,6 +611,119 @@ bool MainComponent::punchRecordedClip(const juce::File& file)
     refreshAfterArrangementEdit();
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
     return true;
+}
+
+/** Hands the Sound-Activated Recording setting to the engine, for the next
+    take: a threshold to wait for, and a silence to stop on. */
+void MainComponent::applySoundTrigger()
+{
+    const bool   on       = settings_.getBoolValue("soundActivated", false);
+    const double rate     = engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0;
+    const float  gain     = juce::Decibels::decibelsToGain((float) settings_.getDoubleValue("soundThresholdDb", -40.0));
+    const double stopSecs = settings_.getDoubleValue("soundStopSeconds", 0.0);
+    engine_.setSoundTrigger(on ? gain : 0.0f, on && stopSecs > 0.0 ? (int64_t) (stopSecs * rate) : 0);
+}
+
+/** Sound-Activated Recording: whether a take waits for sound, how loud it
+    has to be, and how long a silence ends it. */
+void MainComponent::showSoundActivatedDialog()
+{
+    auto* window = new juce::AlertWindow("Sound-Activated Recording",
+        "With this on, Record waits for the input to pass the threshold before the take starts, and can "
+        "stop it by itself after a silence. Set the threshold a little above the room's noise on the "
+        "input meter.",
+        juce::MessageBoxIconType::NoIcon, this);
+    window->addComboBox("on", { "On", "Off" }, "Sound-activated:");
+    window->getComboBoxComponent("on")->setSelectedItemIndex(settings_.getBoolValue("soundActivated", false) ? 0 : 1);
+    window->addTextEditor("threshold", juce::String(settings_.getDoubleValue("soundThresholdDb", -40.0), 1),
+                          "Threshold (dB):");
+    window->addTextEditor("stop", juce::String(settings_.getDoubleValue("soundStopSeconds", 0.0), 1),
+                          "Stop after this many seconds of silence (0: never):");
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const bool   on        = window->getComboBoxComponent("on")->getSelectedItemIndex() == 0;
+            const double threshold = juce::jlimit(-90.0, 0.0, window->getTextEditorContents("threshold").getDoubleValue());
+            const double stop      = juce::jlimit(0.0, 3600.0, window->getTextEditorContents("stop").getDoubleValue());
+            self->settings_.setValue("soundActivated", on);
+            self->settings_.setValue("soundThresholdDb", threshold);
+            self->settings_.setValue("soundStopSeconds", stop);
+            self->settings_.saveIfNeeded();
+            self->applySoundTrigger();
+            self->showStatus(on ? "Takes start when the input passes " + juce::String(threshold, 1) + " dB"
+                                : juce::String("Takes start when Record is pressed"));
+        }), false);
+}
+
+/** Timer Record: a take that starts at a set time and, if given a length,
+    stops by itself. Asked again while one is waiting, it offers to cancel. */
+void MainComponent::showTimerRecordDialog()
+{
+    if (timerRecordPending_)
+    {
+        timerRecordPending_ = false;
+        timerRecordStop_    = {};
+        showStatus("Timer record cancelled");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Timer Record",
+        "Start a take a while from now, and stop it after a set length. The app has to stay open, with "
+        "the track to record onto selected.",
+        juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("in", "5", "Start in (minutes):");
+    window->addTextEditor("for", "0", "Record for (minutes, 0: until stopped):");
+    window->addButton("Start Timer", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double in      = juce::jmax(0.0, window->getTextEditorContents("in").getDoubleValue());
+            const double minutes = juce::jmax(0.0, window->getTextEditorContents("for").getDoubleValue());
+            const auto   now     = juce::Time::getCurrentTime();
+
+            self->timerRecordPending_ = true;
+            self->timerRecordStart_   = now + juce::RelativeTime::minutes(in);
+            self->timerRecordStop_    = minutes > 0.0 ? self->timerRecordStart_ + juce::RelativeTime::minutes(minutes)
+                                                      : juce::Time();
+            self->showStatus("Recording starts at " + self->timerRecordStart_.toString(false, true, false)
+                             + (minutes > 0.0 ? " and stops at " + self->timerRecordStop_.toString(false, true, false)
+                                              : juce::String()));
+        }), false);
+}
+
+/** From the UI timer: starts a timed take when its time comes, and stops it
+    when its length is up. */
+void MainComponent::tickTimerRecord()
+{
+    const auto now = juce::Time::getCurrentTime();
+
+    if (timerRecordPending_ && now >= timerRecordStart_)
+    {
+        timerRecordPending_ = false;
+        if (! awaitingRecordedTake_ && ! awaitingMidiTake_)
+            toggleRecording();
+        return;
+    }
+
+    if (timerRecordStop_ != juce::Time() && now >= timerRecordStop_)
+    {
+        timerRecordStop_ = {};
+        if (awaitingRecordedTake_ || awaitingMidiTake_)
+            toggleRecording();
+    }
 }
 
 /** Append recording (Audacity's Shift+R): the take starts where the

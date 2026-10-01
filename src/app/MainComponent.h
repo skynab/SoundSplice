@@ -221,6 +221,10 @@ private:
     bool                   punchRecordedClip(const juce::File& file);
     void                   saveRecentInput();
     void                   recordAtEndOfTrack();
+    void                   applySoundTrigger();
+    void                   showSoundActivatedDialog();
+    void                   showTimerRecordDialog();
+    void                   tickTimerRecord();
     static constexpr double kRecentInputSeconds = 120.0;
 
     /**
@@ -693,6 +697,10 @@ private:
     // its passes become the takes of one clip. See MainComponent_Recording.cpp.
     bool   loopRecording_       = false;
     bool   punchRecording_      = false; // over loopRecordFrom/ToBeats_, when not looping
+
+    // Timer record: when the take starts, and, if it has one, when it stops.
+    bool       timerRecordPending_ = false;
+    juce::Time timerRecordStart_, timerRecordStop_;
     double loopRecordFromBeats_ = 0.0;
     double loopRecordToBeats_   = 0.0;
 

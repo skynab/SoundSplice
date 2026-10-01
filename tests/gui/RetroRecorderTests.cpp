@@ -115,3 +115,49 @@ TEST_CASE("A take is recorded in the chosen format, from the chosen input", "[gu
     file.deleteFile();
     thread.stopThread(1000);
 }
+
+TEST_CASE("A sound-activated take waits for sound, and stops itself on silence", "[gui][recording]")
+{
+    juce::TimeSliceThread thread("Test writer");
+    thread.startThread();
+
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getNonexistentChildFile("SoundSpliceTriggerTest", ".wav");
+
+    AudioRecorder recorder;
+    recorder.prepare(48000.0, 2);
+    recorder.setFormat({ 24, 1, 0 });
+    recorder.setSoundTrigger(0.5f, 512); // stop after two silent blocks
+    REQUIRE(recorder.arm(file, thread));
+
+    std::vector<float> block(256);
+    const float*       channels[] { block.data() };
+    const auto play = [&](float level, int64_t playhead)
+    {
+        std::fill(block.begin(), block.end(), level);
+        recorder.process(channels, 1, 256, true, playhead);
+    };
+
+    play(0.1f, 0);
+    play(0.1f, 256);
+    REQUIRE(recorder.isWaitingForSound()); // under the threshold: nothing yet
+    REQUIRE(recorder.recordedSampleCount() == 0);
+
+    play(0.8f, 512);                        // sound: the take starts here
+    REQUIRE_FALSE(recorder.isWaitingForSound());
+    REQUIRE(recorder.startPlayheadSamples() == 512);
+    play(0.8f, 768);
+    play(0.8f, 1024);
+    play(0.0f, 1280);
+    REQUIRE(recorder.isArmed());            // one silent block isn't enough
+    play(0.0f, 1536);
+    REQUIRE_FALSE(recorder.isArmed());      // two are: it stops itself
+    play(0.0f, 1792);
+    REQUIRE(recorder.isFinished());
+    REQUIRE(recorder.stoppedOnSilence());
+    REQUIRE(recorder.recordedSampleCount() == 5 * 256);
+
+    REQUIRE(recorder.finishTake() == file);
+    file.deleteFile();
+    thread.stopThread(1000);
+}

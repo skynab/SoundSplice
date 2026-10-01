@@ -1211,9 +1211,12 @@ void MainComponent::timerCallback()
     // "COUNT-IN" rather than "PLAYING" while the click is counting you in —
     // the transport is rolling but nothing is being captured yet, and that
     // distinction is the whole point of the feature.
-    const char* transportState = engine_.isCountingIn() ? "COUNT-IN"
-                               : engine_.isPlaying()    ? "PLAYING"
-                                                        : "STOPPED";
+    tickTimerRecord();
+
+    const char* transportState = engine_.isCountingIn()      ? "COUNT-IN"
+                               : engine_.isWaitingForSound() ? "WAITING FOR SOUND"
+                               : engine_.isPlaying()         ? "PLAYING"
+                                                             : "STOPPED";
     // The transport also starts and stops from elsewhere (clip launches, the
     // menu), so the glyph follows the engine rather than the last click.
     playPauseButton.setToggleState(engine_.isPlaying(), juce::dontSendNotification);

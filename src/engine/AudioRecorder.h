@@ -63,6 +63,26 @@ public:
 
     const Format& format() const noexcept { return format_; }
 
+    /** Sound-activated recording, from the next take: an armed take waits
+        until the inputs it records reach @p thresholdGain (linear; 0 for
+        off) and starts there, and, with @p stopAfterSilenceSamples, stops by
+        itself once they've stayed under it that long. Message thread. */
+    void setSoundTrigger(float thresholdGain, int64_t stopAfterSilenceSamples)
+    {
+        triggerGain_.store(juce::jmax(0.0f, thresholdGain), std::memory_order_relaxed);
+        silenceStop_.store(juce::jmax((int64_t) 0, stopAfterSilenceSamples), std::memory_order_relaxed);
+    }
+
+    /** True while an armed take is waiting for sound to start it. */
+    bool isWaitingForSound() const noexcept
+    {
+        return armed_.load(std::memory_order_relaxed) && waitingForSound_.load(std::memory_order_relaxed);
+    }
+
+    /** True if the last take ended itself, on silence, rather than being
+        stopped. */
+    bool stoppedOnSilence() const noexcept { return stoppedOnSilence_.load(std::memory_order_relaxed); }
+
     // ---- message thread ----
     /**
         Starts a new take, written to @p destination.
@@ -116,6 +136,9 @@ public:
         droppedSamples_.store(0, std::memory_order_relaxed);
         startPlayhead_.store(-1, std::memory_order_relaxed);
         leadInRemaining_.store(juce::jmax((int64_t) 0, leadInSamples), std::memory_order_relaxed);
+        waitingForSound_.store(triggerGain_.load(std::memory_order_relaxed) > 0.0f, std::memory_order_relaxed);
+        stoppedOnSilence_.store(false, std::memory_order_relaxed);
+        silentRun_ = 0;
         finished_.store(false, std::memory_order_relaxed);
 
         // Released last: it is what makes the writer visible to the audio
@@ -206,6 +229,15 @@ public:
             return;
         }
 
+        // Sound-activated: still waiting, and nothing has started, until the
+        // inputs it records reach the threshold - then this block starts it.
+        if (armedNow && transportPlaying && waitingForSound_.load(std::memory_order_relaxed))
+        {
+            if (inputPeak(inputChannelData, numInputChannels, numSamples) < triggerGain_.load(std::memory_order_relaxed))
+                return;
+            waitingForSound_.store(false, std::memory_order_relaxed);
+        }
+
         const bool recordingNow = armedNow && transportPlaying;
 
         // The take ends when capture stops...
@@ -255,10 +287,39 @@ public:
             writePosition_.fetch_add(numSamples, std::memory_order_relaxed);
         else
             droppedSamples_.fetch_add(numSamples, std::memory_order_relaxed);
+
+        // Stopping on silence: disarmed here, so the take finishes on the
+        // next block exactly as if Stop had been pressed.
+        const auto stopAfter = silenceStop_.load(std::memory_order_relaxed);
+        const auto threshold = triggerGain_.load(std::memory_order_relaxed);
+        if (stopAfter > 0 && threshold > 0.0f)
+        {
+            silentRun_ = inputPeak(inputChannelData, numInputChannels, numSamples) < threshold ? silentRun_ + numSamples : 0;
+            if (silentRun_ >= stopAfter)
+            {
+                stoppedOnSilence_.store(true, std::memory_order_relaxed);
+                armed_.store(false, std::memory_order_release);
+            }
+        }
     }
 
 private:
     static constexpr int kMaxChannels = 8;
+
+    /** The loudest sample this block on the inputs a take records. */
+    float inputPeak(const float* const* input, int numInputChannels, int numSamples) const noexcept
+    {
+        if (input == nullptr || numInputChannels <= 0)
+            return 0.0f;
+
+        const int first = firstInput_.load(std::memory_order_relaxed);
+        float     peak  = 0.0f;
+        for (int ch = 0; ch < numChannels_; ++ch)
+            if (const float* samples = input[juce::jmin(first + ch, numInputChannels - 1)])
+                for (int n = 0; n < numSamples; ++n)
+                    peak = juce::jmax(peak, std::abs(samples[n]));
+        return peak;
+    }
 
     /** Message thread. Stops the audio thread seeing the writer first, then
         destroys it - which flushes the FIFO and closes the file. */
@@ -284,6 +345,12 @@ private:
 
     Format           format_;
     std::atomic<int> firstInput_ { 0 };
+
+    std::atomic<float>   triggerGain_      { 0.0f };
+    std::atomic<int64_t> silenceStop_      { 0 };
+    std::atomic<bool>    waitingForSound_  { false };
+    std::atomic<bool>    stoppedOnSilence_ { false };
+    int64_t              silentRun_ = 0; // audio-thread only
     bool   wasRecording_ = false;                // audio-thread only
     double sampleRate_   = 48000.0;
     int    numChannels_  = 2;
