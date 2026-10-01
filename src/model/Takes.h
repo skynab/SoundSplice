@@ -182,6 +182,32 @@ namespace takeedit
     }
 
     /**
+        Swipe comping: take @p takeIndex plays over [@p fromBeats, @p toBeats)
+        on track @p trackId, in every clip there that has such a take - the
+        pieces of an earlier comp as well as the one the swipe began on. Each
+        is comped as compRange does, so pieces that end up playing the same
+        take straight on are joined again. True if anything changed.
+    */
+    inline bool compTrackRange(Song& song, int trackId, double fromBeats, double toBeats, int takeIndex)
+    {
+        const auto* track = findTrack(song, trackId);
+        if (track == nullptr || toBeats <= fromBeats || takeIndex < 0)
+            return false;
+
+        // Ids first: comping splits and joins clips, so indices move.
+        std::vector<int> ids;
+        for (const auto& clip : track->clips)
+            if (clip.type == ClipType::Audio && takeIndex < (int) clip.takes.size() && clip.startBeats < toBeats
+                && clip.startBeats + clip.lengthBeats > fromBeats)
+                ids.push_back(clip.id);
+
+        bool changed = false;
+        for (const int id : ids)
+            changed = compRange(song, trackId, id, fromBeats, toBeats, takeIndex) || changed;
+        return changed;
+    }
+
+    /**
         The passes of a recording made while the transport looped: one file,
         captured continuously while the playhead went round the loop
         [@p loopStart, @p loopEnd) again and again. For each pass, where in the

@@ -789,3 +789,57 @@ TEST_CASE("Ctrl-dragging an audio clip slips its audio and leaves it in place", 
     REQUIRE(offset < 4.0);
     REQUIRE(offset >= 0.0);
 }
+
+TEST_CASE("Take lanes: a click on a row chooses that take, a drag along one swipes it", "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = std::make_unique<ArrangementView>();
+    view->setVisible(true);
+    view->setSize(900, 500);
+    view->setZoom(1.0f);
+
+    // One audio clip over beats 0-16 with three takes.
+    model::Song song;
+    const int   trackId = model::addTrack(song, model::TrackType::Audio, "Vox").id;
+    model::Clip clip;
+    clip.type        = model::ClipType::Audio;
+    clip.lengthBeats = 16.0;
+    clip.audioFile   = "c.wav";
+    clip.takes       = { { "a.wav", 0.0, "One" }, { "b.wav", 0.0, "Two" }, { "c.wav", 0.0, "Three" } };
+    clip.activeTake  = 2;
+    model::addClip(song, trackId, clip);
+    view->setSong(song);
+    view->setLaneHeight(app::laneHeightForTakes(3));
+    view->setShowTakeLanes(true);
+
+    int    chosenTake = -1, swipedTake = -1, moves = 0;
+    double from = -1.0, to = -1.0;
+    view->onTakeChosen = [&](int, int, int take) { chosenTake = take; };
+    view->onTakeSwiped = [&](int, int take, double f, double t) { swipedTake = take; from = f; to = t; };
+    view->onClipMoved  = [&](int, int, double) { ++moves; };
+
+    // Row 1 (the second take) of the clip's box, which starts 3px into the lane.
+    const float top  = view->rulerHeightForTesting() + 3.0f;
+    const float row1 = top + app::kTakeLaneHeaderHeight + 18.0f * 1.5f;
+    const float x    = view->gutterWidthForTesting() + 40.0f;
+
+    const juce::Point<float> press { x, row1 };
+    sendMouseDown(*view, dragEventAt(*view, press, press));
+    sendMouseUp(*view, dragEventAt(*view, press, press));
+    REQUIRE(chosenTake == 1);
+    REQUIRE(swipedTake == -1);
+
+    sendMouseDown(*view, dragEventAt(*view, press, press));
+    sendMouseDrag(*view, dragEventAt(*view, { x + 150.0f, row1 }, press));
+    sendMouseUp(*view, dragEventAt(*view, { x + 150.0f, row1 }, press));
+    REQUIRE(swipedTake == 1);
+    REQUIRE(from < to);
+    REQUIRE(moves == 0);
+
+    // The header still moves the clip.
+    const juce::Point<float> header { x, top + 4.0f };
+    sendMouseDown(*view, dragEventAt(*view, header, header));
+    sendMouseDrag(*view, dragEventAt(*view, { x + 150.0f, header.y }, header));
+    sendMouseUp(*view, dragEventAt(*view, { x + 150.0f, header.y }, header));
+    REQUIRE(moves == 1);
+}

@@ -134,6 +134,7 @@ MainComponent::MainComponent()
     arrangementView_.setSnapToMarkers(settings_.getValue("snapToMarkers", "1") != "0");
     arrangementView_.setSnapToClipEdges(settings_.getValue("snapToClipEdges", "1") != "0");
     arrangementView_.setShowEnvelopes(settings_.getValue("showClipEnvelopes", "0") == "1");
+    arrangementView_.setShowTakeLanes(settings_.getValue("showTakeLanes", "0") == "1");
     autoCrossfades_ = settings_.getValue("autoCrossfades", "1") == "1";
     arrangementView_.setShowSpectrograms(settings_.getValue("trackSpectrograms", "0") == "1");
     audioEditor_.setDbScale(settings_.getValue("waveformDbScale", "0") == "1");
@@ -968,6 +969,22 @@ MainComponent::MainComponent()
     arrangementView_.onClipEnvelopeChanged = [this](int trackIndex, int clipIndex, const engine::ClipEnvelope& envelope)
     {
         setClipEnvelope(trackIndex, clipIndex, envelope);
+    };
+
+    // Take lanes: a click on a take's row plays that take over the clip, a
+    // drag along one comps what it crossed to it.
+    arrangementView_.onTakeChosen = [this](int trackIndex, int clipIndex, int take)
+    {
+        const auto& song = history_.current();
+        if (trackIndex < 0 || trackIndex >= (int) song.tracks.size()
+            || clipIndex < 0 || clipIndex >= (int) song.tracks[(size_t) trackIndex].clips.size())
+            return;
+        const auto& clip = song.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+        useClipTake(trackIndex, clip.id, clip.startBeats, clip.startBeats + clip.lengthBeats, take);
+    };
+    arrangementView_.onTakeSwiped = [this](int trackIndex, int take, double fromBeats, double toBeats)
+    {
+        swipeCompTake(trackIndex, take, fromBeats, toBeats);
     };
 
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)

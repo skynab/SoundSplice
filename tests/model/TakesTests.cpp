@@ -92,6 +92,35 @@ TEST_CASE("Comping plays another take over a range, and comping back joins it ag
     REQUIRE(song.tracks[0].clips[0].sourceOffsetSeconds == Approx(1.5));
 }
 
+TEST_CASE("Swiping a take across comped pieces comps each, and joins what carries on", "[model][takes]")
+{
+    int  trackId = 0;
+    auto song    = twoPasses(trackId);
+    const int id = takeedit::combineIntoTakes(song, trackId, { song.tracks[0].clips[0].id, song.tracks[0].clips[1].id });
+
+    // b.wav | a.wav over beat 2-3 | b.wav
+    REQUIRE(takeedit::compRange(song, trackId, id, 2.0, 3.0, 0));
+    REQUIRE(song.tracks[0].clips.size() == 3);
+
+    // A swipe of a.wav from 1.5 to 4 crosses all three pieces.
+    REQUIRE(takeedit::compTrackRange(song, trackId, 1.5, 4.0, 0));
+    const auto& clips = song.tracks[0].clips;
+    REQUIRE(clips.size() == 3);
+    REQUIRE(clips[0].audioFile == "b.wav");
+    REQUIRE(clips[0].lengthBeats == Approx(1.5));
+    REQUIRE(clips[1].audioFile == "a.wav");
+    REQUIRE(clips[1].startBeats == Approx(1.5));
+    REQUIRE(clips[1].lengthBeats == Approx(2.5)); // one piece, joined across the old cut
+    REQUIRE(clips[1].sourceOffsetSeconds == Approx(0.75));
+    REQUIRE(clips[2].audioFile == "b.wav");
+    REQUIRE(clips[2].startBeats == Approx(4.0));
+
+    // The same swipe again changes nothing; nor does a take there isn't.
+    REQUIRE_FALSE(takeedit::compTrackRange(song, trackId, 1.5, 4.0, 0));
+    REQUIRE_FALSE(takeedit::compTrackRange(song, trackId, 1.5, 4.0, 5));
+    REQUIRE_FALSE(takeedit::compTrackRange(song, trackId, 3.0, 3.0, 1));
+}
+
 TEST_CASE("A loop recording's passes are found in its one file", "[model][takes]")
 {
     // A 4-second loop from 10 s, capture starting at 9 s (a second of

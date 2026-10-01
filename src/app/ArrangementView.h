@@ -16,8 +16,10 @@
 #include "SnapTargets.h"
 #include "TimeFormat.h"
 #include "model/Markers.h"
+#include "model/Takes.h"
 #include "model/TimeSelection.h"
 #include "SpectrogramCache.h"
+#include "TakeLanes.h"
 #include "WaveformCache.h"
 #include "TrackColours.h"
 #include "TimelineGeometry.h"
@@ -129,6 +131,12 @@ public:
     std::function<void(int srcTrackIndex, int clipIndex, int destTrackIndex, double newStartBeats)> onClipMovedToTrack;
     std::function<void(int trackIndex, int clipIndex)> onClipSelected; // fired on press, before any drag
 
+    /** Take lanes (setShowTakeLanes): a click on take @p take's row of a clip,
+        to play that take over the clip, and a drag along one, to comp the
+        stretch [@p fromBeats, @p toBeats) of the track to it. */
+    std::function<void(int trackIndex, int clipIndex, int take)> onTakeChosen;
+    std::function<void(int trackIndex, int take, double fromBeats, double toBeats)> onTakeSwiped;
+
     /** Fired when a track's mute button in the gutter is clicked. The view
         doesn't change the document itself — the owner does, and the change
         comes back through setSong. */
@@ -157,8 +165,15 @@ public:
         // runs for every scroll and playhead tick.
         for (const auto& track : song_.tracks)
             for (const auto& clip : track.clips)
+            {
                 if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty())
                     waveforms_.ensure(juce::File(clip.audioFile));
+
+                // Every take's, for the take lanes.
+                for (const auto& take : clip.takes)
+                    if (! take.audioFile.empty())
+                        waveforms_.ensure(juce::File(take.audioFile));
+            }
         ensureSpectrograms();
 
         updateContentSize();
@@ -274,6 +289,21 @@ public:
     }
 
     bool showsEnvelopes() const { return showEnvelopes_; }
+
+    /** Whether a clip with takes draws each in a row of its own under a
+        header band (app/TakeLanes.h): click a row to play that take, drag
+        along one to comp to it, drag the header to move the clip. */
+    void setShowTakeLanes(bool show)
+    {
+        if (show == showTakeLanes_)
+            return;
+
+        showTakeLanes_ = show;
+        swiping_       = false;
+        repaint();
+    }
+
+    bool showsTakeLanes() const noexcept { return showTakeLanes_; }
 
     /** How the ruler and grid count time (bars and beats, or a clock, sample
         or timecode grid), which is also what clips snap to. */
@@ -483,7 +513,10 @@ public:
                 g.setColour(clipColour);
                 g.fillRoundedRectangle(r, 3.0f);
 
-                paintClipContents(g, clip, r);
+                if (const auto lanes = takeLanesFor(clip, r); lanes.shown())
+                    paintTakeLanes(g, clip, r, lanes, i);
+                else
+                    paintClipContents(g, clip, r);
 
                 if (showEnvelopes_ && clip.type == model::ClipType::Audio)
                     paintEnvelope(g, envelopeEditing_ && i == envelopeTrack_ && c == envelopeClip_
@@ -626,9 +659,9 @@ private:
         A thumbnail still scanning draws nothing rather than a partial
         waveform that would redraw a moment later looking different. */
     void paintAudioClipContents(juce::Graphics& g, const model::Clip& clip,
-                                juce::Rectangle<float> bounds)
+                                juce::Rectangle<float> bounds, float insetY = 3.0f)
     {
-        if (clip.audioFile.empty() || bounds.getWidth() < 8.0f || bounds.getHeight() < 8.0f)
+        if (clip.audioFile.empty() || bounds.getWidth() < 8.0f || bounds.getHeight() < 2.0f * insetY + 2.0f)
             return;
 
         auto* thumbnail = waveforms_.find(juce::File(clip.audioFile));
@@ -644,7 +677,7 @@ private:
         if (fraction <= 0.0 || seconds <= 0.0)
             return;
 
-        auto area = bounds.reduced(2.0f, 3.0f);
+        auto area = bounds.reduced(2.0f, insetY);
         area.setWidth((float) (area.getWidth() * fraction));
         if (area.getWidth() < 1.0f || area.getHeight() < 1.0f)
             return;
@@ -900,6 +933,92 @@ private:
         g.drawText(label, area.reduced(3.0f, 0.0f), juce::Justification::centredLeft, true);
     }
 
+    /** A clip's take lanes, or none: none unless they're shown, the clip is
+        audio with two takes or more, and its box is tall enough for them. */
+    app::TakeLaneLayout takeLanesFor(const model::Clip& clip, juce::Rectangle<float> bounds) const
+    {
+        if (! showTakeLanes_ || clip.type != model::ClipType::Audio)
+            return {};
+        return app::takeLaneLayout(bounds.getY(), bounds.getHeight(), (int) clip.takes.size());
+    }
+
+    /** A take's name as the lanes and the header show it. */
+    static juce::String takeLabel(const model::Clip& clip, int take)
+    {
+        const auto& name = clip.takes[(size_t) take].name;
+        return name.empty() ? "Take " + juce::String(take + 1) : juce::String(name);
+    }
+
+    /** Draws a clip as its take lanes: the header, naming the take that
+        plays, and a row per take with that take's audio where the clip is,
+        the one playing lit and the rest dimmed. A swipe being dragged along a
+        row of this track shows over it. */
+    void paintTakeLanes(juce::Graphics& g, const model::Clip& clip, juce::Rectangle<float> bounds,
+                        const app::TakeLaneLayout& lanes, int trackIndex)
+    {
+        for (int t = 0; t < lanes.rowCount; ++t)
+        {
+            const auto row     = juce::Rectangle<float>(bounds.getX(), lanes.rowTop(t), bounds.getWidth(), lanes.rowHeight);
+            const bool playing = t == clip.activeTake;
+
+            if (playing)
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.14f));
+                g.fillRect(row);
+            }
+
+            auto take                = clip;
+            take.audioFile           = clip.takes[(size_t) t].audioFile;
+            take.sourceOffsetSeconds = model::takeedit::takeOffsetSeconds(clip, clip.takes[(size_t) t]);
+            paintAudioClipContents(g, take, row, 1.0f);
+            if (! playing)
+            {
+                g.setColour(juce::Colours::black.withAlpha(0.3f));
+                g.fillRect(row);
+            }
+
+            if (lanes.rowHeight >= 12.0f && row.getWidth() > 40.0f)
+            {
+                g.setFont(juce::FontOptions(9.5f));
+                g.setColour(juce::Colours::white.withAlpha(playing ? 0.85f : 0.5f));
+                g.drawText(takeLabel(clip, t), row.reduced(4.0f, 0.0f), juce::Justification::centredLeft, true);
+            }
+
+            g.setColour(juce::Colours::black.withAlpha(0.35f));
+            g.fillRect(row.getX(), row.getY(), row.getWidth(), 1.0f);
+        }
+
+        // The header: which take plays here, as a plain clip says it.
+        const auto header = juce::Rectangle<float>(bounds.getX(), lanes.headerTop, bounds.getWidth(),
+                                                   app::kTakeLaneHeaderHeight);
+        if (header.getWidth() > 40.0f)
+        {
+            const int playing = juce::jlimit(0, (int) clip.takes.size() - 1, clip.activeTake);
+            g.setFont(juce::FontOptions(9.5f));
+            g.setColour(juce::Colours::white.withAlpha(0.8f));
+            g.drawText(takeLabel(clip, playing) + " / " + juce::String((int) clip.takes.size()),
+                       header.reduced(kFadeHandleSize + 4.0f, 0.0f), juce::Justification::centredLeft, true);
+        }
+
+        paintClipFades(g, clip, bounds);
+
+        if (swiping_ && swipeMoved_ && trackIndex == swipeTrack_ && swipeTake_ < lanes.rowCount)
+        {
+            const double from = std::min(swipeAnchorBeat_, swipeCurrentBeat_);
+            const double to   = std::max(swipeAnchorBeat_, swipeCurrentBeat_);
+            const float  x0   = std::max(bounds.getX(), geometry_.xForBeat(from));
+            const float  x1   = std::min(bounds.getRight(), geometry_.xForBeat(to));
+            if (x1 > x0)
+            {
+                const auto band = juce::Rectangle<float>(x0, lanes.rowTop(swipeTake_), x1 - x0, lanes.rowHeight);
+                g.setColour(juce::Colours::cyan.withAlpha(0.3f));
+                g.fillRect(band);
+                g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+                g.drawRect(band, 1.0f);
+            }
+        }
+    }
+
     void paintClipContents(juce::Graphics& g, const model::Clip& clip,
                            juce::Rectangle<float> bounds)
     {
@@ -1038,6 +1157,29 @@ private:
                 return;
             }
 
+            // A take's row, with take lanes shown: a click plays that take, a
+            // drag along it comps (see mouseUp). The edge grips still trim,
+            // Ctrl still slips, and the header moves the clip.
+            if (const auto lanes = takeLanesFor(clip, clipBounds(trackIndex, clip));
+                lanes.shown() && ! e.mods.isCommandDown() && ! isOnClipRightEdge(clip, e.position.x)
+                && ! isOnClipLeftEdge(clip, e.position.x))
+            {
+                if (const int row = lanes.rowAt(e.position.y); row >= 0)
+                {
+                    swiping_          = true;
+                    swipeMoved_       = false;
+                    swipeTrack_       = trackIndex;
+                    swipeClip_        = clipIndex;
+                    swipeTake_        = row;
+                    swipePressX_      = e.position.x;
+                    swipeAnchorBeat_  = snappedBeatAt(e.position.x, e.mods.isAltDown());
+                    swipeCurrentBeat_ = swipeAnchorBeat_;
+                    if (onClipSelected)
+                        onClipSelected(trackIndex, clipIndex);
+                    return;
+                }
+            }
+
             // A fade handle sits in a clip's top corner, on top of the edge
             // grips, so it is checked first.
             dragging_           = true;
@@ -1105,6 +1247,17 @@ private:
                 envelopePoint_             = envelopePreview_.movePoint(envelopePoint_, seconds, gain);
                 repaint();
             }
+            return;
+        }
+
+        if (swiping_)
+        {
+            if (! swipeMoved_ && std::abs(e.position.x - swipePressX_) < kSwipeDragPixels)
+                return;
+
+            swipeMoved_       = true;
+            swipeCurrentBeat_ = snappedBeatAt(e.position.x, e.mods.isAltDown());
+            repaint();
             return;
         }
 
@@ -1280,6 +1433,23 @@ private:
 
             if (dragged && onTrackDuplicateRequested)
                 onTrackDuplicateRequested(track);
+            return;
+        }
+
+        if (swiping_)
+        {
+            swiping_ = false;
+            repaint();
+
+            const double from = std::min(swipeAnchorBeat_, swipeCurrentBeat_);
+            const double to   = std::max(swipeAnchorBeat_, swipeCurrentBeat_);
+            if (! swipeMoved_)
+            {
+                if (onTakeChosen)
+                    onTakeChosen(swipeTrack_, swipeClip_, swipeTake_);
+            }
+            else if (to - from > 1.0e-9 && onTakeSwiped)
+                onTakeSwiped(swipeTrack_, swipeTake_, from, to);
             return;
         }
 
@@ -1975,6 +2145,19 @@ private:
         const double tolerance = kSnapMagnetPixels / std::max(1.0e-3, (double) geometry_.pixelsPerBeat());
         return std::max(0.0, app::snapPosition(geometry_.beatForX(x), magnets, tolerance, gridOn, snapUnitBeats()));
     }
+
+    // Take lanes, and a swipe being dragged along one: which track, clip and
+    // take it began on, and the stretch it covers so far (snapped beats).
+    bool   showTakeLanes_    = false;
+    bool   swiping_          = false;
+    bool   swipeMoved_       = false;
+    int    swipeTrack_       = -1;
+    int    swipeClip_        = -1;
+    int    swipeTake_        = -1;
+    float  swipePressX_      = 0.0f;
+    double swipeAnchorBeat_  = 0.0;
+    double swipeCurrentBeat_ = 0.0;
+    static constexpr float kSwipeDragPixels = 4.0f;
 
     // Clip volume curves (engine/ClipEnvelope.h): whether they're shown and
     // edited, and the edit in progress — which clip, which point, and the

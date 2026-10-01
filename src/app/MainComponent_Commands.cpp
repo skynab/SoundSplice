@@ -308,6 +308,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(arrangementView_.showsEnvelopes());
             break;
 
+        case commands::showTakeLanes:
+            info.setTicked(arrangementView_.showsTakeLanes());
+            break;
+
         case commands::trackSpectrograms:
             info.setTicked(arrangementView_.showsSpectrograms());
             break;
@@ -663,6 +667,27 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
+        case commands::showTakeLanes:
+        {
+            const bool show = ! arrangementView_.showsTakeLanes();
+            arrangementView_.setShowTakeLanes(show);
+            settings_.setValue("showTakeLanes", show ? "1" : "0");
+            settings_.saveIfNeeded();
+
+            // Tall enough for every take of the clip with the most to have a
+            // row; never made shorter.
+            int most = 0;
+            for (const auto& track : history_.current().tracks)
+                for (const auto& clip : track.clips)
+                    most = juce::jmax(most, (int) clip.takes.size());
+            if (show && most >= 2)
+                arrangementView_.setLaneHeight(juce::jmax(arrangementView_.laneHeight(), app::laneHeightForTakes(most)));
+
+            showStatus(show ? "Take lanes shown - click a take's row to play it, drag along one to comp to it"
+                            : "Take lanes hidden");
+            break;
+        }
+
         case commands::nextOpenFile:      stepOpenFile(1); break;
         case commands::previousOpenFile:  stepOpenFile(-1); break;
         case commands::closeOpenFile:
@@ -889,6 +914,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::fitProject);
         add(commands::fitVertically);
         add(commands::showClipEnvelopes);
+        add(commands::showTakeLanes);
         add(commands::waveformDbScale);
         add(commands::spectrogramView);
         add(commands::spectrogramSplit);

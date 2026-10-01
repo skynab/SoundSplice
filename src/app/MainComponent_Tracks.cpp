@@ -1529,6 +1529,26 @@ void MainComponent::useClipTake(int trackIndex, int clipId, double fromBeats, do
     refreshAfterArrangementEdit();
 }
 
+/** Swipe comping in the take lanes: take @p take plays over [@p fromBeats,
+    @p toBeats) in every clip on the track that has it. One undo step. */
+void MainComponent::swipeCompTake(int trackIndex, int take, double fromBeats, double toBeats)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const int trackId = song.tracks[(size_t) trackIndex].id;
+    auto      trial   = song;
+    if (! model::takeedit::compTrackRange(trial, trackId, fromBeats, toBeats, take))
+        return;
+
+    history_.edit("Comp takes", [trackId, fromBeats, toBeats, take](model::Song& s)
+    {
+        model::takeedit::compTrackRange(s, trackId, fromBeats, toBeats, take);
+    });
+    refreshAfterArrangementEdit();
+}
+
 /** Makes every audio clip on the track that overlaps clip @p clipIndex,
     and that clip, into one clip with a take for each. */
 void MainComponent::combineOverlappingClipsIntoTakes(int trackIndex, int clipIndex)

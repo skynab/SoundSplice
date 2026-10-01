@@ -104,7 +104,8 @@ add_executable(soundsplice_tests
   app/AutosaveTests.cpp
   app/TimeFormatTests.cpp
   app/SnapTargetsTests.cpp
-  app/OpenFilesTests.cpp)
+  app/OpenFilesTests.cpp
+  app/TakeLanesTests.cpp)
 
 target_link_libraries(soundsplice_tests
   PRIVATE
