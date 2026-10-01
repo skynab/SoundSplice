@@ -104,7 +104,9 @@ bool MainComponent::editTimeSelection(const juce::String& label, bool copy, bool
     editor. */
 bool MainComponent::pasteAtTimeSelection()
 {
-    if (razorClipboardIsLatest_ && ! razorClipboard_.isEmpty())
+    // Razor areas paste over razor areas or at a time selection: with
+    // neither, Paste is the audio editor's.
+    if (razorClipboardIsLatest_ && ! razorClipboard_.isEmpty() && (! razorAreas_.empty() || timeSelection_.hasTracks()))
         return pasteRazorClipboard();
 
     if (! timeSelection_.hasTracks() || rangeClipboard_.isEmpty())
@@ -179,13 +181,13 @@ bool MainComponent::editRazorAreas(const juce::String& label, bool copy, bool re
 }
 
 /** Pastes razor areas in the shape they were copied in: over the razor
-    areas if there are any, else at the time selection, else at the playhead
-    on the selected track. What was pasted is left as razor areas. */
+    areas if there are any, else at the time selection. What was pasted is
+    left as razor areas. */
 bool MainComponent::pasteRazorClipboard()
 {
     const auto& song     = history_.current();
-    int         topTrack = selectedTrackIndex_;
-    double      at       = uiTempoMap_.ppqFromSamples(engine_.playheadSamples());
+    int         topTrack = -1;
+    double      at       = 0.0;
 
     if (! razorAreas_.empty())
     {

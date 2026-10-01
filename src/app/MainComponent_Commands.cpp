@@ -102,7 +102,8 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::pasteAudio:
             info.setActive((audioInFront && ! audioClipboard_.empty())
                            || (timeSelection_.hasTracks() && ! rangeClipboard_.isEmpty())
-                           || (razorClipboardIsLatest_ && ! razorClipboard_.isEmpty()));
+                           || (razorClipboardIsLatest_ && ! razorClipboard_.isEmpty()
+                               && (! razorAreas_.empty() || timeSelection_.hasTracks())));
             break;
 
         case commands::deleteAudio:

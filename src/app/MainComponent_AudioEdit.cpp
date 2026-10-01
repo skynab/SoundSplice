@@ -480,6 +480,7 @@ void MainComponent::copyAudioSelection()
     }
 
     audioClipboard_           = std::move(channels);
+    razorClipboardIsLatest_   = false; // Paste means this now
     audioClipboardSampleRate_ = audio.sequence.sampleRate;
     showStatus("Copied " + juce::String((double) (to - from) / audio.sequence.sampleRate, 2) + "s");
 }
@@ -539,6 +540,7 @@ void MainComponent::cutAudioSelection()
         {
             // Lifted from the same samples that are about to be cut.
             audioClipboard_           = selection;
+            razorClipboardIsLatest_   = false;
             audioClipboardSampleRate_ = sampleRate;
 
             for (auto& channel : selection)
