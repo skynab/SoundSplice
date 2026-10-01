@@ -62,6 +62,11 @@ struct Track
     // can't silently recolour existing projects.
     unsigned int      colour     = 0;
 
+    // Which of the audio device's inputs this track records from (the first
+    // of a stereo pair), or -1 for the one File > Recording Format chooses.
+    // So several tracks can each take their own input in one take.
+    int               recordInput = -1;
+
     std::vector<Clip> clips;
 
     // The session grid's column for this track, indexed by scene. Kept the

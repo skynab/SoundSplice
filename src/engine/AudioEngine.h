@@ -185,8 +185,46 @@ public:
         nothing is being captured yet. */
     bool isCountingIn() const noexcept { return recorder_.leadInRemaining() > 0; }
     /** Stops capturing; the take becomes readable once isRecordingFinished(). */
-    void stopRecording() { recorder_.disarm(); }
-    bool isRecordingFinished() const noexcept { return recorder_.isFinished(); }
+    void stopRecording()
+    {
+        recorder_.disarm();
+        for (auto& extra : extraRecorders_)
+            extra.disarm();
+    }
+
+    /** True once every take - the main one and any extra - is finished. */
+    bool isRecordingFinished() const noexcept
+    {
+        if (! recorder_.isFinished())
+            return false;
+        for (const auto& extra : extraRecorders_)
+            if (! extra.isFinished())
+                return false;
+        return true;
+    }
+
+    // ---- extra takes, for recording several tracks at once ----
+    /** How many tracks besides the main take can record at the same time. */
+    static constexpr int kExtraTakes = kMaxTracks - 1;
+
+    /** Arms extra take @p slot, alongside the main one: written to
+        @p destination in @p format (its own inputs), with the same count-in
+        and sound trigger. Call before beginRecording, which starts the
+        transport. False if the file couldn't be opened. Message thread. */
+    bool beginExtraRecording(int slot, const juce::File& destination, const AudioRecorder::Format& format);
+
+    juce::File finishExtraTake(int slot)
+    {
+        return slot >= 0 && slot < kExtraTakes ? extraRecorders_[(size_t) slot].finishTake() : juce::File {};
+    }
+    int64_t extraTakeStartSample(int slot) const noexcept
+    {
+        return slot >= 0 && slot < kExtraTakes ? extraRecorders_[(size_t) slot].startPlayheadSamples() : -1;
+    }
+    int64_t extraTakeDroppedSamples(int slot) const noexcept
+    {
+        return slot >= 0 && slot < kExtraTakes ? extraRecorders_[(size_t) slot].droppedSampleCount() : 0;
+    }
 
     /** Sound-activated recording - see AudioRecorder::setSoundTrigger. */
     void setSoundTrigger(float thresholdGain, int64_t stopAfterSilenceSamples)
@@ -665,6 +703,7 @@ private:
     juce::StringArray registeredMidiInputs_;
 
     AudioRecorder recorder_;
+    std::array<AudioRecorder, kMaxTracks - 1> extraRecorders_; // see beginExtraRecording
     MidiRecorder  midiRecorder_;
 
     // Scratch for translating a block's juce::MidiBuffer into the PODs

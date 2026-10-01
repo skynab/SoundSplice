@@ -37,6 +37,8 @@ public:
     std::function<void(bool)>  onSoloChange;
     std::function<void(float)> onPanChange;
     std::function<void()>      onSelect;
+    std::function<void(bool)>  onArmChange;       // the R button
+    std::function<void()>      onInputMenuRequested; // right-click on it
 
     MixerStrip()
     {
@@ -56,6 +58,24 @@ public:
         soloButton_.onClick = [this] { if (onSoloChange) onSoloChange(soloButton_.getToggleState()); };
         soloButton_.setTooltip("Solo this track - silences every other track");
         addAndMakeVisible(soloButton_);
+
+        armButton_.setClickingTogglesState(true);
+        armButton_.setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
+        armButton_.onClick = [this]
+        {
+            if (juce::ModifierKeys::currentModifiers.isPopupMenu())
+            {
+                armButton_.setToggleState(! armButton_.getToggleState(), juce::dontSendNotification);
+                if (onInputMenuRequested)
+                    onInputMenuRequested();
+                return;
+            }
+            if (onArmChange)
+                onArmChange(armButton_.getToggleState());
+        };
+        armButton_.setTooltip("Arm this track to record - several can be armed at once. "
+                              "Right-click to choose its input");
+        addAndMakeVisible(armButton_);
 
         panSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
         panSlider_.setRange(-100.0, 100.0, 1.0);
@@ -90,6 +110,12 @@ public:
     void setGainDb(float db)   { gainSlider_.setValue(db, juce::dontSendNotification); }
     void setMuted(bool muted)  { muteButton_.setToggleState(muted, juce::dontSendNotification); }
     void setSoloed(bool solo)  { soloButton_.setToggleState(solo, juce::dontSendNotification); }
+    void setArmed(bool armed)  { armButton_.setToggleState(armed, juce::dontSendNotification); }
+    void setInputName(const juce::String& name)
+    {
+        armButton_.setTooltip("Arm this track to record - several can be armed at once. Records from: " + name
+                              + ". Right-click to choose");
+    }
     void setPan(float pan)         { panSlider_.setValue(pan * 100.0, juce::dontSendNotification); }
     void setSelected(bool sel) { if (selected_ != sel) { selected_ = sel; repaint(); } }
     void setLevel(int channel, float linearPeak) { meter_.setLevel(channel, linearPeak); }
@@ -121,8 +147,10 @@ public:
         area.removeFromTop(4);
 
         auto btnRow = area.removeFromTop(22);
-        muteButton_.setBounds(btnRow.removeFromLeft(btnRow.getWidth() / 2).reduced(2));
-        soloButton_.setBounds(btnRow.reduced(2));
+        const int third = btnRow.getWidth() / 3;
+        muteButton_.setBounds(btnRow.removeFromLeft(third).reduced(2));
+        soloButton_.setBounds(btnRow.removeFromLeft(third).reduced(2));
+        armButton_.setBounds(btnRow.reduced(2));
         area.removeFromTop(4);
 
         // Strips pack side by side, so a narrow one is the normal case once
@@ -150,6 +178,7 @@ private:
     juce::Label      nameLabel_;
     juce::TextButton muteButton_ { "M" };
     juce::TextButton soloButton_ { "S" };
+    juce::TextButton armButton_  { "R" };
     juce::Label      panLabel_;
     juce::Slider     panSlider_;
     juce::Slider     gainSlider_;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <set>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_data_structures/juce_data_structures.h>
 
@@ -218,6 +219,9 @@ private:
     void                   showRecordingLatencyDialog();
     void                   showRecordingFormatDialog();
     engine::AudioRecorder::Format savedRecordFormat();
+    engine::AudioRecorder::Format recordFormatFor(int trackIndex);
+    void                   setTrackArmed(int trackIndex, bool armed);
+    void                   chooseTrackInput(int trackIndex);
     bool                   punchRecordedClip(const juce::File& file);
     void                   saveRecentInput();
     void                   recordAtEndOfTrack();
@@ -700,6 +704,17 @@ private:
 
     // Timer record: when the take starts, and, if it has one, when it stops.
     bool       timerRecordPending_ = false;
+
+    // Tracks armed to record, by id - session state, not part of the song.
+    // With any armed, a take records each from its own input; the first is
+    // the main take, the rest extras (AudioEngine::beginExtraRecording).
+    std::set<int> armedTrackIds_;
+    struct ExtraTake
+    {
+        int trackIndex = -1;
+        int slot       = -1;
+    };
+    std::vector<ExtraTake> extraTakes_;
     juce::Time timerRecordStart_, timerRecordStop_;
     double loopRecordFromBeats_ = 0.0;
     double loopRecordToBeats_   = 0.0;

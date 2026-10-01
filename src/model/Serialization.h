@@ -402,6 +402,10 @@ inline std::string serialize(const Song& song)
             << " " << track.colour
             << " " << track.name << "\n";
 
+        // Only when it has its own input: -1 means the app's choice.
+        if (track.recordInput >= 0)
+            out << "TRACKINPUT " << track.recordInput << "\n";
+
         // Only non-empty lanes are written, so an unautomated track costs one
         // "TAUTOS 0" line rather than one empty record per automatable
         // parameter.
@@ -907,6 +911,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             std::getline(ts, name);
             track.name = detail::trimLeadingSpace(std::move(name));
         }
+
+        if (readTagged("TRACKINPUT", rest))
+            track.recordInput = std::max(-1, std::atoi(rest.c_str()));
 
         if (readTagged("TAUTOS", rest))
         {

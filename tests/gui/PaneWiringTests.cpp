@@ -112,12 +112,13 @@ TEST_CASE("A mixer strip reports every move the user makes", "[gui][wiring]")
 
     float gain = 0.0f, pan = -99.0f;
     bool  muted = false, soloed = false;
-    int   gains = 0, pans = 0, mutes = 0, solos = 0;
+    int   gains = 0, pans = 0, mutes = 0, solos = 0, arms = 0;
 
     strip.onGainChange = [&](float v) { gain = v;   ++gains; };
     strip.onPanChange  = [&](float v) { pan  = v;   ++pans;  };
     strip.onMuteChange = [&](bool  v) { muted = v;  ++mutes; };
     strip.onSoloChange = [&](bool  v) { soloed = v; ++solos; };
+    strip.onArmChange  = [&](bool)    { ++arms; };
 
     std::vector<juce::Component*> controls;
     paneaudit::collectControls(strip, controls);
@@ -127,7 +128,7 @@ TEST_CASE("A mixer strip reports every move the user makes", "[gui][wiring]")
     int reportsBefore = 0;
     for (auto* control : controls)
     {
-        reportsBefore = gains + pans + mutes + solos;
+        reportsBefore = gains + pans + mutes + solos + arms;
 
         if (auto* slider = dynamic_cast<juce::Slider*>(control))
             slider->setValue(slider->getMinimum()
@@ -142,7 +143,7 @@ TEST_CASE("A mixer strip reports every move the user makes", "[gui][wiring]")
         INFO("control " << (control->getName().isEmpty() ? juce::String("(unnamed)")
                                                          : control->getName())
              << " reported nothing");
-        REQUIRE(gains + pans + mutes + solos > reportsBefore);
+        REQUIRE(gains + pans + mutes + solos + arms > reportsBefore);
     }
 
     INFO("gain " << gains << " pan " << pans << " mute " << mutes << " solo " << solos);

@@ -73,6 +73,9 @@ public:
         silenceStop_.store(juce::jmax((int64_t) 0, stopAfterSilenceSamples), std::memory_order_relaxed);
     }
 
+    float   soundTriggerGain() const noexcept { return triggerGain_.load(std::memory_order_relaxed); }
+    int64_t soundTriggerStopSamples() const noexcept { return silenceStop_.load(std::memory_order_relaxed); }
+
     /** True while an armed take is waiting for sound to start it. */
     bool isWaitingForSound() const noexcept
     {

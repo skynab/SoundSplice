@@ -1956,6 +1956,12 @@ void MainComponent::updateMixerStrips()
             strip->setMuted(track.muted);
             strip->setSoloed(track.solo);
             strip->setPan(track.pan);
+            strip->setArmed(armedTrackIds_.count(track.id) > 0);
+
+            const auto inputs = engine_.inputChannelNames();
+            const int  input  = track.recordInput;
+            strip->setInputName(input < 0 ? juce::String("as in Recording Format")
+                                          : input < inputs.size() ? inputs[input] : "input " + juce::String(input + 1));
         }
         strip->setSelected(i == selectedTrackIndex_);
     }

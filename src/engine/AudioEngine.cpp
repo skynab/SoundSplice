@@ -444,6 +444,18 @@ bool AudioEngine::beginRecording(const juce::File& destination)
     return recorder_.arm(destination, recordWriterThread_, countInLeadInSamples());
 }
 
+bool AudioEngine::beginExtraRecording(int slot, const juce::File& destination, const AudioRecorder::Format& format)
+{
+    if (slot < 0 || slot >= kExtraTakes)
+        return false;
+
+    auto& extra = extraRecorders_[(size_t) slot];
+    extra.prepare(sampleRate_.load(std::memory_order_relaxed), format.channels);
+    extra.setFormat(format);
+    extra.setSoundTrigger(recorder_.soundTriggerGain(), recorder_.soundTriggerStopSamples());
+    return extra.arm(destination, recordWriterThread_, countInLeadInSamples());
+}
+
 void AudioEngine::beginMidiRecording()
 {
     // Grown on the message thread, before the audio thread can need it: the
@@ -837,6 +849,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     context.streamEpoch = streamer_.beginBlock();
 
     recorder_.process(inputChannelData, numInputChannels, numSamples,
+                      context.transport.playing, context.transport.playheadSamples);
+    for (auto& extra : extraRecorders_)
+        extra.process(inputChannelData, numInputChannels, numSamples,
                       context.transport.playing, context.transport.playheadSamples);
     meterInput(inputChannelData, numInputChannels, numSamples);
     retro_.process(inputChannelData, numInputChannels, numSamples, context.transport.playing,

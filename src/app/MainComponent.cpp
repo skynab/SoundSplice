@@ -550,6 +550,8 @@ MainComponent::MainComponent()
         strip->onSoloChange = [this, i](bool s)   { setTrackSolo(i, s); };
         strip->onPanChange  = [this, i](float p)  { setTrackPan(i, p); };
         strip->onSelect     = [this, i]           { selectTrack(i); };
+        strip->onArmChange  = [this, i](bool a)   { setTrackArmed(i, a); };
+        strip->onInputMenuRequested = [this, i]   { chooseTrackInput(i); };
         trackStrips_.add(strip);
         mixerView_.addAndMakeVisible(strip);
     }

@@ -224,9 +224,37 @@ void MainComponent::toggleRecording()
         // At this device's rate, which the silence to stop on is counted in.
         applySoundTrigger();
 
+        // Which tracks the take goes onto: every armed audio track, each from
+        // its own input, or - with none armed - the selected track if it can
+        // hold audio, otherwise a new one.
+        const auto& song = history_.current();
+        std::vector<int> targets;
+        for (int t = 0; t < (int) song.tracks.size(); ++t)
+            if (song.tracks[(size_t) t].type == model::TrackType::Audio
+                && armedTrackIds_.count(song.tracks[(size_t) t].id) > 0)
+                targets.push_back(t);
+        if (targets.empty())
+        {
+            const bool canHoldAudio = selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) song.tracks.size()
+                                   && song.tracks[(size_t) selectedTrackIndex_].type == model::TrackType::Audio;
+            targets.push_back(canHoldAudio ? selectedTrackIndex_ : -1);
+        }
+
+        // The extra tracks first: they're armed alongside the main take, which
+        // is what starts the transport.
+        extraTakes_.clear();
+        for (size_t i = 1; i < targets.size() && (int) i <= engine::AudioEngine::kExtraTakes; ++i)
+        {
+            const int  slot  = (int) i - 1;
+            const auto extra = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
+            if (engine_.beginExtraRecording(slot, extra, recordFormatFor(targets[i])))
+                extraTakes_.push_back({ targets[i], slot });
+        }
+
         // Into the saved project's audio folder, or the scratch folder until
         // there is one (see app/ProjectMedia.h).
         const auto file = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
+        engine_.setRecordFormat(recordFormatFor(targets.front()));
 
         if (! engine_.beginRecording(file))
         {
@@ -241,19 +269,13 @@ void MainComponent::toggleRecording()
             else
                 showError("Could not start recording (no audio input device, "
                           "or the file could not be created)");
+            engine_.stopRecording(); // the extras armed above
+            extraTakes_.clear();
             return;
         }
 
-        recordingFile_ = file;
-
-        // Onto the selected track if it can hold audio, otherwise a new one.
-        // A Synth track can't take an audio clip, so recording while
-        // one is selected has to mean "somewhere else" rather than fail.
-        const auto& song = history_.current();
-        const bool  canHoldAudio = selectedTrackIndex_ >= 0
-                                && selectedTrackIndex_ < (int) song.tracks.size()
-                                && song.tracks[(size_t) selectedTrackIndex_].type == model::TrackType::Audio;
-        recordingTargetTrack_ = canHoldAudio ? selectedTrackIndex_ : -1;
+        recordingFile_        = file;
+        recordingTargetTrack_ = targets.front();
 
         awaitingRecordedTake_ = true;
         recordButton.setToggleState(true, juce::dontSendNotification); // swaps to the stop square
@@ -302,42 +324,60 @@ void MainComponent::finishRecordingIfReady()
     // that returns just below.
     post(Cmd::SetLooping, loopButton.getToggleState() ? 1.0 : 0.0);
 
-    const int64_t dropped   = engine_.recordedDroppedSamples();
+    int64_t       dropped   = engine_.recordedDroppedSamples();
     const int64_t startedAt = engine_.recordedTakeStartSample();
 
     // Closes the file and hands it over; empty means nothing was captured.
     const auto file = engine_.finishRecordedTake();
-    if (file == juce::File{})
+
+    const int  latency = recordingLatencySamples();
+    int        passes  = 0;
+    bool       punched = false;
+    int        placed  = 0;
+
+    // One take onto its track: where the transport was when its capture
+    // began (after any count-in), through the import path - which measures
+    // the file and appends to the track - then late by the device's round
+    // trip, as loop takes, or punched in, as the take was started.
+    const auto place = [&](const juce::File& take, int64_t takeStart, int trackIndex)
+    {
+        const double startBeats = takeStart >= 0 ? juce::jmax(0.0, uiTempoMap_.ppqFromSamples(takeStart)) : 0.0;
+        importAudioFileAtBeat(take, startBeats, trackIndex);
+
+        const int takePasses = loopRecording_ ? makeLoopTakesFromRecording(take, takeStart, latency) : 0;
+        if (takePasses == 0)
+            compensateRecordingLatency(take, latency);
+        const bool takePunched = punchRecording_ && punchRecordedClip(take);
+
+        passes = juce::jmax(passes, takePasses);
+        punched |= takePunched;
+        ++placed;
+    };
+
+    if (file != juce::File{})
+        place(file, startedAt, recordingTargetTrack_);
+
+    // Every other armed track's take, the same way onto its own track.
+    for (const auto& extra : extraTakes_)
+    {
+        dropped += engine_.extraTakeDroppedSamples(extra.slot);
+        const auto extraStart = engine_.extraTakeStartSample(extra.slot);
+        const auto extraFile  = engine_.finishExtraTake(extra.slot);
+        if (extraFile != juce::File{})
+            place(extraFile, extraStart, extra.trackIndex);
+    }
+    extraTakes_.clear();
+
+    recordingFile_        = juce::File{};
+    recordingTargetTrack_ = -1;
+    loopRecording_        = false;
+    punchRecording_       = false;
+
+    if (placed == 0)
     {
         showError("Recording was empty (no input captured)");
         return;
     }
-
-    // Where the take goes on the timeline: where the transport actually was
-    // when capture began, which is after any count-in. Falls back to the start
-    // only if the engine never reported a position.
-    const double startBeats = startedAt >= 0
-                                ? juce::jmax(0.0, uiTempoMap_.ppqFromSamples(startedAt))
-                                : 0.0;
-
-    // The clip's length, undo, and selection all come from the existing import
-    // path — which measures the file's real duration rather than guessing, and
-    // appends to the target track rather than always making a new one. This
-    // used to be a second, hand-written copy of that logic here.
-    importAudioFileAtBeat(file, startBeats, recordingTargetTrack_);
-
-    recordingFile_        = juce::File{};
-    recordingTargetTrack_ = -1;
-
-    // The recording came back late by the device's round trip: the clip
-    // plays from that far into its file, so it lines up with what was playing.
-    const int latency = recordingLatencySamples();
-    const int passes  = loopRecording_ ? makeLoopTakesFromRecording(file, startedAt, latency) : 0;
-    if (passes == 0)
-        compensateRecordingLatency(file, latency);
-    const bool punched = punchRecording_ && punchRecordedClip(file);
-    loopRecording_  = false;
-    punchRecording_ = false;
 
     // Reported after the import, so the take is on the timeline either way —
     // a recording with a gap is still worth keeping, it just must not be
@@ -356,7 +396,7 @@ void MainComponent::finishRecordingIfReady()
     // was there. On macOS the usual cause is microphone permission — the OS
     // grants none and CoreAudio delivers zeros rather than an error — so the
     // message names that first.
-    if (isSilentAudioFile(file))
+    if (file != juce::File{} && isSilentAudioFile(file))
     {
         showError("Recorded silence - check microphone permission "
                   "(System Settings > Privacy & Security > Microphone) and the input device");
@@ -367,8 +407,82 @@ void MainComponent::finishRecordingIfReady()
         showStatus("Recorded " + juce::String(passes) + " passes as takes - right-click the clip to choose one");
     else if (punched)
         showStatus("Punched in over the selection");
+    else if (placed > 1)
+        showStatus("Recorded " + juce::String(placed) + " tracks");
     else
         showStatus("Recorded: " + file.getFileName());
+}
+
+/** The record format for a take onto @p trackIndex: the Recording Format
+    setting, from the track's own input when it has one. */
+engine::AudioRecorder::Format MainComponent::recordFormatFor(int trackIndex)
+{
+    auto        format = savedRecordFormat();
+    const auto& song   = history_.current();
+    if (trackIndex >= 0 && trackIndex < (int) song.tracks.size() && song.tracks[(size_t) trackIndex].recordInput >= 0)
+        format.firstInput = song.tracks[(size_t) trackIndex].recordInput;
+    return format;
+}
+
+/** Arms or disarms a track for recording. Several can be armed: Record then
+    takes each from its own input onto its own track. Not an edit - it says
+    what the next take will do, not what the song is. */
+void MainComponent::setTrackArmed(int trackIndex, bool armed)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const auto& track = song.tracks[(size_t) trackIndex];
+    if (armed && track.type != model::TrackType::Audio)
+    {
+        showError("Only audio tracks record audio - arm an audio track");
+        updateMixerStrips();
+        return;
+    }
+
+    if (armed)
+        armedTrackIds_.insert(track.id);
+    else
+        armedTrackIds_.erase(track.id);
+    updateMixerStrips();
+
+    if (awaitingRecordedTake_)
+        showStatus("Arming applies from the next take");
+}
+
+/** Which input a track records from: a menu of the device's inputs, and the
+    app's default. Saved with the project. */
+void MainComponent::chooseTrackInput(int trackIndex)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const int  current = song.tracks[(size_t) trackIndex].recordInput;
+    const auto inputs  = engine_.inputChannelNames();
+    const bool stereo  = savedRecordFormat().channels == 2;
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader(stereo ? "Record from (and the input after it)" : "Record from");
+    menu.addItem(1, "As in Recording Format", true, current < 0);
+    for (int i = 0; i < inputs.size(); ++i)
+        menu.addItem(100 + i, inputs[i], true, current == i);
+
+    menu.showMenuAsync(juce::PopupMenu::Options(),
+        [self = juce::Component::SafePointer<MainComponent>(this), trackIndex](int result)
+        {
+            if (self == nullptr || result == 0)
+                return;
+
+            const int input = result == 1 ? -1 : result - 100;
+            self->history_.edit("Set track input", [trackIndex, input](model::Song& s)
+            {
+                if (trackIndex >= 0 && trackIndex < (int) s.tracks.size())
+                    s.tracks[(size_t) trackIndex].recordInput = input;
+            });
+            self->updateMixerStrips();
+        });
 }
 
 /** Turns the clip a loop recording was just imported as (the selected one)

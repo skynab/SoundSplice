@@ -851,3 +851,20 @@ TEST_CASE("A clip's takes round-trip, names and files with spaces included", "[m
     REQUIRE(restored == song);
     REQUIRE(restored.tracks[0].clips[0].takes[0].audioFile == "takes/pass one.wav");
 }
+
+TEST_CASE("A track's own record input round-trips, and the default writes nothing", "[model][io]")
+{
+    Song song;
+    addTrack(song, TrackType::Audio, "Kick");
+    addTrack(song, TrackType::Audio, "Snare");
+    song.tracks[1].recordInput = 3;
+
+    const auto text = serialize(song);
+    REQUIRE(text.find("TRACKINPUT 3") != std::string::npos);
+    REQUIRE(text.find("TRACKINPUT") == text.rfind("TRACKINPUT")); // only the one with its own
+
+    Song restored;
+    REQUIRE(deserialize(text, restored));
+    REQUIRE(restored == song);
+    REQUIRE(restored.tracks[0].recordInput == -1);
+}
