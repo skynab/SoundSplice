@@ -622,6 +622,10 @@ private:
     juce::Component::SafePointer<class PluginManagerDialog> pluginManager_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   addBusTrack();
+    void                   toggleClipWarp(int trackIndex, int clipId);
+    void                   detectClipTempo(int trackIndex, int clipId);
+    void                   askClipTempo(int trackIndex, int clipId);
+    void                   songTempoFromClip(int trackIndex, int clipId);
     double                 tempoAtPlayhead() const;
     void                   afterTempoEdit();
     void                   editTempoChangeAt(double beat);

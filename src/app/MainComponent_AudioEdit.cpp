@@ -45,6 +45,15 @@ void MainComponent::refreshAudioEditorForSelected()
         return;
     }
 
+    // A warped clip plays its file stretched: the samples the editor would
+    // show aren't the ones heard, where they're heard.
+    if (clip->warp)
+    {
+        audioEditor_.setNoAudioClipSelected("This clip is warped to the song's tempo - turn Warp off "
+                                            "(right-click the clip) to edit its audio");
+        return;
+    }
+
     const juce::File file(clip->audioFile);
     const auto&      track = history_.current().tracks[(size_t) selectedTrackIndex_];
 

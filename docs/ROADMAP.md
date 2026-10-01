@@ -214,7 +214,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   **plugin manager** ✅ (File > Plugin Manager: turn plugins off, forget them, unblock them, scan) with a
   blocklist ✅ and crash-safe scanning ✅ (each plugin is probed in a copy of the app, `src/app/PluginProbe.h`;
   one that crashes, hangs or won't load is blocklisted)
-- 🟡 **Buses, sends, sidechain, tempo changes, warp**: cut in the strip-down, and brought back (decided
+- ✅ **Buses, sends, sidechain, tempo changes, warp**: cut in the strip-down, and brought back (decided
   2026-10-01). ✅ **Bus tracks and sends** (Edit > Add Bus Track, or Add Bus in the mixer: a mixer strip's
   Out routes the track to a bus, Sends adds sends at their own level, pre or post fader; buses feed
   buses, never in a loop; solo follows the routing and delay compensation counts each bus on the way
@@ -224,7 +224,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   edit, ramp or remove one, drag its flag to move it; the tempo control edits the tempo in force at the
   playhead; audio keeps its time and instrument parts their beats; clip edits, fades, the seconds grid and
   label import/export measure through the map, `model::BeatClock`; snapping to the seconds grid still steps
-  at the starting tempo) · ⬜ warp
+  at the starting tempo) · ✅ **warp** (right-click an audio clip: Detect Clip Tempo or Set Clip Tempo, then Warp
+  to Song Tempo; the clip keeps its beats and its audio is stretched, pitch kept, by Signalsmith Stretch, following
+  tempo changes; one stretch per clip, from the tempo where it starts; `src/model/Warp.h`,
+  `src/engine/TempoDetect.h`)
 
 ### Phase 6 — Audition's "finishing" workflows
 

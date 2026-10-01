@@ -6,6 +6,7 @@
 
 #include "engine/TempoMap.h"
 #include "model/BeatClock.h"
+#include "model/WarpFactor.h"
 #include "model/Song.h"
 
 namespace soundsplice::model
@@ -86,6 +87,14 @@ namespace tempoedit
 
             for (auto& clip : track.clips)
             {
+                // A warped clip follows the beat instead, restretched to the
+                // tempo it now starts at (model/Warp.h).
+                if (clip.warp && clip.sourceBpm > 0.0)
+                {
+                    warpedit::rescale(clip, warpedit::factorUnder(after, clip) / warpedit::factorUnder(before, clip));
+                    continue;
+                }
+
                 const double end = move(clip.startBeats + clip.lengthBeats);
                 clip.startBeats  = move(clip.startBeats);
                 clip.lengthBeats = std::max(0.0, end - clip.startBeats);

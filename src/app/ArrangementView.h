@@ -20,6 +20,7 @@
 #include "model/RazorEdits.h"
 #include "model/Takes.h"
 #include "model/TempoChanges.h"
+#include "model/Warp.h"
 #include "model/TimeSelection.h"
 #include "SpectrogramCache.h"
 #include "TakeLanes.h"
@@ -715,7 +716,10 @@ private:
         // split clip starts partway into its recording.
         // The clip's seconds per beat, on average over it: through the tempo
         // map, so a clip after a tempo change is drawn as long as it plays.
-        const double fileSeconds    = thumbnail->getTotalLength() - clip.sourceOffsetSeconds;
+        // A warped clip's file is drawn stretched as it plays: its offset is
+        // in that time, the file's own is that divided by the stretch.
+        const double stretch        = model::warpedit::factorFor(song_, clip);
+        const double fileSeconds    = thumbnail->getTotalLength() * stretch - clip.sourceOffsetSeconds;
         const double secondsPerBeat = clipSecondsFor(clip) / juce::jmax(1.0e-9, clip.lengthBeats);
         const double fraction       = audioClipDrawnFraction(fileSeconds, clip.lengthBeats, secondsPerBeat);
         const double seconds        = audioClipAudibleSeconds(fileSeconds, clip.lengthBeats, secondsPerBeat);
@@ -734,8 +738,8 @@ private:
             if (const auto* picture = spectrograms_.find(juce::File(clip.audioFile)); picture != nullptr && picture->isReady())
             {
                 const double firstAt    = picture->windowSeconds * 0.5;
-                const double columnFrom = (clip.sourceOffsetSeconds - firstAt) / picture->secondsPerColumn;
-                const double columnTo   = (clip.sourceOffsetSeconds + seconds - firstAt) / picture->secondsPerColumn;
+                const double columnFrom = (clip.sourceOffsetSeconds / stretch - firstAt) / picture->secondsPerColumn;
+                const double columnTo   = ((clip.sourceOffsetSeconds + seconds) / stretch - firstAt) / picture->secondsPerColumn;
                 const auto   source     = juce::Rectangle<float>((float) columnFrom, 0.0f, (float) (columnTo - columnFrom),
                                                                  (float) picture->image.getHeight());
 
@@ -756,7 +760,7 @@ private:
         // disagreeing reads as one of them being wrong.
         g.setColour(juce::Colours::white.withAlpha(0.55f));
         thumbnail->drawChannels(g, area.toNearestInt(),
-                                clip.sourceOffsetSeconds, clip.sourceOffsetSeconds + seconds,
+                                clip.sourceOffsetSeconds / stretch, (clip.sourceOffsetSeconds + seconds) / stretch,
                                 juce::Decibels::decibelsToGain(clip.gainDb));
     }
 
@@ -784,7 +788,7 @@ private:
     double fileSecondsFor(const model::Clip& clip) const
     {
         if (auto* thumbnail = waveforms_.find(juce::File(clip.audioFile)); thumbnail != nullptr)
-            return juce::jmax(0.0, thumbnail->getTotalLength());
+            return juce::jmax(0.0, thumbnail->getTotalLength()) * model::warpedit::factorFor(song_, clip);
         return 0.0;
     }
 
@@ -797,7 +801,8 @@ private:
 
         if (auto* thumbnail = waveforms_.find(juce::File(clip.audioFile));
             thumbnail != nullptr && thumbnail->getTotalLength() > 0.0)
-            return juce::jlimit(0.0, window, thumbnail->getTotalLength() - clip.sourceOffsetSeconds);
+            return juce::jlimit(0.0, window, thumbnail->getTotalLength() * model::warpedit::factorFor(song_, clip)
+                                                 - clip.sourceOffsetSeconds);
 
         return window;
     }

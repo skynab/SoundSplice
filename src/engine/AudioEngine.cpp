@@ -1,4 +1,5 @@
 #include "engine/AudioEngine.h"
+#include "engine/HqStretch.h"
 
 #include "engine/SequenceAudioFormat.h"
 #include "rt/RealtimeGuard.h"
@@ -268,6 +269,69 @@ std::shared_ptr<ClipData> AudioEngine::decodeOrGetCached(const juce::File& file)
     return shared;
 }
 
+std::shared_ptr<ClipData> AudioEngine::warpedOrGetCached(const juce::File& file, double stretch)
+{
+    // Not warped, or by so little that stretching would only cost quality.
+    if (std::abs(stretch - 1.0) < 1.0e-4)
+        return decodeOrGetCached(file);
+
+    auto& versions = warpCache_[file.getFullPathName()];
+    for (const auto& version : versions)
+        if (std::abs(version.stretch - stretch) < 1.0e-9 && version.data != nullptr)
+            return version.data;
+
+    // The whole file, in memory: a stretch needs all of it, so even a clip
+    // long enough to stream from disk is decoded here.
+    auto source = decodeAudioFile(file);
+    if (source == nullptr || source->lengthSamples <= 0)
+        return decodeOrGetCached(file);
+
+    const int channelCount = juce::jmax(1, source->audio.getNumChannels());
+    std::vector<std::vector<float>> channels((size_t) channelCount);
+    for (int c = 0; c < channelCount; ++c)
+    {
+        const float* read = source->audio.getReadPointer(c);
+        channels[(size_t) c].assign(read, read + source->lengthSamples);
+    }
+
+    hqstretch::Settings settings;
+    settings.lengthFactor = stretch;
+    auto stretched = hqstretch::process(channels, source->sourceSampleRate, settings);
+    if (stretched.empty())
+        return decodeOrGetCached(file); // too short for the stretcher: play it as it is
+
+    auto warped              = std::make_shared<ClipData>();
+    warped->sourceSampleRate = source->sourceSampleRate;
+    warped->numChannels      = channelCount;
+    warped->lengthSamples    = (int) stretched[0].size();
+    warped->audio.setSize(channelCount, warped->lengthSamples);
+    for (int c = 0; c < channelCount; ++c)
+        warped->audio.copyFrom(c, 0, stretched[(size_t) c].data(), warped->lengthSamples);
+
+    // A few stretches per file are kept: dragging the tempo makes many.
+    if (versions.size() >= 4)
+        versions.erase(versions.begin());
+    versions.push_back({ stretch, warped });
+    return warped;
+}
+
+TempoEstimate AudioEngine::detectFileTempo(const juce::File& file)
+{
+    // The file as it is on disk, not as it plays warped: detecting a warped
+    // clip's playback would report the tempo it was warped to.
+    auto decoded = decodeAudioFile(file);
+    if (decoded == nullptr || decoded->lengthSamples <= 0)
+        return {};
+
+    std::vector<std::vector<float>> channels((size_t) juce::jmax(1, decoded->audio.getNumChannels()));
+    for (int c = 0; c < (int) channels.size(); ++c)
+    {
+        const float* read = decoded->audio.getReadPointer(c);
+        channels[(size_t) c].assign(read, read + decoded->lengthSamples);
+    }
+    return detectTempo(channels, decoded->sourceSampleRate);
+}
+
 bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>& clips)
 {
     if (index < 0 || index >= kMaxTracks)
@@ -293,7 +357,7 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
 
     for (const auto& spec : clips)
     {
-        auto decoded = decodeOrGetCached(spec.file);
+        auto decoded = warpedOrGetCached(spec.file, spec.stretch);
         if (decoded == nullptr)
         {
             allOk = false;

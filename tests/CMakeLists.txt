@@ -66,6 +66,7 @@ add_executable(soundsplice_tests
   engine/EqCurveTests.cpp
   engine/ReverbTests.cpp
   engine/MixRoutingTests.cpp
+  engine/TempoDetectTests.cpp
   model/HistoryTests.cpp
   model/SongTests.cpp
   model/SerializationTests.cpp
@@ -75,6 +76,7 @@ add_executable(soundsplice_tests
   model/FoldersTests.cpp
   model/RoutingTests.cpp
   model/TempoChangesTests.cpp
+  model/WarpTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp
   model/TimebaseTests.cpp

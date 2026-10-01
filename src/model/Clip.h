@@ -104,6 +104,12 @@ struct Clip
     std::vector<ClipTake> takes;
     int                   activeTake = 0;
 
+    /** Warp (model/Warp.h): the clip follows the song's tempo, its audio
+        stretched from the tempo it was played at, sourceBpm (0 when that
+        isn't known). Audio clips only. */
+    bool   warp      = false;
+    double sourceBpm = 0.0;
+
     bool operator==(const Clip&) const = default;
 };
 

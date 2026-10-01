@@ -25,6 +25,7 @@
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
 #include "engine/EngineCommand.h"
+#include "engine/TempoDetect.h"
 #include "engine/InstrumentTrack.h"
 #include "engine/Varispeed.h"
 #include "engine/MasterBusNode.h"
@@ -61,6 +62,11 @@ struct AudioClipSpec
         resubmissions so it keeps its chain - see AudioEngine::clipChains_. */
     int                            clipId = 0;
     std::vector<EffectParamValues> effects;
+
+    /** A warped clip's time stretch (model::warpFactor): its file played
+        this many times as long, pitch kept. 1 for an ordinary clip. Its
+        offset, fades and curve are already in the stretched time. */
+    double stretch = 1.0;
 
     /** Each slot's shape, in the same order as @c effects: its kind and, for
         a plugin, which one and its saved state, from which the chain is
@@ -450,6 +456,10 @@ public:
         built here on the message thread and installed by the audio thread at
         the start of its next block, without allocating there. */
     void setTempoChanges(const std::vector<TempoChange>& changes);
+
+    /** The tempo of @p file's performance (engine/TempoDetect.h), from the
+        file as it is on disk. Message thread; decodes the whole file. */
+    TempoEstimate detectFileTempo(const juce::File& file);
 
     // ---- session view (message thread) ----
     /** Replaces a track's session column. Slot index is the scene. */
@@ -871,6 +881,19 @@ private:
     // What a sidechain listens to when its source hasn't rendered this block
     // (it's muted, left out of a stem, or caught in a loop): silence.
     juce::AudioBuffer<float> silentKey_;
+
+    /** @p file decoded and stretched by @p stretch, pitch kept, for a warped
+        clip: made once per file and stretch and cached, since stretching a
+        file is far too slow to repeat on every edit. A stretch of (almost) 1
+        is the file as decoded. */
+    std::shared_ptr<ClipData> warpedOrGetCached(const juce::File& file, double stretch);
+
+    struct WarpedClip
+    {
+        double                    stretch = 1.0;
+        std::shared_ptr<ClipData> data;
+    };
+    std::map<juce::String, std::vector<WarpedClip>> warpCache_; // by path, a few stretches each
 
     // Tempo maps on their way to the audio thread, and back to be freed.
     rt::SpscRingBuffer<TempoMap*> tempoInbox_   { 8 };

@@ -318,10 +318,11 @@ public:
         repaint();
     }
 
-    void setNoAudioClipSelected()
+    void setNoAudioClipSelected(const juce::String& why = "Select an Audio clip to edit it")
     {
         file_      = juce::File{};
         selection_ = {};
+        placeholderLabel_.setText(why, juce::dontSendNotification);
         setContentVisible(false);
     }
 

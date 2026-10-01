@@ -1396,6 +1396,104 @@ void MainComponent::endSendDrag(int trackIndex, int send)
                });
 }
 
+/** Warps clip @p clipId to the song's tempo, or stops warping it. */
+void MainComponent::toggleClipWarp(int trackIndex, int clipId)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+    const int  trackId = song.tracks[(size_t) trackIndex].id;
+    const auto* clip   = model::warpedit::findClip(song, trackId, clipId);
+    if (clip == nullptr)
+        return;
+    const bool warp = ! clip->warp;
+
+    if (warp)
+        showBusy("Stretching the clip to the song's tempo...");
+    history_.edit(warp ? "Warp clip" : "Unwarp clip",
+                  [trackId, clipId, warp](model::Song& s) { model::warpedit::setWarp(s, trackId, clipId, warp); });
+    refreshAfterArrangementEdit();
+    showStatus(warp ? "Warped - it follows the song's tempo now, tempo changes included"
+                    : "Unwarped - it plays at its own tempo again");
+}
+
+/** Detects clip @p clipId's tempo from its file and keeps it on the clip. */
+void MainComponent::detectClipTempo(int trackIndex, int clipId)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+    const int   trackId = song.tracks[(size_t) trackIndex].id;
+    const auto* clip    = model::warpedit::findClip(song, trackId, clipId);
+    if (clip == nullptr || clip->type != model::ClipType::Audio)
+        return;
+
+    showBusy("Detecting the clip's tempo...");
+    const auto estimate = engine_.detectFileTempo(juce::File(clip->audioFile));
+    if (! estimate.isUsable())
+    {
+        showError("No steady tempo found in this clip - use Set Clip Tempo to give it one");
+        return;
+    }
+
+    const double bpm = estimate.bpm;
+    history_.edit("Detect clip tempo", [trackId, clipId, bpm](model::Song& s) { model::warpedit::setSourceTempo(s, trackId, clipId, bpm); });
+    refreshAfterArrangementEdit();
+    showStatus("Clip tempo: " + juce::String(bpm, 1) + " BPM"
+               + (estimate.confidence < 0.5 ? juce::String(" (not sure - check it by ear)") : juce::String()));
+}
+
+/** Asks for clip @p clipId's tempo. */
+void MainComponent::askClipTempo(int trackIndex, int clipId)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+    const int   trackId = song.tracks[(size_t) trackIndex].id;
+    const auto* clip    = model::warpedit::findClip(song, trackId, clipId);
+    if (clip == nullptr)
+        return;
+
+    auto* window = new juce::AlertWindow("Set Clip Tempo", "The tempo this clip was played at",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("bpm", clip->sourceBpm > 0.0 ? juce::String(clip->sourceBpm, 2) : juce::String(), "Tempo (BPM):");
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, trackId, clipId](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+            const double bpm = window->getTextEditorContents("bpm").getDoubleValue();
+            if (bpm < 10.0 || bpm > 999.0)
+            {
+                self->showError("A tempo between 10 and 999 BPM, please");
+                return;
+            }
+            self->history_.edit("Set clip tempo", [trackId, clipId, bpm](model::Song& s) { model::warpedit::setSourceTempo(s, trackId, clipId, bpm); });
+            self->refreshAfterArrangementEdit();
+        }));
+}
+
+/** Sets the song's tempo at the clip to the clip's own, so it plays in time
+    without warping. */
+void MainComponent::songTempoFromClip(int trackIndex, int clipId)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+    const auto* clip = model::warpedit::findClip(song, song.tracks[(size_t) trackIndex].id, clipId);
+    if (clip == nullptr || clip->sourceBpm <= 0.0)
+        return;
+
+    const double bpm = clip->sourceBpm;
+    const double at  = model::tempoedit::changeInForceAt(song, clip->startBeats);
+    history_.edit("Tempo from clip", [at, bpm](model::Song& s) { model::tempoedit::setTempo(s, at, bpm); });
+    afterTempoEdit();
+    showStatus("Song tempo set to " + juce::String(bpm, 1) + " BPM from the clip");
+}
+
 /** Puts a track in edit group @p group, or none (0). */
 void MainComponent::setTrackEditGroup(int trackIndex, int group)
 {
@@ -1823,6 +1921,24 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
             ++overlapping;
     menu.addItem(kCombineTakes, "Combine Overlapping Clips into Takes", overlapping > 1);
 
+    // Warp (model/Warp.h): follow the song's tempo, from the tempo the clip
+    // was played at.
+    static constexpr int kWarp            = 4;
+    static constexpr int kDetectTempo     = 5;
+    static constexpr int kSetClipTempo    = 6;
+    static constexpr int kProjectFromClip = 7;
+    if (clip.type == model::ClipType::Audio)
+    {
+        menu.addSeparator();
+        const bool knows = clip.sourceBpm > 0.0;
+        menu.addItem(kWarp, knows ? "Warp to Song Tempo   (clip is " + juce::String(clip.sourceBpm, 1) + " BPM)"
+                                  : juce::String("Warp to Song Tempo   (detect or set its tempo first)"),
+                     knows, clip.warp);
+        menu.addItem(kDetectTempo, "Detect Clip Tempo");
+        menu.addItem(kSetClipTempo, "Set Clip Tempo...");
+        menu.addItem(kProjectFromClip, "Set Song Tempo from Clip", knows);
+    }
+
     menu.showMenuAsync(juce::PopupMenu::Options(),
         [self = juce::Component::SafePointer<MainComponent>(this), trackIndex, clipIndex, fades, clipId,
          clipStart = clip.startBeats, clipEnd = clip.startBeats + clip.lengthBeats, selectionFrom, selectionTo](int result)
@@ -1835,6 +1951,10 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
                 self->combineOverlappingClipsIntoTakes(trackIndex, clipIndex);
                 return;
             }
+            if (result == kWarp)            { self->toggleClipWarp(trackIndex, clipId); return; }
+            if (result == kDetectTempo)     { self->detectClipTempo(trackIndex, clipId); return; }
+            if (result == kSetClipTempo)    { self->askClipTempo(trackIndex, clipId); return; }
+            if (result == kProjectFromClip) { self->songTempoFromClip(trackIndex, clipId); return; }
             if (result >= kSelectionTakeBase)
             {
                 self->useClipTake(trackIndex, clipId, selectionFrom, selectionTo, result - kSelectionTakeBase);
@@ -2052,6 +2172,7 @@ void MainComponent::syncEngineTracks()
             spec.channels            = clip.channels;
             spec.envelope            = clip.envelope;
             spec.clipId              = clip.id;
+            spec.stretch             = model::warpedit::factorFor(song, clip);
             for (const auto& slot : clip.effects)
             {
                 spec.effects.push_back(model::effectParamValues(slot));

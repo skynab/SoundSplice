@@ -86,6 +86,8 @@ namespace detail
         out << "CLIPCHANS " << (int) clip.channels << "\n";
         if (clip.autoFadeIn || clip.autoFadeOut)
             out << "CLIPAUTOXF " << (clip.autoFadeIn ? 1 : 0) << " " << (clip.autoFadeOut ? 1 : 0) << "\n";
+        if (clip.warp || clip.sourceBpm > 0.0)
+            out << "CLIPWARP " << (clip.warp ? 1 : 0) << " " << num(clip.sourceBpm) << "\n";
 
         // Only when there's a curve: a clip without one reads back as unity.
         if (! clip.envelope.isEmpty())
@@ -644,6 +646,14 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             as >> in >> out;
             clip.autoFadeIn  = in != 0;
             clip.autoFadeOut = out != 0;
+        }
+
+        if (readTagged("CLIPWARP", rest))
+        {
+            std::istringstream ws(rest);
+            int warp = 0;
+            ws >> warp >> clip.sourceBpm;
+            clip.warp = warp != 0 && clip.sourceBpm > 0.0;
         }
 
         if (readTagged("CLIPENV", rest))
