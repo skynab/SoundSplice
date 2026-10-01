@@ -255,7 +255,55 @@ void MainComponent::openPluginEditor(int slotIndex)
         }
 
     auto* window = pluginWindows_.add(new PluginEditorWindow(node->instance()->getName(), *node->instance()));
-    window->onCloseRequested = [this](PluginEditorWindow* w) { pluginWindows_.removeObject(w); };
+    window->onCloseRequested = [this](PluginEditorWindow* w)
+    {
+        pluginWindows_.removeObject(w);
+        capturePluginStates("Change plugin settings");
+    };
+}
+
+/** Copies every loaded plugin's own state into the document, where it has
+    changed: what was turned in a plugin's editor is otherwise only in the
+    running instance, and lost on save, reload or a rebuild of its chain. One
+    undo step, under @p label; nothing if no plugin changed. */
+void MainComponent::capturePluginStates(const juce::String& label)
+{
+    struct Change
+    {
+        int         track = 0;
+        int         slot  = 0;
+        std::string state;
+    };
+    std::vector<Change> changes;
+
+    const auto& song = history_.current();
+    for (int t = 0; t < (int) song.tracks.size(); ++t)
+    {
+        const auto& chain = song.tracks[(size_t) t].effectChain;
+        for (int s = 0; s < (int) chain.size(); ++s)
+        {
+            if (chain[(size_t) s].kind != model::EffectKind::Plugin)
+                continue;
+
+            const auto* node = engine_.trackPluginNode(t, s);
+            if (node == nullptr || node->instance() == nullptr)
+                continue; // not loaded here: keep what the document has
+
+            auto state = node->saveState();
+            if (state != chain[(size_t) s].plugin.state)
+                changes.push_back({ t, s, std::move(state) });
+        }
+    }
+
+    if (changes.empty())
+        return;
+
+    history_.edit(label.toStdString(), [&changes](model::Song& s)
+    {
+        for (const auto& change : changes)
+            if (change.track < (int) s.tracks.size() && change.slot < (int) s.tracks[(size_t) change.track].effectChain.size())
+                s.tracks[(size_t) change.track].effectChain[(size_t) change.slot].plugin.state = change.state;
+    });
 }
 
 /** Closes every plugin editor. Called before anything that rebuilds a chain,
