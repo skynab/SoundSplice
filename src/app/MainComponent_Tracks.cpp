@@ -1036,6 +1036,13 @@ void MainComponent::showTrackSettingsMenu(int trackIndex)
                                              : juce::String(track.name));
     menu.addSubMenu("Colour", colours);
     menu.addSubMenu("Edit Group", groups);
+    if (model::folderedit::parentIndexOf(song, trackIndex) >= 0)
+        menu.addItem(kOutdentTrackMenuId, "Take Out of Folder");
+    else
+    {
+        auto trial = song;
+        menu.addItem(kIndentTrackMenuId, "Put in Folder Above", model::folderedit::indent(trial, trackIndex));
+    }
     menu.addItem(1, "Rename...");
     menu.addSeparator();
 
@@ -1061,6 +1068,18 @@ void MainComponent::showTrackSettingsMenu(int trackIndex)
             return;
         }
 
+        if (result == kIndentTrackMenuId)
+        {
+            self->indentTrack(trackIndex);
+            return;
+        }
+
+        if (result == kOutdentTrackMenuId)
+        {
+            self->outdentTrack(trackIndex);
+            return;
+        }
+
         if (const int group = result - kFirstEditGroupMenuId; group >= 0 && group <= model::kEditGroupCount)
         {
             self->setTrackEditGroup(trackIndex, group);
@@ -1070,6 +1089,68 @@ void MainComponent::showTrackSettingsMenu(int trackIndex)
         if (const int index = result - kFirstColourMenuId; index >= 0 && index < kNumTrackColours)
             self->setTrackColour(trackIndex, kTrackColours[index].argb);
     });
+}
+
+/** The tracks mute and solo on @p trackIndex act on: its edit group and,
+    for a folder, the tracks in each. */
+std::vector<int> MainComponent::linkedTracks(int trackIndex) const
+{
+    const auto&      song = history_.current();
+    std::vector<int> linked;
+    for (const int member : model::groupedit::memberIndices(song, trackIndex))
+        for (const int track : model::folderedit::withChildren(song, member))
+            if (std::find(linked.begin(), linked.end(), track) == linked.end())
+                linked.push_back(track);
+    return linked;
+}
+
+/** Collapses a folder track, hiding the tracks in it, or opens it again. */
+void MainComponent::toggleFolder(int trackIndex)
+{
+    const auto& song = history_.current();
+    if (! model::folderedit::isFolder(song, trackIndex))
+        return;
+
+    const int  trackId   = song.tracks[(size_t) trackIndex].id;
+    const bool collapsed = ! song.tracks[(size_t) trackIndex].folderCollapsed;
+    history_.edit(collapsed ? "Collapse folder" : "Expand folder", [trackId, collapsed](model::Song& s)
+    {
+        if (auto* track = model::findTrack(s, trackId))
+            track->folderCollapsed = collapsed;
+    });
+    arrangementView_.setSong(history_.current());
+}
+
+/** Puts a track in the folder above it (see model::folderedit::indent). */
+void MainComponent::indentTrack(int trackIndex)
+{
+    auto trial = history_.current();
+    if (! model::folderedit::indent(trial, trackIndex))
+        return;
+
+    history_.edit("Put track in folder", [trackIndex](model::Song& s) { model::folderedit::indent(s, trackIndex); });
+    arrangementView_.setSong(history_.current());
+    showStatus("In the folder above - click its triangle to collapse it");
+}
+
+/** Takes a track out of its folder, moving it past the folder's last track. */
+void MainComponent::outdentTrack(int trackIndex)
+{
+    auto      trial = history_.current();
+    const int moved = model::folderedit::outdent(trial, trackIndex);
+    if (moved < 0)
+        return;
+
+    history_.edit("Take track out of folder", [trackIndex](model::Song& s) { model::folderedit::outdent(s, trackIndex); });
+
+    // The track list's order changed: the selection follows its track, and
+    // everything indexed by it is refreshed.
+    int selected = selectedTrackIndex_;
+    if (selected == trackIndex)
+        selected = moved;
+    else if (selected > trackIndex && selected <= moved)
+        --selected;
+    selectTrackAndRefreshAll(selected);
 }
 
 /** Puts a track in edit group @p group, or none (0). */
@@ -2110,8 +2191,8 @@ void MainComponent::setTrackMuted(int index, bool muted)
     if (song.tracks[(size_t) index].muted == muted)
         return; // nothing changed, so nothing worth an undo step
 
-    // Its whole edit group with it.
-    const auto members = model::groupedit::memberIndices(song, index);
+    // Its whole edit group with it, and on a folder the tracks in it.
+    const auto members = linkedTracks(index);
     history_.edit(muted ? "Mute track" : "Unmute track", [members, muted](model::Song& s)
     {
         for (const int member : members)
@@ -2141,7 +2222,7 @@ void MainComponent::setTrackSolo(int index, bool solo)
     if (song.tracks[(size_t) index].solo == solo)
         return;
 
-    const auto members = model::groupedit::memberIndices(song, index);
+    const auto members = linkedTracks(index);
     history_.edit(solo ? "Solo track" : "Unsolo track", [members, solo](model::Song& s)
     {
         for (const int member : members)

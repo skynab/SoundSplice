@@ -15,6 +15,7 @@
 #include "EnvelopeGeometry.h"
 #include "SnapTargets.h"
 #include "TimeFormat.h"
+#include "model/Folders.h"
 #include "model/Markers.h"
 #include "model/RazorEdits.h"
 #include "model/Takes.h"
@@ -147,6 +148,9 @@ public:
         it knows what the options do, and the view doesn't. */
     std::function<void(int trackIndex)> onTrackSettingsRequested;
 
+    /** Fired by a click on a folder track's triangle: collapse or expand it. */
+    std::function<void(int trackIndex)> onFolderToggled;
+
     /** Fired when a track's header is alt-dragged: duplicate that track. */
     std::function<void(int trackIndex)> onTrackDuplicateRequested;
     std::function<void(const juce::File& file, double dropBeat, int trackIndex)> onFileDropped;
@@ -167,6 +171,7 @@ public:
     void setSong(const model::Song& song)
     {
         song_ = song;
+        rebuildRows();
 
         // Thumbnails are made here rather than in paint: creating one starts a
         // file scan and allocates, neither of which belongs on a path that
@@ -419,10 +424,13 @@ public:
         // Track lanes + clips.
         for (int i = 0; i < (int) song_.tracks.size(); ++i)
         {
-            const auto& track = song_.tracks[(size_t) i];
-            const float y     = geometry_.rulerHeight + (float) i * geometry_.laneHeight;
+            if (rowOfTrack_[(size_t) i] < 0)
+                continue; // in a collapsed folder
 
-            if (i % 2 == 0)
+            const auto& track = song_.tracks[(size_t) i];
+            const float y     = laneTop(i);
+
+            if (rowOfTrack_[(size_t) i] % 2 == 0)
             {
                 g.setColour(juce::Colours::white.withAlpha(0.03f));
                 g.fillRect(0.0f, y, width, geometry_.laneHeight);
@@ -439,8 +447,9 @@ public:
             // someone renames one — call an audio track "Verse" and nothing
             // would say it was audio any more. This is what makes renaming
             // free.
-            const auto tagArea = juce::Rectangle<float>(10.0f, y + geometry_.laneHeight * 0.5f - 8.0f,
+            const auto tagArea = juce::Rectangle<float>(tagLeft(i), y + geometry_.laneHeight * 0.5f - 8.0f,
                                                         32.0f, 16.0f);
+            paintFolderMarks(g, i, y);
             g.setColour(juce::Colours::white.withAlpha(0.12f));
             g.fillRoundedRectangle(tagArea, 3.0f);
             g.setColour(juce::Colours::white.withAlpha(track.muted ? 0.35f : 0.7f));
@@ -593,7 +602,7 @@ public:
                                      : dragPreviewTrackIndex_;
             if (ghostRow >= 0 && ghostRow < (int) song_.tracks.size())
             {
-                const float ghostY = geometry_.rulerHeight + (float) ghostRow * geometry_.laneHeight;
+                const float ghostY = laneTop(ghostRow);
                 const float cx     = geometry_.xForBeat(dragPreviewStart_);
                 const float cw     = juce::jmax(2.0f, (float) dragPreviewLength_ * ppb);
                 const juce::Rectangle<float> r(cx, ghostY + 3.0f, cw, geometry_.laneHeight - 6.0f);
@@ -789,7 +798,7 @@ private:
         if (clip.type != model::ClipType::Audio)
             return 0;
 
-        const float top = geometry_.rulerHeight + (float) trackIndex * geometry_.laneHeight + 3.0f;
+        const float top = laneTop(trackIndex) + 3.0f;
         if (point.y < top || point.y > top + kFadeHandleSize + 2.0f)
             return 0;
 
@@ -878,20 +887,93 @@ private:
         that doesn't work. */
     juce::Rectangle<float> muteButtonBounds(int trackIndex) const
     {
-        const float top = geometry_.rulerHeight + geometry_.laneHeight * (float) trackIndex;
+        const float top = laneTop(trackIndex);
         return juce::Rectangle<float>(geometry_.gutterWidth - 2.0f * kMuteSize - 10.0f,
                                       top + (geometry_.laneHeight - kMuteSize) * 0.5f,
                                       kMuteSize, kMuteSize);
     }
 
-    /** The lane a y-coordinate falls in, or -1 above or below them all. */
+    /** The track whose lane a y-coordinate falls in, or -1 above or below
+        them all. */
     int trackAtY(float y) const
     {
         if (y < geometry_.rulerHeight)
             return -1;
 
-        const int index = (int) ((y - geometry_.rulerHeight) / geometry_.laneHeight);
-        return index >= 0 && index < (int) song_.tracks.size() ? index : -1;
+        const int row = (int) ((y - geometry_.rulerHeight) / geometry_.laneHeight);
+        return row >= 0 && row < (int) trackOfRow_.size() ? trackOfRow_[(size_t) row] : -1;
+    }
+
+    // Folder tracks (model/Folders.h): which track each lane shows, and
+    // which lane each track is on (-1 inside a collapsed folder).
+    std::vector<int> trackOfRow_;
+    std::vector<int> rowOfTrack_;
+
+    void rebuildRows()
+    {
+        trackOfRow_ = model::folderedit::visibleTrackIndices(song_);
+        rowOfTrack_.assign(song_.tracks.size(), -1);
+        for (int row = 0; row < (int) trackOfRow_.size(); ++row)
+            rowOfTrack_[(size_t) trackOfRow_[(size_t) row]] = row;
+    }
+
+    /** The top of track @p trackIndex's lane, or far off the top for one
+        inside a collapsed folder, so nothing there is ever hit. */
+    float laneTop(int trackIndex) const
+    {
+        if (trackIndex < 0 || trackIndex >= (int) rowOfTrack_.size() || rowOfTrack_[(size_t) trackIndex] < 0)
+            return -1.0e6f;
+        return geometry_.rulerHeight + (float) rowOfTrack_[(size_t) trackIndex] * geometry_.laneHeight;
+    }
+
+    static constexpr float kFolderIndent = 12.0f;
+
+    /** Where a track's type tag starts: indented in a folder, and past the
+        triangle on a folder. */
+    float tagLeft(int trackIndex) const
+    {
+        if (model::folderedit::parentIndexOf(song_, trackIndex) >= 0)
+            return 10.0f + kFolderIndent;
+        return model::folderedit::isFolder(song_, trackIndex) ? 20.0f : 10.0f;
+    }
+
+    /** A folder's collapse triangle, or nothing for a track that isn't one. */
+    juce::Rectangle<float> folderToggleBounds(int trackIndex) const
+    {
+        if (! model::folderedit::isFolder(song_, trackIndex))
+            return {};
+        return { 5.0f, laneTop(trackIndex) + geometry_.laneHeight * 0.5f - 7.0f, 14.0f, 14.0f };
+    }
+
+    int folderToggleAt(juce::Point<float> point) const
+    {
+        for (int i = 0; i < (int) song_.tracks.size(); ++i)
+            if (folderToggleBounds(i).contains(point))
+                return i;
+        return -1;
+    }
+
+    /** A folder's triangle, pointing down when open; a line down the gutter
+        beside the tracks in one. */
+    void paintFolderMarks(juce::Graphics& g, int trackIndex, float y)
+    {
+        if (const auto toggle = folderToggleBounds(trackIndex); ! toggle.isEmpty())
+        {
+            const bool collapsed = song_.tracks[(size_t) trackIndex].folderCollapsed;
+            const auto c         = toggle.getCentre();
+            juce::Path triangle;
+            if (collapsed)
+                triangle.addTriangle(c.x - 3.0f, c.y - 5.0f, c.x - 3.0f, c.y + 5.0f, c.x + 4.0f, c.y);
+            else
+                triangle.addTriangle(c.x - 5.0f, c.y - 3.0f, c.x + 5.0f, c.y - 3.0f, c.x, c.y + 4.0f);
+            g.setColour(juce::Colours::white.withAlpha(0.75f));
+            g.fillPath(triangle);
+        }
+        else if (model::folderedit::parentIndexOf(song_, trackIndex) >= 0)
+        {
+            g.setColour(juce::Colours::white.withAlpha(0.18f));
+            g.fillRect(12.0f, y, 2.0f, geometry_.laneHeight);
+        }
     }
 
     /** True for a point on the ruler strip, right of the gutter. The gutter's
@@ -1090,6 +1172,13 @@ private:
         // where no clip can be, but a click there would otherwise fall
         // through to the seek at the bottom of this function and move the
         // playhead every time someone muted a track.
+        if (const int folder = folderToggleAt(e.position); folder >= 0)
+        {
+            if (onFolderToggled)
+                onFolderToggled(folder);
+            return;
+        }
+
         if (const int muteTrack = muteButtonAt(e.position); muteTrack >= 0)
         {
             if (onTrackMuteToggled)
@@ -1871,8 +1960,7 @@ private:
     {
         if (y < geometry_.rulerHeight)
             return -1;
-        const int idx = (int) ((y - geometry_.rulerHeight) / geometry_.laneHeight);
-        return (idx >= 0 && idx < (int) song_.tracks.size()) ? idx : -1;
+        return trackAtY(y);
     }
 
     /** Finds the clip under @p pos, if any (searching by lane, then by clip rect). */
@@ -1880,7 +1968,7 @@ private:
     {
         for (int i = 0; i < (int) song_.tracks.size(); ++i)
         {
-            const float y = geometry_.rulerHeight + (float) i * geometry_.laneHeight;
+            const float y = laneTop(i);
             if (pos.y < y || pos.y >= y + geometry_.laneHeight)
                 continue;
 
@@ -2042,7 +2130,7 @@ private:
 
     void updateContentSize()
     {
-        const int numTracks = (int) song_.tracks.size();
+        const int numTracks = (int) trackOfRow_.size();
         setSize((int) std::ceil(geometry_.contentWidth(totalBeats())),
                 (int) std::ceil(geometry_.contentHeight(numTracks)));
     }
@@ -2284,7 +2372,7 @@ private:
     /** A clip's box on its lane, as the clip loop in paint draws it. */
     juce::Rectangle<float> clipBounds(int trackIndex, const model::Clip& clip) const
     {
-        const float y = geometry_.rulerHeight + (float) trackIndex * geometry_.laneHeight;
+        const float y = laneTop(trackIndex);
         return { geometry_.xForBeat(clip.startBeats), y + 3.0f,
                  juce::jmax(2.0f, (float) clip.lengthBeats * geometry_.pixelsPerBeat()), geometry_.laneHeight - 6.0f };
     }
@@ -2392,11 +2480,18 @@ private:
         return end > 0.0 ? end : totalBeats();
     }
 
-    /** The lane index for @p y, running past the last lane rather than
-        stopping, so a drag below the tracks keeps the bottom one selected. */
+    /** The track for @p y, running past the last lane rather than
+        stopping (and before the first, below 0), so a drag below the tracks
+        keeps the bottom one selected. */
     int trackAtYUnclamped(float y) const
     {
-        return (int) std::floor((y - geometry_.rulerHeight) / geometry_.laneHeight);
+        const int row  = (int) std::floor((y - geometry_.rulerHeight) / geometry_.laneHeight);
+        const int rows = (int) trackOfRow_.size();
+        if (row < 0 || rows == 0)
+            return row;
+        if (row < rows)
+            return trackOfRow_[(size_t) row];
+        return trackOfRow_.back() + (row - rows + 1);
     }
 
     void beginTimeSelection(const juce::MouseEvent& e)
@@ -2443,8 +2538,8 @@ private:
 
             const float left  = geometry_.xForBeat(area.startBeats);
             const float right = geometry_.xForBeat(area.endBeats);
-            const auto  box   = juce::Rectangle<float>(left, geometry_.rulerHeight + (float) lane * geometry_.laneHeight,
-                                                       juce::jmax(1.0f, right - left), geometry_.laneHeight);
+            const auto  box   = juce::Rectangle<float>(left, laneTop(lane), juce::jmax(1.0f, right - left),
+                                                       geometry_.laneHeight);
             if (! ghost)
             {
                 g.setColour(juce::Colour(0xffff8c42).withAlpha(0.28f));
@@ -2477,10 +2572,10 @@ private:
 
         for (int i = 0; i < (int) song_.tracks.size(); ++i)
         {
-            if (! timeSelection_.includes(song_.tracks[(size_t) i].id))
+            if (! timeSelection_.includes(song_.tracks[(size_t) i].id) || rowOfTrack_[(size_t) i] < 0)
                 continue;
 
-            const float y = geometry_.rulerHeight + (float) i * geometry_.laneHeight;
+            const float y = laneTop(i);
 
             if (right - left >= 1.0f)
             {

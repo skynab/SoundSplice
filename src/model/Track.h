@@ -83,6 +83,12 @@ struct Track
     // have their lined-up clips moved together (see model/TrackGroups.h).
     int               editGroup = 0;
 
+    // The folder track this one is in, by id, or 0 for none; and, on a
+    // folder, whether its tracks are hidden. Organization only: see
+    // model/Folders.h for when a track counts as in a folder.
+    int               folderParentId  = 0;
+    bool              folderCollapsed = false;
+
     std::vector<Clip> clips;
 
     // The session grid's column for this track, indexed by scene. Kept the

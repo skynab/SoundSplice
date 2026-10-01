@@ -693,6 +693,8 @@ MainComponent::MainComponent()
         showTrackSettingsMenu(trackIndex);
     };
 
+    arrangementView_.onFolderToggled = [this](int trackIndex) { toggleFolder(trackIndex); };
+
     arrangementView_.onTrackDuplicateRequested = [this](int trackIndex)
     {
         duplicateTrackAt(trackIndex);

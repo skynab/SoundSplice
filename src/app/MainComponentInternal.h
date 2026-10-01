@@ -26,6 +26,7 @@
 #include "engine/OfflineRenderer.h"
 #include "engine/SequenceAudioFormat.h"
 #include "model/RazorEdits.h"
+#include "model/Folders.h"
 #include "model/TrackGroups.h"
 #include "model/TrackChannels.h"
 #include "model/MasteringPresets.h"
@@ -51,6 +52,8 @@ inline constexpr int kFirstLayoutMenuId = 40;
     fixed items. */
 inline constexpr int kFirstColourMenuId = 200;
 inline constexpr int kFirstEditGroupMenuId = 300; // None, then each group
+inline constexpr int kIndentTrackMenuId    = 3;
+inline constexpr int kOutdentTrackMenuId   = 4;
 
 /** How close to the edge the playhead gets before the keys grid pages. Small,
     so almost the whole width is travelled before each jump. */

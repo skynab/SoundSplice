@@ -894,3 +894,38 @@ TEST_CASE("Razor areas: Ctrl+Shift-drags add them, a drag inside moves them, a c
     sendMouseUp(*view, dragEventAt(*view, away, away));
     REQUIRE(latest.empty());
 }
+
+TEST_CASE("A collapsed folder hides its tracks' lanes, and its triangle toggles it", "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = std::make_unique<ArrangementView>();
+    view->setVisible(true);
+    view->setSize(900, 500);
+
+    auto song = songWithTracks(4);
+    model::folderedit::indent(song, 1);
+    model::folderedit::indent(song, 2);
+    song.tracks[0].folderCollapsed = true;
+    view->setSong(song);
+
+    const float top  = view->rulerHeightForTesting();
+    const float lane = view->laneHeightForTesting();
+
+    // Lanes: the folder, then track 3; its two tracks are out of sight.
+    REQUIRE(view->trackAtYForTesting(top + lane * 0.5f) == 0);
+    REQUIRE(view->trackAtYForTesting(top + lane * 1.5f) == 3);
+    REQUIRE(view->trackAtYForTesting(top + lane * 2.5f) == -1);
+    REQUIRE(view->getHeight() == (int) std::ceil(top + lane * 2.0f));
+
+    int toggled = -1;
+    view->onFolderToggled = [&](int track) { toggled = track; };
+    const juce::Point<float> triangle { 12.0f, top + lane * 0.5f };
+    sendMouseDown(*view, dragEventAt(*view, triangle, triangle));
+    sendMouseUp(*view, dragEventAt(*view, triangle, triangle));
+    REQUIRE(toggled == 0);
+
+    // Open, every lane is back.
+    song.tracks[0].folderCollapsed = false;
+    view->setSong(song);
+    REQUIRE(view->trackAtYForTesting(top + lane * 2.5f) == 2);
+}

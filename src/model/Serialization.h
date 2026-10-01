@@ -415,6 +415,10 @@ inline std::string serialize(const Song& song)
         if (track.editGroup > 0)
             out << "TRACKGROUP " << track.editGroup << "\n";
 
+        // Only for a track in a folder, or a collapsed one.
+        if (track.folderParentId != 0 || track.folderCollapsed)
+            out << "TRACKFOLDER " << track.folderParentId << " " << (track.folderCollapsed ? 1 : 0) << "\n";
+
         // Only non-empty lanes are written, so an unautomated track costs one
         // "TAUTOS 0" line rather than one empty record per automatable
         // parameter.
@@ -938,6 +942,15 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
         if (readTagged("TRACKGROUP", rest))
             track.editGroup = std::max(0, std::atoi(rest.c_str()));
+
+        if (readTagged("TRACKFOLDER", rest))
+        {
+            std::istringstream fields(rest);
+            int parentId = 0, collapsed = 0;
+            fields >> parentId >> collapsed;
+            track.folderParentId  = parentId;
+            track.folderCollapsed = collapsed != 0;
+        }
 
         if (readTagged("TAUTOS", rest))
         {

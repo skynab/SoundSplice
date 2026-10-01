@@ -610,6 +610,10 @@ private:
     void                   combineOverlappingClipsIntoTakes(int trackIndex, int clipIndex);
     void                   swipeCompTake(int trackIndex, int take, double fromBeats, double toBeats);
     void                   setTrackEditGroup(int trackIndex, int group);
+    void                   toggleFolder(int trackIndex);
+    void                   indentTrack(int trackIndex);
+    void                   outdentTrack(int trackIndex);
+    std::vector<int>       linkedTracks(int trackIndex) const;
     void                   copyNotes();
     void                   pasteNotes();
     void                   copyClip();
