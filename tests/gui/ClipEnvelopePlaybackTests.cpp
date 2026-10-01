@@ -374,3 +374,49 @@ TEST_CASE("A trimmed clip starting mid-block plays nothing of its file before it
     REQUIRE(out.getSample(0, 23998) == 0.0f);
     REQUIRE(out.getSample(0, 24002) == 1.0f);
 }
+
+TEST_CASE("An audio clip after a tempo change plays where the map puts it, at its own speed",
+          "[gui][envelope][tempo]")
+{
+    // 120 bpm, then 60 from beat 2: beat 4 is 1 s + 2 s = sample 144000, and
+    // a one-beat clip there lasts a second.
+    TempoMap map;
+    map.setSampleRate(kRate);
+    map.setTempoChanges({ { 0.0, 120.0 }, { 2.0, 60.0 } });
+
+    AudioFilePlayerNode player;
+    player.prepare(kRate, kBlock);
+    AudioClipSlot slot;
+    slot.clipData    = fullScale(4.0);
+    slot.startBeats  = 4.0;
+    slot.lengthBeats = 1.0;
+    auto* clips = new AudioFilePlayerNode::ClipList();
+    clips->push_back(slot);
+    player.submitClips(clips);
+
+    constexpr int blocks = 400;
+    juce::AudioBuffer<float> out(2, kBlock * blocks);
+    out.clear();
+    for (int b = 0; b < blocks; ++b)
+    {
+        const int      at = b * kBlock;
+        ProcessContext context;
+        context.sampleRate                = kRate;
+        context.numSamples                = kBlock;
+        context.transport.playing         = true;
+        context.transport.tempoMap        = &map;
+        context.transport.playheadSamples = at;
+        context.transport.ppqPosition     = map.ppqFromSamples(at);
+        context.transport.ppqAtBlockEnd   = map.ppqFromSamples(at + kBlock);
+        context.transport.bpm             = map.tempoAtBeat(context.transport.ppqPosition);
+
+        juce::AudioBuffer<float> view(out.getArrayOfWritePointers(), 2, at, kBlock);
+        juce::MidiBuffer         midi;
+        player.process(view, midi, context);
+    }
+
+    REQUIRE(out.getSample(0, 143998) == 0.0f);
+    REQUIRE(out.getSample(0, 144002) == 1.0f);
+    REQUIRE(out.getSample(0, 191998) == 1.0f);
+    REQUIRE(out.getSample(0, 192002) == 0.0f);
+}

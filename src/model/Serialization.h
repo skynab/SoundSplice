@@ -390,6 +390,11 @@ inline std::string serialize(const Song& song)
             << detail::num(marker.lengthBeats) << " " << name << "\n";
     }
 
+    // Only the changes after the start: BPM already carries beat 0.
+    for (const auto& change : song.tempoChanges)
+        out << "TEMPOAT " << detail::num(change.beat) << " " << detail::num(change.bpm) << " "
+            << (change.ramp ? 1 : 0) << "\n";
+
     out << "SCENES " << song.scenes.size() << "\n";
     for (const auto& scene : song.scenes)
         out << "SCENE " << scene.name << "\n"; // name is rest-of-line, so it may contain spaces
@@ -896,6 +901,22 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             song.markers.push_back(std::move(marker));
         }
     }
+
+    while (readTagged("TEMPOAT", rest))
+    {
+        std::istringstream   fields(rest);
+        engine::TempoChange change;
+        int                 ramp = 0;
+        fields >> change.beat >> change.bpm >> ramp;
+        change.ramp = ramp != 0;
+
+        // Dropped rather than trusted: a tempo that isn't positive divides by
+        // zero deep inside playback, and beat 0 is BPM's.
+        if (change.bpm > 0.0 && change.beat > 0.0)
+            song.tempoChanges.push_back(change);
+    }
+    std::sort(song.tempoChanges.begin(), song.tempoChanges.end(),
+              [](const engine::TempoChange& a, const engine::TempoChange& b) { return a.beat < b.beat; });
 
     if (readTagged("SCENES", rest))
     {

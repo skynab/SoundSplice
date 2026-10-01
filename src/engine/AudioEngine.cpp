@@ -74,6 +74,13 @@ AudioEngine::~AudioEngine()
 
     deviceManager_.removeAudioCallback(this);
     deviceManager_.closeAudioDevice();
+
+    // Tempo maps still on their way in or out.
+    TempoMap* map = nullptr;
+    while (tempoInbox_.pop(map))
+        delete map;
+    while (tempoReclaim_.pop(map))
+        delete map;
 }
 
 bool AudioEngine::reopenAudioInput()
@@ -640,6 +647,25 @@ void AudioEngine::setTrackRouting(int index, bool isBus, int outputBus, const st
     track.outputBus.store(outputBus, std::memory_order_relaxed);
 }
 
+void AudioEngine::setTempoChanges(const std::vector<TempoChange>& changes)
+{
+    auto* map = new TempoMap();
+    map->setSampleRate(transport_.tempoMap().sampleRate());
+    map->setTempoChanges(changes);
+    if (! tempoInbox_.push(map))
+        delete map; // the queue is full: the next edit carries the same map
+}
+
+void AudioEngine::installIncomingTempoMap() noexcept
+{
+    TempoMap* incoming = nullptr;
+    while (tempoInbox_.pop(incoming))
+    {
+        transport_.tempoMap().adopt(*incoming);
+        (void) tempoReclaim_.push(incoming); // a full queue leaks it until the destructor
+    }
+}
+
 void AudioEngine::setTrackSidechains(int index, const std::vector<std::pair<int, int>>& slotAndSource)
 {
     if (index < 0 || index >= kMaxTracks)
@@ -954,10 +980,17 @@ void AudioEngine::pump() noexcept
 
     filePlayer_.collectRetiredClips();
     audition_.collectRetired();
+
+    TempoMap* retiredTempo = nullptr;
+    while (tempoReclaim_.pop(retiredTempo))
+        delete retiredTempo;
 }
 
 void AudioEngine::drainCommandQueue() noexcept
 {
+    // The tempo map first, so a SetTempo queued after it edits the new one.
+    installIncomingTempoMap();
+
     EngineCommand command;
     while (commandQueue_.pop(command))
     {

@@ -30,6 +30,7 @@
 #include "model/RazorEdits.h"
 #include "model/Folders.h"
 #include "model/Routing.h"
+#include "model/TempoChanges.h"
 #include "model/TrackGroups.h"
 #include "model/TrackChannels.h"
 #include "model/MasteringPresets.h"

@@ -4,9 +4,17 @@
 
 namespace soundsplice::engine
 {
+class TempoMap;
+
 /** An immutable snapshot of the transport at the start of an audio block. */
 struct TransportSnapshot
 {
+    /** The tempo map in force, for anything placed in beats but played in
+        real time - an audio clip - to find where it is in samples. Null in
+        contexts built by hand (tests), which fall back to the block's own
+        tempo. Valid for the block only. */
+    const TempoMap* tempoMap = nullptr;
+
     bool    playing            = false;
     int64_t playheadSamples    = 0;
     double  bpm                = 120.0;

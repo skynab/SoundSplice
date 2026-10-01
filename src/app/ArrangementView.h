@@ -121,6 +121,14 @@ public:
         new, with where it should now start. */
     std::function<void(int markerId, double newStartBeats)> onMarkerMoved;
 
+    /** Tempo changes, along the bottom of the ruler: right-click to add one
+        (or edit, ramp or remove the one there), drag one to move it. The
+        view only says what was asked; the owner makes the edit. */
+    std::function<void(double beat)>                  onTempoChangeRequested;
+    std::function<void(double beat)>                  onTempoChangeRemoved;
+    std::function<void(double beat)>                  onTempoRampToggled;
+    std::function<void(double fromBeat, double toBeat)> onTempoChangeMoved;
+
     /** Fired when a clip's volume curve is edited (with curves shown): a
         point added, dragged or removed, with the curve as it should now be. */
     std::function<void(int trackIndex, int clipIndex, const engine::ClipEnvelope& envelope)> onClipEnvelopeChanged;
@@ -589,6 +597,7 @@ public:
 
         paintTimeSelection(g);
         paintRazorAreas(g);
+        paintTempoChanges(g, height);
 
         // The dragged clip's ghost, drawn once here rather than inline in
         // the loop above: a resize always stays on dragTrackIndex_'s lane, a
@@ -1203,8 +1212,22 @@ private:
         {
             if (e.mods.isPopupMenu())
             {
-                if (const int marker = markerAt(e.position); marker >= 0 && onMarkerMenuRequested)
-                    onMarkerMenuRequested(marker);
+                if (const int marker = markerAt(e.position); marker >= 0)
+                {
+                    if (onMarkerMenuRequested)
+                        onMarkerMenuRequested(marker);
+                }
+                else
+                    showTempoMenu(e.position.x);
+                return;
+            }
+
+            // A tempo change's flag is picked up rather than scrubbed through.
+            if (const int change = tempoChangeAt(e.position); change >= 0)
+            {
+                draggingTempo_     = change;
+                tempoDragFromBeat_ = song_.tempoChanges[(size_t) change].beat;
+                tempoDragToBeat_   = tempoDragFromBeat_;
                 return;
             }
 
@@ -1431,6 +1454,16 @@ private:
             return;
         }
 
+        if (draggingTempo_ >= 0)
+        {
+            // Snapped to the bar: a tempo change a fraction of a beat off the
+            // bar line reads as a mistake even when it's meant.
+            const double qpb = quartersPerBar();
+            tempoDragToBeat_ = std::max(qpb, std::round(geometry_.beatForX(e.position.x) / qpb) * qpb);
+            repaint();
+            return;
+        }
+
         if (markerDragId_ >= 0)
         {
             // A few pixels before it counts as a move, so a click that
@@ -1648,6 +1681,16 @@ private:
             // A click on an existing point that didn't move it changes nothing.
             if (onClipEnvelopeChanged && envelopePreview_ != envelopeOriginal_)
                 onClipEnvelopeChanged(envelopeTrack_, envelopeClip_, envelopePreview_);
+            return;
+        }
+
+        if (draggingTempo_ >= 0)
+        {
+            const double from = tempoDragFromBeat_, to = tempoDragToBeat_;
+            draggingTempo_ = -1;
+            repaint();
+            if (std::abs(to - from) > 1.0e-9 && onTempoChangeMoved)
+                onTempoChangeMoved(from, to);
             return;
         }
 
@@ -2516,6 +2559,94 @@ private:
         if (onTimeSelectionChanged)
             onTimeSelectionChanged(timeSelection_);
     }
+
+    /** Each tempo change after the start: a flag along the bottom of the
+        ruler with its tempo, a faint line down through the lanes, and for a
+        ramp, a slope back to the change before, the span it slides across. */
+    void paintTempoChanges(juce::Graphics& g, float height)
+    {
+        const float top = geometry_.rulerHeight * 0.55f;
+        for (int i = 0; i < (int) song_.tempoChanges.size(); ++i)
+        {
+            const auto&  change = song_.tempoChanges[(size_t) i];
+            const double beat   = i == draggingTempo_ ? tempoDragToBeat_ : change.beat;
+            const float  x      = geometry_.xForBeat(beat);
+            if (x < geometry_.gutterWidth - 2.0f || x > (float) getWidth())
+                continue;
+
+            g.setColour(juce::Colours::orange.withAlpha(0.22f));
+            g.fillRect(x, geometry_.rulerHeight, 1.0f, height - geometry_.rulerHeight);
+            g.setColour(juce::Colours::orange.withAlpha(0.9f));
+            g.fillRect(x, top, 2.0f, geometry_.rulerHeight - top);
+
+            if (change.ramp)
+            {
+                const double previous = i > 0 ? song_.tempoChanges[(size_t) i - 1].beat : 0.0;
+                g.setColour(juce::Colours::orange.withAlpha(0.55f));
+                g.drawLine(geometry_.xForBeat(previous), geometry_.rulerHeight - 1.0f, x, top, 1.5f);
+            }
+
+            g.setColour(juce::Colours::orange.withAlpha(0.95f));
+            g.setFont(juce::FontOptions(10.0f));
+            g.drawText(juce::String(change.bpm, change.bpm == std::round(change.bpm) ? 0 : 1),
+                       (int) x + 4, (int) top - 1, 48, (int) (geometry_.rulerHeight - top) + 1,
+                       juce::Justification::centredLeft);
+        }
+    }
+
+    /** The tempo change whose flag is under @p point on the ruler, or -1.
+        Generous, since the flag is two pixels wide. */
+    int tempoChangeAt(juce::Point<float> point) const
+    {
+        if (point.y < geometry_.rulerHeight * 0.5f || point.y >= geometry_.rulerHeight)
+            return -1;
+        for (int i = 0; i < (int) song_.tempoChanges.size(); ++i)
+            if (std::abs(geometry_.xForBeat(song_.tempoChanges[(size_t) i].beat) - point.x) <= 5.0f)
+                return i;
+        return -1;
+    }
+
+    /** Add a tempo change at the bar clicked, or edit, ramp or remove the
+        one there. */
+    void showTempoMenu(float x)
+    {
+        int existing = -1;
+        for (int i = 0; i < (int) song_.tempoChanges.size(); ++i)
+            if (std::abs(geometry_.xForBeat(song_.tempoChanges[(size_t) i].beat) - x) <= 5.0f)
+                existing = i;
+
+        const double qpb     = quartersPerBar();
+        const double barBeat = std::max(qpb, std::round(geometry_.beatForX(x) / qpb) * qpb);
+
+        juce::PopupMenu menu;
+        if (existing >= 0)
+        {
+            menu.addItem(1, "Edit Tempo Change...");
+            menu.addItem(3, "Slide to This Tempo (Ramp)", true, song_.tempoChanges[(size_t) existing].ramp);
+            menu.addSeparator();
+            menu.addItem(2, "Remove Tempo Change");
+        }
+        else
+            menu.addItem(1, "Add Tempo Change at Bar " + juce::String((int) std::round(barBeat / qpb) + 1) + "...");
+
+        const double beat = existing >= 0 ? song_.tempoChanges[(size_t) existing].beat : barBeat;
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+                           [self = juce::Component::SafePointer<ArrangementView>(this), beat](int result)
+        {
+            if (self == nullptr)
+                return;
+            if (result == 1 && self->onTempoChangeRequested)
+                self->onTempoChangeRequested(beat);
+            else if (result == 2 && self->onTempoChangeRemoved)
+                self->onTempoChangeRemoved(beat);
+            else if (result == 3 && self->onTempoRampToggled)
+                self->onTempoRampToggled(beat);
+        });
+    }
+
+    int    draggingTempo_     = -1;
+    double tempoDragFromBeat_ = 0.0;
+    double tempoDragToBeat_   = 0.0;
 
     void changeRazorAreas(const model::RazorAreas& areas)
     {

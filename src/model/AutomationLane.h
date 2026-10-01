@@ -149,6 +149,17 @@ public:
             point.beat *= factor;
     }
 
+    /** Moves every point's beat through @p move, which must never reverse
+        two beats' order, so the lane stays sorted. How a lane on an audio
+        track follows its audio through a change to the tempo map - see
+        model::tempoedit::retimeAudio. */
+    template <typename Move>
+    void mapBeats(Move move)
+    {
+        for (auto& point : points_)
+            point.beat = move(point.beat);
+    }
+
     bool operator==(const AutomationLane&) const = default;
 
 private:

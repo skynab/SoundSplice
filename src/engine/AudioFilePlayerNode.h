@@ -7,6 +7,7 @@
 #include "engine/ClipStream.h"
 #include "engine/Interpolation.h"
 #include "engine/Node.h"
+#include "engine/TempoMap.h"
 #include "rt/SpscRingBuffer.h"
 
 namespace soundsplice::engine
@@ -123,16 +124,30 @@ public:
             if (slot.clipData == nullptr)
                 continue;
 
-            const double startedBeatsAgo = blockStartBeats - slot.startBeats;
-            auto*        effects         = slot.effects.get();
+            // Where the clip is, in samples from the block's start: it's
+            // placed in beats but plays in real time, so its start and end are
+            // found through the tempo map - a tempo change before or during it
+            // moves where it is, not how fast it plays. Without a map (a
+            // hand-built context), this block's own tempo stands in.
+            double startedSamplesAgo = 0.0, windowSamples = 0.0;
+            if (const auto* map = context.transport.tempoMap)
+            {
+                const double startSample = map->sampleOffsetForPpq(slot.startBeats);
+                startedSamplesAgo = (double) context.transport.playheadSamples - startSample;
+                windowSamples     = map->sampleOffsetForPpq(slot.startBeats + slot.lengthBeats) - startSample;
+            }
+            else
+            {
+                startedSamplesAgo = (blockStartBeats - slot.startBeats) * samplesPerBeat;
+                windowSamples     = slot.lengthBeats * samplesPerBeat;
+            }
+
+            auto* effects = slot.effects.get();
 
             if (effects == nullptr || effects->empty() || numSamples > clipScratch_.getNumSamples())
             {
-                // Window tested in beats, where the clip is actually placed;
-                // the offset into the file is then a real-time distance in
-                // samples.
-                if (blockEndBeats > slot.startBeats && startedBeatsAgo < slot.lengthBeats)
-                    renderSlot(slot, startedBeatsAgo * samplesPerBeat, samplesPerBeat, buffer, context);
+                if (startedSamplesAgo + numSamples > 0.0 && startedSamplesAgo < windowSamples)
+                    renderSlot(slot, startedSamplesAgo, windowSamples, buffer, context);
                 continue;
             }
 
@@ -141,11 +156,11 @@ public:
             // clip is; and the chain keeps running for a while after the
             // clip ends, so a reverb or echo rings out rather than stopping
             // dead at the clip's edge.
-            const double latencyBeats = effects->latencySamples() / samplesPerBeat;
-            const double tailBeats    = kClipEffectTailSeconds * deviceSampleRate_ / samplesPerBeat;
-            const double readBeatsAgo = startedBeatsAgo + latencyBeats;
-            const bool   reading      = blockEndBeats + latencyBeats > slot.startBeats && readBeatsAgo < slot.lengthBeats;
-            const bool   ringing      = readBeatsAgo >= slot.lengthBeats && startedBeatsAgo < slot.lengthBeats + tailBeats;
+            const double latency  = (double) effects->latencySamples();
+            const double tail     = kClipEffectTailSeconds * deviceSampleRate_;
+            const double readAgo  = startedSamplesAgo + latency;
+            const bool   reading  = readAgo + numSamples > 0.0 && readAgo < windowSamples;
+            const bool   ringing  = readAgo >= windowSamples && startedSamplesAgo < windowSamples + tail;
             if (! reading && ! ringing)
                 continue;
 
@@ -154,7 +169,7 @@ public:
             juce::AudioBuffer<float> clipAudio(clipScratch_.getArrayOfWritePointers(), channels, numSamples);
             clipAudio.clear();
             if (reading)
-                renderSlot(slot, readBeatsAgo * samplesPerBeat, samplesPerBeat, clipAudio, context);
+                renderSlot(slot, readAgo, windowSamples, clipAudio, context);
             effects->setBpm(context.transport.bpm);
             effects->process(clipAudio);
             for (int ch = 0; ch < channels; ++ch)
@@ -165,9 +180,10 @@ public:
 private:
     /** Adds @p activeSlot's audio to @p buffer, @p localStart samples into
         its window at the block's start (negative when it starts during the
-        block). Sample-accurate at both ends: nothing before its start or
-        past the end of its window is heard. */
-    void renderSlot(const AudioClipSlot& activeSlot, double localStart, double samplesPerBeat,
+        block), the window being @p windowSamples long. Sample-accurate at
+        both ends: nothing before its start or past the end of its window is
+        heard. */
+    void renderSlot(const AudioClipSlot& activeSlot, double localStart, double windowSamples,
                     juce::AudioBuffer<float>& buffer, const ProcessContext& context) noexcept
     {
         const int   numSamples = context.numSamples;
@@ -194,7 +210,7 @@ private:
         // where the audio does to be heard at all. Worked out from this
         // block's own tempo, the same way the window itself is tested above.
         const double sourceRate       = deviceSampleRate_ * ratio;
-        const double windowSeconds    = activeSlot.lengthBeats * samplesPerBeat / deviceSampleRate_;
+        const double windowSeconds    = windowSamples / deviceSampleRate_;
         const double fileSeconds      = (double) length / sourceRate - activeSlot.sourceOffsetSeconds;
         const double clipSeconds      = juce::jmax(0.0, juce::jmin(windowSeconds, fileSeconds));
         const auto   fades            = fittedFades(activeSlot.fades, clipSeconds);

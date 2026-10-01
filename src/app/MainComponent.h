@@ -622,6 +622,16 @@ private:
     juce::Component::SafePointer<class PluginManagerDialog> pluginManager_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   addBusTrack();
+    double                 tempoAtPlayhead() const;
+    void                   afterTempoEdit();
+    void                   editTempoChangeAt(double beat);
+    void                   removeTempoChangeAt(double beat);
+    void                   toggleTempoRamp(double beat);
+    void                   moveTempoChange(double from, double to);
+
+    // The tempo map last handed to the engine, so it's only sent again when
+    // it has changed.
+    std::vector<engine::TempoChange> pushedTempoMap_;
     void                   chooseTrackOutput(int trackIndex);
     void                   showSendsMenu(int trackIndex);
     void                   setSendLevel(int trackIndex, int send, float levelDb);

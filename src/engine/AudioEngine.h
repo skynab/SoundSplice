@@ -446,6 +446,11 @@ public:
         @c second (at most mixrouting::kMaxKeys). Message thread. */
     void setTrackSidechains(int index, const std::vector<std::pair<int, int>>& slotAndSource);
 
+    /** Replaces the whole tempo map (engine::TempoMap::setTempoChanges):
+        built here on the message thread and installed by the audio thread at
+        the start of its next block, without allocating there. */
+    void setTempoChanges(const std::vector<TempoChange>& changes);
+
     // ---- session view (message thread) ----
     /** Replaces a track's session column. Slot index is the scene. */
     void setTrackSessionSlots(int index, const std::vector<SessionSlotData>& slots);
@@ -866,6 +871,11 @@ private:
     // What a sidechain listens to when its source hasn't rendered this block
     // (it's muted, left out of a stem, or caught in a loop): silence.
     juce::AudioBuffer<float> silentKey_;
+
+    // Tempo maps on their way to the audio thread, and back to be freed.
+    rt::SpscRingBuffer<TempoMap*> tempoInbox_   { 8 };
+    rt::SpscRingBuffer<TempoMap*> tempoReclaim_ { 16 };
+    void installIncomingTempoMap() noexcept;
 
     /** One slot's node: a built-in, or the plugin it names, loaded here on
         the message thread with its saved state (a plugin missing on this

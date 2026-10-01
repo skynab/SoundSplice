@@ -39,8 +39,13 @@ struct Marker
 
 struct Song
 {
-    /** The project tempo. One tempo for the whole song. */
+    /** The tempo at the start of the song; tempoChanges holds any after it
+        (see model/TempoChanges.h, the one place the two are joined). */
     double bpm                = 120.0;
+
+    /** Tempo changes after the start, sorted by beat, each a step or a ramp
+        into its tempo. Empty: one tempo for the whole song. */
+    std::vector<engine::TempoChange> tempoChanges;
     int    timeSigNumerator   = 4;
     int    timeSigDenominator = 4;
 

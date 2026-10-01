@@ -66,20 +66,33 @@ double MainComponent::playheadBeat() const
     return juce::jmax(0.0, uiTempoMap_.ppqFromSamples(engine_.playheadSamples()));
 }
 
-/** Sets the project tempo as one undoable edit. Audio tracks keep their clips
-    and automation at the same time in seconds, while instrument tracks stay
-    on their beats — see model::retimeAudioForTempoChange. */
+/** The tempo the tempo control shows and sets: the starting tempo, or the
+    tempo change in force at the playhead. */
+double MainComponent::tempoAtPlayhead() const
+{
+    const auto&  song = history_.current();
+    const double at   = model::tempoedit::changeInForceAt(song, playheadBeat());
+    const int    i    = model::tempoedit::changeAt(song, at);
+    return i >= 0 ? song.tempoChanges[(size_t) i].bpm : song.bpm;
+}
+
+/** Sets the tempo in force at the playhead - the starting tempo, or the
+    change the playhead is past - as one undoable edit. Audio tracks keep
+    their clips and automation at the same time in seconds, while
+    instrument tracks stay on their beats: see model::tempoedit. */
 void MainComponent::setProjectTempo(double bpm)
 {
-    if (std::abs(history_.current().bpm - bpm) < 1.0e-9)
+    if (std::abs(tempoAtPlayhead() - bpm) < 1.0e-9)
         return;
 
-    history_.edit("Tempo", [bpm](model::Song& s)
-    {
-        model::retimeAudioForTempoChange(s, s.bpm, bpm);
-        s.bpm = bpm;
-    });
+    const double at = model::tempoedit::changeInForceAt(history_.current(), playheadBeat());
+    history_.edit("Tempo", [at, bpm](model::Song& s) { model::tempoedit::setTempo(s, at, bpm); });
+    afterTempoEdit();
+}
 
+/** Everything that follows a change to the tempo map. */
+void MainComponent::afterTempoEdit()
+{
     pushTempoMap();
 
     // Audio clips' beat positions just changed, so the engine's windows and
@@ -89,14 +102,73 @@ void MainComponent::setProjectTempo(double bpm)
     refreshAutomationPaneForSelected();
 }
 
-/** Hands the project tempo to the engine and the UI's own map, and refreshes
-    everything that depends on where beats fall. */
+/** Adds or edits the tempo change at @p beat, asking for the tempo. */
+void MainComponent::editTempoChangeAt(double beat)
+{
+    const auto& song     = history_.current();
+    const int   existing = model::tempoedit::changeAt(song, beat);
+    const double current = existing >= 0 ? song.tempoChanges[(size_t) existing].bpm
+                                         : model::tempoedit::tempoAt(song, beat);
+
+    auto* window = new juce::AlertWindow(existing >= 0 ? "Edit Tempo Change" : "Add Tempo Change",
+                                         "Bar " + juce::String((int) std::round(beat / beatsPerBar()) + 1),
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("bpm", juce::String(current, 2), "Tempo (BPM):");
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, beat](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double bpm = window->getTextEditorContents("bpm").getDoubleValue();
+            if (bpm < 10.0 || bpm > 999.0)
+            {
+                self->showError("A tempo between 10 and 999 BPM, please");
+                return;
+            }
+            self->history_.edit("Tempo change", [beat, bpm](model::Song& s) { model::tempoedit::setTempo(s, beat, bpm); });
+            self->afterTempoEdit();
+        }));
+}
+
+void MainComponent::removeTempoChangeAt(double beat)
+{
+    history_.edit("Remove tempo change", [beat](model::Song& s) { model::tempoedit::removeChange(s, beat); });
+    afterTempoEdit();
+}
+
+void MainComponent::toggleTempoRamp(double beat)
+{
+    history_.edit("Tempo ramp", [beat](model::Song& s) { model::tempoedit::toggleRamp(s, beat); });
+    afterTempoEdit();
+}
+
+void MainComponent::moveTempoChange(double from, double to)
+{
+    auto trial = history_.current();
+    if (! model::tempoedit::moveChange(trial, from, to))
+        return;
+    history_.edit("Move tempo change", [from, to](model::Song& s) { model::tempoedit::moveChange(s, from, to); });
+    afterTempoEdit();
+}
+
+/** Hands the tempo map to the engine and the UI's own map when it has
+    changed, and refreshes everything that depends on where beats fall. */
 void MainComponent::pushTempoMap()
 {
     const auto& song = history_.current();
 
-    uiTempoMap_.setTempo(song.bpm);
-    post(Cmd::SetTempo, song.bpm);
+    const auto map = model::tempoedit::mapFor(song);
+    if (map != pushedTempoMap_)
+    {
+        pushedTempoMap_ = map;
+        uiTempoMap_.setTempoChanges(map);
+        engine_.setTempoChanges(map);
+    }
 
     // The loop region is a musical position, so where it lands in samples
     // changed with the tempo.

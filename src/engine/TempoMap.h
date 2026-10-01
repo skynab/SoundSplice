@@ -150,6 +150,22 @@ public:
         rebuild();
     }
 
+    /** Takes @p prepared's tempo changes by swapping storage rather than
+        copying, so a map built on the message thread can be installed by
+        the audio thread without allocating; @p prepared is left holding the
+        old ones, to be freed back on the message thread. Keeps this map's
+        sample rate and time signature. */
+    void adopt(TempoMap& prepared) noexcept
+    {
+        std::swap(changes_, prepared.changes_);
+        std::swap(cumulativeSamples_, prepared.cumulativeSamples_);
+
+        // Built at another rate, its cache is redone here: the same size, so
+        // it reuses the storage it has.
+        if (prepared.sampleRate_ != sampleRate_)
+            rebuild();
+    }
+
     void setTimeSignature(int num, int den) noexcept
     {
         if (num > 0) numerator_ = num;

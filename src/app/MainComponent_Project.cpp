@@ -36,10 +36,7 @@ void MainComponent::createEmptyProject()
     history_.reset(song);
     selectedTrackIndex_ = 0;
     tempoSlider.setValue(song.bpm, juce::dontSendNotification);
-
-    uiTempoMap_.setTempo(song.bpm);
-    post(Cmd::SetTempo, song.bpm);
-    refreshFromModel();
+    refreshFromModel(); // pushes the tempo map
     clipLabel.setText("No clip loaded", juce::dontSendNotification);
 
     // A brand-new project has nothing worth saving yet, so it starts clean —
@@ -367,9 +364,7 @@ void MainComponent::loadSongIntoEditor(const model::Song& song)
     selectedTrackIndex_ = 0;
 
     tempoSlider.setValue(song.bpm, juce::dontSendNotification);
-    uiTempoMap_.setTempo(song.bpm);
-    post(Cmd::SetTempo, song.bpm);
-    refreshFromModel();
+    refreshFromModel(); // pushes the tempo map
 }
 
 /** Where the unsaved document is kept: beside the app's settings rather than

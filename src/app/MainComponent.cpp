@@ -996,6 +996,10 @@ MainComponent::MainComponent()
     arrangementView_.onMarkerMenuRequested   = [this](int markerId) { showMarkerMenu(markerId); };
     arrangementView_.onMarkerRenameRequested = [this](int markerId) { renameMarkerPrompt(markerId); };
     arrangementView_.onMarkerMoved = [this](int markerId, double startBeats) { moveMarkerTo(markerId, startBeats); };
+    arrangementView_.onTempoChangeRequested = [this](double beat) { editTempoChangeAt(beat); };
+    arrangementView_.onTempoChangeRemoved   = [this](double beat) { removeTempoChangeAt(beat); };
+    arrangementView_.onTempoRampToggled     = [this](double beat) { toggleTempoRamp(beat); };
+    arrangementView_.onTempoChangeMoved     = [this](double from, double to) { moveTempoChange(from, to); };
     arrangementView_.onClipEnvelopeChanged = [this](int trackIndex, int clipIndex, const engine::ClipEnvelope& envelope)
     {
         setClipEnvelope(trackIndex, clipIndex, envelope);
@@ -1139,6 +1143,9 @@ void MainComponent::refreshFromModel()
     // so both sat at 4/4 no matter what the document said.
     const auto& song = history_.current();
     uiTempoMap_.setTimeSignature(song.timeSigNumerator, song.timeSigDenominator);
+
+    // And the tempo map, which an undo or redo may have changed.
+    pushTempoMap();
     post(Cmd::SetTimeSignature, (double) song.timeSigNumerator, (double) song.timeSigDenominator);
     updateTimeSignatureControls();
     pianoRoll_.setBeatsPerBar(beatsPerBar());
@@ -1295,7 +1302,7 @@ void MainComponent::timerCallback()
     // dragged, or it would fight the hand that is moving it.
     if (! tempoSlider.isMouseButtonDown())
     {
-        const double bpm = history_.current().bpm;
+        const double bpm = tempoAtPlayhead();
         if (std::abs(tempoSlider.getValue() - bpm) > 1.0e-6)
             tempoSlider.setValue(bpm, juce::dontSendNotification);
     }

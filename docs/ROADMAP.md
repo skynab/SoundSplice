@@ -220,7 +220,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   buses, never in a loop; solo follows the routing and delay compensation counts each bus on the way
   out; `src/model/Routing.h`, `src/engine/MixRouting.h`; the headless bounce tool doesn't route yet) ·
   ✅ **sidechain** (a compressor's or gate's Key button in the effects panel: it listens to another track's
-  output as it leaves its fader, rendered first; `FXKEY`) · ⬜ tempo changes · ⬜ warp
+  output as it leaves its fader, rendered first; `FXKEY`) · 🟡 **tempo changes** (right-click the ruler to add,
+  edit, ramp or remove one, drag its flag to move it; the tempo control edits the tempo in force at the
+  playhead; audio keeps its time and instrument parts their beats; `src/model/TempoChanges.h`; clip editing
+  still measures seconds at one tempo) · ⬜ warp
 
 ### Phase 6 — Audition's "finishing" workflows
 

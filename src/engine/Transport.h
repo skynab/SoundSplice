@@ -62,6 +62,7 @@ public:
         // things that legitimately want a scalar (tempo-synced effects,
         // automation stepping) should be following.
         s.bpm = tempoMap_.tempoAtBeat(s.ppqPosition);
+        s.tempoMap = &tempoMap_;
         return s;
     }
 
