@@ -202,6 +202,18 @@ public:
         device open. Message thread. */
     int reportedRoundTripSamples();
 
+    /** What takes are recorded as, and from which inputs. The input meter
+        follows the same inputs. Message thread, between takes. */
+    void setRecordFormat(const AudioRecorder::Format& format)
+    {
+        recorder_.setFormat(format);
+        meterFirstInput_.store(juce::jmax(0, format.firstInput), std::memory_order_relaxed);
+        meterChannels_.store(juce::jlimit(1, 2, format.channels), std::memory_order_relaxed);
+    }
+
+    /** The device's input channels by name, for choosing which to record. */
+    juce::StringArray inputChannelNames();
+
     /** The loudest input sample on @p channel (0 or 1) since this was last
         asked, as a linear peak, and resets it: what the input meter shows.
         Message thread; the audio thread only raises it. */
@@ -708,6 +720,8 @@ private:
     // taken (and reset) by the UI: see takeInputPeak.
     std::array<std::atomic<float>, 2> inputPeak_ {};
     std::array<std::atomic<bool>, 2>  inputClipped_ {};
+    std::atomic<int>                  meterFirstInput_ { 0 };
+    std::atomic<int>                  meterChannels_ { 2 };
 
     RetroRecorder retro_;
     double        retroSeconds_ = 0.0;

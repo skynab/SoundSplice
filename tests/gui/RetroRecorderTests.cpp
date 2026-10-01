@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <engine/AudioRecorder.h>
 #include <engine/RetroRecorder.h>
 
 #include <vector>
@@ -68,4 +69,49 @@ TEST_CASE("Retroactive recording keeps the latest run, placed where it was playe
     retro.prepare(1000.0, 0.0);
     REQUIRE_FALSE(retro.isOn());
     REQUIRE_FALSE(retro.copyLatestRun(out, start));
+}
+
+TEST_CASE("A take is recorded in the chosen format, from the chosen input", "[gui][recording]")
+{
+    juce::TimeSliceThread thread("Test writer");
+    thread.startThread();
+
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getNonexistentChildFile("SoundSpliceFormatTest", ".wav");
+
+    AudioRecorder recorder;
+    recorder.prepare(48000.0, 2);
+    recorder.setFormat({ 16, 1, 2 }); // 16-bit mono, from the third input
+    REQUIRE(recorder.arm(file, thread));
+
+    // Four inputs, each a different constant, so which was taken shows.
+    std::vector<float> inputs[4];
+    const float*       channels[4];
+    for (int i = 0; i < 4; ++i)
+    {
+        inputs[i].assign(256, 0.1f * (float) (i + 1));
+        channels[i] = inputs[i].data();
+    }
+    for (int block = 0; block < 10; ++block)
+        recorder.process(channels, 4, 256, true, block * 256);
+    recorder.disarm();
+    recorder.process(channels, 4, 256, true, 2560);
+    REQUIRE(recorder.isFinished());
+    REQUIRE(recorder.finishTake() == file);
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    REQUIRE(reader != nullptr);
+    REQUIRE(reader->numChannels == 1);
+    REQUIRE(reader->bitsPerSample == 16);
+    REQUIRE(reader->lengthInSamples == 2560);
+
+    juce::AudioBuffer<float> read(1, 100);
+    reader->read(&read, 0, 100, 1000, true, false);
+    REQUIRE(std::abs(read.getSample(0, 50) - 0.3f) < 1.0e-3f); // the third input's level
+
+    reader.reset();
+    file.deleteFile();
+    thread.stopThread(1000);
 }

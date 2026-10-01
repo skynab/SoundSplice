@@ -220,6 +220,8 @@ MainComponent::MainComponent()
 
     // What's coming in, left over right, with a light that stays red after a
     // clip until it's clicked - the level to check before a take.
+    engine_.setRecordFormat(savedRecordFormat());
+
     // Kept input for retroactive recording, if it was on last time.
     if (settings_.getBoolValue("keepRecentInput", false))
         engine_.setRetroactiveSeconds(kRecentInputSeconds);

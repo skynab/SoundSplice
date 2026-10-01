@@ -375,6 +375,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::setProjectRoot:   setProjectRootFolderDialog(); break;
         case commands::audioSettings:    showAudioSettings(); break;
         case commands::recordingLatency: showRecordingLatencyDialog(); break;
+        case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
         {
@@ -742,6 +743,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         // Right next to Audio Settings, which is where anyone whose sound is
         // coming out of the wrong device goes looking.
         add(commands::followSystemOutput);
+        add(commands::recordingFormat);
         add(commands::recordingLatency);
     }
     else if (topLevelMenuIndex == 1) // Edit

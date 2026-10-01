@@ -351,9 +351,12 @@ void AudioEngine::meterInput(const float* const* inputChannelData, int numInputC
     if (inputChannelData == nullptr || numInputChannels <= 0 || numSamples <= 0)
         return;
 
+    // The inputs a take would record: a mono one shows on both sides.
+    const int first    = meterFirstInput_.load(std::memory_order_relaxed);
+    const int channels = meterChannels_.load(std::memory_order_relaxed);
     for (int ch = 0; ch < 2; ++ch)
     {
-        const float* samples = inputChannelData[juce::jmin(ch, numInputChannels - 1)];
+        const float* samples = inputChannelData[juce::jmin(first + juce::jmin(ch, channels - 1), numInputChannels - 1)];
         if (samples == nullptr)
             continue;
 
@@ -388,6 +391,21 @@ bool AudioEngine::copyRecentInput(juce::AudioBuffer<float>& out, int64_t& startP
     // the copy, so it's left out.
     const int margin = transport_.isPlaying() ? (int) retro_.sampleRate() : 0;
     return retro_.copyLatestRun(out, startPlayhead, margin);
+}
+
+juce::StringArray AudioEngine::inputChannelNames()
+{
+    auto* device = deviceManager_.getCurrentAudioDevice();
+    if (device == nullptr)
+        return {};
+
+    // Only the ones that are switched on in Audio Settings deliver anything.
+    const auto names  = device->getInputChannelNames();
+    const auto active = device->getActiveInputChannels();
+    juce::StringArray result;
+    for (int i = 0; i < names.size(); ++i)
+        result.add(active[i] ? names[i] : names[i] + " (off)");
+    return result;
 }
 
 int AudioEngine::reportedRoundTripSamples()
@@ -1251,7 +1269,7 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
     mastering_.prepare(sampleRate, blockSize);
     master_.prepare(sampleRate, blockSize);
 
-    recorder_.prepare(sampleRate, 2);
+    recorder_.prepare(sampleRate, recorder_.format().channels);
     metronome_.prepare(sampleRate);
 }
 

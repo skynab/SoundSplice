@@ -36,6 +36,15 @@ namespace soundsplice::engine
 class AudioRecorder
 {
 public:
+    /** What a take is written as, and which of the device's inputs it takes. */
+    struct Format
+    {
+        int  bitsPerSample = 24;    // 16, 24, or 32 (as floating point)
+        int  channels      = 2;     // 1 for mono, 2 for stereo
+        int  firstInput    = 0;     // the device input the take starts from
+        bool operator==(const Format&) const = default;
+    };
+
     ~AudioRecorder() { discardWriter(); }
 
     void prepare(double sampleRate, int numChannels)
@@ -43,6 +52,16 @@ public:
         sampleRate_  = sampleRate > 0.0 ? sampleRate : 48000.0;
         numChannels_ = juce::jmax(1, numChannels);
     }
+
+    /** For the next take: arm() reads it. Message thread. */
+    void setFormat(const Format& format)
+    {
+        format_      = format;
+        numChannels_ = juce::jlimit(1, 2, format.channels);
+        firstInput_.store(juce::jmax(0, format.firstInput), std::memory_order_relaxed);
+    }
+
+    const Format& format() const noexcept { return format_; }
 
     // ---- message thread ----
     /**
@@ -68,12 +87,17 @@ public:
         if (stream == nullptr)
             return false;
 
+        // A WAV, which JUCE writes as RF64 once it passes 4 GB, so a long
+        // take at a high rate isn't cut off by the format.
+        const bool floating = format_.bitsPerSample >= 32;
         juce::WavAudioFormat format;
         auto writer = format.createWriterFor(stream, // consumed on success
             juce::AudioFormatWriterOptions{}
                 .withSampleRate(sampleRate_)
                 .withNumChannels(numChannels_)
-                .withBitsPerSample(24));
+                .withBitsPerSample(floating ? 32 : (format_.bitsPerSample <= 16 ? 16 : 24))
+                .withSampleFormat(floating ? juce::AudioFormatWriterOptions::SampleFormat::floatingPoint
+                                           : juce::AudioFormatWriterOptions::SampleFormat::integral));
 
         if (writer == nullptr)
             return false;
@@ -214,10 +238,13 @@ public:
         // handing it a null pointer, which it documents as not allowed - and a
         // mono source recorded to a silent right channel would be a bug that
         // only shows up on playback.
+        // From the chosen input on; an input the device doesn't have falls
+        // back to its last, so a take still has sound in it.
+        const int    first = firstInput_.load(std::memory_order_relaxed);
         const float* channels[kMaxChannels] {};
         for (int ch = 0; ch < numChannels_ && ch < kMaxChannels; ++ch)
         {
-            const int source = juce::jmin(ch, numInputChannels - 1);
+            const int source = juce::jmin(first + ch, numInputChannels - 1);
             channels[ch] = source >= 0 ? inputChannelData[source] : nullptr;
         }
 
@@ -255,6 +282,8 @@ private:
     std::atomic<bool>    armed_    { false };
     std::atomic<bool>    finished_ { true };     // true initially: no take pending
 
+    Format           format_;
+    std::atomic<int> firstInput_ { 0 };
     bool   wasRecording_ = false;                // audio-thread only
     double sampleRate_   = 48000.0;
     int    numChannels_  = 2;

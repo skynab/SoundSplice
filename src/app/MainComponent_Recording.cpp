@@ -638,6 +638,74 @@ void MainComponent::saveRecentInput()
     showStatus("Saved " + juce::String((double) kept.getNumSamples() / rate, 1) + " s of recent input");
 }
 
+/** The record format the settings hold: 24-bit stereo from the first input
+    until it's been chosen. */
+engine::AudioRecorder::Format MainComponent::savedRecordFormat()
+{
+    engine::AudioRecorder::Format format;
+    format.bitsPerSample = settings_.getIntValue("recordBits", 24);
+    format.channels      = juce::jlimit(1, 2, settings_.getIntValue("recordChannels", 2));
+    format.firstInput    = juce::jmax(0, settings_.getIntValue("recordFirstInput", 0));
+    return format;
+}
+
+/** Recording Format: bit depth, mono or stereo, and which input (or pair)
+    takes are recorded from. Applies from the next take. */
+void MainComponent::showRecordingFormatDialog()
+{
+    if (awaitingRecordedTake_)
+    {
+        showError("Stop recording first");
+        return;
+    }
+
+    const auto format = savedRecordFormat();
+    const auto inputs = engine_.inputChannelNames();
+
+    auto* window = new juce::AlertWindow("Recording Format",
+        "What takes are recorded as, from the next one on. 24-bit is plenty for most things; 32-bit float "
+        "can't clip in the file, which helps when levels are unknown. Inputs come from the device chosen "
+        "in Audio Settings.",
+        juce::MessageBoxIconType::NoIcon, this);
+
+    window->addComboBox("bits", { "16-bit", "24-bit", "32-bit float" }, "Bit depth:");
+    window->getComboBoxComponent("bits")->setSelectedItemIndex(format.bitsPerSample <= 16 ? 0 : format.bitsPerSample >= 32 ? 2 : 1);
+
+    window->addComboBox("channels", { "Mono", "Stereo" }, "Channels:");
+    window->getComboBoxComponent("channels")->setSelectedItemIndex(format.channels == 1 ? 0 : 1);
+
+    // Each input by name; for stereo, the take is it and the next one.
+    juce::StringArray inputChoices;
+    for (int i = 0; i < juce::jmax(1, inputs.size()); ++i)
+        inputChoices.add(inputs.isEmpty() ? juce::String("Input 1") : inputs[i]);
+    window->addComboBox("input", inputChoices, "From input (stereo: it and the next):");
+    window->getComboBoxComponent("input")->setSelectedItemIndex(juce::jmin(format.firstInput, inputChoices.size() - 1));
+
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            static constexpr int kBits[] { 16, 24, 32 };
+            const int bits     = kBits[juce::jlimit(0, 2, window->getComboBoxComponent("bits")->getSelectedItemIndex())];
+            const int channels = window->getComboBoxComponent("channels")->getSelectedItemIndex() == 0 ? 1 : 2;
+            const int input    = juce::jmax(0, window->getComboBoxComponent("input")->getSelectedItemIndex());
+
+            self->settings_.setValue("recordBits", bits);
+            self->settings_.setValue("recordChannels", channels);
+            self->settings_.setValue("recordFirstInput", input);
+            self->settings_.saveIfNeeded();
+            self->engine_.setRecordFormat(self->savedRecordFormat());
+            self->showStatus("Recording " + juce::String(bits == 32 ? "32-bit float" : juce::String(bits) + "-bit")
+                             + (channels == 1 ? " mono" : " stereo") + " from input " + juce::String(input + 1));
+        }), false);
+}
+
 /** How late a recording is: the device's reported round trip, adjusted by
     the Recording Latency setting (a driver's figure is often a little off),
     or nothing with compensation turned off. */

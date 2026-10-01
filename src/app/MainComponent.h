@@ -216,6 +216,8 @@ private:
     int                    recordingLatencySamples();
     void                   compensateRecordingLatency(const juce::File& file, int latencySamples);
     void                   showRecordingLatencyDialog();
+    void                   showRecordingFormatDialog();
+    engine::AudioRecorder::Format savedRecordFormat();
     bool                   punchRecordedClip(const juce::File& file);
     void                   saveRecentInput();
     static constexpr double kRecentInputSeconds = 120.0;
