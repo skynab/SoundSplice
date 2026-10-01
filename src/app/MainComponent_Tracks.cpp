@@ -452,12 +452,14 @@ void MainComponent::duplicateTrackAt(int trackIndex)
 
     const auto sourceName = juce::String(song.tracks[(size_t) trackIndex].name);
 
-    history_.edit("Duplicate track", [trackIndex](model::Song& s)
+    int copyIndex = trackIndex + 1;
+    history_.edit("Duplicate track", [trackIndex, &copyIndex](model::Song& s)
     {
-        model::duplicateTrack(s, trackIndex);
+        // A folder's copy goes after the tracks in it, keeping them in it.
+        copyIndex = model::folderedit::duplicate(s, trackIndex);
     });
 
-    selectTrackAndRefreshAll(trackIndex + 1); // the copy, so it can be worked on straight away
+    selectTrackAndRefreshAll(copyIndex); // the copy, so it can be worked on straight away
     showStatus("Duplicated " + (sourceName.isEmpty() ? juce::String("track") : "\"" + sourceName + "\""));
 }
 

@@ -91,3 +91,19 @@ TEST_CASE("Folders round-trip, and a track in none writes nothing", "[model][fol
     REQUIRE(restored == song);
     REQUIRE(folderedit::isHidden(restored, 1));
 }
+
+TEST_CASE("Duplicating a folder puts the copy after its tracks, which stay in it", "[model][folders]")
+{
+    auto song = fiveTracks();
+    folderedit::indent(song, 1);
+    folderedit::indent(song, 2);
+
+    REQUIRE(folderedit::duplicate(song, 0) == 3);
+    REQUIRE(song.tracks[3].name == "Drums copy");
+    REQUIRE(folderedit::childIndices(song, 0) == std::vector<int> { 1, 2 });
+    REQUIRE_FALSE(folderedit::isFolder(song, 3));
+
+    // A track in a folder is copied into it.
+    REQUIRE(folderedit::duplicate(song, 1) == 2);
+    REQUIRE(folderedit::childIndices(song, 0) == std::vector<int> { 1, 2, 3 });
+}

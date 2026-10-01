@@ -106,6 +106,28 @@ namespace folderedit
         return last;
     }
 
+    /** Duplicates track @p index as model::duplicateTrack does, but a
+        folder's copy goes after the tracks in it rather than between the
+        folder and them, which would leave them in no folder. The copy is a
+        plain track: the tracks in the folder aren't copied with it. Returns
+        the copy's index, or -1. */
+    inline int duplicate(Song& song, int index)
+    {
+        const auto children = childIndices(song, index);
+        if (duplicateTrack(song, index) == nullptr)
+            return -1;
+        if (children.empty())
+            return index + 1;
+
+        // The copy is at index + 1 and the folder's tracks after it.
+        const int last = children.back() + 1;
+        Track     copy = std::move(song.tracks[(size_t) index + 1]);
+        copy.folderCollapsed = false;
+        song.tracks.erase(song.tracks.begin() + index + 1);
+        song.tracks.insert(song.tracks.begin() + last, std::move(copy));
+        return last;
+    }
+
     /** @p index and, for a folder, every track in it: what mute and solo
         on a folder act on. */
     inline std::vector<int> withChildren(const Song& song, int index)
