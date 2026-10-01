@@ -1812,7 +1812,10 @@ void MainComponent::syncEngineTracks()
             spec.envelope            = clip.envelope;
             spec.clipId              = clip.id;
             for (const auto& slot : clip.effects)
+            {
                 spec.effects.push_back(model::effectParamValues(slot));
+                spec.slots.push_back(effectSlotSpecFor(slot));
+            }
             audioSpecs.push_back(spec);
         }
         // Submitted even when empty, which the guard here used to skip: the
@@ -1822,6 +1825,10 @@ void MainComponent::syncEngineTracks()
         // the comment above is only true if it's also submitted when there's
         // nothing to submit.
         engine_.setTrackAudioClips(i, audioSpecs);
+
+        // A clip's plugin went with its chain: so must any editor showing it.
+        if (engine_.takeClipPluginChainsChanged())
+            closePluginEditors();
 
         engine_.setTrackMuted(i, track.muted);
         engine_.setTrackSolo(i, track.solo);
@@ -1871,17 +1878,7 @@ void MainComponent::syncEngineTracks()
         std::vector<engine::EffectSlotSpec> chainSpecs;
         chainSpecs.reserve(track.effectChain.size());
         for (const auto& slot : track.effectChain)
-        {
-            engine::EffectSlotSpec spec;
-            spec.kind = slot.kind;
-            if (slot.kind == model::EffectKind::Plugin)
-            {
-                spec.pluginFormat     = pluginFormatName(slot.plugin.format);
-                spec.pluginIdentifier = slot.plugin.identifier;
-                spec.pluginState      = slot.plugin.state;
-            }
-            chainSpecs.push_back(std::move(spec));
-        }
+            chainSpecs.push_back(effectSlotSpecFor(slot));
         // A rebuild destroys this track's nodes, hosted plugins included, so
         // any editor drawing one has to go first. Only on an actual rebuild —
         // closing plugin windows on every unrelated edit would be maddening.

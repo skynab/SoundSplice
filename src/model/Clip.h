@@ -90,9 +90,10 @@ struct Clip
 
     /** Effects on this clip alone, in order, before its track's own chain:
         the take's reverb or EQ, which shouldn't touch the rest of the track.
-        Played live, like the track's, so a change is heard at once; a tail
-        stops where the clip does. Built-in effects only for now. Audio
-        clips only. */
+        Played live, like the track's, so a change is heard at once. Built-in
+        effects and hosted plugins alike; the clip is read ahead by their
+        latency so it stays on time, and their tails ring on past its end
+        (engine/AudioFilePlayerNode.h). Audio clips only. */
     std::vector<EffectSlot> effects;
 
     /** Every take of this stretch, when there's more than the one playing:

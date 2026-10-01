@@ -120,29 +120,45 @@ public:
         // other comes in.
         for (const auto& slot : *current_)
         {
+            if (slot.clipData == nullptr)
+                continue;
+
             const double startedBeatsAgo = blockStartBeats - slot.startBeats;
+            auto*        effects         = slot.effects.get();
 
-            // Window tested in beats, where the clip is actually placed; the
-            // offset into the file is then a real-time distance in samples.
-            if (blockEndBeats > slot.startBeats && startedBeatsAgo < slot.lengthBeats && slot.clipData != nullptr)
+            if (effects == nullptr || effects->empty() || numSamples > clipScratch_.getNumSamples())
             {
-                auto* effects = slot.effects.get();
-                if (effects == nullptr || effects->empty() || numSamples > clipScratch_.getNumSamples())
-                {
+                // Window tested in beats, where the clip is actually placed;
+                // the offset into the file is then a real-time distance in
+                // samples.
+                if (blockEndBeats > slot.startBeats && startedBeatsAgo < slot.lengthBeats)
                     renderSlot(slot, startedBeatsAgo * samplesPerBeat, samplesPerBeat, buffer, context);
-                    continue;
-                }
-
-                // The clip alone, through its own chain, then into the track.
-                const int channels = juce::jmin(buffer.getNumChannels(), clipScratch_.getNumChannels());
-                juce::AudioBuffer<float> clipAudio(clipScratch_.getArrayOfWritePointers(), channels, numSamples);
-                clipAudio.clear();
-                renderSlot(slot, startedBeatsAgo * samplesPerBeat, samplesPerBeat, clipAudio, context);
-                effects->setBpm(context.transport.bpm);
-                effects->process(clipAudio);
-                for (int ch = 0; ch < channels; ++ch)
-                    buffer.addFrom(ch, 0, clipAudio, ch, 0, numSamples);
+                continue;
             }
+
+            // A clip with its own effects. It's read as far ahead as its
+            // chain delays it, so what comes out lines up with where the
+            // clip is; and the chain keeps running for a while after the
+            // clip ends, so a reverb or echo rings out rather than stopping
+            // dead at the clip's edge.
+            const double latencyBeats = effects->latencySamples() / samplesPerBeat;
+            const double tailBeats    = kClipEffectTailSeconds * deviceSampleRate_ / samplesPerBeat;
+            const double readBeatsAgo = startedBeatsAgo + latencyBeats;
+            const bool   reading      = blockEndBeats + latencyBeats > slot.startBeats && readBeatsAgo < slot.lengthBeats;
+            const bool   ringing      = readBeatsAgo >= slot.lengthBeats && startedBeatsAgo < slot.lengthBeats + tailBeats;
+            if (! reading && ! ringing)
+                continue;
+
+            // The clip alone, through its own chain, then into the track.
+            const int channels = juce::jmin(buffer.getNumChannels(), clipScratch_.getNumChannels());
+            juce::AudioBuffer<float> clipAudio(clipScratch_.getArrayOfWritePointers(), channels, numSamples);
+            clipAudio.clear();
+            if (reading)
+                renderSlot(slot, readBeatsAgo * samplesPerBeat, samplesPerBeat, clipAudio, context);
+            effects->setBpm(context.transport.bpm);
+            effects->process(clipAudio);
+            for (int ch = 0; ch < channels; ++ch)
+                buffer.addFrom(ch, 0, clipAudio, ch, 0, numSamples);
         }
     }
 
@@ -203,7 +219,7 @@ private:
 
             for (int i = 0; i < numSamples; ++i)
             {
-                if (position >= 0.0 && position < (double) length && secondsIntoClip < clipSeconds)
+                if (position >= 0.0 && position < (double) length && secondsIntoClip >= 0.0 && secondsIntoClip < clipSeconds)
                 {
                     const float gain = fading ? clipGain * envelopeGainAt(position) * clipFadeGain(fades, secondsIntoClip, clipSeconds)
                                               : clipGain * envelopeGainAt(position);
@@ -221,7 +237,9 @@ private:
 
         for (int i = 0; i < numSamples; ++i)
         {
-            if (position >= 0.0 && position < (double) length && secondsIntoClip < clipSeconds)
+            // Not before the clip starts, either: a block it starts in begins
+            // before it, where a trimmed clip's file still has audio.
+            if (position >= 0.0 && position < (double) length && secondsIntoClip >= 0.0 && secondsIntoClip < clipSeconds)
             {
                 const float gain = fading ? clipGain * envelopeGainAt(position) * clipFadeGain(fades, secondsIntoClip, clipSeconds)
                                           : clipGain * envelopeGainAt(position);
@@ -238,6 +256,10 @@ private:
             secondsIntoClip += secondsPerSample;
         }
     }
+
+    /** How long a clip's own effects keep running after it ends, for their
+        tails: long enough for a hall reverb. */
+    static constexpr double kClipEffectTailSeconds = 8.0;
 
     double    deviceSampleRate_ = 0.0;
     int       readerIndex_      = 0;

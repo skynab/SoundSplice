@@ -271,3 +271,106 @@ TEST_CASE("Delay compensation lines a track with a latent effect up with one wit
     int unaligned = 0;
     REQUIRE(peakAt(false, 0, unaligned) == 1000); // with nothing to meet, untouched
 }
+
+namespace
+{
+    /** Delays its input by a fixed number of samples, and says so as its
+        latency or not: a stand-in for a lookahead effect, or for an echo. */
+    struct DelayBy final : EffectProcessor
+    {
+        DelayBy(int samples, bool reportsLatency) : delay(samples), reports(reportsLatency) {}
+
+        EffectKind kind() const noexcept override { return EffectKind::Amplify; }
+        void prepare(double, int) override { line.assign((size_t) delay, 0.0f); at = 0; }
+        void setEnabled(bool) override {}
+        int  latencySamples() const noexcept override { return reports ? delay : 0; }
+        void process(juce::AudioBuffer<float>& buffer) override
+        {
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+            {
+                const float in  = buffer.getSample(0, i);
+                const float out = line[(size_t) at];
+                line[(size_t) at] = in;
+                at = (at + 1) % delay;
+                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                    buffer.setSample(ch, i, out);
+            }
+        }
+
+    protected:
+        void apply(const EffectParamValues&) override {}
+
+    private:
+        int                delay;
+        bool               reports;
+        std::vector<float> line;
+        int                at = 0;
+    };
+
+    void submitWithEffect(AudioFilePlayerNode& player, double startBeats, double lengthBeats, int delay, bool latency)
+    {
+        player.prepare(kRate, kBlock);
+
+        auto chain = std::make_shared<EffectChain>();
+        chain->add(std::make_unique<DelayBy>(delay, latency));
+        chain->prepare(kRate, kBlock);
+
+        AudioClipSlot slot;
+        slot.clipData    = fullScale(4.0);
+        slot.startBeats  = startBeats;
+        slot.lengthBeats = lengthBeats;
+        slot.effects     = chain;
+
+        auto* clips = new AudioFilePlayerNode::ClipList();
+        clips->push_back(slot);
+        player.submitClips(clips);
+    }
+}
+
+TEST_CASE("A clip's latent effects are read ahead, so the clip still starts on time", "[gui][envelope][effects]")
+{
+    // A clip from beat 1 (sample 24000) to beat 2, through 1000 samples of
+    // reported latency: what comes out starts and stops where the clip does.
+    AudioFilePlayerNode player;
+    submitWithEffect(player, 1.0, 1.0, 1000, true);
+    const auto out = play(player, 120);
+
+    REQUIRE(out.getSample(0, 23998) == 0.0f);
+    REQUIRE(out.getSample(0, 24002) == 1.0f);
+    REQUIRE(out.getSample(0, 47998) == 1.0f);
+    REQUIRE(out.getSample(0, 48002) == 0.0f);
+}
+
+TEST_CASE("A clip's effects ring on past its end", "[gui][envelope][effects]")
+{
+    // An echo of 1000 samples, not reported as latency: the clip's last
+    // stretch comes out after the clip has ended.
+    AudioFilePlayerNode player;
+    submitWithEffect(player, 1.0, 1.0, 1000, false);
+    const auto out = play(player, 120);
+
+    REQUIRE(out.getSample(0, 24998) == 0.0f); // the echo of nothing before the clip
+    REQUIRE(out.getSample(0, 25002) == 1.0f);
+    REQUIRE(out.getSample(0, 48500) == 1.0f); // past the end: the tail
+    REQUIRE(out.getSample(0, 49002) == 0.0f);
+}
+
+TEST_CASE("A trimmed clip starting mid-block plays nothing of its file before it starts", "[gui][envelope]")
+{
+    AudioFilePlayerNode player;
+    player.prepare(kRate, kBlock);
+
+    AudioClipSlot slot;
+    slot.clipData            = fullScale(4.0);
+    slot.startBeats          = 1.0; // sample 24000, inside a block
+    slot.lengthBeats         = 1.0;
+    slot.sourceOffsetSeconds = 1.0; // a second into its file
+
+    auto* clips = new AudioFilePlayerNode::ClipList();
+    clips->push_back(slot);
+    player.submitClips(clips);
+
+    const auto out = play(player, 60);
+    REQUIRE(out.getSample(0, 23998) == 0.0f);
+    REQUIRE(out.getSample(0, 24002) == 1.0f);
+}

@@ -275,7 +275,13 @@ bool AudioEngine::setTrackAudioClips(int index, const std::vector<AudioClipSpec>
     {
         const bool kept = std::any_of(clips.begin(), clips.end(),
                                       [&](const AudioClipSpec& spec) { return spec.clipId == it->first && ! spec.effects.empty(); });
-        it = (it->second.track == index && ! kept) ? clipChains_.erase(it) : std::next(it);
+        if (it->second.track == index && ! kept)
+        {
+            clipPluginChainsChanged_ = clipPluginChainsChanged_ || it->second.hasPlugin();
+            it = clipChains_.erase(it);
+        }
+        else
+            ++it;
     }
 
     for (const auto& spec : clips)
@@ -306,19 +312,29 @@ std::shared_ptr<EffectChain> AudioEngine::clipChainFor(int trackIndex, const Aud
     if (spec.effects.empty())
         return nullptr;
 
-    std::vector<EffectKind> kinds;
-    for (const auto& values : spec.effects)
-        kinds.push_back(values.kind);
-
-    auto& entry = clipChains_[spec.clipId];
-    if (entry.chain == nullptr || entry.kinds != kinds)
+    // The chain's shape: the slots the spec names, or each effect's kind.
+    std::vector<EffectSlotSpec> shape;
+    for (size_t i = 0; i < spec.effects.size(); ++i)
     {
+        auto slot = i < spec.slots.size() ? spec.slots[i] : EffectSlotSpec {};
+        slot.kind = spec.effects[i].kind;
+        shape.push_back(std::move(slot));
+    }
+
+    auto& entry   = clipChains_[spec.clipId];
+    bool  rebuild = entry.chain == nullptr || entry.shape.size() != shape.size();
+    for (size_t i = 0; ! rebuild && i < shape.size(); ++i)
+        rebuild = ! entry.shape[i].sameShapeAs(shape[i]);
+
+    if (rebuild)
+    {
+        clipPluginChainsChanged_ = clipPluginChainsChanged_ || entry.hasPlugin();
+
         auto chain = std::make_shared<EffectChain>();
-        for (const auto kind : kinds)
+        for (const auto& slot : shape)
         {
-            // Built-ins only on a clip for now; a plugin's place is kept by a
-            // node that passes audio through, so later slots stay aligned.
-            auto node = makeBuiltInNode(kind);
+            // A kind this build can't make keeps its place as a pass-through.
+            auto node = makeSlotNode(slot);
             chain->add(node != nullptr ? std::move(node) : std::make_unique<PluginNode>(nullptr));
         }
 
@@ -326,14 +342,46 @@ std::shared_ptr<EffectChain> AudioEngine::clipChainFor(int trackIndex, const Aud
         if (rate > 0.0)
             chain->prepare(rate, currentBlockSize_);
 
-        entry.kinds = std::move(kinds);
         entry.chain = std::move(chain);
     }
+    entry.shape = std::move(shape);
     entry.track = trackIndex;
 
     for (size_t i = 0; i < spec.effects.size(); ++i)
         entry.chain->applyParams(i, spec.effects[i]);
     return entry.chain;
+}
+
+PluginNode* AudioEngine::clipPluginNode(int clipId, int slotIndex)
+{
+    const auto it = clipChains_.find(clipId);
+    if (it == clipChains_.end() || slotIndex < 0)
+        return nullptr;
+    return dynamic_cast<PluginNode*>(it->second.chain->nodeAt((size_t) slotIndex));
+}
+
+std::unique_ptr<EffectProcessor> AudioEngine::makeSlotNode(const EffectSlotSpec& spec)
+{
+    if (spec.kind != EffectKind::Plugin)
+        return makeBuiltInNode(spec.kind);
+
+    // Instantiated here, on the message thread: loading a binary and
+    // running third-party initialisation must never happen under the
+    // audio thread. A plugin this machine doesn't have becomes a node
+    // that passes audio through rather than failing the load — the
+    // document still remembers which one it wanted. A node rather than a
+    // gap, so every later slot keeps the position the document gives it,
+    // which is how parameters and automation find it.
+    const double rate = sampleRate_.load(std::memory_order_relaxed);
+    std::string  error;
+    auto instance = pluginHost_.createInstance(spec.pluginFormat, spec.pluginIdentifier, rate > 0.0 ? rate : 48000.0,
+                                               currentBlockSize_, &error);
+    if (instance == nullptr)
+        DBG("plugin unavailable: " << spec.pluginIdentifier.c_str() << " (" << error.c_str() << ")");
+
+    auto node = std::make_unique<PluginNode>(std::move(instance));
+    node->restoreState(spec.pluginState);
+    return node;
 }
 
 void AudioEngine::setClipEffectParams(int clipId, int slotIndex, const EffectParamValues& values)
@@ -711,36 +759,10 @@ void AudioEngine::rebuildTrackEffectChain(int index)
     if (index < 0 || index >= kMaxTracks)
         return;
 
-    const double rateForPlugins = sampleRate_.load(std::memory_order_relaxed);
-
     auto chain = std::make_unique<EffectChain>();
     for (const auto& spec : chainStructure_[(size_t) index])
-    {
-        if (spec.kind != EffectKind::Plugin)
-        {
-            if (auto node = makeBuiltInNode(spec.kind))
-                chain->add(std::move(node));
-            continue;
-        }
-
-        // Instantiated here, on the message thread: loading a binary and
-        // running third-party initialisation must never happen under the
-        // audio thread. A plugin this machine doesn't have becomes a node
-        // that passes audio through rather than failing the load — the
-        // document still remembers which one it wanted. A node rather than a
-        // gap, so every later slot keeps the position the document gives it,
-        // which is how parameters and automation find it.
-        std::string error;
-        auto instance = pluginHost_.createInstance(spec.pluginFormat, spec.pluginIdentifier,
-                                                   rateForPlugins > 0.0 ? rateForPlugins : 48000.0,
-                                                   currentBlockSize_, &error);
-        if (instance == nullptr)
-            DBG("plugin unavailable: " << spec.pluginIdentifier.c_str() << " (" << error.c_str() << ")");
-
-        auto node = std::make_unique<PluginNode>(std::move(instance));
-        node->restoreState(spec.pluginState);
-        chain->add(std::move(node));
-    }
+        if (auto node = makeSlotNode(spec))
+            chain->add(std::move(node));
 
     // Prepared here, on the message thread, where allocating a delay line is
     // allowed. A rate of zero means the device hasn't started yet; the rebuild

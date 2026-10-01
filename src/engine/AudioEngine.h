@@ -2,9 +2,11 @@
 
 #include <array>
 #include <atomic>
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -59,6 +61,11 @@ struct AudioClipSpec
         resubmissions so it keeps its chain - see AudioEngine::clipChains_. */
     int                            clipId = 0;
     std::vector<EffectParamValues> effects;
+
+    /** Each slot's shape, in the same order as @c effects: its kind and, for
+        a plugin, which one and its saved state, from which the chain is
+        built. A slot without one here is built from its kind alone. */
+    std::vector<EffectSlotSpec> slots;
 };
 
 /**
@@ -115,6 +122,15 @@ public:
     /** A live change to one of a clip's effects, as a knob turns: applied to
         the chain it already has, with no resubmission. Message thread. */
     void setClipEffectParams(int clipId, int slotIndex, const EffectParamValues& values);
+
+    /** The hosted plugin in slot @p slotIndex of clip @p clipId's own chain,
+        or nullptr. Message thread, for its editor and its state. */
+    PluginNode* clipPluginNode(int clipId, int slotIndex);
+
+    /** True, once, after a clip-list submission rebuilt or dropped a clip
+        chain holding a plugin: an editor open on one of those plugins is
+        drawing something that's gone, and has to be closed. */
+    bool takeClipPluginChainsChanged() noexcept { return std::exchange(clipPluginChainsChanged_, false); }
 
     // Metronome (thread-safe atomics). Summed in after the master chain, so
     // it never passes through the master effects or reaches the meter — and
@@ -805,9 +821,21 @@ private:
     struct ClipChain
     {
         int                          track = -1;
-        std::vector<EffectKind>      kinds;
+        std::vector<EffectSlotSpec>  shape;
         std::shared_ptr<EffectChain> chain;
+
+        bool hasPlugin() const
+        {
+            return std::any_of(shape.begin(), shape.end(),
+                               [](const EffectSlotSpec& s) { return s.kind == EffectKind::Plugin; });
+        }
     };
+    bool clipPluginChainsChanged_ = false;
+
+    /** One slot's node: a built-in, or the plugin it names, loaded here on
+        the message thread with its saved state (a plugin missing on this
+        machine passes audio through, keeping later slots in place). */
+    std::unique_ptr<EffectProcessor> makeSlotNode(const EffectSlotSpec& spec);
     std::map<int, ClipChain> clipChains_;
 
     // The input meter's readings, raised by the audio thread each block and

@@ -300,6 +300,21 @@ inline EffectRenderResult renderEffectChain(const std::vector<model::EffectSlot>
     short enough that rendering it doesn't stall the UI on a long selection. */
 inline constexpr double kEffectPreviewSeconds = 10.0;
 
+/** What the engine builds a slot's node from: its kind and, for a plugin,
+    which one and its saved state. */
+inline engine::EffectSlotSpec effectSlotSpecFor(const model::EffectSlot& slot)
+{
+    engine::EffectSlotSpec spec;
+    spec.kind = slot.kind;
+    if (slot.kind == model::EffectKind::Plugin)
+    {
+        spec.pluginFormat     = pluginFormatName(slot.plugin.format);
+        spec.pluginIdentifier = slot.plugin.identifier;
+        spec.pluginState      = slot.plugin.state;
+    }
+    return spec;
+}
+
 /** Reads the value a fader controls, straight from the document. */
 inline float readFader(const model::Song& song, int index, MixerStrip::Fader fader)
 {

@@ -83,7 +83,7 @@ void MainComponent::refreshEffectChainForSelected()
 void MainComponent::addEffectSlot(model::EffectKind kind, const model::PluginRef& plugin)
 {
     const auto ref = editedChainRef();
-    if (ref.track < 0 || (ref.isClip() && kind == model::EffectKind::Plugin))
+    if (ref.track < 0)
         return;
 
     history_.edit(ref.isClip() ? "Add clip effect" : "Add effect", [ref, kind, &plugin](model::Song& s)
@@ -239,7 +239,15 @@ void MainComponent::scanForPlugins()
 /** Opens a hosted plugin's own editor. */
 void MainComponent::openPluginEditor(int slotIndex)
 {
-    auto* node = engine_.trackPluginNode(selectedTrackIndex_, slotIndex);
+    // The plugin in the chain the effects panel is showing: the track's, or
+    // the selected clip's own.
+    const auto       ref  = editedChainRef();
+    engine::PluginNode* node = nullptr;
+    if (ref.isClip())
+        node = engine_.clipPluginNode(history_.current().tracks[(size_t) ref.track].clips[(size_t) ref.clip].id,
+                                      slotIndex);
+    else if (ref.track >= 0)
+        node = engine_.trackPluginNode(ref.track, slotIndex);
     if (node == nullptr || node->instance() == nullptr)
     {
         showError("That plugin isn't loaded on this machine");
@@ -271,6 +279,7 @@ void MainComponent::capturePluginStates(const juce::String& label)
     struct Change
     {
         int         track = 0;
+        int         clip  = -1; // -1: the track's own chain
         int         slot  = 0;
         std::string state;
     };
@@ -291,8 +300,24 @@ void MainComponent::capturePluginStates(const juce::String& label)
 
             auto state = node->saveState();
             if (state != chain[(size_t) s].plugin.state)
-                changes.push_back({ t, s, std::move(state) });
+                changes.push_back({ t, -1, s, std::move(state) });
         }
+
+        // And each clip's own chain.
+        const auto& clips = song.tracks[(size_t) t].clips;
+        for (int c = 0; c < (int) clips.size(); ++c)
+            for (int s = 0; s < (int) clips[(size_t) c].effects.size(); ++s)
+            {
+                const auto& slot = clips[(size_t) c].effects[(size_t) s];
+                const auto* node = slot.kind == model::EffectKind::Plugin
+                                       ? engine_.clipPluginNode(clips[(size_t) c].id, s) : nullptr;
+                if (node == nullptr || node->instance() == nullptr)
+                    continue;
+
+                auto state = node->saveState();
+                if (state != slot.plugin.state)
+                    changes.push_back({ t, c, s, std::move(state) });
+            }
     }
 
     if (changes.empty())
@@ -301,8 +326,9 @@ void MainComponent::capturePluginStates(const juce::String& label)
     history_.edit(label.toStdString(), [&changes](model::Song& s)
     {
         for (const auto& change : changes)
-            if (change.track < (int) s.tracks.size() && change.slot < (int) s.tracks[(size_t) change.track].effectChain.size())
-                s.tracks[(size_t) change.track].effectChain[(size_t) change.slot].plugin.state = change.state;
+            if (auto* chain = chainAt(s, { change.track, change.clip });
+                chain != nullptr && change.slot < (int) chain->size())
+                (*chain)[(size_t) change.slot].plugin.state = change.state;
     });
 }
 

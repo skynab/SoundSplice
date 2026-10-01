@@ -455,14 +455,13 @@ private:
 
         for (auto& [name, submenu] : groups)
             menu.addSubMenu(name, submenu);
-        // Plugins go on a track's chain; a clip's is built-ins only for now
-        // (see model::Clip::effects).
-        if (! clipScope_ && plugins_.empty())
+        // Plugins go on a track's chain or a clip's alike.
+        if (plugins_.empty())
         {
             menu.addSeparator();
             menu.addItem(kScanId, "Scan for plugins...");
         }
-        else if (! clipScope_)
+        else
         {
             menu.addSeparator();
             juce::PopupMenu pluginMenu;
