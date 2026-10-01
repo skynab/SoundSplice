@@ -119,6 +119,7 @@ TEST_CASE("A mixer strip reports every move the user makes", "[gui][wiring]")
     strip.onMuteChange = [&](bool  v) { muted = v;  ++mutes; };
     strip.onSoloChange = [&](bool  v) { soloed = v; ++solos; };
     strip.onArmChange  = [&](bool)    { ++arms; };
+    strip.onAutomationModeMenuRequested = [&] { ++arms; }; // counted with the R button's
 
     std::vector<juce::Component*> controls;
     paneaudit::collectControls(strip, controls);

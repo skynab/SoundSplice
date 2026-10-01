@@ -407,6 +407,10 @@ inline std::string serialize(const Song& song)
         if (track.recordInput >= 0 || track.recordChannels > 0)
             out << "TRACKINPUT " << track.recordInput << " " << track.recordChannels << "\n";
 
+        // Only when it has its own: -1 follows the mix.
+        if (track.automationMode >= 0)
+            out << "TRACKAUTOMODE " << track.automationMode << "\n";
+
         // Only non-empty lanes are written, so an unautomated track costs one
         // "TAUTOS 0" line rather than one empty record per automatable
         // parameter.
@@ -920,6 +924,12 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             fields >> input >> channels;
             track.recordInput    = std::max(-1, input);
             track.recordChannels = std::clamp(channels, 0, 2);
+        }
+
+        if (readTagged("TRACKAUTOMODE", rest))
+        {
+            const int mode       = std::atoi(rest.c_str());
+            track.automationMode = mode >= 0 && mode <= 3 ? mode : -1;
         }
 
         if (readTagged("TAUTOS", rest))

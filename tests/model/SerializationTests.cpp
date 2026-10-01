@@ -869,3 +869,20 @@ TEST_CASE("A track's own record input round-trips, and the default writes nothin
     REQUIRE(restored == song);
     REQUIRE(restored.tracks[0].recordInput == -1);
 }
+
+TEST_CASE("A track's own automation mode round-trips, and following the mix writes nothing", "[model][io]")
+{
+    Song song;
+    addTrack(song, TrackType::Audio, "Vocal");
+    addTrack(song, TrackType::Audio, "Bed");
+    song.tracks[0].automationMode = 2; // Latch
+
+    const auto text = serialize(song);
+    REQUIRE(text.find("TRACKAUTOMODE 2") != std::string::npos);
+    REQUIRE(text.find("TRACKAUTOMODE") == text.rfind("TRACKAUTOMODE"));
+
+    Song restored;
+    REQUIRE(deserialize(text, restored));
+    REQUIRE(restored == song);
+    REQUIRE(restored.tracks[1].automationMode == -1);
+}

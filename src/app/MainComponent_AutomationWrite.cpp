@@ -1,7 +1,8 @@
 #include "MainComponentInternal.h"
 
 // Recording automation by moving controls during playback, in the mode the
-// master panel's Automation picker sets (see model::AutomationMode).
+// master panel's Automation picker sets (see model::AutomationMode), or the
+// track's own where it has one (the mode button on its mixer strip).
 //
 // A *pass* is one stretch of playback that writes anything. It opens when a
 // control is first moved (or, in Write mode, when playback starts), and
@@ -64,6 +65,25 @@ model::AutomationLane* MainComponent::automationLaneFor(model::Song& song, const
     return &track.effectChain[(size_t) key.slot].automation[key.param];
 }
 
+/** The mode @p trackIndex's controls record in: its own, or the mix's.
+    The master lane (-1) always uses the mix's. */
+model::AutomationMode MainComponent::automationModeFor(int trackIndex) const
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return automationMode_;
+    return model::effectiveAutomationMode(song.tracks[(size_t) trackIndex].automationMode, automationMode_);
+}
+
+/** True if any track is in Write mode, which writes for the whole of a pass. */
+bool MainComponent::anyTrackInWriteMode() const
+{
+    for (int t = 0; t < (int) history_.current().tracks.size(); ++t)
+        if (automationModeFor(t) == model::AutomationMode::Write)
+            return true;
+    return false;
+}
+
 bool MainComponent::isWritingAutomation(const AutomationWriteKey& key) const
 {
     for (const auto& write : automationWrites_)
@@ -105,11 +125,11 @@ void MainComponent::openAutomationPass()
     automationPassBefore_ = history_.current();
     automationPassBeat_   = uiTempoMap_.ppqFromSamples(engine_.playheadSamples());
 
-    // Write mode takes every track's volume and pan for the whole pass.
-    if (automationMode_ == model::AutomationMode::Write)
+    // Write mode takes every such track's volume and pan for the whole pass.
+    const auto& song = history_.current();
+    for (int t = 0; t < (int) song.tracks.size(); ++t)
     {
-        const auto& song = history_.current();
-        for (int t = 0; t < (int) song.tracks.size(); ++t)
+        if (automationModeFor(t) == model::AutomationMode::Write)
         {
             automationControlMoved(AutomationWriteKey::trackParam(t, model::TrackParam::Gain),
                                    song.tracks[(size_t) t].gainDb, false);
@@ -123,12 +143,13 @@ void MainComponent::openAutomationPass()
     (@p touching). Starts writing it if the mode and the transport say so. */
 void MainComponent::automationControlMoved(const AutomationWriteKey& key, float value, bool touching)
 {
-    if (automationMode_ == model::AutomationMode::Read || ! engine_.isPlaying())
+    const auto mode = automationModeFor(key.track);
+    if (mode == model::AutomationMode::Read || ! engine_.isPlaying())
         return;
 
     // In Touch mode only a held control writes: a nudge from the scroll
     // wheel or the keyboard has no release to end it.
-    if (automationMode_ == model::AutomationMode::Touch && ! touching && ! isWritingAutomation(key))
+    if (mode == model::AutomationMode::Touch && ! touching && ! isWritingAutomation(key))
         return;
 
     openAutomationPass();
@@ -166,7 +187,7 @@ void MainComponent::automationControlReleased(const AutomationWriteKey& key)
             continue;
 
         it->touching = false;
-        if (automationMode_ != model::AutomationMode::Touch || ! it->writer.active())
+        if (automationModeFor(key.track) != model::AutomationMode::Touch || ! it->writer.active())
             return;
 
         auto& song = history_.mutableCurrent();
@@ -190,7 +211,7 @@ void MainComponent::tickAutomationWrites()
         return;
     }
 
-    if (automationMode_ == model::AutomationMode::Write)
+    if (anyTrackInWriteMode())
         openAutomationPass();
     if (! automationPassOpen_)
         return;
@@ -244,6 +265,41 @@ void MainComponent::setAutomationMode(model::AutomationMode mode)
     // reinterpreting what's already being written.
     closeAutomationPass();
     automationMode_ = mode;
+    updateMixerStrips(); // strips following the mix show its mode
+}
+
+/** Offers a track its own automation mode, or following the mix's. */
+void MainComponent::chooseTrackAutomationMode(int trackIndex)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    static const char* const names[] = { "Read", "Touch", "Latch", "Write" };
+    const int current = song.tracks[(size_t) trackIndex].automationMode;
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Automation mode");
+    menu.addItem(1, juce::String("As the mix (") + names[(int) automationMode_] + ")", true, current < 0);
+    for (int m = 0; m < 4; ++m)
+        menu.addItem(10 + m, names[m], true, current == m);
+
+    menu.showMenuAsync(juce::PopupMenu::Options(),
+        [self = juce::Component::SafePointer<MainComponent>(this), trackIndex](int result)
+        {
+            if (self == nullptr || result == 0)
+                return;
+
+            // As for the mix's mode: a pass in progress ends as it stands.
+            self->closeAutomationPass();
+            const int mode = result == 1 ? -1 : result - 10;
+            self->history_.edit("Set track automation mode", [trackIndex, mode](model::Song& s)
+            {
+                if (trackIndex >= 0 && trackIndex < (int) s.tracks.size())
+                    s.tracks[(size_t) trackIndex].automationMode = mode;
+            });
+            self->updateMixerStrips();
+        });
 }
 
 } // namespace soundsplice

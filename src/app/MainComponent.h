@@ -693,6 +693,9 @@ private:
     void                    tickAutomationWrites();
     void                    closeAutomationPass();
     void                    setAutomationMode(model::AutomationMode mode);
+    void                    chooseTrackAutomationMode(int trackIndex);
+    model::AutomationMode   automationModeFor(int trackIndex) const;
+    bool                    anyTrackInWriteMode() const;
 
     model::AutomationMode        automationMode_     = model::AutomationMode::Read;
     std::vector<AutomationWrite> automationWrites_;

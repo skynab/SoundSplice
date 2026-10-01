@@ -25,6 +25,16 @@ enum class AutomationMode
     Write = 3
 };
 
+/** The mode a track records in: its own (@p trackMode, a stored
+    AutomationMode) or, when it has none (-1, or a value this build doesn't
+    know), the mix's. */
+inline AutomationMode effectiveAutomationMode(int trackMode, AutomationMode mix)
+{
+    if (trackMode >= (int) AutomationMode::Read && trackMode <= (int) AutomationMode::Write)
+        return (AutomationMode) trackMode;
+    return mix;
+}
+
 /**
     Records one control into its lane as the playhead moves: whatever the
     lane had between where writing began and where it is now is replaced by

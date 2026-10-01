@@ -72,6 +72,12 @@ struct Track
     // be recorded in one take, each as it should be.
     int               recordChannels = 0;
 
+    // How moving this track's controls records automation, as a
+    // model::AutomationMode, or -1 to follow the mix's mode (the master
+    // panel's picker): REAPER's per-track mode, so one track can be written
+    // while the rest only play. See model::effectiveAutomationMode.
+    int               automationMode = -1;
+
     std::vector<Clip> clips;
 
     // The session grid's column for this track, indexed by scene. Kept the

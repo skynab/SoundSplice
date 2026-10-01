@@ -39,6 +39,7 @@ public:
     std::function<void()>      onSelect;
     std::function<void(bool)>  onArmChange;       // the R button
     std::function<void()>      onInputMenuRequested; // right-click on it
+    std::function<void()>      onAutomationModeMenuRequested; // the automation mode button
 
     MixerStrip()
     {
@@ -76,6 +77,10 @@ public:
         armButton_.setTooltip("Arm this track to record - several can be armed at once. "
                               "Right-click to choose its input");
         addAndMakeVisible(armButton_);
+
+        autoModeButton_.onClick = [this] { if (onAutomationModeMenuRequested) onAutomationModeMenuRequested(); };
+        autoModeButton_.setTooltip("How moving this track's controls records automation");
+        addAndMakeVisible(autoModeButton_);
 
         panSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
         panSlider_.setRange(-100.0, 100.0, 1.0);
@@ -122,6 +127,17 @@ public:
         armButton_.setTooltip("Arm this track to record - several can be armed at once. Records from: " + name
                               + ". Right-click to choose");
     }
+    /** Shows the mode the track records automation in: @p name, and whether
+        it's the track's own (lit) or the mix's it follows. */
+    void setAutomationMode(const juce::String& name, bool ownMode)
+    {
+        autoModeButton_.setButtonText(name);
+        autoModeButton_.setColour(juce::TextButton::buttonColourId,
+                                  ownMode ? juce::Colours::steelblue.withAlpha(0.6f)
+                                          : getLookAndFeel().findColour(juce::TextButton::buttonColourId));
+        autoModeButton_.setColour(juce::TextButton::textColourOffId,
+                                  juce::Colours::white.withAlpha(ownMode ? 1.0f : 0.55f));
+    }
     void setPan(float pan)         { panSlider_.setValue(pan * 100.0, juce::dontSendNotification); }
     void setSelected(bool sel) { if (selected_ != sel) { selected_ = sel; repaint(); } }
     void setLevel(int channel, float linearPeak) { meter_.setLevel(channel, linearPeak); }
@@ -157,6 +173,8 @@ public:
         muteButton_.setBounds(btnRow.removeFromLeft(third).reduced(2));
         soloButton_.setBounds(btnRow.removeFromLeft(third).reduced(2));
         armButton_.setBounds(btnRow.reduced(2));
+        area.removeFromTop(2);
+        autoModeButton_.setBounds(area.removeFromTop(18).reduced(2, 0));
         area.removeFromTop(4);
 
         // Strips pack side by side, so a narrow one is the normal case once
@@ -185,6 +203,7 @@ private:
     juce::TextButton muteButton_ { "M" };
     juce::TextButton soloButton_ { "S" };
     juce::TextButton armButton_  { "R" };
+    juce::TextButton autoModeButton_ { "Read" };
     juce::Label      panLabel_;
     juce::Slider     panSlider_;
     juce::Slider     gainSlider_;

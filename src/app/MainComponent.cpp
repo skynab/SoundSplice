@@ -552,6 +552,7 @@ MainComponent::MainComponent()
         strip->onSelect     = [this, i]           { selectTrack(i); };
         strip->onArmChange  = [this, i](bool a)   { setTrackArmed(i, a); };
         strip->onInputMenuRequested = [this, i]   { chooseTrackInput(i); };
+        strip->onAutomationModeMenuRequested = [this, i] { chooseTrackAutomationMode(i); };
         trackStrips_.add(strip);
         mixerView_.addAndMakeVisible(strip);
     }

@@ -1958,6 +1958,9 @@ void MainComponent::updateMixerStrips()
             strip->setPan(track.pan);
             strip->setArmed(armedTrackIds_.count(track.id) > 0);
 
+            static const char* const modeNames[] = { "Read", "Touch", "Latch", "Write" };
+            strip->setAutomationMode(modeNames[(int) automationModeFor(i)], track.automationMode >= 0);
+
             const auto inputs = engine_.inputChannelNames();
             const int  input  = track.recordInput;
             strip->setInputName(input < 0 ? juce::String("as in Recording Format")

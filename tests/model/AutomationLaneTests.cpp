@@ -254,3 +254,14 @@ TEST_CASE("A jump back while writing starts a new stretch there", "[model][autom
     REQUIRE(lane.valueAt(2.5) == Approx(0.5f));
     REQUIRE(lane.valueAt(12.0) == Approx(0.5f)); // from where it ended back to the old curve
 }
+
+TEST_CASE("A track records in its own automation mode, or the mix's when it has none", "[model][automation]")
+{
+    using soundsplice::model::AutomationMode;
+    using soundsplice::model::effectiveAutomationMode;
+
+    REQUIRE(effectiveAutomationMode(-1, AutomationMode::Latch) == AutomationMode::Latch);
+    REQUIRE(effectiveAutomationMode((int) AutomationMode::Write, AutomationMode::Read) == AutomationMode::Write);
+    REQUIRE(effectiveAutomationMode((int) AutomationMode::Read, AutomationMode::Write) == AutomationMode::Read);
+    REQUIRE(effectiveAutomationMode(17, AutomationMode::Touch) == AutomationMode::Touch); // unknown: the mix's
+}
