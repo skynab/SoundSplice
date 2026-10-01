@@ -72,6 +72,12 @@ public:
     /** The Track/Clip switch changed: the owner hands over the other chain. */
     std::function<void(bool clipScope)> onScopeChanged;
 
+    /** A compressor's or gate's Key button (model::canBeKeyed): choose the
+        track it listens to. @c sidechainName names a track by id for the
+        button. Track scope only. */
+    std::function<void(int slotIndex)>        onSidechainMenuRequested;
+    std::function<juce::String(int trackId)>  sidechainName;
+
     EffectChainPanel()
     {
         // Which chain this edits: the track's, or the selected clip's alone.
@@ -124,6 +130,14 @@ public:
         presetsButton_.setTooltip("Starting points for this effect, and settings you've saved");
         presetsButton_.onClick = [this] { showPresetsMenu(); };
         addChildComponent(presetsButton_);
+
+        keyButton_.setTooltip("What this effect listens to: its own input, or another track (a sidechain)");
+        keyButton_.onClick = [this]
+        {
+            if (onSidechainMenuRequested && isValidSlot(selected_))
+                onSidechainMenuRequested(selected_);
+        };
+        addChildComponent(keyButton_);
 
         // The parametric EQ's curve, edited by dragging its points; the
         // numbers below it follow.
@@ -322,6 +336,8 @@ public:
 
         auto presetRow = area.removeFromTop(kRowHeight).reduced(2);
         setBoundsOrHide(presetsButton_, presetRow.removeFromLeft(juce::jmin(kPresetsButtonWidth, presetRow.getWidth())));
+        presetRow.removeFromLeft(4);
+        setBoundsOrHide(keyButton_, presetRow.removeFromLeft(juce::jmin(160, presetRow.getWidth())));
 
         // Everything below the presets scrolls, laid out at its full height
         // inside the viewport.
@@ -614,7 +630,7 @@ private:
         button: what setContentVisible hides. */
     std::vector<juce::Component*> paramControls()
     {
-        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &paramsViewport_, &parametricView_, &dynamicsView_, &irButton_ };
+        std::vector<juce::Component*> controls { &editorButton_, &presetsButton_, &keyButton_, &paramsViewport_, &parametricView_, &dynamicsView_, &irButton_ };
         for (auto& row : rows_)
         {
             if (row.label != nullptr)
@@ -718,6 +734,7 @@ private:
     {
         editorButton_.setVisible(false);
         presetsButton_.setVisible(false);
+        keyButton_.setVisible(false);
         parametricView_.setVisible(false);
         dynamicsView_.setVisible(false);
         irButton_.setVisible(false);
@@ -747,6 +764,13 @@ private:
         paramsViewport_.setVisible(true);
 
         const auto& slot = chain_[(size_t) selected_];
+        if (model::canBeKeyed(slot.kind) && ! clipScope_)
+        {
+            keyButton_.setButtonText(slot.sidechainTrackId == 0 || ! sidechainName
+                                         ? juce::String("Key: Own Input")
+                                         : "Key: " + sidechainName(slot.sidechainTrackId));
+            keyButton_.setVisible(true);
+        }
         if (slot.kind == model::EffectKind::ParametricEq)
         {
             parametricView_.setBands(model::parametricBands(slot.parametricEq));
@@ -855,7 +879,7 @@ private:
     bool                             updating_       = false;
 
     juce::Label      placeholder_;
-    juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_, presetsButton_;
+    juce::TextButton addButton_, removeButton_, upButton_, downButton_, editorButton_, presetsButton_, keyButton_;
 
     // The content outlives the viewport showing it, and both outlive the
     // curves and rows parented to the content (members go in reverse order).

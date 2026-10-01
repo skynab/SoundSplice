@@ -1181,6 +1181,61 @@ void MainComponent::pushTrackRouting(int trackIndex)
                 sends.push_back({ b, send.levelDb, send.preFader });
 
     engine_.setTrackRouting(trackIndex, model::routing::isBus(track), model::routing::outputIndex(song, trackIndex), sends);
+
+    // Sidechains: each keyed slot and the track it listens to, while that
+    // track is still there.
+    std::vector<std::pair<int, int>> keys;
+    for (int s = 0; s < (int) track.effectChain.size(); ++s)
+    {
+        const auto& slot = track.effectChain[(size_t) s];
+        if (! model::canBeKeyed(slot.kind) || slot.sidechainTrackId == 0)
+            continue;
+        for (int t = 0; t < (int) song.tracks.size(); ++t)
+            if (t != trackIndex && song.tracks[(size_t) t].id == slot.sidechainTrackId)
+                keys.push_back({ s, t });
+    }
+    engine_.setTrackSidechains(trackIndex, keys);
+}
+
+/** Which track the selected track's compressor or gate in slot
+    @p slotIndex listens to: its own input, or any track it doesn't feed
+    (a track it feeds would be listening to itself, a moment late). */
+void MainComponent::chooseSidechain(int slotIndex)
+{
+    const auto& song = history_.current();
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
+        return;
+
+    const auto& track = song.tracks[(size_t) selectedTrackIndex_];
+    if (slotIndex < 0 || slotIndex >= (int) track.effectChain.size())
+        return;
+
+    const int        current = track.effectChain[(size_t) slotIndex].sidechainTrackId;
+    std::vector<int> sources;
+    juce::PopupMenu  menu;
+    menu.addSectionHeader("Listen to");
+    menu.addItem(1, "Own Input", true, current == 0);
+    for (const auto& other : song.tracks)
+        if (other.id != track.id && ! model::routing::feeds(song, track.id, other.id))
+        {
+            sources.push_back(other.id);
+            menu.addItem(100 + (int) sources.size() - 1, juce::String(other.name), true, other.id == current);
+        }
+
+    menu.showMenuAsync(juce::PopupMenu::Options(),
+        [self = juce::Component::SafePointer<MainComponent>(this), trackId = track.id, slotIndex, sources](int result)
+        {
+            if (self == nullptr || result == 0)
+                return;
+            const int source = result == 1 ? 0 : sources[(size_t) (result - 100)];
+            self->history_.edit(source == 0 ? "Remove sidechain" : "Set sidechain", [trackId, slotIndex, source](model::Song& s)
+            {
+                if (auto* t = model::findTrack(s, trackId); t != nullptr && slotIndex < (int) t->effectChain.size())
+                    t->effectChain[(size_t) slotIndex].sidechainTrackId = source;
+            });
+            self->syncEngineTracks();
+            self->refreshEffectChainForSelected();
+        });
 }
 
 /** Adds a bus track (model/Routing.h) after the last track. */

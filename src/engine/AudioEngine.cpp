@@ -640,6 +640,22 @@ void AudioEngine::setTrackRouting(int index, bool isBus, int outputBus, const st
     track.outputBus.store(outputBus, std::memory_order_relaxed);
 }
 
+void AudioEngine::setTrackSidechains(int index, const std::vector<std::pair<int, int>>& slotAndSource)
+{
+    if (index < 0 || index >= kMaxTracks)
+        return;
+
+    auto&     track = tracks_[(size_t) index];
+    const int count = juce::jmin((int) slotAndSource.size(), mixrouting::kMaxKeys);
+    track.keyCount.store(juce::jmin(count, track.keyCount.load(std::memory_order_relaxed)), std::memory_order_release);
+    for (int k = 0; k < count; ++k)
+    {
+        track.keySlot[(size_t) k].store(slotAndSource[(size_t) k].first, std::memory_order_relaxed);
+        track.keySource[(size_t) k].store(slotAndSource[(size_t) k].second, std::memory_order_relaxed);
+    }
+    track.keyCount.store(count, std::memory_order_release);
+}
+
 void AudioEngine::snapshotRouting(std::array<mixrouting::Node, kMaxTracks>& nodes) noexcept
 {
     for (int i = 0; i < kMaxTracks; ++i)
@@ -656,6 +672,9 @@ void AudioEngine::snapshotRouting(std::array<mixrouting::Node, kMaxTracks>& node
                                        track.sendGain[(size_t) s].load(std::memory_order_relaxed),
                                        track.sendPreFader[(size_t) s].load(std::memory_order_relaxed) };
         node.chainLatency = node.active ? track.chainLatency() : 0;
+        node.keyCount     = juce::jlimit(0, mixrouting::kMaxKeys, track.keyCount.load(std::memory_order_acquire));
+        for (int k = 0; k < node.keyCount; ++k)
+            node.keySources[(size_t) k] = track.keySource[(size_t) k].load(std::memory_order_relaxed);
     }
 }
 
@@ -1239,11 +1258,30 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
                     if (const int bus = mixrouting::validBus(nodes.data(), kMaxTracks, i, nodes[(size_t) i].sends[(size_t) s].bus);
                         bus >= 0 && needed[(size_t) bus])
                         feeds = true;
+
+                // A key a needed track listens to: rendered for that, though
+                // nothing of it reaches the stem.
+                for (int j = 0; j < kMaxTracks && ! feeds; ++j)
+                    if (needed[(size_t) j])
+                        for (int k = 0; k < nodes[(size_t) j].keyCount; ++k)
+                            if (mixrouting::validKey(nodes.data(), kMaxTracks, j, nodes[(size_t) j].keySources[(size_t) k]) == i)
+                                feeds = true;
                 if (feeds)
                     needed[(size_t) i] = grew = true;
             }
         }
     }
+
+    // Who's listened to, so they keep their output for their listeners.
+    std::array<bool, kMaxTracks> isKey {};
+    for (int i = 0; i < kMaxTracks; ++i)
+        for (int k = 0; k < nodes[(size_t) i].keyCount; ++k)
+            if (const int source = mixrouting::validKey(nodes.data(), kMaxTracks, i, nodes[(size_t) i].keySources[(size_t) k]); source >= 0)
+                isKey[(size_t) source] = true;
+
+    if (silentKey_.getNumSamples() < numSamples)
+        silentKey_.setSize(2, numSamples, false, false, true);
+    silentKey_.clear();
 
     // Each bus starts the block empty; its sources add in before it renders.
     for (int i = 0; i < kMaxTracks; ++i)
@@ -1287,6 +1325,19 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
                 to.sendPreFader[(size_t) to.sendCount] = send.preFader;
                 ++to.sendCount;
             }
+        }
+
+        // Keys: the source's output if it has rendered this block, else
+        // silence - never the track's own input, which would be a different
+        // effect from the one asked for.
+        to.keepKey = isKey[(size_t) i];
+        for (int k = 0; k < node.keyCount && to.keyCount < mixrouting::kMaxKeys; ++k)
+        {
+            const int source = mixrouting::validKey(nodes.data(), kMaxTracks, i, node.keySources[(size_t) k]);
+            to.keySlots[(size_t) to.keyCount] = tracks_[(size_t) i].keySlot[(size_t) k].load(std::memory_order_relaxed);
+            to.keys[(size_t) to.keyCount]     = source >= 0 && rendered[(size_t) source] ? &tracks_[(size_t) source].keyOutput
+                                                                                         : &silentKey_;
+            ++to.keyCount;
         }
 
         tracks_[(size_t) i].renderRouted(midi, context, i == armed, launchQuantumSamples, to);
@@ -1483,6 +1534,8 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
         entry.chain->prepare(sampleRate, blockSize);
 
     filePlayer_.prepare(sampleRate, blockSize);
+    silentKey_.setSize(2, juce::jmax(1, blockSize));
+    silentKey_.clear();
     audition_.prepare(sampleRate);
     masterFilter_.prepare(sampleRate, blockSize);
     masterDelay_.prepare(sampleRate, blockSize);

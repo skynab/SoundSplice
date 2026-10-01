@@ -23,6 +23,7 @@ namespace mixrouting
 {
     inline constexpr int kMaxNodes = 32;
     inline constexpr int kMaxSends = 8;
+    inline constexpr int kMaxKeys  = 4; // keyed effect slots per track
 
     struct Send
     {
@@ -40,7 +41,19 @@ namespace mixrouting
         std::array<Send, kMaxSends>  sends {};
         int                          sendCount = 0;
         int                          chainLatency = 0; // its effects', in samples
+
+        // The tracks its keyed effects listen to (sidechains): no audio
+        // flows, but each has to render first, so its output is there.
+        std::array<int, kMaxKeys>    keySources {};
+        int                          keyCount = 0;
     };
+
+    /** @p source if it's an active node other than @p from: a key that can
+        be listened to. */
+    inline int validKey(const Node* nodes, int count, int from, int source)
+    {
+        return source >= 0 && source < count && source != from && nodes[source].active ? source : -1;
+    }
 
     /** @p target if it's an active bus other than @p from, else -1. */
     inline int validBus(const Node* nodes, int count, int from, int target)
@@ -69,6 +82,9 @@ namespace mixrouting
             for (int s = 0; s < nodes[i].sendCount; ++s)
                 if (const int bus = validBus(nodes, count, i, nodes[i].sends[(size_t) s].bus); bus >= 0)
                     ++waiting[(size_t) bus];
+            for (int k = 0; k < nodes[i].keyCount; ++k)
+                if (validKey(nodes, count, i, nodes[i].keySources[(size_t) k]) >= 0)
+                    ++waiting[(size_t) i]; // waits for each of its keys
         }
 
         std::array<bool, kMaxNodes> placed {};
@@ -91,6 +107,13 @@ namespace mixrouting
                 for (int s = 0; s < nodes[i].sendCount; ++s)
                     if (const int bus = validBus(nodes, count, i, nodes[i].sends[(size_t) s].bus); bus >= 0)
                         --waiting[(size_t) bus];
+
+                // Whoever listens to this one has one key fewer to wait for.
+                for (int j = 0; j < count; ++j)
+                    if (nodes[j].active)
+                        for (int k = 0; k < nodes[j].keyCount; ++k)
+                            if (validKey(nodes, count, j, nodes[j].keySources[(size_t) k]) == i)
+                                --waiting[(size_t) j];
             }
         }
 

@@ -651,6 +651,10 @@ struct ChannelMixerSettings
     bool operator==(const ChannelMixerSettings&) const = default;
 };
 
+/** Whether an effect of @p kind can listen to another track (see
+    EffectSlot::sidechainTrackId): the compressor and the gate. */
+inline bool canBeKeyed(EffectKind kind) { return kind == EffectKind::Compressor || kind == EffectKind::Gate; }
+
 struct EffectSlot
 {
     EffectKind kind    = EffectKind::Filter;
@@ -688,6 +692,12 @@ struct EffectSlot
     VocoderSettings      vocoder;
     ChannelMixerSettings channelMixer;
     PluginRef          plugin; // meaningful when kind == Plugin
+
+    // The track whose output this effect's detector listens to, by id, or 0
+    // for its own input: a compressor ducking a bass under the kick, or a
+    // gate opened by another track. Only for effects that can be keyed
+    // (model::canBeKeyed); a track that has gone means its own input again.
+    int                sidechainTrackId = 0;
 
     // Automation for this effect's parameters, keyed by descriptor id (see
     // model/EffectParams.h). Kept on the slot rather than the track so the

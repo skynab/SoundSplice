@@ -112,3 +112,23 @@ TEST_CASE("Delay compensation counts the buses on each track's way out", "[engin
     REQUIRE(compensationFor(nodes.data(), 5, 2, latest) == 150);
     REQUIRE(compensationFor(nodes.data(), 5, 3, latest) == 0);   // a bus's inputs are already aligned
 }
+
+TEST_CASE("A track keyed from another renders after it", "[engine][routing]")
+{
+    std::vector<Node> nodes(3);
+    for (auto& node : nodes)
+        node.active = true;
+    nodes[0].keySources[0] = 2; // the bass listens to the kick
+    nodes[0].keyCount      = 1;
+
+    std::vector<int> order(kMaxNodes);
+    order.resize((size_t) renderOrder(nodes.data(), 3, order.data()));
+    REQUIRE(order.size() == 3);
+    REQUIRE(placeOf(order, 2) < placeOf(order, 0));
+
+    // Keying from itself is ignored rather than waited on forever.
+    nodes[1].keySources[0] = 1;
+    nodes[1].keyCount      = 1;
+    REQUIRE(renderOrder(nodes.data(), 3, order.data()) == 3);
+    REQUIRE(validKey(nodes.data(), 3, 1, 1) == -1);
+}

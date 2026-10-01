@@ -219,7 +219,8 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   Out routes the track to a bus, Sends adds sends at their own level, pre or post fader; buses feed
   buses, never in a loop; solo follows the routing and delay compensation counts each bus on the way
   out; `src/model/Routing.h`, `src/engine/MixRouting.h`; the headless bounce tool doesn't route yet) ·
-  ⬜ sidechain · ⬜ tempo changes · ⬜ warp
+  ✅ **sidechain** (a compressor's or gate's Key button in the effects panel: it listens to another track's
+  output as it leaves its fader, rendered first; `FXKEY`) · ⬜ tempo changes · ⬜ warp
 
 ### Phase 6 — Audition's "finishing" workflows
 

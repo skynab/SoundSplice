@@ -91,3 +91,42 @@ TEST_CASE("A routed track feeds its bus and its sends, pre and post fader", "[gu
     bus.renderRouted(midi, context, false, 0.0, out);
     REQUIRE(master.getSample(0, 100) == 0.0f);
 }
+
+TEST_CASE("A keyed compressor ducks on its key, not on what it compresses", "[gui][routing]")
+{
+    CompressorEffect compressor;
+    compressor.prepare(kRate, kBlock);
+    compressor.setEnabled(true);
+    compressor.setThresholdDb(-30.0f);
+    compressor.setRatio(20.0f);
+    compressor.setAttackMs(0.1f);
+    compressor.setReleaseMs(5.0f);
+
+    const auto run = [&](const juce::AudioBuffer<float>* key)
+    {
+        juce::AudioBuffer<float> quiet(2, kBlock);
+        for (int i = 0; i < kBlock; ++i)
+            for (int ch = 0; ch < 2; ++ch)
+                quiet.setSample(ch, i, 0.01f); // -40 dB: under the threshold
+        compressor.setSidechainInput(key);
+        compressor.process(quiet);
+        return quiet.getSample(0, kBlock - 1);
+    };
+
+    // On its own the quiet signal passes untouched...
+    REQUIRE(run(nullptr) == Approx(0.01f).margin(1.0e-5));
+
+    // ...but a loud key pushes it down.
+    juce::AudioBuffer<float> kick(2, kBlock);
+    for (int i = 0; i < kBlock; ++i)
+        for (int ch = 0; ch < 2; ++ch)
+            kick.setSample(ch, i, 0.9f);
+    REQUIRE(run(&kick) < 0.002f);
+
+    // A silent key ducks nothing.
+    juce::AudioBuffer<float> silence(2, kBlock);
+    silence.clear();
+    for (int b = 0; b < 40; ++b)
+        run(&silence); // let the release settle
+    REQUIRE(run(&silence) == Approx(0.01f).margin(1.0e-4));
+}

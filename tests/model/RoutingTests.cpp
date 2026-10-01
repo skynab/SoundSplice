@@ -82,3 +82,23 @@ TEST_CASE("Buses, outputs and sends round-trip", "[model][routing][io]")
     REQUIRE(restored.tracks[2].type == TrackType::Bus);
     REQUIRE(restored.tracks[2].sends[0].preFader);
 }
+
+TEST_CASE("A compressor's sidechain round-trips, and its own input writes nothing", "[model][routing][io]")
+{
+    Ids  ids;
+    auto song = mix(ids);
+    auto& vocal = song.tracks[1];
+    vocal.effectChain.push_back(makeEffectSlot(EffectKind::Compressor));
+    vocal.effectChain.push_back(makeEffectSlot(EffectKind::Gate));
+    vocal.effectChain[0].sidechainTrackId = ids.drums;
+
+    const auto text = serialize(song);
+    REQUIRE(text.find("FXKEY " + std::to_string(ids.drums)) != std::string::npos);
+    REQUIRE(text.find("FXKEY") == text.rfind("FXKEY"));
+
+    Song restored;
+    REQUIRE(deserialize(text, restored));
+    REQUIRE(restored == song);
+    REQUIRE(canBeKeyed(EffectKind::Gate));
+    REQUIRE_FALSE(canBeKeyed(EffectKind::Reverb));
+}

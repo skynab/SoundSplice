@@ -871,6 +871,12 @@ MainComponent::MainComponent()
         addEffectSlot(model::EffectKind::Plugin, ref);
     };
     effectChain_.onScopeChanged         = [this](bool) { refreshEffectChainForSelected(); };
+    effectChain_.onSidechainMenuRequested = [this](int slot) { chooseSidechain(slot); };
+    effectChain_.sidechainName = [this](int trackId)
+    {
+        const auto* track = model::findTrack(history_.current(), trackId);
+        return track != nullptr ? juce::String(track->name) : juce::String("(gone)");
+    };
     effectChain_.onSlotRemoved          = [this](int slot) { removeEffectSlot(slot); };
     effectChain_.onSlotMoved            = [this](int slot, int delta) { moveEffectSlot(slot, delta); };
     effectChain_.onSlotBypassToggled    = [this](int slot, bool on) { setEffectSlotBypass(slot, on); };

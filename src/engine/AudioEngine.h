@@ -442,6 +442,10 @@ public:
         mixrouting::kMaxSends). Message thread. */
     void setTrackRouting(int index, bool isBus, int outputBus, const std::vector<SendSpec>& sends);
 
+    /** Track @p index's sidechains: effect slot @c first listens to track
+        @c second (at most mixrouting::kMaxKeys). Message thread. */
+    void setTrackSidechains(int index, const std::vector<std::pair<int, int>>& slotAndSource);
+
     // ---- session view (message thread) ----
     /** Replaces a track's session column. Slot index is the scene. */
     void setTrackSessionSlots(int index, const std::vector<SessionSlotData>& slots);
@@ -858,6 +862,10 @@ private:
         }
     };
     bool clipPluginChainsChanged_ = false;
+
+    // What a sidechain listens to when its source hasn't rendered this block
+    // (it's muted, left out of a stem, or caught in a loop): silence.
+    juce::AudioBuffer<float> silentKey_;
 
     /** One slot's node: a built-in, or the plugin it names, loaded here on
         the message thread with its saved state (a plugin missing on this

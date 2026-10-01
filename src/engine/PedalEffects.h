@@ -21,6 +21,15 @@ namespace soundsplice::engine
     DriveEffect: turning a knob must not rebuild the chain, since that would
     reset every tail in it.
 */
+/** The detector signal for a block: the sidechain @p key when there is one
+    long enough to cover @p buffer, else @p buffer itself. A key too short is
+    a block the source didn't render, which the caller hands as silence
+    anyway; this only guards against reading past an end. */
+inline const juce::AudioBuffer<float>* keyFor(const juce::AudioBuffer<float>* key, const juce::AudioBuffer<float>& buffer)
+{
+    return key != nullptr && key->getNumChannels() > 0 && key->getNumSamples() >= buffer.getNumSamples() ? key : &buffer;
+}
+
 class CompressorEffect
 {
 public:
@@ -35,6 +44,11 @@ public:
     void setAttackMs(float ms)        { attackMs_.store(ms, std::memory_order_relaxed); }
     void setReleaseMs(float ms)       { releaseMs_.store(ms, std::memory_order_relaxed); }
     void setMakeUpDb(float db)        { makeUpDb_.store(db, std::memory_order_relaxed); }
+
+    /** What the detector listens to this block: another track's output (a
+        sidechain), or nullptr for the audio being compressed. Borrowed for
+        the block only, from the thread that calls process(). */
+    void setSidechainInput(const juce::AudioBuffer<float>* input) noexcept { sidechain_ = input; }
 
     void process(juce::AudioBuffer<float>& buffer)
     {
@@ -52,13 +66,15 @@ public:
         const int numChannels = buffer.getNumChannels();
         const int numSamples  = buffer.getNumSamples();
 
+        const auto* detector = keyFor(sidechain_, buffer);
+
         for (int n = 0; n < numSamples; ++n)
         {
             // The detector sees the loudest channel, so the pair ducks
             // together on whichever one is actually loud.
             float peak = 0.0f;
-            for (int channel = 0; channel < numChannels; ++channel)
-                peak = juce::jmax(peak, std::abs(buffer.getSample(channel, n)));
+            for (int channel = 0; channel < detector->getNumChannels(); ++channel)
+                peak = juce::jmax(peak, std::abs(detector->getSample(channel, n)));
 
             const float gain = compressor_.gainFor(peak) * makeUp;
 
@@ -69,6 +85,7 @@ public:
 
 private:
     Compressor compressor_;
+    const juce::AudioBuffer<float>* sidechain_ = nullptr;
 
     std::atomic<bool>  enabled_     { false };
     std::atomic<float> thresholdDb_ { -18.0f };
@@ -94,6 +111,9 @@ public:
     void setHoldMs(float ms)          { holdMs_.store(ms, std::memory_order_relaxed); }
     void setReleaseMs(float ms)       { releaseMs_.store(ms, std::memory_order_relaxed); }
 
+    /** As CompressorEffect's: the gate opens on another track. */
+    void setSidechainInput(const juce::AudioBuffer<float>* input) noexcept { sidechain_ = input; }
+
     void process(juce::AudioBuffer<float>& buffer)
     {
         if (! enabled_.load(std::memory_order_relaxed))
@@ -108,11 +128,13 @@ public:
         const int numChannels = buffer.getNumChannels();
         const int numSamples  = buffer.getNumSamples();
 
+        const auto* detector = keyFor(sidechain_, buffer);
+
         for (int n = 0; n < numSamples; ++n)
         {
             float peak = 0.0f;
-            for (int channel = 0; channel < numChannels; ++channel)
-                peak = juce::jmax(peak, std::abs(buffer.getSample(channel, n)));
+            for (int channel = 0; channel < detector->getNumChannels(); ++channel)
+                peak = juce::jmax(peak, std::abs(detector->getSample(channel, n)));
 
             const float gain = gate_.gainFor(peak);
 
@@ -123,6 +145,7 @@ public:
 
 private:
     Gate gate_;
+    const juce::AudioBuffer<float>* sidechain_ = nullptr;
 
     std::atomic<bool>  enabled_     { false };
     std::atomic<float> thresholdDb_ { -40.0f };

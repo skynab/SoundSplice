@@ -168,6 +168,9 @@ namespace detail
         if (! slot.convolution.irFile.empty())
             out << "FXIR " << slot.convolution.irFile << "\n";
 
+        if (slot.sidechainTrackId != 0)
+            out << "FXKEY " << slot.sidechainTrackId << "\n";
+
         if (slot.kind == EffectKind::Plugin)
         {
             // Split across lines because identifier, name and state are all
@@ -556,6 +559,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
         if (readTagged("FXIR", rest))
             slot.convolution.irFile = rest;
+
+        if (readTagged("FXKEY", rest))
+            slot.sidechainTrackId = std::atoi(rest.c_str());
 
         if (slot.kind == EffectKind::Plugin)
         {

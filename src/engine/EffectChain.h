@@ -83,6 +83,11 @@ struct EffectProcessor
         see InstrumentTrack's delay compensation. Audio thread safe. */
     virtual int latencySamples() const noexcept { return 0; }
 
+    /** The detector signal for this block, for an effect that can listen to
+        another track (model::canBeKeyed), or nullptr for its own input. Set
+        before process() each block; a no-op for everything else. */
+    virtual void setSidechainInput(const juce::AudioBuffer<float>* /*input*/) {}
+
     /** Bypass and every parameter, from one slot's settings. Message thread:
         the setters behind it store atomics the audio thread reads.
 
@@ -243,6 +248,8 @@ struct CompressorNode final : BuiltInNode<CompressorNode, CompressorEffect, Effe
         { "release", [](CompressorEffect& e, int, float v) { e.setReleaseMs(v); } },
         { "makeUp", [](CompressorEffect& e, int, float v) { e.setMakeUpDb(v); } },
     };
+
+    void setSidechainInput(const juce::AudioBuffer<float>* input) override { effect.setSidechainInput(input); }
 };
 
 struct TremoloNode final : BuiltInNode<TremoloNode, TremoloEffect, EffectKind::Tremolo>
@@ -284,6 +291,8 @@ struct GateNode final : BuiltInNode<GateNode, GateEffect, EffectKind::Gate>
         { "hold", [](GateEffect& e, int, float v) { e.setHoldMs(v); } },
         { "release", [](GateEffect& e, int, float v) { e.setReleaseMs(v); } },
     };
+
+    void setSidechainInput(const juce::AudioBuffer<float>* input) override { effect.setSidechainInput(input); }
 };
 
 struct EqNode final : BuiltInNode<EqNode, EqPedalEffect, EffectKind::Eq>
@@ -656,6 +665,21 @@ public:
     }
 
     EffectProcessor* nodeAt(size_t index) { return index < nodes_.size() ? nodes_[index].get() : nullptr; }
+
+    /** Points slot @p index's detector at @p key for this block (see
+        EffectProcessor::setSidechainInput); clearSidechains first takes
+        every slot back to its own input. Audio thread. */
+    void setSidechainInput(size_t index, const juce::AudioBuffer<float>* key)
+    {
+        if (index < nodes_.size())
+            nodes_[index]->setSidechainInput(key);
+    }
+
+    void clearSidechains()
+    {
+        for (auto& node : nodes_)
+            node->setSidechainInput(nullptr);
+    }
 
 private:
     std::vector<std::unique_ptr<EffectProcessor>> nodes_;

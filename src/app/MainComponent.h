@@ -628,6 +628,7 @@ private:
     void                   beginSendDrag(int trackIndex, int send);
     void                   endSendDrag(int trackIndex, int send);
     void                   pushTrackRouting(int trackIndex);
+    void                   chooseSidechain(int slotIndex);
 
     // A send level being dragged on a strip, committed as one undo step.
     bool                   sendDragging_  = false;

@@ -67,6 +67,15 @@ struct InstrumentTrack
         int                                                            sendCount = 0;
         bool                                                           audible   = true;
         int                                                            delay     = 0;
+
+        // Sidechains: which effect slots listen to which buffers this block.
+        std::array<int, mixrouting::kMaxKeys>                          keySlots {};
+        std::array<const juce::AudioBuffer<float>*, mixrouting::kMaxKeys> keys {};
+        int                                                            keyCount = 0;
+
+        // Whether another track listens to this one: if so its output is kept
+        // in keyOutput for them.
+        bool                                                           keepKey = false;
     };
 
     SynthInstrumentNode      synth;
@@ -96,6 +105,12 @@ struct InstrumentTrack
     std::array<std::atomic<bool>, mixrouting::kMaxSends>  sendPreFader {};
     std::atomic<int>         sendCount   { 0 };
     juce::AudioBuffer<float> busInput;
+
+    // Sidechains: effect slot keySlot[k] listens to track keySource[k].
+    std::array<std::atomic<int>, mixrouting::kMaxKeys> keySlot {};
+    std::array<std::atomic<int>, mixrouting::kMaxKeys> keySource {};
+    std::atomic<int>         keyCount    { 0 };
+    juce::AudioBuffer<float> keyOutput; // this block's output, for tracks keyed from it
     juce::MidiBuffer         trackMidi;
     juce::AudioBuffer<float> scratch;
 
@@ -170,6 +185,8 @@ struct InstrumentTrack
         scratch.setSize(2, juce::jmax(1, blockSize));
         busInput.setSize(2, juce::jmax(1, blockSize));
         busInput.clear();
+        keyOutput.setSize(2, juce::jmax(1, blockSize));
+        keyOutput.clear();
         compensation_.setSize(2, kMaxCompensation);
         compensation_.clear();
         compensationWrite_ = 0;
@@ -341,6 +358,8 @@ public:
             channelPeak_[0].store(0.0f, std::memory_order_relaxed);
             channelPeak_[1].store(0.0f, std::memory_order_relaxed);
             compensationStale_ = true; // what it holds is from before the silence
+            if (to.keepKey)
+                keyOutput.clear(); // a muted key ducks nothing
             return;
         }
 
@@ -368,7 +387,12 @@ public:
             effectChain_->setBpm(context.transport.bpm);
             if (automation_ != nullptr)
                 applyEffectAutomation(*effectChain_, *automation_, context.transport.ppqPosition);
+
+            effectChain_->clearSidechains();
+            for (int k = 0; k < to.keyCount; ++k)
+                effectChain_->setSidechainInput((size_t) to.keySlots[(size_t) k], to.keys[(size_t) k]);
             effectChain_->process(scratch);
+            effectChain_->clearSidechains(); // the keys are only lent for this block
         }
 
         compensate(numSamples, to.delay);
@@ -419,6 +443,12 @@ public:
 
             if (to.output != nullptr)
                 addFaded(*to.output, ch, channelGainStart, channelGainEnd, 1.0f);
+
+            if (to.keepKey)
+            {
+                keyOutput.clear(ch, 0, numSamples);
+                addFaded(keyOutput, ch, channelGainStart, channelGainEnd, 1.0f);
+            }
 
             // Post-fader sends: the track as the fader and pan leave it.
             for (int s = 0; s < to.sendCount; ++s)
