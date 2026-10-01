@@ -578,7 +578,9 @@ public:
             {
                 g.setColour(juce::Colours::white.withAlpha(track.muted ? 0.2f : 0.35f));
                 g.setFont(juce::FontOptions(12.0f));
-                g.drawText("No clips - select this track and click + Clip to add one",
+                g.drawText(track.type == model::TrackType::Bus
+                               ? "Bus - mixes the tracks routed or sent to it (Out and Sends on their mixer strips)"
+                               : "No clips - select this track and click + Clip to add one",
                            juce::Rectangle<float>(timelineX + 8.0f, y, width - timelineX - 16.0f,
                                                   geometry_.laneHeight),
                            juce::Justification::centredLeft);

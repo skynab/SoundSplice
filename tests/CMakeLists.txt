@@ -65,6 +65,7 @@ add_executable(soundsplice_tests
   engine/ShelfPeakFilterTests.cpp
   engine/EqCurveTests.cpp
   engine/ReverbTests.cpp
+  engine/MixRoutingTests.cpp
   model/HistoryTests.cpp
   model/SongTests.cpp
   model/SerializationTests.cpp
@@ -72,6 +73,7 @@ add_executable(soundsplice_tests
   model/RazorEditsTests.cpp
   model/TrackGroupsTests.cpp
   model/FoldersTests.cpp
+  model/RoutingTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp
   model/TimebaseTests.cpp
@@ -158,6 +160,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/TransferCurveViewTests.cpp
     gui/UtilityEffectsTests.cpp
     gui/PluginManagerTests.cpp
+    gui/BusRoutingTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 

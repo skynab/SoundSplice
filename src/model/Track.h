@@ -16,7 +16,21 @@ namespace soundsplice::model
 enum class TrackType
 {
     Instrument = 0, // MIDI clips driving a synth
-    Audio      = 1  // audio-file clips
+    Audio      = 1, // audio-file clips
+    // 2 and 3 were Looper-Audio's drum and guitar tracks: not reused.
+    Bus        = 4  // no clips: mixes what other tracks send it (model/Routing.h)
+};
+
+/** A send from a track to a bus: a copy of the track at its own level,
+    tapped after the fader and pan, or before them (pre-fader), as a
+    reverb return or a headphone mix wants. */
+struct TrackSend
+{
+    int   busId    = 0;     // the bus track, by id
+    float levelDb  = 0.0f;
+    bool  preFader = false;
+
+    bool operator==(const TrackSend&) const = default;
 };
 
 /** Which of a track's parameters an automation lane drives (see
@@ -88,6 +102,12 @@ struct Track
     // model/Folders.h for when a track counts as in a folder.
     int               folderParentId  = 0;
     bool              folderCollapsed = false;
+
+    // Where this track's output goes: a bus track by id, or 0 for the
+    // master; and its sends to buses. See model/Routing.h for which
+    // routings are allowed (no loops) and what an id that's gone means.
+    int                    outputBusId = 0;
+    std::vector<TrackSend> sends;
 
     std::vector<Clip> clips;
 

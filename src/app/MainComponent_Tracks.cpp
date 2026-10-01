@@ -83,6 +83,11 @@ void MainComponent::addClipToSelectedTrack()
 {
     if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
         return;
+    if (! model::routing::holdsClips(history_.current().tracks[(size_t) selectedTrackIndex_]))
+    {
+        showError("A bus has no clips - route or send tracks to it instead");
+        return;
+    }
 
     const int trackIdx = selectedTrackIndex_;
     int       newClipIndex = -1;
@@ -280,6 +285,11 @@ void MainComponent::pasteClip()
 {
     if (clipClipboard_.empty() || selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
         return;
+    if (! model::rangeedit::fits(history_.current().tracks[(size_t) selectedTrackIndex_], clipClipboard_.front().type))
+    {
+        showError("That clip can't go on this track - audio goes on audio tracks, notes on instrument ones");
+        return;
+    }
 
     const double dropBeat = std::round(uiTempoMap_.ppqFromSamples(engine_.playheadSamples()));
     const int    trackIdx = selectedTrackIndex_;
@@ -1155,6 +1165,182 @@ void MainComponent::outdentTrack(int trackIndex)
     selectTrackAndRefreshAll(selected);
 }
 
+/** Track @p trackIndex's routing to the engine, by indices: where its
+    output goes and its sends, each to a bus that's still there. */
+void MainComponent::pushTrackRouting(int trackIndex)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const auto&                            track = song.tracks[(size_t) trackIndex];
+    std::vector<engine::AudioEngine::SendSpec> sends;
+    for (const auto& send : track.sends)
+        for (int b = 0; b < (int) song.tracks.size(); ++b)
+            if (song.tracks[(size_t) b].id == send.busId && model::routing::isBus(song.tracks[(size_t) b]))
+                sends.push_back({ b, send.levelDb, send.preFader });
+
+    engine_.setTrackRouting(trackIndex, model::routing::isBus(track), model::routing::outputIndex(song, trackIndex), sends);
+}
+
+/** Adds a bus track (model/Routing.h) after the last track. */
+void MainComponent::addBusTrack()
+{
+    if (trackCount() >= engine_.maxTracks())
+    {
+        showError("Track limit reached");
+        return;
+    }
+
+    history_.edit("Add bus", [](model::Song& s)
+    {
+        int buses = 0;
+        for (const auto& track : s.tracks)
+            buses += model::routing::isBus(track) ? 1 : 0;
+        model::addTrack(s, model::TrackType::Bus, "Bus " + std::to_string(buses + 1));
+    });
+
+    selectTrackAndRefreshAll(trackCount() - 1);
+    showStatus("Added a bus - on a track's mixer strip, Out sends its output here and Sends adds a send");
+}
+
+/** Where a track's output goes: the master, or a bus that doesn't feed it. */
+void MainComponent::chooseTrackOutput(int trackIndex)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const auto& track = song.tracks[(size_t) trackIndex];
+    const auto  buses = model::routing::busesFor(song, track.id);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Output");
+    menu.addItem(1, "Master", true, model::routing::outputIndex(song, trackIndex) < 0);
+    for (int b = 0; b < (int) buses.size(); ++b)
+        menu.addItem(100 + b, juce::String(model::findTrack(song, buses[(size_t) b])->name), true,
+                     track.outputBusId == buses[(size_t) b]);
+    if (buses.empty())
+        menu.addItem(2, "(add a bus to route to one)", false, false);
+
+    menu.showMenuAsync(juce::PopupMenu::Options(),
+        [self = juce::Component::SafePointer<MainComponent>(this), trackId = track.id, buses](int result)
+        {
+            if (self == nullptr || result == 0 || result == 2)
+                return;
+            const int busId = result == 1 ? 0 : buses[(size_t) (result - 100)];
+            self->history_.edit("Route track", [trackId, busId](model::Song& s) { model::routing::setOutput(s, trackId, busId); });
+            self->syncEngineTracks();
+            self->updateMixerStrips();
+        });
+}
+
+/** A track's sends: add one to a bus, or for each one, pre or post fader,
+    or remove it. */
+void MainComponent::showSendsMenu(int trackIndex)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+
+    const auto& track = song.tracks[(size_t) trackIndex];
+    std::vector<int> addable;
+    for (const int busId : model::routing::busesFor(song, track.id))
+        if (std::none_of(track.sends.begin(), track.sends.end(), [busId](const model::TrackSend& s) { return s.busId == busId; }))
+            addable.push_back(busId);
+
+    juce::PopupMenu add;
+    for (int b = 0; b < (int) addable.size(); ++b)
+        add.addItem(100 + b, juce::String(model::findTrack(song, addable[(size_t) b])->name));
+
+    juce::PopupMenu menu;
+    menu.addSubMenu("Add Send To", add, ! addable.empty());
+    for (int k = 0; k < (int) track.sends.size(); ++k)
+    {
+        const auto* bus = model::routing::busById(song, track.sends[(size_t) k].busId);
+        if (bus == nullptr)
+            continue;
+        juce::PopupMenu one;
+        one.addItem(1000 + k * 10, "Pre-Fader", true, track.sends[(size_t) k].preFader);
+        one.addItem(1000 + k * 10 + 1, "Remove");
+        menu.addSubMenu("Send to " + juce::String(bus->name), one);
+    }
+
+    menu.showMenuAsync(juce::PopupMenu::Options(),
+        [self = juce::Component::SafePointer<MainComponent>(this), trackId = track.id, addable](int result)
+        {
+            if (self == nullptr || result == 0)
+                return;
+
+            if (result >= 100 && result < 1000)
+            {
+                const int busId = addable[(size_t) (result - 100)];
+                self->history_.edit("Add send", [trackId, busId](model::Song& s) { model::routing::addSend(s, trackId, busId); });
+            }
+            else
+            {
+                const int k = (result - 1000) / 10, action = (result - 1000) % 10;
+                self->history_.edit(action == 0 ? "Change send" : "Remove send", [trackId, k, action](model::Song& s)
+                {
+                    auto* track = model::findTrack(s, trackId);
+                    if (track == nullptr || k < 0 || k >= (int) track->sends.size())
+                        return;
+                    if (action == 0)
+                        track->sends[(size_t) k].preFader = ! track->sends[(size_t) k].preFader;
+                    else
+                        track->sends.erase(track->sends.begin() + k);
+                });
+            }
+            self->syncEngineTracks();
+            self->updateMixerStrips();
+        });
+}
+
+/** A send's level, live from its slider; a drag commits as one step. */
+void MainComponent::setSendLevel(int trackIndex, int send, float levelDb)
+{
+    auto& song = history_.mutableCurrent();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        return;
+    auto& sends = song.tracks[(size_t) trackIndex].sends;
+    if (send < 0 || send >= (int) sends.size())
+        return;
+
+    sends[(size_t) send].levelDb = levelDb;
+    pushTrackRouting(trackIndex);
+}
+
+void MainComponent::beginSendDrag(int trackIndex, int send)
+{
+    const auto& tracks = history_.current().tracks;
+    if (trackIndex < 0 || trackIndex >= (int) tracks.size() || send < 0 || send >= (int) tracks[(size_t) trackIndex].sends.size())
+        return;
+
+    sendDragging_  = true;
+    sendDragTrack_ = trackIndex;
+    sendDragIndex_ = send;
+    sendDragFrom_  = tracks[(size_t) trackIndex].sends[(size_t) send].levelDb;
+}
+
+void MainComponent::endSendDrag(int trackIndex, int send)
+{
+    if (! sendDragging_ || sendDragTrack_ != trackIndex || sendDragIndex_ != send)
+        return;
+    sendDragging_ = false;
+
+    const auto& tracks = history_.current().tracks;
+    if (trackIndex >= (int) tracks.size() || send >= (int) tracks[(size_t) trackIndex].sends.size())
+        return;
+
+    const float landedOn = tracks[(size_t) trackIndex].sends[(size_t) send].levelDb;
+    commitDrag(history_, std::string("Set send level"), sendDragFrom_, landedOn,
+               [trackIndex, send](model::Song& s, float v)
+               {
+                   if (trackIndex < (int) s.tracks.size() && send < (int) s.tracks[(size_t) trackIndex].sends.size())
+                       s.tracks[(size_t) trackIndex].sends[(size_t) send].levelDb = v;
+               });
+}
+
 /** Puts a track in edit group @p group, or none (0). */
 void MainComponent::setTrackEditGroup(int trackIndex, int group)
 {
@@ -1827,6 +2013,7 @@ void MainComponent::syncEngineTracks()
         // the comment above is only true if it's also submitted when there's
         // nothing to submit.
         engine_.setTrackAudioClips(i, audioSpecs);
+        pushTrackRouting(i);
 
         // A clip's plugin went with its chain: so must any editor showing it.
         if (engine_.takeClipPluginChainsChanged())
@@ -2098,6 +2285,16 @@ void MainComponent::updateMixerStrips()
             strip->setSoloed(track.solo);
             strip->setPan(track.pan);
             strip->setArmed(armedTrackIds_.count(track.id) > 0);
+
+            // Routing: where the output goes, the sends, and no arming a bus.
+            const int out = model::routing::outputIndex(song, i);
+            strip->setOutputName(out < 0 ? juce::String("Master") : juce::String(song.tracks[(size_t) out].name));
+            std::vector<MixerStrip::SendView> sends;
+            for (const auto& send : track.sends)
+                if (const auto* bus = model::routing::busById(song, send.busId))
+                    sends.push_back({ juce::String(bus->name), send.levelDb, send.preFader });
+            strip->setSends(sends);
+            strip->setArmable(! model::routing::isBus(track));
 
             static const char* const modeNames[] = { "Read", "Touch", "Latch", "Write" };
             strip->setAutomationMode(modeNames[(int) automationModeFor(i)], track.automationMode >= 0);

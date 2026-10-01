@@ -27,7 +27,7 @@ What already exists, so the plan doesn't rebuild it:
 | Record | Audio input with count-in, metronome and monitoring; MIDI recording |
 | I/O | Import WAV/AIFF/FLAC/Ogg/MP3; export the same five, mix or stems, with dither |
 | Workspace | Dockable panes, layouts, snapshot undo/redo |
-| 🔁 Removed | Buses, sends, sidechain, tempo changes, warp, drums/guitar/piano, generative loops |
+| 🔁 Removed | Drums/guitar/piano, generative loops (buses, sends, sidechain, tempo changes and warp are coming back: Phase 5) |
 
 ### Architectural limits that block parity
 
@@ -214,9 +214,12 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   **plugin manager** ✅ (File > Plugin Manager: turn plugins off, forget them, unblock them, scan) with a
   blocklist ✅ and crash-safe scanning ✅ (each plugin is probed in a copy of the app, `src/app/PluginProbe.h`;
   one that crashes, hangs or won't load is blocklisted)
-- 🔁 **Buses, sends, sidechain, tempo changes, warp** exist in REAPER and Audition but were cut from
-  SoundSplice on purpose. Parity would mean re-adding them, so decide per feature before Phase 5
-  starts. Auto Duck (Phase 2) covers the most common sidechain use without them.
+- 🟡 **Buses, sends, sidechain, tempo changes, warp**: cut in the strip-down, and brought back (decided
+  2026-10-01). ✅ **Bus tracks and sends** (Edit > Add Bus Track, or Add Bus in the mixer: a mixer strip's
+  Out routes the track to a bus, Sends adds sends at their own level, pre or post fader; buses feed
+  buses, never in a loop; solo follows the routing and delay compensation counts each bus on the way
+  out; `src/model/Routing.h`, `src/engine/MixRouting.h`; the headless bounce tool doesn't route yet) ·
+  ⬜ sidechain · ⬜ tempo changes · ⬜ warp
 
 ### Phase 6 — Audition's "finishing" workflows
 

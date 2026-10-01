@@ -621,6 +621,19 @@ private:
     // The plugin manager while it's open, to refresh after a scan.
     juce::Component::SafePointer<class PluginManagerDialog> pluginManager_;
     void                   setTrackEditGroup(int trackIndex, int group);
+    void                   addBusTrack();
+    void                   chooseTrackOutput(int trackIndex);
+    void                   showSendsMenu(int trackIndex);
+    void                   setSendLevel(int trackIndex, int send, float levelDb);
+    void                   beginSendDrag(int trackIndex, int send);
+    void                   endSendDrag(int trackIndex, int send);
+    void                   pushTrackRouting(int trackIndex);
+
+    // A send level being dragged on a strip, committed as one undo step.
+    bool                   sendDragging_  = false;
+    int                    sendDragTrack_ = -1;
+    int                    sendDragIndex_ = -1;
+    float                  sendDragFrom_  = 0.0f;
     void                   toggleFolder(int trackIndex);
     void                   indentTrack(int trackIndex);
     void                   outdentTrack(int trackIndex);
@@ -876,6 +889,7 @@ private:
     juce::DrawableButton lastFrameButton     { "Last",     juce::DrawableButton::ImageFitted };
     juce::DrawableButton recordButton { "Record", juce::DrawableButton::ImageFitted };
     juce::TextButton   addTrackButton { "Add Track" };
+    juce::TextButton   addBusButton { "Add Bus" };
     juce::ToggleButton loopButton      { "Loop" };
     // Collapses the transport pane to its first row, so the pane can be
     // dragged down to a single strip when the readouts aren't wanted.

@@ -518,6 +518,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::copyTrack:       copyTrack(); break;
         case commands::pasteTrack:      pasteTrack(); break;
         case commands::duplicateTrack:  duplicateTrackAt(selectedTrackIndex_); break;
+        case commands::addBusTrack:     addBusTrack(); break;
         case commands::splitStereoToMono: splitSelectedTrackToMono(); break;
         case commands::swapChannels:    swapSelectedTrackChannels(); break;
         case commands::makeStereoTrack: makeStereoTrack(); break;
@@ -871,6 +872,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::copyTrack);
         add(commands::pasteTrack);
         add(commands::duplicateTrack);
+        add(commands::addBusTrack);
         add(commands::splitStereoToMono);
         add(commands::swapChannels);
         add(commands::makeStereoTrack);

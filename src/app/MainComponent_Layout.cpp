@@ -433,6 +433,8 @@ void MainComponent::layoutMixerView()
 
     auto toolbar = area.removeFromTop(28);
     addTrackButton.setBounds(toolbar.removeFromLeft(100));
+    toolbar.removeFromLeft(6);
+    addBusButton.setBounds(toolbar.removeFromLeft(80));
     area.removeFromTop(8);
 
     // ---- per-track channel strips, filling the remaining width ----

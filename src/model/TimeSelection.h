@@ -94,7 +94,7 @@ namespace rangeedit
     /** Whether a clip of @p type can be placed on @p track by these edits. */
     inline bool fits(const Track& track, ClipType type)
     {
-        return (track.type == TrackType::Audio) == (type == ClipType::Audio);
+        return track.type != TrackType::Bus && (track.type == TrackType::Audio) == (type == ClipType::Audio);
     }
 
     /** What @p pattern, looping from beat 0, plays over [@p fromBeats,

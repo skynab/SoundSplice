@@ -596,11 +596,67 @@ bool AudioEngine::trackContributesToMix(int index) const noexcept
     if (track.muted.load(std::memory_order_relaxed))
         return false;
 
-    bool anySolo = false;
-    for (const auto& other : tracks_)
-        anySolo |= other.solo.load(std::memory_order_relaxed);
+    // Solo through the routing: what feeds a soloed bus, and what a soloed
+    // track feeds, are heard too (see mixrouting::soloAudible).
+    std::array<mixrouting::Node, kMaxTracks> nodes;
+    for (int i = 0; i < kMaxTracks; ++i)
+    {
+        const auto& t   = tracks_[(size_t) i];
+        auto&       n   = nodes[(size_t) i];
+        n.active    = t.active.load(std::memory_order_relaxed);
+        n.isBus     = t.isBus.load(std::memory_order_relaxed);
+        n.solo      = t.solo.load(std::memory_order_relaxed);
+        n.output    = t.outputBus.load(std::memory_order_relaxed);
+        n.sendCount = juce::jlimit(0, mixrouting::kMaxSends, t.sendCount.load(std::memory_order_relaxed));
+        for (int s = 0; s < n.sendCount; ++s)
+            n.sends[(size_t) s].bus = t.sendBus[(size_t) s].load(std::memory_order_relaxed);
+    }
 
-    return ! anySolo || track.solo.load(std::memory_order_relaxed);
+    bool audible[kMaxTracks] {};
+    mixrouting::soloAudible(nodes.data(), kMaxTracks, audible);
+    return audible[index];
+}
+
+void AudioEngine::setTrackRouting(int index, bool isBus, int outputBus, const std::vector<SendSpec>& sends)
+{
+    if (index < 0 || index >= kMaxTracks)
+        return;
+
+    auto&     track = tracks_[(size_t) index];
+    const int count = juce::jmin((int) sends.size(), mixrouting::kMaxSends);
+
+    // Fewer sends first, then the entries, then more: the audio thread
+    // never reads an entry that isn't filled in yet.
+    track.sendCount.store(juce::jmin(count, track.sendCount.load(std::memory_order_relaxed)), std::memory_order_release);
+    for (int s = 0; s < count; ++s)
+    {
+        track.sendBus[(size_t) s].store(sends[(size_t) s].bus, std::memory_order_relaxed);
+        track.sendGain[(size_t) s].store(juce::Decibels::decibelsToGain(sends[(size_t) s].gainDb), std::memory_order_relaxed);
+        track.sendPreFader[(size_t) s].store(sends[(size_t) s].preFader, std::memory_order_relaxed);
+    }
+    track.sendCount.store(count, std::memory_order_release);
+
+    track.isBus.store(isBus, std::memory_order_relaxed);
+    track.outputBus.store(outputBus, std::memory_order_relaxed);
+}
+
+void AudioEngine::snapshotRouting(std::array<mixrouting::Node, kMaxTracks>& nodes) noexcept
+{
+    for (int i = 0; i < kMaxTracks; ++i)
+    {
+        auto& track = tracks_[(size_t) i];
+        auto& node  = nodes[(size_t) i];
+        node.active       = track.active.load(std::memory_order_relaxed);
+        node.isBus        = track.isBus.load(std::memory_order_relaxed);
+        node.solo         = track.solo.load(std::memory_order_relaxed);
+        node.output       = track.outputBus.load(std::memory_order_relaxed);
+        node.sendCount    = juce::jlimit(0, mixrouting::kMaxSends, track.sendCount.load(std::memory_order_acquire));
+        for (int s = 0; s < node.sendCount; ++s)
+            node.sends[(size_t) s] = { track.sendBus[(size_t) s].load(std::memory_order_relaxed),
+                                       track.sendGain[(size_t) s].load(std::memory_order_relaxed),
+                                       track.sendPreFader[(size_t) s].load(std::memory_order_relaxed) };
+        node.chainLatency = node.active ? track.chainLatency() : 0;
+    }
 }
 
 void AudioEngine::setTrackGainDb(int index, float gainDb)
@@ -1122,11 +1178,10 @@ void AudioEngine::mixInputMonitoring(juce::AudioBuffer<float>& output,
 
 int AudioEngine::latestTrackLatency() noexcept
 {
-    int latest = 0;
-    for (auto& track : tracks_)
-        if (track.active.load(std::memory_order_relaxed))
-            latest = juce::jmax(latest, track.chainLatency());
-    return juce::jmin(latest, InstrumentTrack::kMaxCompensation - 1);
+    // Along each track's way out, through the buses it feeds.
+    std::array<mixrouting::Node, kMaxTracks> nodes;
+    snapshotRouting(nodes);
+    return juce::jmin(mixrouting::latestPath(nodes.data(), kMaxTracks), InstrumentTrack::kMaxCompensation - 1);
 }
 
 void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffer& midi,
@@ -1134,10 +1189,6 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
                                int soloTrack, bool applyMasterBus) noexcept
 {
     const int numSamples = context.numSamples;
-
-    bool anySolo = false;
-    for (auto& track : tracks_)
-        anySolo |= track.solo.load(std::memory_order_relaxed);
 
     // Launch quantization is expressed in beats and converted here, once per
     // block, from the block's own musical span: launch quantisation waits for
@@ -1149,25 +1200,97 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
 
     const int armed = armedTrack_.load(std::memory_order_relaxed);
 
-    // Delay compensation: every track is played as late as the latest one's
-    // effects make it, so a plugin with latency on one track doesn't leave it
-    // behind the others. Taken over every active track even for a stem, so a
-    // stem lines up with the mix it came from.
-    const int latest = latestTrackLatency();
+    // The routing for this block (engine/MixRouting.h): who renders before
+    // whom, who solo leaves audible, and how late each track's path is.
+    std::array<mixrouting::Node, kMaxTracks> nodes;
+    snapshotRouting(nodes);
 
-    for (int i = 0; i < kMaxTracks; ++i)
+    std::array<int, kMaxTracks> order {};
+    const int orderCount = mixrouting::renderOrder(nodes.data(), kMaxTracks, order.data());
+
+    bool audible[kMaxTracks] {};
+    mixrouting::soloAudible(nodes.data(), kMaxTracks, audible);
+
+    // Delay compensation: every track is played as late as the latest path's
+    // effects make it - its own and every bus's on its way out - so a plugin
+    // with latency doesn't leave its track behind the others. Taken over
+    // every active track even for a stem, so a stem lines up with the mix it
+    // came from.
+    const int latest = juce::jmin(mixrouting::latestPath(nodes.data(), kMaxTracks),
+                                  InstrumentTrack::kMaxCompensation - 1);
+
+    // A stem renders one track: straight to the output, as it leaves its
+    // fader. A bus's stem is the bus with what feeds it.
+    std::array<bool, kMaxTracks> needed {};
+    if (soloTrack >= 0 && soloTrack < kMaxTracks)
     {
-        // A stem renders one track. Note that anySolo is still whatever the
-        // whole pool says, and the track still applies mute/solo itself — this
-        // only decides who gets *asked*, so a stem is that track exactly as it
-        // sounds in the mix rather than a special case of it.
-        if (soloTrack >= 0 && i != soloTrack)
+        needed[(size_t) soloTrack] = true;
+        for (bool grew = true; grew;)
+        {
+            grew = false;
+            for (int i = 0; i < kMaxTracks; ++i)
+            {
+                if (needed[(size_t) i] || ! nodes[(size_t) i].active)
+                    continue;
+                bool feeds = false;
+                if (const int out = mixrouting::outputOf(nodes.data(), kMaxTracks, i); out >= 0 && needed[(size_t) out])
+                    feeds = true;
+                for (int s = 0; s < nodes[(size_t) i].sendCount && ! feeds; ++s)
+                    if (const int bus = mixrouting::validBus(nodes.data(), kMaxTracks, i, nodes[(size_t) i].sends[(size_t) s].bus);
+                        bus >= 0 && needed[(size_t) bus])
+                        feeds = true;
+                if (feeds)
+                    needed[(size_t) i] = grew = true;
+            }
+        }
+    }
+
+    // Each bus starts the block empty; its sources add in before it renders.
+    for (int i = 0; i < kMaxTracks; ++i)
+        if (nodes[(size_t) i].active && nodes[(size_t) i].isBus)
+            tracks_[(size_t) i].busInput.clear();
+
+    std::array<bool, kMaxTracks> rendered {};
+    for (int k = 0; k < orderCount; ++k)
+    {
+        const int i = order[(size_t) k];
+        if (soloTrack >= 0 && ! needed[(size_t) i])
             continue;
 
-        if (! tracks_[(size_t) i].active.load(std::memory_order_relaxed))
-            continue;
+        const auto& node = nodes[(size_t) i];
+        InstrumentTrack::Destinations to;
+        to.audible = audible[i];
+        to.delay   = mixrouting::compensationFor(nodes.data(), kMaxTracks, i, latest);
 
-        tracks_[(size_t) i].render(output, midi, context, i == armed, anySolo, launchQuantumSamples, latest);
+        // A bus already rendered this block (only inside a loop) can't take
+        // more; what would have gone there is dropped rather than mixed late.
+        const auto busInputOf = [&](int bus) -> juce::AudioBuffer<float>*
+        {
+            if (bus < 0 || rendered[(size_t) bus] || (soloTrack >= 0 && ! needed[(size_t) bus]))
+                return nullptr;
+            return &tracks_[(size_t) bus].busInput;
+        };
+
+        const int out = mixrouting::outputOf(nodes.data(), kMaxTracks, i);
+        if (soloTrack >= 0)
+            to.output = i == soloTrack ? &output : busInputOf(out);
+        else
+            to.output = out >= 0 ? busInputOf(out) : &output;
+
+        for (int s = 0; s < node.sendCount && soloTrack != i; ++s)
+        {
+            const auto& send = node.sends[(size_t) s];
+            if (auto* target = busInputOf(mixrouting::validBus(nodes.data(), kMaxTracks, i, send.bus)))
+            {
+                to.sends[(size_t) to.sendCount]        = target;
+                to.sendGains[(size_t) to.sendCount]    = send.gain;
+                to.sendPreFader[(size_t) to.sendCount] = send.preFader;
+                ++to.sendCount;
+            }
+        }
+
+        tracks_[(size_t) i].renderRouted(midi, context, i == armed, launchQuantumSamples, to);
+        rendered[(size_t) i] = true;
     }
 
     if (applyMasterBus)

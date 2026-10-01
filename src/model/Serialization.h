@@ -419,6 +419,13 @@ inline std::string serialize(const Song& song)
         if (track.folderParentId != 0 || track.folderCollapsed)
             out << "TRACKFOLDER " << track.folderParentId << " " << (track.folderCollapsed ? 1 : 0) << "\n";
 
+        // Only for a track routed to a bus, and only its sends if it has any.
+        if (track.outputBusId != 0)
+            out << "TRACKOUT " << track.outputBusId << "\n";
+        for (const auto& send : track.sends)
+            out << "TRACKSEND " << send.busId << " " << detail::num((double) send.levelDb) << " "
+                << (send.preFader ? 1 : 0) << "\n";
+
         // Only non-empty lanes are written, so an unautomated track costs one
         // "TAUTOS 0" line rather than one empty record per automatable
         // parameter.
@@ -910,7 +917,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             unsigned int colour = 0;
             ts >> track.id >> typeInt >> gain >> muteInt >> soloInt >> pan >> colour;
 
-            if (typeInt != (int) TrackType::Instrument && typeInt != (int) TrackType::Audio)
+            if (typeInt != (int) TrackType::Instrument && typeInt != (int) TrackType::Audio
+                && typeInt != (int) TrackType::Bus)
                 return fail("unknown track type");
 
             track.type   = (TrackType) typeInt;
@@ -950,6 +958,20 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             fields >> parentId >> collapsed;
             track.folderParentId  = parentId;
             track.folderCollapsed = collapsed != 0;
+        }
+
+        if (readTagged("TRACKOUT", rest))
+            track.outputBusId = std::atoi(rest.c_str());
+        while (readTagged("TRACKSEND", rest))
+        {
+            std::istringstream fields(rest);
+            TrackSend send;
+            double    level = 0.0;
+            int       pre   = 0;
+            fields >> send.busId >> level >> pre;
+            send.levelDb  = (float) level;
+            send.preFader = pre != 0;
+            track.sends.push_back(send);
         }
 
         if (readTagged("TAUTOS", rest))

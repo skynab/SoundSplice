@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <memory>
+#include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -40,6 +42,22 @@ public:
     std::function<void(bool)>  onArmChange;       // the R button
     std::function<void()>      onInputMenuRequested; // right-click on it
     std::function<void()>      onAutomationModeMenuRequested; // the automation mode button
+
+    // Routing (model/Routing.h): the output button, the sends button, and
+    // each send's level slider, by its position in the track's sends.
+    std::function<void()>                onOutputMenuRequested;
+    std::function<void()>                onSendsMenuRequested;
+    std::function<void(int send, float)> onSendLevelChange;
+    std::function<void(int send)>        onSendDragStart;
+    std::function<void(int send)>        onSendDragEnd;
+
+    /** One send as the strip shows it. */
+    struct SendView
+    {
+        juce::String busName;
+        float        levelDb  = 0.0f;
+        bool         preFader = false;
+    };
 
     MixerStrip()
     {
@@ -81,6 +99,14 @@ public:
         autoModeButton_.onClick = [this] { if (onAutomationModeMenuRequested) onAutomationModeMenuRequested(); };
         autoModeButton_.setTooltip("How moving this track's controls records automation");
         addAndMakeVisible(autoModeButton_);
+
+        outputButton_.onClick = [this] { if (onOutputMenuRequested) onOutputMenuRequested(); };
+        outputButton_.setTooltip("Where this track's output goes: the master or a bus");
+        addAndMakeVisible(outputButton_);
+
+        sendsButton_.onClick = [this] { if (onSendsMenuRequested) onSendsMenuRequested(); };
+        sendsButton_.setTooltip("Send a copy of this track to a bus, at its own level");
+        addAndMakeVisible(sendsButton_);
 
         panSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
         panSlider_.setRange(-100.0, 100.0, 1.0);
@@ -138,6 +164,50 @@ public:
         autoModeButton_.setColour(juce::TextButton::textColourOffId,
                                   juce::Colours::white.withAlpha(ownMode ? 1.0f : 0.55f));
     }
+    /** Shows where the output goes, by name. */
+    void setOutputName(const juce::String& name) { outputButton_.setButtonText("Out: " + name); }
+
+    /** A bus can't be recorded onto. */
+    void setArmable(bool armable)
+    {
+        armButton_.setEnabled(armable);
+        armButton_.setAlpha(armable ? 1.0f : 0.35f);
+    }
+
+    /** The track's sends, a level slider each. Rebuilt only when how many
+        there are changes, so a drag on one isn't cut short by a refresh. */
+    void setSends(const std::vector<SendView>& sends)
+    {
+        if (sends.size() != sendSliders_.size())
+        {
+            sendSliders_.clear();
+            for (int i = 0; i < (int) sends.size(); ++i)
+            {
+                auto slider = std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
+                slider->setRange(-60.0, 6.0, 0.1);
+                slider->setDoubleClickReturnValue(true, 0.0);
+                slider->setPopupDisplayEnabled(true, false, this);
+                slider->setTextValueSuffix(" dB");
+                slider->onValueChange = [this, i, raw = slider.get()]
+                {
+                    if (onSendLevelChange) onSendLevelChange(i, (float) raw->getValue());
+                };
+                slider->onDragStart = [this, i] { if (onSendDragStart) onSendDragStart(i); };
+                slider->onDragEnd   = [this, i] { if (onSendDragEnd) onSendDragEnd(i); };
+                addAndMakeVisible(*slider);
+                sendSliders_.push_back(std::move(slider));
+            }
+            resized();
+        }
+
+        for (size_t i = 0; i < sends.size(); ++i)
+        {
+            sendSliders_[i]->setValue(sends[i].levelDb, juce::dontSendNotification);
+            sendSliders_[i]->setTooltip("Send to " + sends[i].busName + (sends[i].preFader ? " (pre-fader)" : ""));
+        }
+        sendsButton_.setButtonText(sends.empty() ? juce::String("Sends") : "Sends (" + juce::String((int) sends.size()) + ")");
+    }
+
     void setPan(float pan)         { panSlider_.setValue(pan * 100.0, juce::dontSendNotification); }
     void setSelected(bool sel) { if (selected_ != sel) { selected_ = sel; repaint(); } }
     void setLevel(int channel, float linearPeak) { meter_.setLevel(channel, linearPeak); }
@@ -175,6 +245,12 @@ public:
         armButton_.setBounds(btnRow.reduced(2));
         area.removeFromTop(2);
         autoModeButton_.setBounds(area.removeFromTop(18).reduced(2, 0));
+        area.removeFromTop(2);
+        outputButton_.setBounds(area.removeFromTop(18).reduced(2, 0));
+        area.removeFromTop(2);
+        sendsButton_.setBounds(area.removeFromTop(18).reduced(2, 0));
+        for (auto& slider : sendSliders_)
+            slider->setBounds(area.removeFromTop(14).reduced(2, 0));
         area.removeFromTop(4);
 
         // Strips pack side by side, so a narrow one is the normal case once
@@ -204,6 +280,9 @@ private:
     juce::TextButton soloButton_ { "S" };
     juce::TextButton armButton_  { "R" };
     juce::TextButton autoModeButton_ { "Read" };
+    juce::TextButton outputButton_ { "Out: Master" };
+    juce::TextButton sendsButton_ { "Sends" };
+    std::vector<std::unique_ptr<juce::Slider>> sendSliders_;
     juce::Label      panLabel_;
     juce::Slider     panSlider_;
     juce::Slider     gainSlider_;

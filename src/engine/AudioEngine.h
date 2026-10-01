@@ -429,6 +429,19 @@ public:
     void setTrackGainDb(int index, float gainDb);
     void setTrackPan(int index, float pan);
 
+    /** One send from a track to a bus (engine/MixRouting.h), by indices. */
+    struct SendSpec
+    {
+        int   bus      = -1;
+        float gainDb   = 0.0f;
+        bool  preFader = false;
+    };
+
+    /** Track @p index's routing: whether it's a bus, which bus its output
+        feeds (-1 for the master), and its sends (at most
+        mixrouting::kMaxSends). Message thread. */
+    void setTrackRouting(int index, bool isBus, int outputBus, const std::vector<SendSpec>& sends);
+
     // ---- session view (message thread) ----
     /** Replaces a track's session column. Slot index is the scene. */
     void setTrackSessionSlots(int index, const std::vector<SessionSlotData>& slots);
@@ -513,6 +526,9 @@ public:
         track is delayed to line up with. Audio thread, or with the device
         suspended. */
     int latestTrackLatency() noexcept;
+
+    /** The routing as it stands, for this block: one node per track. */
+    void snapshotRouting(std::array<mixrouting::Node, kMaxTracks>& nodes) noexcept;
 
     /** One parameter of one slot, by id, if that slot is still @p kind.
         For a parameter being written while its lane is set aside, which the

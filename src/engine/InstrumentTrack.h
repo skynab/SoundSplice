@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cmath>
 
@@ -8,6 +9,7 @@
 #include "engine/AudioFilePlayerNode.h"
 #include "engine/AutomationCurve.h"
 #include "engine/EffectChain.h"
+#include "engine/MixRouting.h"
 #include "engine/ProcessContext.h"
 #include "engine/Sequencer.h"
 #include "engine/SessionPlayer.h"
@@ -53,6 +55,20 @@ inline void applyEffectAutomation(EffectChain& chain, const TrackAutomation& aut
 */
 struct InstrumentTrack
 {
+    /** Where one block of this track goes (see renderRouted): its output -
+        the master or a bus's input, or nowhere - and its sends, and whether
+        mute and solo leave it audible, and how far to delay it. */
+    struct Destinations
+    {
+        juce::AudioBuffer<float>*                                      output = nullptr;
+        std::array<juce::AudioBuffer<float>*, mixrouting::kMaxSends>  sends {};
+        std::array<float, mixrouting::kMaxSends>                       sendGains {};
+        std::array<bool, mixrouting::kMaxSends>                        sendPreFader {};
+        int                                                            sendCount = 0;
+        bool                                                           audible   = true;
+        int                                                            delay     = 0;
+    };
+
     SynthInstrumentNode      synth;
     Sequencer                sequencer;
     SessionPlayer            session;
@@ -69,6 +85,17 @@ struct InstrumentTrack
 
     std::atomic<float>       gainDb      { 0.0f };
     std::atomic<float>       pan         { 0.0f }; // -1 = hard left, 0 = centre, +1 = hard right
+
+    // Routing (engine/MixRouting.h), set from the message thread: whether
+    // this is a bus, which track its output feeds (-1: the master), and its
+    // sends. A bus mixes what reaches busInput into its own chain and fader.
+    std::atomic<bool>        isBus       { false };
+    std::atomic<int>         outputBus   { -1 };
+    std::array<std::atomic<int>, mixrouting::kMaxSends>   sendBus {};
+    std::array<std::atomic<float>, mixrouting::kMaxSends> sendGain {};     // linear
+    std::array<std::atomic<bool>, mixrouting::kMaxSends>  sendPreFader {};
+    std::atomic<int>         sendCount   { 0 };
+    juce::AudioBuffer<float> busInput;
     juce::MidiBuffer         trackMidi;
     juce::AudioBuffer<float> scratch;
 
@@ -141,6 +168,8 @@ struct InstrumentTrack
         audioPlayer.prepare(sampleRate, blockSize);
         trackMidi.ensureSize(2048);
         scratch.setSize(2, juce::jmax(1, blockSize));
+        busInput.setSize(2, juce::jmax(1, blockSize));
+        busInput.clear();
         compensation_.setSize(2, kMaxCompensation);
         compensation_.clear();
         compensationWrite_ = 0;
@@ -262,11 +291,25 @@ public:
 
     /** Audio thread: render this track (post-gain) additively into @p mix,
         delayed so it lands as late as @p alignToLatency - the latest any
-        track's effects make it - and so lines up with every other track. */
+        track's effects make it - and so lines up with every other track.
+        Unrouted: the offline renderer and the tests' way in. */
     void render(juce::AudioBuffer<float>& mix,
                 const juce::MidiBuffer& liveMidi,
                 const ProcessContext& context, bool receivesLiveMidi, bool anySoloActive,
                 double launchQuantumSamples = 0.0, int alignToLatency = 0)
+    {
+        Destinations to;
+        to.output  = &mix;
+        to.audible = ! anySoloActive || solo.load(std::memory_order_relaxed);
+        to.delay   = alignToLatency - chainLatency();
+        renderRouted(liveMidi, context, receivesLiveMidi, launchQuantumSamples, to);
+    }
+
+    /** Audio thread: render this track into @p to's output and sends - the
+        master, or the inputs of the buses it feeds. A bus starts from what
+        has reached its busInput. */
+    void renderRouted(const juce::MidiBuffer& liveMidi, const ProcessContext& context, bool receivesLiveMidi,
+                      double launchQuantumSamples, const Destinations& to)
     {
         TrackAutomation* incoming = nullptr;
         while (automationInbox_.pop(incoming))
@@ -291,8 +334,7 @@ public:
         if (receivesLiveMidi)
             trackMidi.addEvents(liveMidi, 0, context.numSamples, 0);
 
-        const bool audible = ! muted.load(std::memory_order_relaxed)
-                           && (! anySoloActive || solo.load(std::memory_order_relaxed));
+        const bool audible = ! muted.load(std::memory_order_relaxed) && to.audible;
 
         if (! audible)
         {
@@ -309,6 +351,9 @@ public:
         scratch.clear();
         synth.process(scratch, trackMidi, context);
         audioPlayer.process(scratch, trackMidi, context); // adds in; midi is ignored
+        if (isBus.load(std::memory_order_relaxed))
+            for (int ch = 0; ch < juce::jmin(scratch.getNumChannels(), busInput.getNumChannels()); ++ch)
+                scratch.addFrom(ch, 0, busInput, ch, 0, juce::jmin(numSamples, busInput.getNumSamples()));
 
         // Inserts run on the summed track output, before gain — so lowering
         // the fader doesn't change the effect.
@@ -326,7 +371,13 @@ public:
             effectChain_->process(scratch);
         }
 
-        compensate(numSamples, alignToLatency - (effectChain_ != nullptr ? effectChain_->latencySamples() : 0));
+        compensate(numSamples, to.delay);
+
+        // Pre-fader sends: what the effects made, at the send's level.
+        for (int s = 0; s < to.sendCount; ++s)
+            if (auto* target = to.sends[(size_t) s]; target != nullptr && to.sendPreFader[(size_t) s])
+                for (int ch = 0; ch < juce::jmin(target->getNumChannels(), scratch.getNumChannels()); ++ch)
+                    target->addFrom(ch, 0, scratch, ch, 0, numSamples, to.sendGains[(size_t) s]);
 
         const float staticGainDb = gainDb.load(std::memory_order_relaxed);
         const float staticPan    = pan.load(std::memory_order_relaxed);
@@ -345,7 +396,18 @@ public:
         const float panStart  = automationPan() != nullptr ? automationPan()->valueAt(beatAtStart, staticPan) : staticPan;
         const float panEnd    = automationPan() != nullptr ? automationPan()->valueAt(beatAtEnd, staticPan) : staticPan;
 
-        const int channels = juce::jmin(mix.getNumChannels(), scratch.getNumChannels());
+        const int channels = scratch.getNumChannels();
+
+        // Into @p target from @p ch, at the fader's ramp times @p scale.
+        const auto addFaded = [&](juce::AudioBuffer<float>& target, int ch, float start, float end, float scale)
+        {
+            if (ch >= target.getNumChannels())
+                return;
+            if (start == end)
+                target.addFrom(ch, 0, scratch, ch, 0, numSamples, start * scale);
+            else
+                target.addFromWithRamp(ch, 0, scratch.getReadPointer(ch), numSamples, start * scale, end * scale);
+        };
 
         for (int ch = 0; ch < channels; ++ch)
         {
@@ -355,11 +417,13 @@ public:
             const float channelGainStart = gainStart * panGainFor(ch, panStart);
             const float channelGainEnd   = gainEnd   * panGainFor(ch, panEnd);
 
-            if (channelGainStart == channelGainEnd)
-                mix.addFrom(ch, 0, scratch, ch, 0, numSamples, channelGainStart);
-            else
-                mix.addFromWithRamp(ch, 0, scratch.getReadPointer(ch), numSamples,
-                                    channelGainStart, channelGainEnd);
+            if (to.output != nullptr)
+                addFaded(*to.output, ch, channelGainStart, channelGainEnd, 1.0f);
+
+            // Post-fader sends: the track as the fader and pan leave it.
+            for (int s = 0; s < to.sendCount; ++s)
+                if (auto* target = to.sends[(size_t) s]; target != nullptr && ! to.sendPreFader[(size_t) s])
+                    addFaded(*target, ch, channelGainStart, channelGainEnd, to.sendGains[(size_t) s]);
 
             if (ch < 2)
             {

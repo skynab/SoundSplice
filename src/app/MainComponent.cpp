@@ -272,6 +272,9 @@ MainComponent::MainComponent()
 
     addTrackButton.onClick = [this] { addTrack(); };
     mixerView_.addAndMakeVisible(addTrackButton);
+    addBusButton.onClick = [this] { addBusTrack(); };
+    addBusButton.setTooltip("Add a bus: route or send tracks to it to mix them together through its effects");
+    mixerView_.addAndMakeVisible(addBusButton);
 
     // ---- master panel: its own dock tab (see workspace_.registerPanel
     // below), not a pull-out inside Mixer — it applies to the whole song,
@@ -554,6 +557,11 @@ MainComponent::MainComponent()
         strip->onArmChange  = [this, i](bool a)   { setTrackArmed(i, a); };
         strip->onInputMenuRequested = [this, i]   { chooseTrackInput(i); };
         strip->onAutomationModeMenuRequested = [this, i] { chooseTrackAutomationMode(i); };
+        strip->onOutputMenuRequested = [this, i] { chooseTrackOutput(i); };
+        strip->onSendsMenuRequested  = [this, i] { showSendsMenu(i); };
+        strip->onSendLevelChange     = [this, i](int send, float db) { setSendLevel(i, send, db); };
+        strip->onSendDragStart       = [this, i](int send) { beginSendDrag(i, send); };
+        strip->onSendDragEnd         = [this, i](int send) { endSendDrag(i, send); };
         trackStrips_.add(strip);
         mixerView_.addAndMakeVisible(strip);
     }
@@ -1235,6 +1243,7 @@ void MainComponent::timerCallback()
     stopAtEndOfArrangement();
 
     addTrackButton.setEnabled(trackCount() < engine_.maxTracks());
+    addBusButton.setEnabled(trackCount() < engine_.maxTracks());
     addClipButton_.setEnabled(selectedTrackIndex_ >= 0 && selectedTrackIndex_ < trackCount());
 
     const double sampleRate = engine_.sampleRate();
