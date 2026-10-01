@@ -978,9 +978,15 @@ int MainComponent::recordingLatencySamples()
     if (! settings_.getBoolValue("compensateRecordingLatency", true))
         return 0;
 
+    // A measured round trip, when there is one for this rate, rather than
+    // what the driver reports, which is often a little off.
+    const double rate     = engine_.sampleRate();
+    const int    measured = settings_.getIntValue("measuredLatencySamples", -1);
+    const bool   useIt    = measured >= 0 && std::abs(settings_.getDoubleValue("measuredLatencyRate", 0.0) - rate) < 0.5;
+
     const double adjustMs = settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0);
-    const int    adjust   = (int) std::lround(adjustMs * 0.001 * engine_.sampleRate());
-    return juce::jmax(0, engine_.reportedRoundTripSamples() + adjust);
+    const int    adjust   = (int) std::lround(adjustMs * 0.001 * rate);
+    return juce::jmax(0, (useIt ? measured : engine_.reportedRoundTripSamples()) + adjust);
 }
 
 /** Moves the clip a recording was just imported as (the selected one) that
@@ -1010,6 +1016,61 @@ void MainComponent::compensateRecordingLatency(const juce::File& file, int laten
     refreshAfterArrangementEdit();
 }
 
+/** Measure Recording Latency: plays a click and times it coming back
+    through a loopback cable (engine::LatencyProbe). The answer is kept for
+    this rate and used in place of what the device reports. */
+void MainComponent::measureRecordingLatency()
+{
+    if (engine_.isPlaying())
+    {
+        showError("Stop playback first");
+        return;
+    }
+
+    auto options = juce::MessageBoxOptions()
+                       .withIconType(juce::MessageBoxIconType::InfoIcon)
+                       .withTitle("Measure Recording Latency")
+                       .withMessage("Connect an output to an input with a cable, or turn on your interface's "
+                                    "loopback, and turn your speakers down: a click plays once, and the time it "
+                                    "takes to come back in is what recordings will be moved back by.")
+                       .withButton("Measure")
+                       .withButton("Cancel")
+                       .withAssociatedComponent(this);
+
+    juce::AlertWindow::showAsync(options, [self = juce::Component::SafePointer<MainComponent>(this)](int result)
+    {
+        if (self == nullptr || result != 1 || self->engine_.isMeasuringLatency())
+            return;
+        self->engine_.startLatencyMeasurement();
+        self->measuringLatency_ = true;
+        self->showStatus("Measuring...");
+    });
+}
+
+/** From the UI timer: reports and keeps a measurement once it's done. */
+void MainComponent::finishLatencyMeasurementIfReady()
+{
+    if (! measuringLatency_ || engine_.isMeasuringLatency())
+        return;
+    measuringLatency_ = false;
+
+    const int    samples = engine_.measuredLatencySamples();
+    const double rate    = engine_.sampleRate();
+    if (samples < 0 || rate <= 0.0)
+    {
+        showError("The click didn't come back - check the cable runs from an output to an input that's switched "
+                  "on in Audio Settings, and that the input level isn't all the way down");
+        return;
+    }
+
+    settings_.setValue("measuredLatencySamples", samples);
+    settings_.setValue("measuredLatencyRate", rate);
+    settings_.saveIfNeeded();
+    showStatus("Measured round trip: " + juce::String((double) samples * 1000.0 / rate, 2) + " ms (" + juce::String(samples)
+               + " samples, the device reports " + juce::String(engine_.reportedRoundTripSamples())
+               + ") - recordings use it now");
+}
+
 /** Recording Latency: whether recordings are moved back by the device's
     round trip, and by how much more or less than it reports. */
 void MainComponent::showRecordingLatencyDialog()
@@ -1020,12 +1081,18 @@ void MainComponent::showRecordingLatencyDialog()
                                   ? juce::String((double) reported * 1000.0 / rate, 1) + " ms ("
                                         + juce::String(reported) + " samples)"
                                   : juce::String("no device open");
+    const int    measured     = settings_.getIntValue("measuredLatencySamples", -1);
+    const auto   measuredText = measured >= 0 && rate > 0.0
+                                    && std::abs(settings_.getDoubleValue("measuredLatencyRate", 0.0) - rate) < 0.5
+                                  ? juce::String((double) measured * 1000.0 / rate, 1) + " ms"
+                                  : juce::String();
 
     auto* window = new juce::AlertWindow("Recording Latency",
         "A recording comes back late by the time sound takes to leave the device and return to it. "
-        "The device reports " + reportedText + "; recordings are moved back by that, plus any "
-        "adjustment below.\n\nTo measure it, record the metronome's click through a cable from an "
-        "output to an input, and set the adjustment so the recorded click lands on the beat.",
+        "The device reports " + reportedText + (measuredText.isEmpty() ? juce::String() : "; measured, it's " + measuredText)
+        + ". Recordings are moved back by " + (measuredText.isEmpty() ? "the reported figure" : "the measured one")
+        + ", plus any adjustment below.\n\nFile > Measure Recording Latency times it through a cable "
+        "from an output to an input.",
         juce::MessageBoxIconType::NoIcon, this);
     window->addTextEditor("adjust", juce::String(settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0), 1),
                           "Adjustment (ms, + moves recordings earlier):");

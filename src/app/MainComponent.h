@@ -217,6 +217,9 @@ private:
     int                    recordingLatencySamples();
     void                   compensateRecordingLatency(const juce::File& file, int latencySamples);
     void                   showRecordingLatencyDialog();
+    void                   measureRecordingLatency();
+    void                   finishLatencyMeasurementIfReady();
+    bool                   measuringLatency_ = false;
     void                   showRecordingFormatDialog();
     engine::AudioRecorder::Format savedRecordFormat();
     engine::AudioRecorder::Format recordFormatFor(int trackIndex);

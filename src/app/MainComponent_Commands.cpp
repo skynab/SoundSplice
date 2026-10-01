@@ -67,6 +67,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(! awaitingRecordedTake_ && ! awaitingMidiTake_);
             break;
 
+        case commands::measureLatency:
+            info.setActive(! awaitingRecordedTake_ && ! awaitingMidiTake_ && ! engine_.isMeasuringLatency());
+            break;
+
         case commands::soundActivatedRecording:
             info.setTicked(settings_.getBoolValue("soundActivated", false));
             break;
@@ -387,6 +391,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::setProjectRoot:   setProjectRootFolderDialog(); break;
         case commands::audioSettings:    showAudioSettings(); break;
         case commands::recordingLatency: showRecordingLatencyDialog(); break;
+        case commands::measureLatency:   measureRecordingLatency(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -760,6 +765,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::followSystemOutput);
         add(commands::recordingFormat);
         add(commands::recordingLatency);
+        add(commands::measureLatency);
     }
     else if (topLevelMenuIndex == 1) // Edit
     {

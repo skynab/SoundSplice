@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <engine/AudioRecorder.h>
+#include <engine/LatencyProbe.h>
 #include <engine/RetroRecorder.h>
 
 #include <vector>
@@ -160,4 +161,45 @@ TEST_CASE("A sound-activated take waits for sound, and stops itself on silence",
     REQUIRE(recorder.finishTake() == file);
     file.deleteFile();
     thread.stopThread(1000);
+}
+
+TEST_CASE("The latency probe times its click through a loopback", "[gui][recording]")
+{
+    // A loopback "cable" that hands back what went out 100 samples later -
+    // more than a block, as a real round trip always is - a little quieter
+    // and smeared, as converters would.
+    const auto measure = [](int delay, float gain)
+    {
+        LatencyProbe probe;
+        probe.start(1000.0, 1.0);
+        REQUIRE(probe.isRunning());
+        REQUIRE(probe.result() == LatencyProbe::kPending);
+
+        std::vector<float> cable(4096, 0.0f);
+        int                written = 0;
+        for (int block = 0; block < 20 && probe.isRunning(); ++block)
+        {
+            float out[64] {};
+            float in[64] {};
+            for (int n = 0; n < 64; ++n)
+            {
+                const int at = written + n - delay;
+                in[n] = at > 0 ? gain * 0.5f * (cable[(size_t) at] + cable[(size_t) at - 1]) : 0.0f;
+            }
+            float*       outputs[] { out };
+            const float* inputs[] { in };
+            probe.process(inputs, 1, outputs, 1, 64);
+            for (int n = 0; n < 64; ++n)
+                cable[(size_t) (written + n)] = out[n];
+            written += 64;
+        }
+        REQUIRE_FALSE(probe.isRunning());
+        return probe.result();
+    };
+
+    const int found = measure(100, 0.6f);
+    REQUIRE(found >= 100);
+    REQUIRE(found <= 101); // the smear moves the peak by at most a sample
+
+    REQUIRE(measure(100, 0.0f) == LatencyProbe::kNoSignal); // no cable: nothing comes back
 }

@@ -890,7 +890,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     // reasons the metronome is: it stays out of the meter, out of the master
     // effects, and — because renderOffline only ever calls processBlock — it
     // can never end up in an exported file.
-    mixInputMonitoring(output, inputChannelData, numInputChannels, numSamples);
+    // Not while measuring: with a cable from an output to an input, the
+    // monitored input would come straight back round as a second click.
+    if (! latencyProbe_.isRunning())
+        mixInputMonitoring(output, inputChannelData, numInputChannels, numSamples);
 
     // An effect preview, on its own clock. Mixed in here, outside
     // processBlock, for the same reason as the monitoring: it must never
@@ -905,6 +908,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     // device's: rather than a click in the wrong place, none.
     if (! atSpeed)
         metronome_.process(output, context, isCountingIn());
+
+    // Last, so the click goes out as it is: see LatencyProbe.
+    latencyProbe_.process(inputChannelData, numInputChannels, outputChannelData, numOutputChannels, numSamples);
 }
 
 void AudioEngine::renderAtSpeed(juce::AudioBuffer<float>& output, double speed, int numSamples) noexcept

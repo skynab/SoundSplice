@@ -206,6 +206,7 @@ enum Id : int
     appendRecord,
     soundActivatedRecording,
     timerRecord,
+    measureLatency,
 };
 
 /** One command's fixed description. */
@@ -237,6 +238,7 @@ inline const std::vector<Definition>& all()
         { audioSettings,    "Audio Settings...",    "File", "Choose the audio and MIDI devices.", {} },
         { followSystemOutput, "Follow System Output Device", "File", "Switch output when the system's default device changes.", {} },
         { recordingFormat,  "Recording Format...",  "File", "Choose the bit depth, mono or stereo, and which inputs takes are recorded from.", {} },
+        { measureLatency,   "Measure Recording Latency...", "File", "Time a click through a cable from an output to an input, so recordings line up exactly.", {} },
         { recordingLatency, "Recording Latency...", "File", "Line recordings up with what was playing, allowing for the device's delay.", {} },
 
         { undo,             "Undo",                 "Edit", "Undo the last edit.", { keys::undo } },

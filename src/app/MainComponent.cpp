@@ -1214,6 +1214,7 @@ void MainComponent::timerCallback()
     // the transport is rolling but nothing is being captured yet, and that
     // distinction is the whole point of the feature.
     tickTimerRecord();
+    finishLatencyMeasurementIfReady();
 
     const char* transportState = engine_.isCountingIn()      ? "COUNT-IN"
                                : engine_.isWaitingForSound() ? "WAITING FOR SOUND"

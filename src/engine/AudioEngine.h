@@ -31,6 +31,7 @@
 #include "engine/PluginHost.h"
 #include "engine/PluginNode.h"
 #include "engine/RetroRecorder.h"
+#include "engine/LatencyProbe.h"
 #include "engine/Pattern.h"
 #include "engine/Transport.h"
 
@@ -247,6 +248,15 @@ public:
         leaves late, is played along to, and comes back in late. 0 with no
         device open. Message thread. */
     int reportedRoundTripSamples();
+
+    /** Measures the true round trip with a click through a loopback cable
+        (see LatencyProbe). Message thread; the transport should be stopped. */
+    void startLatencyMeasurement() { latencyProbe_.start(sampleRate_.load(std::memory_order_relaxed)); }
+    bool isMeasuringLatency() const noexcept { return latencyProbe_.isRunning(); }
+
+    /** The measured round trip in samples, LatencyProbe::kNoSignal if the
+        click didn't come back, or LatencyProbe::kPending until it's done. */
+    int measuredLatencySamples() const noexcept { return latencyProbe_.result(); }
 
     /** What takes are recorded as, and from which inputs. The input meter
         follows the same inputs. Message thread, between takes. */
@@ -771,6 +781,7 @@ private:
     std::atomic<int>                  meterChannels_ { 2 };
 
     RetroRecorder retro_;
+    LatencyProbe  latencyProbe_;
     double        retroSeconds_ = 0.0;
     void meterInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
 
