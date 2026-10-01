@@ -78,6 +78,11 @@ struct Track
     // while the rest only play. See model::effectiveAutomationMode.
     int               automationMode = -1;
 
+    // The edit group this track belongs to, 1..model::kEditGroupCount, or 0
+    // for none: tracks in one group are selected, muted, soloed, faded and
+    // have their lined-up clips moved together (see model/TrackGroups.h).
+    int               editGroup = 0;
+
     std::vector<Clip> clips;
 
     // The session grid's column for this track, indexed by scene. Kept the

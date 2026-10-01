@@ -1017,10 +1017,25 @@ void MainComponent::showTrackSettingsMenu(int trackIndex)
         colours.addItem(kFirstColourMenuId + i, option.name, true, chosen);
     }
 
+    // Edit groups: see model/TrackGroups.h. Each says who's in it already.
+    juce::PopupMenu groups;
+    groups.addItem(kFirstEditGroupMenuId, "None", true, track.editGroup == 0);
+    for (int g = 1; g <= model::kEditGroupCount; ++g)
+    {
+        juce::StringArray members;
+        for (const auto& other : song.tracks)
+            if (other.editGroup == g && other.id != track.id)
+                members.add(other.name.empty() ? juce::String("unnamed") : juce::String(other.name));
+        groups.addItem(kFirstEditGroupMenuId + g,
+                       "Group " + juce::String(g) + (members.isEmpty() ? juce::String() : " (with " + members.joinIntoString(", ") + ")"),
+                       true, track.editGroup == g);
+    }
+
     juce::PopupMenu menu;
     menu.addSectionHeader(track.name.empty() ? ("Track " + juce::String(trackIndex + 1))
                                              : juce::String(track.name));
     menu.addSubMenu("Colour", colours);
+    menu.addSubMenu("Edit Group", groups);
     menu.addItem(1, "Rename...");
     menu.addSeparator();
 
@@ -1046,9 +1061,35 @@ void MainComponent::showTrackSettingsMenu(int trackIndex)
             return;
         }
 
+        if (const int group = result - kFirstEditGroupMenuId; group >= 0 && group <= model::kEditGroupCount)
+        {
+            self->setTrackEditGroup(trackIndex, group);
+            return;
+        }
+
         if (const int index = result - kFirstColourMenuId; index >= 0 && index < kNumTrackColours)
             self->setTrackColour(trackIndex, kTrackColours[index].argb);
     });
+}
+
+/** Puts a track in edit group @p group, or none (0). */
+void MainComponent::setTrackEditGroup(int trackIndex, int group)
+{
+    const auto& song = history_.current();
+    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size() || song.tracks[(size_t) trackIndex].editGroup == group)
+        return;
+
+    const int trackId = song.tracks[(size_t) trackIndex].id;
+    history_.edit(group > 0 ? "Set edit group" : "Remove from edit group", [trackId, group](model::Song& s)
+    {
+        if (auto* track = model::findTrack(s, trackId))
+            track->editGroup = group;
+    });
+
+    arrangementView_.setSong(history_.current());
+    showStatus(group > 0 ? "In edit group " + juce::String(group)
+                               + " - selections, mute, solo, faders and lined-up clips follow the group"
+                         : juce::String("No longer in an edit group"));
 }
 
 /** Colour is document state, so it's an undoable edit rather than a live
@@ -1995,14 +2036,15 @@ void MainComponent::updateMixerStrips()
 void MainComponent::setTrackGain(int index, float gainDb)
 {
     // Live tweak: update the current document in place (not a separate undo step).
+    // The rest of its edit group move by as much.
     auto& song = history_.mutableCurrent();
-    if (index >= 0 && index < (int) song.tracks.size())
+    writeGroupFader(song, index, MixerStrip::Fader::Gain, gainDb);
+    for (const int member : model::groupedit::memberIndices(song, index))
     {
-        auto& track = song.tracks[(size_t) index];
-        track.gainDb = gainDb;
-
+        engine_.setTrackGainDb(member, song.tracks[(size_t) member].gainDb);
+        if (member != index && member < trackStrips_.size())
+            trackStrips_[member]->setGainDb(song.tracks[(size_t) member].gainDb);
     }
-    engine_.setTrackGainDb(index, gainDb);
 
     // Written into the lane if the automation mode says so (see
     // MainComponent_AutomationWrite.cpp); the drag hooks say when it's held.
@@ -2043,7 +2085,7 @@ void MainComponent::endFaderDrag(int trackIndex, MixerStrip::Fader fader)
 
     const float landedOn = readFader(history_.current(), trackIndex, fader);
     commitDrag(history_, faderName(fader), faderDragFrom_, landedOn,
-               [trackIndex, fader](model::Song& s, float v) { writeFader(s, trackIndex, fader, v); });
+               [trackIndex, fader](model::Song& s, float v) { writeGroupFader(s, trackIndex, fader, v); });
 }
 
 /** Mutes or unmutes a track, as an undoable edit.
@@ -2068,12 +2110,16 @@ void MainComponent::setTrackMuted(int index, bool muted)
     if (song.tracks[(size_t) index].muted == muted)
         return; // nothing changed, so nothing worth an undo step
 
-    history_.edit(muted ? "Mute track" : "Unmute track", [index, muted](model::Song& s)
+    // Its whole edit group with it.
+    const auto members = model::groupedit::memberIndices(song, index);
+    history_.edit(muted ? "Mute track" : "Unmute track", [members, muted](model::Song& s)
     {
-        s.tracks[(size_t) index].muted = muted;
+        for (const int member : members)
+            s.tracks[(size_t) member].muted = muted;
     });
 
-    engine_.setTrackMuted(index, muted);
+    for (const int member : members)
+        engine_.setTrackMuted(member, muted);
 
     // Both views show mute, and either can set it, so both are refreshed from
     // the document here rather than by whichever one happened to be clicked.
@@ -2095,24 +2141,28 @@ void MainComponent::setTrackSolo(int index, bool solo)
     if (song.tracks[(size_t) index].solo == solo)
         return;
 
-    history_.edit(solo ? "Solo track" : "Unsolo track", [index, solo](model::Song& s)
+    const auto members = model::groupedit::memberIndices(song, index);
+    history_.edit(solo ? "Solo track" : "Unsolo track", [members, solo](model::Song& s)
     {
-        s.tracks[(size_t) index].solo = solo;
+        for (const int member : members)
+            s.tracks[(size_t) member].solo = solo;
     });
 
-    engine_.setTrackSolo(index, solo);
+    for (const int member : members)
+        engine_.setTrackSolo(member, solo);
     updateMixerStrips();
 }
 
 void MainComponent::setTrackPan(int index, float pan)
 {
     auto& song = history_.mutableCurrent();
-    if (index >= 0 && index < (int) song.tracks.size())
+    writeGroupFader(song, index, MixerStrip::Fader::Pan, pan);
+    for (const int member : model::groupedit::memberIndices(song, index))
     {
-        auto& track = song.tracks[(size_t) index];
-        track.pan = pan;
+        engine_.setTrackPan(member, song.tracks[(size_t) member].pan);
+        if (member != index && member < trackStrips_.size())
+            trackStrips_[member]->setPan(song.tracks[(size_t) member].pan);
     }
-    engine_.setTrackPan(index, pan);
     automationControlMoved(AutomationWriteKey::trackParam(index, model::TrackParam::Pan), pan, false);
 }
 

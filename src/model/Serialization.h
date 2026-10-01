@@ -411,6 +411,10 @@ inline std::string serialize(const Song& song)
         if (track.automationMode >= 0)
             out << "TRACKAUTOMODE " << track.automationMode << "\n";
 
+        // Only when it's in one.
+        if (track.editGroup > 0)
+            out << "TRACKGROUP " << track.editGroup << "\n";
+
         // Only non-empty lanes are written, so an unautomated track costs one
         // "TAUTOS 0" line rather than one empty record per automatable
         // parameter.
@@ -931,6 +935,9 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             const int mode       = std::atoi(rest.c_str());
             track.automationMode = mode >= 0 && mode <= 3 ? mode : -1;
         }
+
+        if (readTagged("TRACKGROUP", rest))
+            track.editGroup = std::max(0, std::atoi(rest.c_str()));
 
         if (readTagged("TAUTOS", rest))
         {

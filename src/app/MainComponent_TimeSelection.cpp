@@ -11,8 +11,12 @@
 
 namespace soundsplice
 {
-void MainComponent::setTimeSelection(const model::TimeSelection& selection)
+void MainComponent::setTimeSelection(const model::TimeSelection& selectionAsMade)
 {
+    // A selection on a grouped track takes in the rest of its edit group.
+    auto selection     = selectionAsMade;
+    selection.trackIds = model::groupedit::withGroupMembers(history_.current(), selection.trackIds);
+
     timeSelection_ = selection;
     arrangementView_.setTimeSelection(selection);
 
@@ -134,9 +138,11 @@ bool MainComponent::pasteAtTimeSelection()
 
 /** Razor areas, made by Ctrl+Shift-dragging in the arrangement. Making some
     lets the time selection go: the edit commands act on one or the other. */
-void MainComponent::setRazorAreas(const model::RazorAreas& areas)
+void MainComponent::setRazorAreas(const model::RazorAreas& areasAsMade)
 {
-    razorAreas_ = areas;
+    // Repeated across the edit group of each area's track.
+    const auto areas = model::groupedit::withGroupAreas(history_.current(), areasAsMade);
+    razorAreas_      = areas;
     arrangementView_.setRazorAreas(areas);
 
     if (areas.empty())
@@ -284,7 +290,7 @@ std::vector<int> MainComponent::arrangementEditTracks() const
 
     const auto& tracks = history_.current().tracks;
     if (selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) tracks.size())
-        return { tracks[(size_t) selectedTrackIndex_].id };
+        return model::groupedit::withGroupMembers(history_.current(), { tracks[(size_t) selectedTrackIndex_].id });
 
     return {};
 }

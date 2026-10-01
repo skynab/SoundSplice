@@ -718,10 +718,23 @@ MainComponent::MainComponent()
             if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
                 return;
             auto& clips = s.tracks[(size_t) trackIndex].clips;
-            if (clipIndex >= 0 && clipIndex < (int) clips.size())
-                clips[(size_t) clipIndex].startBeats = juce::jmax(0.0, newStartBeats);
+            if (clipIndex < 0 || clipIndex >= (int) clips.size())
+                return;
+
+            // The clips lined up with it on the rest of its edit group go too.
+            const double to      = juce::jmax(0.0, newStartBeats);
+            const double delta   = to - clips[(size_t) clipIndex].startBeats;
+            const auto   aligned = model::groupedit::alignedClips(s, trackIndex, clipIndex);
+            clips[(size_t) clipIndex].startBeats = to;
+            for (const auto& [t, c] : aligned)
+                s.tracks[(size_t) t].clips[(size_t) c].startBeats += delta;
+
             if (crossfade)
+            {
                 model::arrangeedit::applyAutoCrossfades(s, trackIndex);
+                for (const auto& [t, c] : aligned)
+                    model::arrangeedit::applyAutoCrossfades(s, t);
+            }
         });
 
         arrangementView_.setSong(history_.current());

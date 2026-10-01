@@ -26,6 +26,7 @@
 #include "engine/OfflineRenderer.h"
 #include "engine/SequenceAudioFormat.h"
 #include "model/RazorEdits.h"
+#include "model/TrackGroups.h"
 #include "model/TrackChannels.h"
 #include "model/MasteringPresets.h"
 #include "model/Serialization.h"
@@ -49,6 +50,7 @@ inline constexpr int kFirstLayoutMenuId = 40;
 /** Colour entries in the per-track gear menu, clear of that menu's own
     fixed items. */
 inline constexpr int kFirstColourMenuId = 200;
+inline constexpr int kFirstEditGroupMenuId = 300; // None, then each group
 
 /** How close to the edge the playhead gets before the keys grid pages. Small,
     so almost the whole width is travelled before each jump. */
@@ -308,6 +310,20 @@ inline float readFader(const model::Song& song, int index, MixerStrip::Fader fad
         case MixerStrip::Fader::Pan:  return track.pan;
     }
     return 0.0f;
+}
+
+/** writeFader for a track and its edit group: the others move by as much
+    (see model::groupedit::setRelative). */
+inline void writeGroupFader(model::Song& song, int index, MixerStrip::Fader fader, float value)
+{
+    if (fader == MixerStrip::Fader::Gain)
+        model::groupedit::setRelative(song, index, value, -60.0f, 6.0f,
+                                      [](const model::Track& t) { return t.gainDb; },
+                                      [](model::Track& t, float v) { t.gainDb = v; });
+    else
+        model::groupedit::setRelative(song, index, value, -1.0f, 1.0f,
+                                      [](const model::Track& t) { return t.pan; },
+                                      [](model::Track& t, float v) { t.pan = v; });
 }
 
 inline void writeFader(model::Song& song, int index, MixerStrip::Fader fader, float value)

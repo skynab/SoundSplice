@@ -609,6 +609,7 @@ private:
     void                   useClipTake(int trackIndex, int clipId, double fromBeats, double toBeats, int take);
     void                   combineOverlappingClipsIntoTakes(int trackIndex, int clipIndex);
     void                   swipeCompTake(int trackIndex, int take, double fromBeats, double toBeats);
+    void                   setTrackEditGroup(int trackIndex, int group);
     void                   copyNotes();
     void                   pasteNotes();
     void                   copyClip();
