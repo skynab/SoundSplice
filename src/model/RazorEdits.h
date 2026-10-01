@@ -151,7 +151,7 @@ namespace razoredit
             entry.lengthBeats = area.lengthBeats();
             entry.trackType   = track.type;
             for (const auto& clip : track.clips)
-                if (auto piece = rangeedit::pieceOf(clip, area.startBeats, area.endBeats, song.bpm))
+                if (auto piece = rangeedit::pieceOf(clip, area.startBeats, area.endBeats, clockFor(song)))
                 {
                     piece->startBeats -= area.startBeats;
                     entry.clips.push_back(*piece);

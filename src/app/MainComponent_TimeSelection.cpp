@@ -26,7 +26,9 @@ void MainComponent::setTimeSelection(const model::TimeSelection& selectionAsMade
     if (selection.isEmpty())
         return;
 
-    const double seconds = selection.lengthBeats() * 60.0 / juce::jmax(1.0, history_.current().bpm);
+    const double seconds = history_.current().bpm > 0.0
+                               ? model::clockFor(history_.current()).secondsBetween(selection.startBeats, selection.endBeats)
+                               : 0.0;
     const int    tracks  = (int) selection.trackIds.size();
     showStatus("Selected " + juce::String(seconds, 2) + "s on " + juce::String(tracks)
                + (tracks == 1 ? " track" : " tracks"));
@@ -65,7 +67,9 @@ bool MainComponent::editTimeSelection(const juce::String& label, bool copy, bool
         return true;
     }
 
-    const double seconds = timeSelection_.lengthBeats() * 60.0 / juce::jmax(1.0, song.bpm);
+    const double seconds = song.bpm > 0.0
+                               ? model::clockFor(song).secondsBetween(timeSelection_.startBeats, timeSelection_.endBeats)
+                               : 0.0;
 
     if (copy)
     {
@@ -387,7 +391,7 @@ std::optional<std::vector<std::pair<double, double>>> MainComponent::silencesInC
     const double rate   = sequence->sampleRate;
     const auto   window = clipSampleWindow(clip,
                                            (int) juce::jmin<std::int64_t>(sequence->length(), std::numeric_limits<int>::max()),
-                                           rate, history_.current().bpm);
+                                           rate, model::clockFor(history_.current()));
     std::vector<std::pair<double, double>> silences;
     if (window.isEmpty())
         return silences;
@@ -430,7 +434,9 @@ void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds,
 
     showBusy("Finding silences...");
 
-    const double beatsPerSecond = song.bpm / 60.0;
+    // Clip times through the tempo map; lengths at the tempo where the
+    // selection starts.
+    const auto clock = model::clockFor(song);
     std::vector<std::pair<double, double>> sounds;
 
     for (const auto& track : song.tracks)
@@ -454,10 +460,10 @@ void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds,
             double cursor = clip.startBeats;
             for (const auto& [from, to] : quiet)
             {
-                const double quietFrom = clip.startBeats + from * beatsPerSecond;
+                const double quietFrom = clock.beatAfter(clip.startBeats, from);
                 if (quietFrom > cursor)
                     sounds.emplace_back(cursor, quietFrom);
-                cursor = juce::jmax(cursor, clip.startBeats + to * beatsPerSecond);
+                cursor = juce::jmax(cursor, clock.beatAfter(clip.startBeats, to));
             }
             if (clipEnd > cursor)
                 sounds.emplace_back(cursor, clipEnd);
@@ -465,8 +471,8 @@ void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds,
     }
 
     const auto gaps = model::arrangeedit::gapsBetween(sounds, selection.startBeats, selection.endBeats,
-                                                      minSilenceSeconds * beatsPerSecond);
-    const double keep = keepSeconds * beatsPerSecond;
+                                                      clock.beatsAfter(selection.startBeats, minSilenceSeconds));
+    const double keep = clock.beatsAfter(selection.startBeats, keepSeconds);
 
     auto         trial   = song;
     const double removed = model::arrangeedit::truncateSilences(trial, selection.trackIds, gaps, keep);
@@ -486,7 +492,8 @@ void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds,
     shortened.endBeats = juce::jmax(shortened.startBeats, shortened.endBeats - removed);
     setTimeSelection(shortened);
     refreshAfterArrangementEdit();
-    showStatus("Took " + juce::String(removed / beatsPerSecond, 2) + " s of silence out");
+    showStatus("Took " + juce::String(clock.secondsBetween(selection.startBeats, selection.startBeats + removed), 2)
+               + " s of silence out");
 }
 
 /** Auto Duck, as Audacity's: the music on the selected tracks dips wherever
@@ -523,7 +530,7 @@ void MainComponent::autoDuck(float thresholdDb, double duckDb, double fadeSecond
 
     showBusy("Listening for the voice...");
 
-    const double beatsPerSecond = song.bpm / 60.0;
+    const auto clock = model::clockFor(song);
     std::vector<std::pair<double, double>> sounds;
 
     for (const auto& clip : control->clips)
@@ -539,10 +546,10 @@ void MainComponent::autoDuck(float thresholdDb, double duckDb, double fadeSecond
         double cursor = clip.startBeats;
         for (const auto& [from, to] : quiet)
         {
-            const double quietFrom = clip.startBeats + from * beatsPerSecond;
+            const double quietFrom = clock.beatAfter(clip.startBeats, from);
             if (quietFrom > cursor)
                 sounds.emplace_back(cursor, quietFrom);
-            cursor = juce::jmax(cursor, clip.startBeats + to * beatsPerSecond);
+            cursor = juce::jmax(cursor, clock.beatAfter(clip.startBeats, to));
         }
         if (clipEnd > cursor)
             sounds.emplace_back(cursor, clipEnd);
@@ -555,7 +562,7 @@ void MainComponent::autoDuck(float thresholdDb, double duckDb, double fadeSecond
         sound.first  = juce::jmax(sound.first, selection.startBeats);
         sound.second = juce::jmin(sound.second, selection.endBeats);
     }
-    const auto merged = model::arrangeedit::mergeRegions(sounds, pauseSeconds * beatsPerSecond);
+    const auto merged = model::arrangeedit::mergeRegions(sounds, clock.beatsAfter(selection.startBeats, pauseSeconds));
 
     const auto gain = (float) juce::Decibels::decibelsToGain(-std::abs(duckDb));
     int        count = 0;
@@ -740,7 +747,7 @@ void MainComponent::snapTimeSelectionToZeroCrossings()
 
             constexpr int radius = 512;
             const double  rate   = sequence->sampleRate;
-            const auto    frame  = app::fileFrameAt(*clip, beat, rate, song.bpm);
+            const auto    frame  = app::fileFrameAt(*clip, beat, rate, model::clockFor(song));
             const auto    from   = juce::jmax<std::int64_t>(0, frame - radius - 1);
 
             juce::AudioBuffer<float> nearby;
@@ -749,7 +756,7 @@ void MainComponent::snapTimeSelectionToZeroCrossings()
 
             const std::vector<float> first(nearby.getReadPointer(0), nearby.getReadPointer(0) + nearby.getNumSamples());
             const int  local   = engine::audioedits::nearestZeroCrossing(first, (int) (frame - from), radius);
-            const auto snapped = app::beatForFileFrame(*clip, from + local, rate, song.bpm);
+            const auto snapped = app::beatForFileFrame(*clip, from + local, rate, model::clockFor(song));
 
             // Kept on the clip it was measured in.
             return juce::jlimit(clip->startBeats, clip->startBeats + clip->lengthBeats, snapped);
@@ -795,7 +802,7 @@ namespace
         if (selection.isEmpty() || song.bpm <= 0.0)
             return regions;
 
-        const double secondsPerBeat = 60.0 / song.bpm;
+        const auto clock = model::clockFor(song);
 
         for (const auto& track : song.tracks)
         {
@@ -818,15 +825,15 @@ namespace
                 const auto   window = clipSampleWindow(clip,
                                                        (int) juce::jmin<std::int64_t>(sequence->length(),
                                                                                       std::numeric_limits<int>::max()),
-                                                       rate, song.bpm);
+                                                       rate, clock);
                 if (window.isEmpty())
                     continue;
 
                 const auto length = (std::int64_t) window.length();
                 const auto from   = juce::jlimit<std::int64_t>(0, length, std::llround(
-                    juce::jmax(0.0, selection.startBeats - clip.startBeats) * secondsPerBeat * rate));
+                    clock.secondsBetween(clip.startBeats, juce::jmax(clip.startBeats, selection.startBeats)) * rate));
                 const auto to     = juce::jlimit<std::int64_t>(from, length, std::llround(
-                    (selection.endBeats - clip.startBeats) * secondsPerBeat * rate));
+                    clock.secondsBetween(clip.startBeats, selection.endBeats) * rate));
                 if (to <= from)
                     continue;
 
@@ -1091,9 +1098,9 @@ void MainComponent::detachAtSilences(float thresholdDb, double minSilenceSeconds
                 continue;
 
             // Seconds from the clip's start, cut down to the time selection.
-            const double secondsPerBeat = 60.0 / song.bpm;
-            const double limitFrom      = limited ? (selectionFrom - clip.startBeats) * secondsPerBeat : 0.0;
-            const double limitTo        = limited ? (selectionTo - clip.startBeats) * secondsPerBeat
+            const auto   clock          = model::clockFor(song);
+            const double limitFrom      = limited ? clock.secondsBetween(clip.startBeats, selectionFrom) : 0.0;
+            const double limitTo        = limited ? clock.secondsBetween(clip.startBeats, selectionTo)
                                                   : std::numeric_limits<double>::max();
 
             Found clipFound { track.id, clip.id, {} };

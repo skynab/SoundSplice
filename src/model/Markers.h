@@ -11,6 +11,7 @@
 
 #include "engine/SequencerMath.h"
 #include "model/Song.h"
+#include "model/TempoChanges.h"
 
 namespace soundsplice::model
 {
@@ -165,7 +166,8 @@ inline std::optional<double> previousMarkerStart(const Song& song, double beat)
     per line, in seconds, with a point marker's end equal to its start. */
 inline std::string exportMarkersAsLabels(const Song& song)
 {
-    const double secondsPerBeat = 60.0 / (song.bpm > 0.0 ? song.bpm : 120.0);
+    // Through the tempo map: a label is a moment in the audio.
+    const BeatClock clock = song.bpm > 0.0 ? clockFor(song) : BeatClock(120.0);
 
     std::ostringstream out;
     for (const auto& marker : song.markers)
@@ -177,20 +179,20 @@ inline std::string exportMarkersAsLabels(const Song& song)
         std::replace(name.begin(), name.end(), '\r', ' ');
 
         char times[96];
-        std::snprintf(times, sizeof(times), "%.6f\t%.6f\t", marker.startBeats * secondsPerBeat,
-                      (marker.startBeats + marker.lengthBeats) * secondsPerBeat);
+        std::snprintf(times, sizeof(times), "%.6f\t%.6f\t", clock.secondsAt(marker.startBeats),
+                      clock.secondsAt(marker.startBeats + marker.lengthBeats));
         out << times << name << "\n";
     }
     return out.str();
 }
 
-/** Markers read from an Audacity label file, converted to beats at @p bpm,
+/** Markers read from an Audacity label file, converted to beats by @p clock,
     in file order and without ids (addMarker gives them those). Lines that
     aren't labels are skipped: blank ones, Audacity's frequency-range lines
     (which start with a backslash), and anything whose times don't parse. */
-inline std::vector<Marker> markersFromLabels(const std::string& text, double bpm)
+inline std::vector<Marker> markersFromLabels(const std::string& text, const BeatClock& songClock)
 {
-    const double tempo = bpm > 0.0 ? bpm : 120.0;
+    const BeatClock clock = songClock.valid() ? songClock : BeatClock(120.0);
 
     std::vector<Marker> markers;
     std::istringstream  in(text);
@@ -219,8 +221,8 @@ inline std::vector<Marker> markersFromLabels(const std::string& text, double bpm
         name = first == std::string::npos ? std::string() : name.substr(first);
 
         Marker marker;
-        marker.startBeats  = engine::beatsForSeconds(std::max(0.0, start), tempo);
-        marker.lengthBeats = engine::beatsForSeconds(std::max(0.0, end - start), tempo);
+        marker.startBeats  = clock.beatAt(std::max(0.0, start));
+        marker.lengthBeats = std::max(0.0, clock.beatAt(std::max(0.0, end)) - marker.startBeats);
         marker.name        = std::move(name);
         markers.push_back(std::move(marker));
     }

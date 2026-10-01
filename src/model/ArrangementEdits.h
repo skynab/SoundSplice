@@ -48,8 +48,9 @@ namespace arrangeedit
                     continue;
                 }
 
-                auto first  = rangeedit::pieceOf(clip, start, beat, song.bpm);
-                auto second = rangeedit::pieceOf(clip, beat, end, song.bpm);
+                const auto clock  = clockFor(song);
+                auto       first  = rangeedit::pieceOf(clip, start, beat, clock);
+                auto       second = rangeedit::pieceOf(clip, beat, end, clock);
                 if (! first || ! second)
                 {
                     clips.push_back(clip);
@@ -71,13 +72,13 @@ namespace arrangeedit
     /** Whether @p next carries straight on from @p clip: it starts where
         @p clip ends, plays the same file from where @p clip leaves off, and at
         the same gain, so the two sound exactly like one clip. */
-    inline bool continues(const Clip& clip, const Clip& next, double bpm)
+    inline bool continues(const Clip& clip, const Clip& next, const BeatClock& clock)
     {
-        if (clip.type != ClipType::Audio || next.type != ClipType::Audio || bpm <= 0.0)
+        if (clip.type != ClipType::Audio || next.type != ClipType::Audio || ! clock.valid())
             return false;
 
         const double end            = clip.startBeats + clip.lengthBeats;
-        const double offsetAtEnd    = clip.sourceOffsetSeconds + clip.lengthBeats * 60.0 / bpm;
+        const double offsetAtEnd    = clip.sourceOffsetSeconds + clock.secondsBetween(clip.startBeats, end);
         constexpr double kSeconds   = 1.0e-6;
 
         return clip.audioFile == next.audioFile
@@ -116,7 +117,7 @@ namespace arrangeedit
                     const double joinAt   = previous.startBeats + previous.lengthBeats;
 
                     if (joinAt >= fromBeats - rangeedit::kEpsilonBeats && joinAt <= toBeats + rangeedit::kEpsilonBeats
-                        && continues(previous, clip, song.bpm))
+                        && continues(previous, clip, clockFor(song)))
                     {
                         previous.lengthBeats     += clip.lengthBeats;
                         previous.fades.outSeconds = clip.fades.outSeconds;
@@ -148,10 +149,10 @@ namespace arrangeedit
     inline int crossfadeClips(Song& song, const std::vector<int>& trackIds, double fromBeats, double toBeats,
                               const std::function<double(const std::string&)>& fileSeconds)
     {
-        if (song.bpm <= 0.0 || toBeats <= fromBeats)
+        const auto clock = clockFor(song);
+        if (! clock.valid() || toBeats <= fromBeats)
             return 0;
 
-        const double secondsPerBeat = 60.0 / song.bpm;
         constexpr double kEpsilon   = rangeedit::kEpsilonBeats;
         int              made       = 0;
 
@@ -186,13 +187,13 @@ namespace arrangeedit
                     || std::max(firstEnd, second.startBeats) > toBeats + kEpsilon)
                     continue;
 
-                const bool carriesOn = continues(first, second, song.bpm);
+                const bool carriesOn = continues(first, second, clock);
 
                 // How far each can reach: the first to the end of its audio,
                 // the second back to the start of its file.
-                const double firstAudioEnd = first.startBeats
-                                           + (fileSeconds(first.audioFile) - first.sourceOffsetSeconds) / secondsPerBeat;
-                const double secondEarliest = second.startBeats - second.sourceOffsetSeconds / secondsPerBeat;
+                const double firstAudioEnd  = clock.beatAfter(first.startBeats,
+                                                              fileSeconds(first.audioFile) - first.sourceOffsetSeconds);
+                const double secondEarliest = clock.beatAfter(second.startBeats, -second.sourceOffsetSeconds);
                 const double secondEnd      = second.startBeats + second.lengthBeats;
 
                 const double from = std::max({ fromBeats, secondEarliest, first.startBeats });
@@ -201,12 +202,12 @@ namespace arrangeedit
                     continue;
 
                 const double moveBack = second.startBeats - from;
-                second.sourceOffsetSeconds = std::max(0.0, second.sourceOffsetSeconds - moveBack * secondsPerBeat);
+                second.sourceOffsetSeconds = std::max(0.0, second.sourceOffsetSeconds - clock.secondsBetween(from, second.startBeats));
                 second.lengthBeats        += moveBack;
                 second.startBeats          = from;
                 first.lengthBeats          = std::max(first.lengthBeats, to - first.startBeats);
 
-                const double seconds = (to - from) * secondsPerBeat;
+                const double seconds = clock.secondsBetween(from, to);
                 const auto   shape   = carriesOn ? engine::FadeShape::Linear : engine::FadeShape::EqualPower;
                 first.fades.outSeconds  = seconds;
                 first.fades.outShape    = shape;
@@ -228,7 +229,8 @@ namespace arrangeedit
         crossfades there are. */
     inline int applyAutoCrossfades(Song& song, int trackIndex)
     {
-        if (trackIndex < 0 || trackIndex >= (int) song.tracks.size() || song.bpm <= 0.0)
+        const auto clock = clockFor(song);
+        if (trackIndex < 0 || trackIndex >= (int) song.tracks.size() || ! clock.valid())
             return 0;
         auto& track = song.tracks[(size_t) trackIndex];
         if (track.type != TrackType::Audio)
@@ -250,8 +252,7 @@ namespace arrangeedit
         std::stable_sort(order.begin(), order.end(), [&track](size_t a, size_t b)
                          { return track.clips[a].startBeats < track.clips[b].startBeats; });
 
-        const double secondsPerBeat = 60.0 / song.bpm;
-        int          made           = 0;
+        int made = 0;
         for (size_t i = 0; i + 1 < order.size(); ++i)
         {
             auto&        first    = track.clips[order[i]];
@@ -261,7 +262,7 @@ namespace arrangeedit
             if (overlap <= rangeedit::kEpsilonBeats || second.startBeats + second.lengthBeats <= firstEnd)
                 continue;
 
-            const double seconds = overlap * secondsPerBeat;
+            const double seconds = clock.secondsBetween(second.startBeats, firstEnd);
             if (first.fades.outSeconds <= 0.0)
             {
                 first.fades.outSeconds = seconds;
@@ -325,10 +326,10 @@ namespace arrangeedit
     inline int duckClips(Song& song, const std::vector<int>& trackIds,
                          const std::vector<std::pair<double, double>>& sounds, float duckGain, double fadeSeconds)
     {
-        if (song.bpm <= 0.0 || sounds.empty())
+        const auto clock = clockFor(song);
+        if (! clock.valid() || sounds.empty())
             return 0;
 
-        const double secondsPerBeat = 60.0 / song.bpm;
         const double fade           = std::max(0.0, fadeSeconds);
         int          ducked         = 0;
 
@@ -346,9 +347,9 @@ namespace arrangeedit
                 const double clipEnd = clip.startBeats + clip.lengthBeats;
 
                 // Beats on the timeline to seconds into the clip's file.
-                const auto fileSecondsAt = [&clip, secondsPerBeat](double beat)
+                const auto fileSecondsAt = [&clip, &clock](double beat)
                 {
-                    return clip.sourceOffsetSeconds + (beat - clip.startBeats) * secondsPerBeat;
+                    return clip.sourceOffsetSeconds + clock.secondsBetween(clip.startBeats, beat);
                 };
 
                 engine::ClipEnvelope envelope;
@@ -389,10 +390,10 @@ namespace arrangeedit
     inline int crossfadeTracks(Song& song, int outTrackId, int inTrackId, double fromBeats, double toBeats,
                                bool equalPower)
     {
-        if (song.bpm <= 0.0 || toBeats <= fromBeats || outTrackId == inTrackId)
+        const auto clock = clockFor(song);
+        if (! clock.valid() || toBeats <= fromBeats || outTrackId == inTrackId)
             return 0;
 
-        const double secondsPerBeat = 60.0 / song.bpm;
         constexpr int kSteps        = 16;
         int           shaped        = 0;
 
@@ -408,8 +409,8 @@ namespace arrangeedit
                 if (clip.type != ClipType::Audio || clipEnd <= fromBeats || clip.startBeats >= toBeats)
                     continue;
 
-                const auto fileSecondsAt = [&clip, secondsPerBeat](double beat)
-                { return clip.sourceOffsetSeconds + (beat - clip.startBeats) * secondsPerBeat; };
+                const auto fileSecondsAt = [&clip, &clock](double beat)
+                { return clip.sourceOffsetSeconds + clock.secondsBetween(clip.startBeats, beat); };
                 const double from = fileSecondsAt(fromBeats), to = fileSecondsAt(toBeats);
 
                 // What was there, kept where the clip still plays.
@@ -519,7 +520,8 @@ namespace arrangeedit
                                 const std::vector<std::pair<double, double>>& silences)
     {
         auto* track = findTrack(song, trackId);
-        if (track == nullptr || ! rangeedit::appliesTo(*track) || song.bpm <= 0.0)
+        const auto clock = clockFor(song);
+        if (track == nullptr || ! rangeedit::appliesTo(*track) || ! clock.valid())
             return -1;
 
         const auto found = std::find_if(track->clips.begin(), track->clips.end(),
@@ -530,24 +532,23 @@ namespace arrangeedit
         const Clip   clip          = *found;
         const double start         = clip.startBeats;
         const double end           = clip.startBeats + clip.lengthBeats;
-        const double beatsPerSecond = song.bpm / 60.0;
 
         std::vector<Clip> pieces;
         double            cursor = start;
 
         for (const auto& [fromSeconds, toSeconds] : silences)
         {
-            const double from = std::clamp(start + fromSeconds * beatsPerSecond, start, end);
-            const double to   = std::clamp(start + toSeconds * beatsPerSecond, start, end);
+            const double from = std::clamp(clock.beatAfter(start, fromSeconds), start, end);
+            const double to   = std::clamp(clock.beatAfter(start, toSeconds), start, end);
             if (to <= from)
                 continue;
 
-            if (auto piece = rangeedit::pieceOf(clip, cursor, from, song.bpm))
+            if (auto piece = rangeedit::pieceOf(clip, cursor, from, clock))
                 pieces.push_back(*piece);
             cursor = std::max(cursor, to);
         }
 
-        if (auto piece = rangeedit::pieceOf(clip, cursor, end, song.bpm))
+        if (auto piece = rangeedit::pieceOf(clip, cursor, end, clock))
             pieces.push_back(*piece);
 
         if (pieces.size() == 1 && pieces[0] == clip)

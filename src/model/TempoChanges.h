@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "engine/TempoMap.h"
+#include "model/BeatClock.h"
 #include "model/Song.h"
 
 namespace soundsplice::model
@@ -29,6 +30,15 @@ namespace tempoedit
         std::vector<engine::TempoChange> map { { 0.0, song.bpm, false } };
         map.insert(map.end(), song.tempoChanges.begin(), song.tempoChanges.end());
         return map;
+    }
+
+    /** The song's clock, for turning beats into seconds and back along its
+        tempo map (see model::BeatClock). */
+    inline BeatClock clockFor(const Song& song)
+    {
+        if (song.tempoChanges.empty())
+            return BeatClock(song.bpm);
+        return BeatClock(mapFor(song));
     }
 
     /** The tempo in force at @p beat (on a ramp, where it has got to). */
@@ -174,5 +184,7 @@ namespace tempoedit
         return true;
     }
 }
+
+using tempoedit::clockFor;
 
 } // namespace soundsplice::model

@@ -306,7 +306,7 @@ void MainComponent::addMarkerRangesInClip(int clipId, const std::vector<engine::
 
     const auto& clip = history_.current().tracks[(size_t) where.track].clips[(size_t) where.clip];
     const double start = clip.startBeats;
-    const double bpm   = history_.current().bpm;
+    const auto   clock = model::clockFor(history_.current());
 
     history_.edit(label.toStdString(), [&](model::Song& s)
     {
@@ -316,8 +316,8 @@ void MainComponent::addMarkerRangesInClip(int clipId, const std::vector<engine::
             const double fromSeconds = (double) (offset + run.from) / sampleRate;
             const double toSeconds   = (double) (offset + run.to) / sampleRate;
             const auto   text        = numbered ? name + " " + juce::String(number++) : name;
-            model::addMarker(s, start + engine::beatsForSeconds(fromSeconds, bpm),
-                             engine::beatsForSeconds(toSeconds - fromSeconds, bpm), text.toStdString());
+            const double from = start + clock.beatsAfter(start, juce::jmax(0.0, fromSeconds));
+            model::addMarker(s, from, clock.beatsAfter(from, juce::jmax(0.0, toSeconds - fromSeconds)), text.toStdString());
         }
     });
 

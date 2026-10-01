@@ -55,8 +55,9 @@ namespace takeedit
     */
     inline int combineIntoTakes(Song& song, int trackId, const std::vector<int>& clipIds)
     {
-        auto* track = findTrack(song, trackId);
-        if (track == nullptr || song.bpm <= 0.0)
+        auto*      track = findTrack(song, trackId);
+        const auto clock = clockFor(song);
+        if (track == nullptr || ! clock.valid())
             return 0;
 
         std::vector<const Clip*> sources;
@@ -85,7 +86,7 @@ namespace takeedit
         std::vector<Placed> placed;
         for (const auto* clip : sources)
         {
-            const double lead = (start - clip->startBeats) * 60.0 / song.bpm;
+            const double lead = clock.secondsBetween(clip->startBeats, start);
             if (clip->takes.empty())
             {
                 placed.push_back({ { clip->audioFile, 0.0, {} }, clip->sourceOffsetSeconds + lead, clip == playing });
@@ -155,12 +156,13 @@ namespace takeedit
         const double from  = std::max(fromBeats, start);
         const double to    = std::min(toBeats, end);
 
-        auto middle = rangeedit::pieceOf(clip, from, to, song.bpm);
+        const auto clock  = clockFor(song);
+        auto       middle = rangeedit::pieceOf(clip, from, to, clock);
         if (! middle || middle->activeTake == takeIndex)
             return false;
 
-        auto before = rangeedit::pieceOf(clip, start, from, song.bpm);
-        auto after  = rangeedit::pieceOf(clip, to, end, song.bpm);
+        auto before = rangeedit::pieceOf(clip, start, from, clock);
+        auto after  = rangeedit::pieceOf(clip, to, end, clock);
         setActiveTake(*middle, takeIndex);
 
         // The first piece keeps the clip's id, so a selection on it holds.
@@ -252,7 +254,7 @@ namespace takeedit
                        double fadeSeconds)
     {
         auto* track = findTrack(song, trackId);
-        auto  piece = rangeedit::pieceOf(recorded, fromBeats, toBeats, song.bpm);
+        auto  piece = rangeedit::pieceOf(recorded, fromBeats, toBeats, clockFor(song));
         if (track == nullptr || ! piece)
             return 0;
 

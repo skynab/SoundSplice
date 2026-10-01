@@ -1667,10 +1667,8 @@ void MainComponent::setClipLength(int trackIndex, int clipIndex, double newLengt
     touched, so dragging the edge back out brings the audio back. */
 void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newStartBeats)
 {
-    const double bpm = history_.current().bpm;
-
     const bool crossfade = autoCrossfades_;
-    history_.edit("Trim clip start", [trackIndex, clipIndex, newStartBeats, bpm, crossfade](model::Song& s)
+    history_.edit("Trim clip start", [trackIndex, clipIndex, newStartBeats, crossfade](model::Song& s)
     {
         if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
             return;
@@ -1680,7 +1678,7 @@ void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newSta
 
         auto& clip = clips[(size_t) clipIndex];
         if (clip.type == model::ClipType::Audio)
-            clip = trimClipStart(clip, newStartBeats, bpm, kMinTrimmedClipBeats);
+            clip = trimClipStart(clip, newStartBeats, model::clockFor(s), kMinTrimmedClipBeats);
         if (crossfade)
             model::arrangeedit::applyAutoCrossfades(s, trackIndex);
     });

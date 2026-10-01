@@ -90,9 +90,10 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
     };
 
     // A time selection sets the length, as it does in Audacity.
-    const double bpm       = history_.current().bpm;
-    const double selection = timeSelection_.isEmpty() || bpm <= 0.0 ? 0.0
-                                                                     : timeSelection_.lengthBeats() * 60.0 / bpm;
+    const double selection = timeSelection_.isEmpty() || history_.current().bpm <= 0.0
+                               ? 0.0
+                               : model::clockFor(history_.current()).secondsBetween(timeSelection_.startBeats,
+                                                                                   timeSelection_.endBeats);
 
     auto* window = new juce::AlertWindow(juce::String("Generate ") + generatorName(kind), {},
                                          juce::MessageBoxIconType::NoIcon, this);
@@ -346,8 +347,9 @@ void MainComponent::generateAudio(const engine::GeneratorSpec& spec)
             return;
         }
 
-        const double bpm         = self->history_.current().bpm;
-        const double lengthBeats = engine::beatsForSeconds(spec.seconds, bpm);
+        // As long as it lasts where it goes: the selection, or the playhead.
+        const double at          = selection.isEmpty() ? self->playheadBeat() : selection.startBeats;
+        const double lengthBeats = model::clockFor(self->history_.current()).beatsAfter(at, juce::jmax(0.0, spec.seconds));
 
         model::Clip clip;
         clip.type        = model::ClipType::Audio;

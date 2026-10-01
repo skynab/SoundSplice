@@ -53,7 +53,7 @@ void MainComponent::refreshAudioEditorForSelected()
     // "this clip" has to mean the part that's heard. Positions in the editor
     // are seconds from the clip's start — readClipAudio maps them back.
     const double clipSeconds = clipAudibleSeconds(*clip, engine_.probeDurationSeconds(file),
-                                                  history_.current().bpm);
+                                                  model::clockFor(history_.current()));
     audioEditor_.setClip(file, clipSeconds, clip->gainDb, track.name, track.colour,
                          clip->sourceOffsetSeconds);
     audioEditor_.setNoisePrintCaptured(! noiseProfiles_.empty() && noiseProfileFile_ == file);
@@ -142,7 +142,9 @@ void MainComponent::updateOpenFilesPane()
 
         // The clip's length in the arrangement: probing the file here would
         // open every one of them on each refresh.
-        const double seconds = song.bpm > 0.0 ? clip.lengthBeats * 60.0 / song.bpm : 0.0;
+        const double seconds = song.bpm > 0.0
+                                   ? model::clockFor(song).secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats)
+                                   : 0.0;
         const int    minutes = (int) (seconds / 60.0);
 
         OpenFilesPane::Entry entry;
@@ -342,7 +344,7 @@ void MainComponent::normaliseSelectedClipTo(float targetPeak)
     const auto window = clipSampleWindow(*clip,
                                          (int) juce::jmin<juce::int64>(reader->lengthInSamples,
                                                                        std::numeric_limits<int>::max()),
-                                         reader->sampleRate, history_.current().bpm);
+                                         reader->sampleRate, model::clockFor(history_.current()));
 
     const int numChannels = juce::jmax(1, (int) reader->numChannels);
     std::vector<juce::Range<float>> levels((size_t) numChannels);
@@ -394,7 +396,7 @@ bool MainComponent::openSelectedClipAudio(ClipAudio& out) const
     out.window   = clipSampleWindow(*clip,
                                     (int) juce::jmin<std::int64_t>(out.sequence.length(),
                                                                    std::numeric_limits<int>::max()),
-                                    out.sequence.sampleRate, history_.current().bpm);
+                                    out.sequence.sampleRate, model::clockFor(history_.current()));
     return true;
 }
 
@@ -653,12 +655,11 @@ void MainComponent::trimToAudioSelection()
 
     const int    trackIndex = selectedTrackIndex_;
     const int    clipIndex  = selectedClipIndex_;
-    const double bpm        = history_.current().bpm;
-
-    history_.edit("Trim audio", [trackIndex, clipIndex, from, to, bpm](model::Song& s)
+    history_.edit("Trim audio", [trackIndex, clipIndex, from, to](model::Song& s)
     {
+        const auto clock = model::clockFor(s);
         auto& target = s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
-        target = trimClipToRange(target, from, to, bpm);
+        target = trimClipToRange(target, from, to, clock);
     });
 
     syncEngineTracks();
@@ -736,9 +737,9 @@ void MainComponent::splitClipAtSelection()
         return;
     }
 
-    const double bpm         = history_.current().bpm;
+    const auto   clock       = model::clockFor(history_.current());
     const double clipSeconds = clipAudibleSeconds(*clip, engine_.probeDurationSeconds(juce::File(clip->audioFile)),
-                                                  bpm);
+                                                  clock);
     const double at          = zeroCrossingsNear({ range.startSeconds })[0];
 
     if (at <= 0.0 || at >= clipSeconds)
@@ -750,10 +751,10 @@ void MainComponent::splitClipAtSelection()
     const int trackIndex = selectedTrackIndex_;
     const int clipIndex  = selectedClipIndex_;
 
-    history_.edit("Split audio", [trackIndex, clipIndex, at, bpm](model::Song& s)
+    history_.edit("Split audio", [trackIndex, clipIndex, at, clock](model::Song& s)
     {
         auto&      track  = s.tracks[(size_t) trackIndex];
-        const auto halves = splitClipAt(track.clips[(size_t) clipIndex], at, bpm);
+        const auto halves = splitClipAt(track.clips[(size_t) clipIndex], at, clock);
 
         track.clips[(size_t) clipIndex] = halves.first;
         model::addClip(s, track.id, halves.second); // reissues the id
@@ -1480,7 +1481,8 @@ double MainComponent::songBeatForClipSeconds(double secondsIntoFile) const
     if (clip == nullptr)
         return 0.0;
 
-    return clip->startBeats + engine::beatsForSeconds(secondsIntoFile, history_.current().bpm);
+    // Clips start at their beat and play in real time, through the tempo map.
+    return clip->startBeats + model::clockFor(history_.current()).beatsAfter(clip->startBeats, std::max(0.0, secondsIntoFile));
 }
 
 /** The inverse: where the song's playhead falls inside the selected clip's
@@ -1492,11 +1494,11 @@ double MainComponent::clipSecondsForSongBeat(double beat) const
     if (clip == nullptr)
         return 0.0;
 
-    const double bpm = history_.current().bpm;
-    if (bpm <= 0.0)
+    const auto clock = model::clockFor(history_.current());
+    if (! clock.valid())
         return 0.0;
 
-    return (beat - clip->startBeats) * 60.0 / bpm;
+    return clock.secondsBetween(clip->startBeats, beat);
 }
 
 /** Measures the noise in the selected range, per channel.
@@ -1755,7 +1757,8 @@ bool MainComponent::replaceClipAudio(const juce::String& label, const ClipAudio&
     const int    trackIndex     = selectedTrackIndex_;
     const int    clipIndex      = selectedClipIndex_;
     const auto   newPath        = destination.getFullPathName().toStdString();
-    const double newLengthBeats = engine::beatsForSeconds(newSeconds, history_.current().bpm);
+    const double newLengthBeats = model::clockFor(history_.current())
+                                      .beatsAfter(selectedAudioClip() != nullptr ? selectedAudioClip()->startBeats : 0.0, newSeconds);
 
     history_.edit(label.toStdString(), [trackIndex, clipIndex, newPath, newLengthBeats](model::Song& s)
     {

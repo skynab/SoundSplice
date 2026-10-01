@@ -211,9 +211,12 @@ public:
     /** Quarter-note bar length (e.g. 4 for 4/4, 3 for 6/8). */
     double quartersPerBar() const noexcept { return numerator_ * 4.0 / denominator_; }
 
-    double ppqFromSamples(int64_t samples) const noexcept
+    double ppqFromSamples(int64_t samples) const noexcept { return ppqFromSampleOffset((double) samples); }
+
+    /** As ppqFromSamples, for a position that isn't a whole sample - the
+        inverse of sampleOffsetForPpq. */
+    double ppqFromSampleOffset(double position) const noexcept
     {
-        const double position = (double) samples;
         if (position <= 0.0)
             return position / samplesPerBeatFor(changes_.front().bpm);
 

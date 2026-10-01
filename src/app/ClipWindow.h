@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "engine/SequencerMath.h"
+#include "model/BeatClock.h"
 #include "model/Clip.h"
 
 namespace soundsplice
@@ -43,25 +44,26 @@ struct SampleWindow
 
 /** The seconds of audio @p clip actually plays: its length, cut short where
     the file runs out after its offset. */
-inline double clipAudibleSeconds(const model::Clip& clip, double fileSeconds, double bpm)
+inline double clipAudibleSeconds(const model::Clip& clip, double fileSeconds, const model::BeatClock& clock)
 {
-    if (bpm <= 0.0)
+    if (! clock.valid())
         return 0.0;
 
     const double available = fileSeconds - clip.sourceOffsetSeconds;
-    return std::max(0.0, std::min(available, clip.lengthBeats * 60.0 / bpm));
+    return std::max(0.0, std::min(available, clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats)));
 }
 
 /** Which samples of a @p fileLengthSamples-long file @p clip plays. Empty if
     the offset is past the end of the file. */
 inline SampleWindow clipSampleWindow(const model::Clip& clip, int fileLengthSamples, double sampleRate,
-                                     double bpm)
+                                     const model::BeatClock& clock)
 {
-    if (sampleRate <= 0.0 || bpm <= 0.0 || fileLengthSamples <= 0)
+    if (sampleRate <= 0.0 || ! clock.valid() || fileLengthSamples <= 0)
         return {};
 
     const auto offset = (std::int64_t) std::llround(clip.sourceOffsetSeconds * sampleRate);
-    const auto wanted = (std::int64_t) std::llround(clip.lengthBeats * 60.0 / bpm * sampleRate);
+    const auto wanted = (std::int64_t) std::llround(
+        clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats) * sampleRate);
 
     const auto start = std::clamp<std::int64_t>(offset, 0, fileLengthSamples);
     const auto end   = std::clamp<std::int64_t>(start + std::max<std::int64_t>(0, wanted), start,
@@ -100,17 +102,18 @@ inline std::vector<float> spliceWindow(const std::vector<float>& file, SampleWin
 /** @p clip cut down to [fromSeconds, toSeconds), measured from the clip's
     start. The kept audio stays where it was on the timeline: the clip's start
     moves forward to meet it rather than the audio jumping back. */
-inline model::Clip trimClipToRange(const model::Clip& clip, double fromSeconds, double toSeconds, double bpm)
+inline model::Clip trimClipToRange(const model::Clip& clip, double fromSeconds, double toSeconds,
+                                   const model::BeatClock& clock)
 {
     model::Clip out = clip;
-    if (bpm <= 0.0)
+    if (! clock.valid())
         return out;
 
     const double from = std::max(0.0, fromSeconds);
     const double to   = std::max(from, toSeconds);
 
-    out.startBeats          = clip.startBeats + engine::beatsForSeconds(from, bpm);
-    out.lengthBeats         = engine::beatsForSeconds(to - from, bpm);
+    out.startBeats          = clip.startBeats + clock.beatsAfter(clip.startBeats, from);
+    out.lengthBeats         = std::max(0.0, clock.beatsAfter(out.startBeats, to - from));
     out.sourceOffsetSeconds = clip.sourceOffsetSeconds + from;
     return out;
 }
@@ -121,9 +124,10 @@ inline model::Clip trimClipToRange(const model::Clip& clip, double fromSeconds, 
 
     The clip's fade-in stays on the first half and its fade-out on the second.
     Neither half fades at the cut, where the two still join seamlessly. */
-inline std::pair<model::Clip, model::Clip> splitClipAt(const model::Clip& clip, double atSeconds, double bpm)
+inline std::pair<model::Clip, model::Clip> splitClipAt(const model::Clip& clip, double atSeconds,
+                                                       const model::BeatClock& clock)
 {
-    const double atBeats = bpm > 0.0 ? engine::beatsForSeconds(atSeconds, bpm) : 0.0;
+    const double atBeats = clock.valid() ? clock.beatsAfter(clip.startBeats, std::max(0.0, atSeconds)) : 0.0;
 
     model::Clip first      = clip;
     first.lengthBeats      = atBeats;
@@ -144,17 +148,15 @@ inline std::pair<model::Clip, model::Clip> splitClipAt(const model::Clip& clip, 
     Clamped three ways: not before beat zero, not so far left that the clip
     would start before its file's first sample (there is no audio there to
     reveal), and not so far right that less than @p minLengthBeats remains. */
-inline model::Clip trimClipStart(const model::Clip& clip, double newStartBeats, double bpm,
+inline model::Clip trimClipStart(const model::Clip& clip, double newStartBeats, const model::BeatClock& clock,
                                  double minLengthBeats)
 {
     model::Clip out = clip;
-    if (bpm <= 0.0)
+    if (! clock.valid())
         return out;
 
-    const double secondsPerBeat = 60.0 / bpm;
-
     // Where the file's first sample sits on the timeline.
-    const double earliest = std::max(0.0, clip.startBeats - clip.sourceOffsetSeconds / secondsPerBeat);
+    const double earliest = std::max(0.0, clip.startBeats + clock.beatsAfter(clip.startBeats, -clip.sourceOffsetSeconds));
     const double latest   = clip.startBeats + clip.lengthBeats - std::max(0.0, minLengthBeats);
 
     // A clip already shorter than the minimum can't move its start at all.
@@ -166,7 +168,7 @@ inline model::Clip trimClipStart(const model::Clip& clip, double newStartBeats, 
 
     out.startBeats          = start;
     out.lengthBeats         = clip.lengthBeats - delta;
-    out.sourceOffsetSeconds = std::max(0.0, clip.sourceOffsetSeconds + delta * secondsPerBeat);
+    out.sourceOffsetSeconds = std::max(0.0, clip.sourceOffsetSeconds + clock.secondsBetween(clip.startBeats, start));
     return out;
 }
 
@@ -179,13 +181,14 @@ inline model::Clip trimClipStart(const model::Clip& clip, double newStartBeats, 
     the end of its file can still slip back towards the audio, but not further
     out. @p fileSeconds of zero or less means the length isn't known yet (the
     file is still being scanned), and only the start is enforced. */
-inline model::Clip slipClip(const model::Clip& clip, double deltaSeconds, double fileSeconds, double bpm)
+inline model::Clip slipClip(const model::Clip& clip, double deltaSeconds, double fileSeconds,
+                            const model::BeatClock& clock)
 {
     model::Clip out = clip;
-    if (bpm <= 0.0)
+    if (! clock.valid())
         return out;
 
-    const double clipSeconds = clip.lengthBeats * 60.0 / bpm;
+    const double clipSeconds = clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);
     const double latest      = fileSeconds > 0.0 ? std::max(clip.sourceOffsetSeconds, fileSeconds - clipSeconds)
                                                  : std::numeric_limits<double>::max();
 

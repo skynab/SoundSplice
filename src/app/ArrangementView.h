@@ -19,6 +19,7 @@
 #include "model/Markers.h"
 #include "model/RazorEdits.h"
 #include "model/Takes.h"
+#include "model/TempoChanges.h"
 #include "model/TimeSelection.h"
 #include "SpectrogramCache.h"
 #include "TakeLanes.h"
@@ -178,7 +179,8 @@ public:
 
     void setSong(const model::Song& song)
     {
-        song_ = song;
+        song_  = song;
+        clock_ = song_.bpm > 0.0 ? model::clockFor(song_) : model::BeatClock(120.0);
         rebuildRows();
 
         // Thumbnails are made here rather than in paint: creating one starts a
@@ -628,7 +630,7 @@ public:
                     // where in the file the waveform starts, not just the box.
                     auto ghostClip = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
                     if (trimmingStart_)
-                        ghostClip = trimClipStart(ghostClip, dragPreviewStart_, song_.bpm, kMinClipBeats);
+                        ghostClip = trimClipStart(ghostClip, dragPreviewStart_, clock_, kMinClipBeats);
                     if (fadeDrag_ != 0)
                         ghostClip.fades = dragPreviewFades_;
                     if (slipping_)
@@ -711,8 +713,10 @@ private:
 
         // What's left of the file from the clip's offset on: a trimmed or
         // split clip starts partway into its recording.
+        // The clip's seconds per beat, on average over it: through the tempo
+        // map, so a clip after a tempo change is drawn as long as it plays.
         const double fileSeconds    = thumbnail->getTotalLength() - clip.sourceOffsetSeconds;
-        const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
+        const double secondsPerBeat = clipSecondsFor(clip) / juce::jmax(1.0e-9, clip.lengthBeats);
         const double fraction       = audioClipDrawnFraction(fileSeconds, clip.lengthBeats, secondsPerBeat);
         const double seconds        = audioClipAudibleSeconds(fileSeconds, clip.lengthBeats, secondsPerBeat);
         if (fraction <= 0.0 || seconds <= 0.0)
@@ -756,10 +760,23 @@ private:
                                 juce::Decibels::decibelsToGain(clip.gainDb));
     }
 
-    /** Pixels per second of audio at the current zoom and tempo. */
-    float pixelsPerSecond() const
+    /** Pixels per second of audio at the current zoom and the tempo at
+        @p beat. */
+    float pixelsPerSecondAt(double beat) const
     {
-        return geometry_.pixelsPerBeat() * (float) (juce::jmax(1.0, song_.bpm) / 60.0);
+        return geometry_.pixelsPerBeat() * (float) (juce::jmax(1.0, clock_.bpmAt(beat)) / 60.0);
+    }
+
+    /** The x of the moment @p seconds into @p clip, through the tempo map. */
+    float xForClipSeconds(const model::Clip& clip, double seconds) const
+    {
+        return geometry_.xForBeat(clock_.beatAfter(clip.startBeats, seconds));
+    }
+
+    /** How long @p clip's window lasts, in seconds. */
+    double clipSecondsFor(const model::Clip& clip) const
+    {
+        return clock_.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);
     }
 
     /** How long an audio clip's whole file is, in seconds, or 0 while it is
@@ -776,14 +793,13 @@ private:
         still being scanned. */
     double audibleSecondsFor(const model::Clip& clip) const
     {
-        const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
+        const double window = clipSecondsFor(clip);
 
         if (auto* thumbnail = waveforms_.find(juce::File(clip.audioFile));
             thumbnail != nullptr && thumbnail->getTotalLength() > 0.0)
-            return audioClipAudibleSeconds(thumbnail->getTotalLength() - clip.sourceOffsetSeconds,
-                                           clip.lengthBeats, secondsPerBeat);
+            return juce::jlimit(0.0, window, thumbnail->getTotalLength() - clip.sourceOffsetSeconds);
 
-        return clip.lengthBeats * secondsPerBeat;
+        return window;
     }
 
     /** Where an audio clip's two fade handles sit: the x of the end of the
@@ -791,13 +807,10 @@ private:
         handle in the corner, which is where you reach to start one. */
     std::pair<float, float> fadeHandleXs(const model::Clip& clip) const
     {
-        const float  left    = geometry_.xForBeat(clip.startBeats);
-        const float  pps     = pixelsPerSecond();
         const double audible = audibleSecondsFor(clip);
         const auto   fitted  = engine::fittedFades(clip.fades, audible);
 
-        return { left + (float) (fitted.inSeconds * pps),
-                 left + (float) ((audible - fitted.outSeconds) * pps) };
+        return { xForClipSeconds(clip, fitted.inSeconds), xForClipSeconds(clip, audible - fitted.outSeconds) };
     }
 
     /** Which fade handle of the clip on @p trackIndex's lane @p point is on:
@@ -833,7 +846,6 @@ private:
         if (bounds.getWidth() < 3.0f * kFadeHandleSize || bounds.getHeight() < 2.0f * kFadeHandleSize)
             return;
 
-        const float  pps     = pixelsPerSecond();
         const double audible = audibleSecondsFor(clip);
         const auto   fitted  = engine::fittedFades(clip.fades, audible);
         const float  left    = bounds.getX();
@@ -845,8 +857,8 @@ private:
             if (seconds <= 0.0)
                 return;
 
-            const float startX = isFadeIn ? left : left + (float) ((audible - seconds) * pps);
-            const float width  = (float) (seconds * pps);
+            const float startX = isFadeIn ? left : xForClipSeconds(clip, audible - seconds);
+            const float width  = (isFadeIn ? xForClipSeconds(clip, seconds) : xForClipSeconds(clip, audible)) - startX;
 
             // The shaded region runs along the top edge and back under the
             // curve: everything above the curve is level the fade removes.
@@ -1558,10 +1570,8 @@ private:
                 && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
             {
                 const auto&  clip    = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
-                const float  left    = geometry_.xForBeat(clip.startBeats);
-                const double pps     = juce::jmax(1.0e-3, (double) pixelsPerSecond());
                 const double audible = audibleSecondsFor(clip);
-                const double atX     = (double) (e.position.x - left) / pps;
+                const double atX     = clock_.secondsBetween(clip.startBeats, geometry_.beatForX(e.position.x));
 
                 if (fadeDrag_ > 0)
                     dragPreviewFades_.inSeconds =
@@ -1579,8 +1589,8 @@ private:
                 && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
             {
                 const auto&  clip  = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
-                const double delta = (currentBeat - dragGrabBeat_) * 60.0 / juce::jmax(1.0, song_.bpm);
-                dragPreviewOffset_ = slipClip(clip, delta, fileSecondsFor(clip), song_.bpm).sourceOffsetSeconds;
+                const double delta = clock_.secondsBetween(dragGrabBeat_, currentBeat);
+                dragPreviewOffset_ = slipClip(clip, delta, fileSecondsFor(clip), clock_).sourceOffsetSeconds;
             }
         }
         else if (trimmingStart_)
@@ -1593,7 +1603,7 @@ private:
             {
                 const auto& clip    = song_.tracks[(size_t) dragTrackIndex_].clips[(size_t) dragClipIndex_];
                 const auto  start   = std::max(0.0, app::snapPosition(currentBeat, magnets, tolerance, gridOn, gridUnit));
-                const auto  trimmed = trimClipStart(clip, start, song_.bpm, kMinClipBeats);
+                const auto  trimmed = trimClipStart(clip, start, clock_, kMinClipBeats);
                 dragPreviewStart_  = trimmed.startBeats;
                 dragPreviewLength_ = trimmed.lengthBeats;
             }
@@ -2117,21 +2127,22 @@ private:
         line every major step and a light one every minor step. */
     void paintSecondsGrid(juce::Graphics& g, float height)
     {
-        const double secondsPerBeat = 60.0 / juce::jmax(1.0, song_.bpm);
+        // Through the tempo map: after a tempo change a second is a different
+        // number of beats.
         const auto [major, minor]   = secondsGridSteps();
-        const double totalSeconds   = totalBeats() * secondsPerBeat;
+        const double totalSeconds   = clock_.secondsAt(totalBeats());
 
         g.setColour(juce::Colours::white.withAlpha(0.07f));
         const int minorLines = (int) std::ceil(totalSeconds / minor);
         for (int i = 0; i <= minorLines; ++i)
-            g.fillRect(geometry_.xForBeat((double) i * minor / secondsPerBeat), geometry_.rulerHeight,
+            g.fillRect(geometry_.xForBeat(clock_.beatAt((double) i * minor)), geometry_.rulerHeight,
                        1.0f, height - geometry_.rulerHeight);
 
         const int majorLines = (int) std::ceil(totalSeconds / major);
         for (int i = 0; i <= majorLines; ++i)
         {
             const double seconds = (double) i * major;
-            const float  x       = geometry_.xForBeat(seconds / secondsPerBeat);
+            const float  x       = geometry_.xForBeat(clock_.beatAt(seconds));
 
             g.setColour(juce::Colours::white.withAlpha(0.16f));
             g.fillRect(x, 0.0f, 1.0f, height);
@@ -2238,6 +2249,7 @@ private:
 
     TimelineGeometry geometry_;
     model::Song      song_;
+    model::BeatClock clock_ { 120.0 }; // song_'s, kept with it in setSong
     double           playheadBeats_ = 0.0;
 
     static constexpr double kMinClipBeats     = 1.0;  // a clip shorter than a beat isn't useful
@@ -2428,7 +2440,7 @@ private:
     {
         const auto   box     = clipBounds(trackIndex, clip);
         const double seconds = app::clampToClipSource(
-            clip, app::sourceSecondsAtBeat(clip, geometry_.beatForX(point.x), song_.bpm), song_.bpm);
+            clip, app::sourceSecondsAtBeat(clip, geometry_.beatForX(point.x), clock_), clock_);
         return { seconds, app::gainForY(point.y, box.getY(), box.getHeight()) };
     }
 
@@ -2445,7 +2457,7 @@ private:
         envelopeOriginal_ = clip.envelope;
         envelopePreview_  = clip.envelope;
 
-        const double pixelsPerSecond = (double) geometry_.pixelsPerBeat() * song_.bpm / 60.0;
+        const double pixelsPerSecond = (double) pixelsPerSecondAt(clip.startBeats);
         const int    near = envelopePreview_.indexNear(seconds, kEnvelopeHitPixels / juce::jmax(1.0e-6, pixelsPerSecond));
 
         if (near >= 0 && e.mods.isAltDown())
@@ -2481,7 +2493,7 @@ private:
         bool       started = false;
         for (float x = box.getX(); x <= box.getRight(); x += 2.0f)
         {
-            const double seconds = app::sourceSecondsAtBeat(clip, geometry_.beatForX(x), song_.bpm);
+            const double seconds = app::sourceSecondsAtBeat(clip, geometry_.beatForX(x), clock_);
             const float  y       = app::yForGain(envelope.gainAt(seconds), box.getY(), box.getHeight());
             if (! started)
             {
@@ -2499,7 +2511,7 @@ private:
 
         for (const auto& point : envelope.points())
         {
-            const float x = geometry_.xForBeat(app::beatAtSourceSeconds(clip, point.seconds, song_.bpm));
+            const float x = geometry_.xForBeat(app::beatAtSourceSeconds(clip, point.seconds, clock_));
             const float y = app::yForGain(point.gain, box.getY(), box.getHeight());
             g.fillRect(x - 3.0f, y - 3.0f, 6.0f, 6.0f);
         }

@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 
+#include "model/BeatClock.h"
 #include "model/Song.h"
 
 namespace soundsplice::app
@@ -37,22 +38,23 @@ inline const model::Clip* audioClipAt(const model::Track& track, double beat)
 }
 
 /** The sample of @p clip's file that plays at @p beat. */
-inline std::int64_t fileFrameAt(const model::Clip& clip, double beat, double sampleRate, double bpm)
+inline std::int64_t fileFrameAt(const model::Clip& clip, double beat, double sampleRate, const model::BeatClock& clock)
 {
-    if (bpm <= 0.0)
+    if (! clock.valid())
         return 0;
 
-    const double seconds = clip.sourceOffsetSeconds + (beat - clip.startBeats) * 60.0 / bpm;
+    const double seconds = clip.sourceOffsetSeconds + clock.secondsBetween(clip.startBeats, beat);
     return (std::int64_t) std::llround(seconds * sampleRate);
 }
 
 /** The beat at which sample @p frame of @p clip's file plays. */
-inline double beatForFileFrame(const model::Clip& clip, std::int64_t frame, double sampleRate, double bpm)
+inline double beatForFileFrame(const model::Clip& clip, std::int64_t frame, double sampleRate,
+                               const model::BeatClock& clock)
 {
-    if (sampleRate <= 0.0)
+    if (sampleRate <= 0.0 || ! clock.valid())
         return clip.startBeats;
 
-    return clip.startBeats + ((double) frame / sampleRate - clip.sourceOffsetSeconds) * bpm / 60.0;
+    return clip.startBeats + clock.beatsAfter(clip.startBeats, (double) frame / sampleRate - clip.sourceOffsetSeconds);
 }
 
 } // namespace soundsplice::app

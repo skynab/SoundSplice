@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "model/BeatClock.h"
 #include "model/Clip.h"
 
 namespace soundsplice::app
@@ -39,22 +40,24 @@ inline float yForGain(float gain, float top, float height)
 }
 
 /** Seconds into @p clip's file for a beat on the timeline. */
-inline double sourceSecondsAtBeat(const model::Clip& clip, double beat, double bpm)
+inline double sourceSecondsAtBeat(const model::Clip& clip, double beat, const model::BeatClock& clock)
 {
-    return bpm > 0.0 ? clip.sourceOffsetSeconds + (beat - clip.startBeats) * 60.0 / bpm
-                     : clip.sourceOffsetSeconds;
+    return clock.valid() ? clip.sourceOffsetSeconds + clock.secondsBetween(clip.startBeats, beat)
+                         : clip.sourceOffsetSeconds;
 }
 
 /** The beat on the timeline where second @p seconds of @p clip's file plays. */
-inline double beatAtSourceSeconds(const model::Clip& clip, double seconds, double bpm)
+inline double beatAtSourceSeconds(const model::Clip& clip, double seconds, const model::BeatClock& clock)
 {
-    return clip.startBeats + (seconds - clip.sourceOffsetSeconds) * bpm / 60.0;
+    return clock.valid() ? clip.startBeats + clock.beatsAfter(clip.startBeats, seconds - clip.sourceOffsetSeconds)
+                         : clip.startBeats;
 }
 
 /** @p seconds kept within the part of the file @p clip plays. */
-inline double clampToClipSource(const model::Clip& clip, double seconds, double bpm)
+inline double clampToClipSource(const model::Clip& clip, double seconds, const model::BeatClock& clock)
 {
-    const double end = clip.sourceOffsetSeconds + clip.lengthBeats * 60.0 / std::max(1.0e-9, bpm);
+    const double end = clip.sourceOffsetSeconds
+                     + (clock.valid() ? clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats) : 0.0);
     return std::clamp(seconds, clip.sourceOffsetSeconds, std::max(clip.sourceOffsetSeconds, end));
 }
 

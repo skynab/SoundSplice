@@ -204,7 +204,7 @@ void MainComponent::importMarkersDialog()
             return;
 
         const auto markers = model::markersFromLabels(file.loadFileAsString().toStdString(),
-                                                      history_.current().bpm);
+                                                      model::clockFor(history_.current()));
         if (markers.empty())
         {
             showError("No labels found in " + file.getFileName());

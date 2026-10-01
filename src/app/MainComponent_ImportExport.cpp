@@ -281,7 +281,7 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
         showError("Could not import: " + file.getFileName());
         return;
     }
-    const double measured        = engine::beatsForSeconds(durationSeconds, song.bpm);
+    const double measured        = model::clockFor(song).beatsAfter(juce::jmax(0.0, startBeats), durationSeconds);
     const double lengthBeats     = measured > 0.0 ? measured : 4.0;
     const auto   path            = file.getFullPathName().toStdString();
 

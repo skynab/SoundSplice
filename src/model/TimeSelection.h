@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "model/Song.h"
+#include "model/TempoChanges.h"
 
 namespace soundsplice::model
 {
@@ -191,14 +192,14 @@ namespace rangeedit
 
     /** The part of @p clip inside [fromBeats, toBeats), or nothing if they
         don't overlap. A piece keeps a fade only on an edge it still has. */
-    inline std::optional<Clip> pieceOf(const Clip& clip, double fromBeats, double toBeats, double bpm)
+    inline std::optional<Clip> pieceOf(const Clip& clip, double fromBeats, double toBeats, const BeatClock& clock)
     {
         const double start = clip.startBeats;
         const double end   = clip.startBeats + clip.lengthBeats;
         const double from  = std::max(fromBeats, start);
         const double to    = std::min(toBeats, end);
 
-        if (to - from <= kEpsilonBeats || bpm <= 0.0)
+        if (to - from <= kEpsilonBeats || ! clock.valid())
             return std::nullopt;
 
         Clip piece                = clip;
@@ -215,7 +216,7 @@ namespace rangeedit
             return piece;
         }
 
-        piece.sourceOffsetSeconds = clip.sourceOffsetSeconds + (from - start) * 60.0 / bpm;
+        piece.sourceOffsetSeconds = clip.sourceOffsetSeconds + clock.secondsBetween(start, from);
 
         if (from > start + kEpsilonBeats)
             piece.fades.inSeconds = 0.0;
@@ -241,7 +242,7 @@ namespace rangeedit
             std::vector<Clip> clips;
             for (const auto& clip : track.clips)
             {
-                if (auto piece = pieceOf(clip, selection.startBeats, selection.endBeats, song.bpm))
+                if (auto piece = pieceOf(clip, selection.startBeats, selection.endBeats, clockFor(song)))
                 {
                     piece->startBeats -= selection.startBeats;
                     clips.push_back(*piece);
@@ -292,8 +293,9 @@ namespace rangeedit
                     continue;
                 }
 
-                const auto before = pieceOf(clip, start, from, song.bpm);
-                auto       after  = pieceOf(clip, to, end, song.bpm);
+                const auto clock  = clockFor(song);
+                const auto before = pieceOf(clip, start, from, clock);
+                auto       after  = pieceOf(clip, to, end, clock);
 
                 if (before)
                     kept.push_back(*before);
@@ -357,8 +359,9 @@ namespace rangeedit
                 }
                 else
                 {
-                    const auto before = pieceOf(clip, start, at, song.bpm);
-                    auto       after  = pieceOf(clip, at, end, song.bpm);
+                    const auto clock  = clockFor(song);
+                    const auto before = pieceOf(clip, start, at, clock);
+                    auto       after  = pieceOf(clip, at, end, clock);
                     if (before)
                         placed.push_back(*before);
                     if (after)

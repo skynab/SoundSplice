@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <model/ArrangementEdits.h>
 #include <model/Serialization.h>
 #include <model/TempoChanges.h>
 
@@ -95,4 +96,46 @@ TEST_CASE("Tempo changes round-trip", "[model][tempo][io]")
     REQUIRE(deserialize(serialize(song), restored));
     REQUIRE(restored == song);
     REQUIRE(restored.tempoChanges[1].ramp);
+}
+
+TEST_CASE("The song's clock measures seconds through its tempo changes", "[model][tempo]")
+{
+    Song song;
+    song.bpm = 120.0;
+    REQUIRE(clockFor(song).secondsBetween(4.0, 8.0) == 2.0); // one tempo: plain arithmetic
+
+    tempoedit::setTempo(song, 4.0, 60.0);
+    const auto clock = clockFor(song);
+    REQUIRE(clock.secondsAt(4.0) == Approx(2.0));
+    REQUIRE(clock.secondsBetween(2.0, 6.0) == Approx(1.0 + 2.0)); // half at 120, half at 60
+    REQUIRE(clock.beatAfter(2.0, 3.0) == Approx(6.0));
+    REQUIRE(clock.beatsAfter(2.0, 3.0) == Approx(4.0));
+    REQUIRE(clock.bpmAt(5.0) == Approx(60.0));
+}
+
+TEST_CASE("Splitting a clip across a tempo change lands on the audio that's there", "[model][tempo]")
+{
+    Song song;
+    song.bpm = 120.0;
+    const int id = addTrack(song, TrackType::Audio, "a").id;
+    Clip clip;
+    clip.type        = ClipType::Audio;
+    clip.startBeats  = 2.0;
+    clip.lengthBeats = 4.0;
+    addClip(song, id, clip);
+
+    // A change to 60 at beat 4, added after the clip was placed. The clip
+    // keeps its time, 1 s to 3 s: beats 2 to 4 still take 1 s, then a beat
+    // is a second, so it now ends at beat 5...
+    tempoedit::setTempo(song, 4.0, 60.0);
+    const auto& placed = song.tracks[0].clips[0];
+    REQUIRE(placed.startBeats == Approx(2.0));
+    REQUIRE(placed.lengthBeats == Approx(3.0).margin(1.0e-4));
+
+    // ...and a cut at beat 4.5 is 1 s + 0.5 s into the file.
+    REQUIRE(arrangeedit::splitClipsAt(song, { id }, 4.5) == 1);
+    const auto& clips = song.tracks[0].clips;
+    REQUIRE(clips.size() == 2);
+    REQUIRE(clips[1].startBeats == Approx(4.5));
+    REQUIRE(clips[1].sourceOffsetSeconds == Approx(1.5).margin(1.0e-4));
 }

@@ -1077,7 +1077,7 @@ void MainComponent::compensateRecordingLatency(const juce::File& file, int laten
 
     const double seconds     = (double) latencySamples / rate;
     clip.sourceOffsetSeconds += seconds;
-    clip.lengthBeats          = juce::jmax(0.0, clip.lengthBeats - engine::beatsForSeconds(seconds, song.bpm));
+    clip.lengthBeats          = juce::jmax(0.0, clip.lengthBeats - model::clockFor(song).beatsAfter(clip.startBeats, seconds));
     refreshAfterArrangementEdit();
 }
 
