@@ -464,7 +464,8 @@ bool AudioEngine::beginRecording(const juce::File& destination)
     return recorder_.arm(destination, recordWriterThread_, countInLeadInSamples());
 }
 
-bool AudioEngine::beginExtraRecording(int slot, const juce::File& destination, const AudioRecorder::Format& format)
+bool AudioEngine::beginExtraRecording(int slot, const juce::File& destination, const AudioRecorder::Format& format,
+                                      bool joinNow)
 {
     if (slot < 0 || slot >= kExtraTakes)
         return false;
@@ -473,7 +474,9 @@ bool AudioEngine::beginExtraRecording(int slot, const juce::File& destination, c
     extra.prepare(sampleRate_.load(std::memory_order_relaxed), format.channels);
     extra.setFormat(format);
     extra.setSoundTrigger(recorder_.soundTriggerGain(), recorder_.soundTriggerStopSamples());
-    return extra.arm(destination, recordWriterThread_, countInLeadInSamples());
+    // Joining a take that's running starts at once: its count-in, if it had
+    // one, is long over.
+    return extra.arm(destination, recordWriterThread_, joinNow ? 0 : countInLeadInSamples());
 }
 
 void AudioEngine::beginMidiRecording()

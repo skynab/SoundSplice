@@ -193,10 +193,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   ✅ **Loop recording into takes** (Loop on and a time selection: each pass round it is a take of one clip) · ✅ **Record several inputs at once to several tracks** (arm with each mixer strip's R; right-click it for the track's input) ·
   ✅ **Append record** (continue at the end of the track, as Audacity does: Transport > Record at End of Track)
 - ✅ **Sound-activated recording** and **timer record** (Audacity): Transport > Sound-Activated Recording... (a threshold to start on, a silence to stop on) and Timer Record...
-- ✅ Record formats: 16-bit, 24-bit and 32-bit float WAV (RF64 past 4 GB), mono or stereo, from any input or pair (File > Recording Format...) · ⬜ per track rather than for every take
+- ✅ Record formats: 16-bit, 24-bit and 32-bit float WAV (RF64 past 4 GB), mono or stereo, from any input or pair (File > Recording Format...) · ✅ input and mono/stereo per track (right-click a mixer strip's R)
 - ✅ **Latency compensation** for recordings (measured round-trip, applied as an offset): the device's reported round trip, or one measured with a click through a loopback cable (File > Measure Recording Latency...), plus a manual adjustment (File > Recording Latency...), applied to every recording and loop take
 - ✅ Input level meter with a peak hold and a clip indicator on every armed track: an armed track's mixer strip meters its own input, with a clip light that stays lit until clicked, and the Transport panel meters the main take's
-- 🟡 Arm and disarm tracks while playing (REAPER): ✅ any time, for the next take · ⬜ joining or leaving a take already running
+- ✅ Arm and disarm tracks while playing (REAPER): arming a track during a take joins it from there, disarming one ends just its part
 - ✅ **Retroactive recording**: Transport > Keep Recent Input holds the last two minutes of input while playing, and Save Recent Input puts what came in since playback last started on the track where it was played (REAPER does this for MIDI; nobody does it well for audio)
 
 ### Phase 5 — Multitrack and mixing parity (Audition, REAPER)

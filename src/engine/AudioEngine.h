@@ -212,7 +212,22 @@ public:
         @p destination in @p format (its own inputs), with the same count-in
         and sound trigger. Call before beginRecording, which starts the
         transport. False if the file couldn't be opened. Message thread. */
-    bool beginExtraRecording(int slot, const juce::File& destination, const AudioRecorder::Format& format);
+    bool beginExtraRecording(int slot, const juce::File& destination, const AudioRecorder::Format& format,
+                             bool joinNow = false);
+
+    /** A track leaving a take that's running: only its recorder stops, and
+        its take is collected with the rest when they're all finished. */
+    void stopMainTake() { recorder_.disarm(); }
+    void stopExtraTake(int slot)
+    {
+        if (slot >= 0 && slot < kExtraTakes)
+            extraRecorders_[(size_t) slot].disarm();
+    }
+    bool isMainTakeArmed() const noexcept { return recorder_.isArmed(); }
+    bool isExtraTakeArmed(int slot) const noexcept
+    {
+        return slot >= 0 && slot < kExtraTakes && extraRecorders_[(size_t) slot].isArmed();
+    }
 
     juce::File finishExtraTake(int slot)
     {

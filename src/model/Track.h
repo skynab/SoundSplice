@@ -67,6 +67,11 @@ struct Track
     // So several tracks can each take their own input in one take.
     int               recordInput = -1;
 
+    // Mono (1) or stereo (2) for this track's takes, or 0 for what
+    // File > Recording Format chooses: a vocal mic and a stereo keyboard can
+    // be recorded in one take, each as it should be.
+    int               recordChannels = 0;
+
     std::vector<Clip> clips;
 
     // The session grid's column for this track, indexed by scene. Kept the

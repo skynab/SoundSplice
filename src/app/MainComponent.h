@@ -224,6 +224,7 @@ private:
     engine::AudioRecorder::Format savedRecordFormat();
     engine::AudioRecorder::Format recordFormatFor(int trackIndex);
     void                   setTrackArmed(int trackIndex, bool armed);
+    void                   joinOrLeaveTake(int trackIndex, bool armed);
     void                   chooseTrackInput(int trackIndex);
     bool                   punchRecordedClip(const juce::File& file);
     void                   saveRecentInput();

@@ -419,8 +419,14 @@ engine::AudioRecorder::Format MainComponent::recordFormatFor(int trackIndex)
 {
     auto        format = savedRecordFormat();
     const auto& song   = history_.current();
-    if (trackIndex >= 0 && trackIndex < (int) song.tracks.size() && song.tracks[(size_t) trackIndex].recordInput >= 0)
-        format.firstInput = song.tracks[(size_t) trackIndex].recordInput;
+    if (trackIndex >= 0 && trackIndex < (int) song.tracks.size())
+    {
+        const auto& track = song.tracks[(size_t) trackIndex];
+        if (track.recordInput >= 0)
+            format.firstInput = track.recordInput;
+        if (track.recordChannels > 0)
+            format.channels = track.recordChannels;
+    }
     return format;
 }
 
@@ -448,7 +454,52 @@ void MainComponent::setTrackArmed(int trackIndex, bool armed)
     updateMixerStrips();
 
     if (awaitingRecordedTake_)
-        showStatus("Arming applies from the next take");
+        joinOrLeaveTake(trackIndex, armed);
+}
+
+/** Arming or disarming a track while a take is running: armed, it joins the
+    take from now, with a recorder of its own; disarmed, its recorder stops
+    and what it recorded is placed with the rest when the take ends. */
+void MainComponent::joinOrLeaveTake(int trackIndex, bool armed)
+{
+    if (! armed)
+    {
+        bool left = false;
+        if (trackIndex == recordingTargetTrack_ && engine_.isMainTakeArmed())
+        {
+            engine_.stopMainTake();
+            left = true;
+        }
+        for (const auto& extra : extraTakes_)
+            if (extra.trackIndex == trackIndex && engine_.isExtraTakeArmed(extra.slot))
+            {
+                engine_.stopExtraTake(extra.slot);
+                left = true;
+            }
+        if (left)
+            showStatus("That track has stopped recording - the rest carry on");
+        return;
+    }
+
+    // A recorder not already in this take.
+    for (int slot = 0; slot < engine::AudioEngine::kExtraTakes; ++slot)
+    {
+        const bool used = std::any_of(extraTakes_.begin(), extraTakes_.end(),
+                                      [slot](const ExtraTake& extra) { return extra.slot == slot; });
+        if (used)
+            continue;
+
+        const auto file = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
+        if (engine_.beginExtraRecording(slot, file, recordFormatFor(trackIndex), true))
+        {
+            extraTakes_.push_back({ trackIndex, slot });
+            showStatus("That track has joined the take");
+        }
+        else
+            showError("Could not start recording that track (the file could not be created)");
+        return;
+    }
+    showError("Every recorder is in use - " + juce::String(engine::AudioEngine::kExtraTakes + 1) + " takes at once at most");
 }
 
 /** Which input a track records from: a menu of the device's inputs, and the
@@ -459,15 +510,23 @@ void MainComponent::chooseTrackInput(int trackIndex)
     if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
         return;
 
-    const int  current = song.tracks[(size_t) trackIndex].recordInput;
-    const auto inputs  = engine_.inputChannelNames();
-    const bool stereo  = savedRecordFormat().channels == 2;
+    const auto& track    = song.tracks[(size_t) trackIndex];
+    const int   current  = track.recordInput;
+    const int   channels = track.recordChannels;
+    const auto  inputs   = engine_.inputChannelNames();
+    const bool  stereo   = recordFormatFor(trackIndex).channels == 2;
 
+    // Which input, and mono or stereo: each the app's choice unless the
+    // track has its own.
     juce::PopupMenu menu;
     menu.addSectionHeader(stereo ? "Record from (and the input after it)" : "Record from");
     menu.addItem(1, "As in Recording Format", true, current < 0);
     for (int i = 0; i < inputs.size(); ++i)
         menu.addItem(100 + i, inputs[i], true, current == i);
+    menu.addSeparator();
+    menu.addItem(10, "Mono or stereo as in Recording Format", true, channels == 0);
+    menu.addItem(11, "Mono", true, channels == 1);
+    menu.addItem(12, "Stereo", true, channels == 2);
 
     menu.showMenuAsync(juce::PopupMenu::Options(),
         [self = juce::Component::SafePointer<MainComponent>(this), trackIndex](int result)
@@ -475,11 +534,17 @@ void MainComponent::chooseTrackInput(int trackIndex)
             if (self == nullptr || result == 0)
                 return;
 
-            const int input = result == 1 ? -1 : result - 100;
-            self->history_.edit("Set track input", [trackIndex, input](model::Song& s)
+            const bool isChannels = result >= 10 && result <= 12;
+            const int  value      = isChannels ? result - 10 : (result == 1 ? -1 : result - 100);
+            self->history_.edit(isChannels ? "Set track channels" : "Set track input",
+                                [trackIndex, isChannels, value](model::Song& s)
             {
-                if (trackIndex >= 0 && trackIndex < (int) s.tracks.size())
-                    s.tracks[(size_t) trackIndex].recordInput = input;
+                if (trackIndex < 0 || trackIndex >= (int) s.tracks.size())
+                    return;
+                if (isChannels)
+                    s.tracks[(size_t) trackIndex].recordChannels = value;
+                else
+                    s.tracks[(size_t) trackIndex].recordInput = value;
             });
             self->updateMixerStrips();
         });

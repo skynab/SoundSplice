@@ -857,10 +857,11 @@ TEST_CASE("A track's own record input round-trips, and the default writes nothin
     Song song;
     addTrack(song, TrackType::Audio, "Kick");
     addTrack(song, TrackType::Audio, "Snare");
-    song.tracks[1].recordInput = 3;
+    song.tracks[1].recordInput    = 3;
+    song.tracks[1].recordChannels = 1;
 
     const auto text = serialize(song);
-    REQUIRE(text.find("TRACKINPUT 3") != std::string::npos);
+    REQUIRE(text.find("TRACKINPUT 3 1") != std::string::npos);
     REQUIRE(text.find("TRACKINPUT") == text.rfind("TRACKINPUT")); // only the one with its own
 
     Song restored;
