@@ -103,20 +103,24 @@ namespace groupedit
     }
 
     /** Sets a fader-like value on @p trackIndex to @p value and moves every
-        other member of its group by as much, each kept to [@p lo, @p hi].
-        @p get and @p set read and write the value on a track. */
+        other member of its group by as much as it moved from @p base, each
+        kept to [@p lo, @p hi]. @p get and @p set read and write the value on
+        a track.
+
+        Measured from @p base - the song as a drag began, or @p song itself
+        for a single change - so a member held at the end of its range on
+        the way comes back to where it was, rather than drifting by what the
+        clamp took. */
     template <typename Get, typename Set>
-    void setRelative(Song& song, int trackIndex, float value, float lo, float hi, Get get, Set set)
+    void setRelative(Song& song, const Song& base, int trackIndex, float value, float lo, float hi, Get get, Set set)
     {
-        if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
+        if (trackIndex < 0 || trackIndex >= (int) song.tracks.size() || base.tracks.size() != song.tracks.size())
             return;
 
-        const float delta = value - get(song.tracks[(size_t) trackIndex]);
+        const float delta = value - get(base.tracks[(size_t) trackIndex]);
         for (const int member : memberIndices(song, trackIndex))
-        {
-            auto& track = song.tracks[(size_t) member];
-            set(track, member == trackIndex ? value : std::clamp(get(track) + delta, lo, hi));
-        }
+            set(song.tracks[(size_t) member],
+                member == trackIndex ? value : std::clamp(get(base.tracks[(size_t) member]) + delta, lo, hi));
     }
 }
 

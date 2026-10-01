@@ -320,16 +320,19 @@ inline float readFader(const model::Song& song, int index, MixerStrip::Fader fad
     return 0.0f;
 }
 
-/** writeFader for a track and its edit group: the others move by as much
-    (see model::groupedit::setRelative). */
-inline void writeGroupFader(model::Song& song, int index, MixerStrip::Fader fader, float value)
+/** writeFader for a track and its edit group: the others move by as much,
+    measured from @p base (see model::groupedit::setRelative), or from
+    @p song itself when there's none. */
+inline void writeGroupFader(model::Song& song, int index, MixerStrip::Fader fader, float value,
+                            const model::Song* base = nullptr)
 {
+    const auto& from = base != nullptr ? *base : song;
     if (fader == MixerStrip::Fader::Gain)
-        model::groupedit::setRelative(song, index, value, -60.0f, 6.0f,
+        model::groupedit::setRelative(song, from, index, value, -60.0f, 6.0f,
                                       [](const model::Track& t) { return t.gainDb; },
                                       [](model::Track& t, float v) { t.gainDb = v; });
     else
-        model::groupedit::setRelative(song, index, value, -1.0f, 1.0f,
+        model::groupedit::setRelative(song, from, index, value, -1.0f, 1.0f,
                                       [](const model::Track& t) { return t.pan; },
                                       [](model::Track& t, float v) { t.pan = v; });
 }

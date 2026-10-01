@@ -2118,7 +2118,7 @@ void MainComponent::setTrackGain(int index, float gainDb)
     // Live tweak: update the current document in place (not a separate undo step).
     // The rest of its edit group move by as much.
     auto& song = history_.mutableCurrent();
-    writeGroupFader(song, index, MixerStrip::Fader::Gain, gainDb);
+    writeGroupFader(song, index, MixerStrip::Fader::Gain, gainDb, faderDragBaseFor(index, MixerStrip::Fader::Gain));
     for (const int member : model::groupedit::memberIndices(song, index))
     {
         engine_.setTrackGainDb(member, song.tracks[(size_t) member].gainDb);
@@ -2131,12 +2131,20 @@ void MainComponent::setTrackGain(int index, float gainDb)
     automationControlMoved(AutomationWriteKey::trackParam(index, model::TrackParam::Gain), gainDb, false);
 }
 
+/** The song as the drag of @p fader on @p trackIndex began, which its edit
+    group's faders move from; nullptr when that fader isn't being dragged. */
+const model::Song* MainComponent::faderDragBaseFor(int trackIndex, MixerStrip::Fader fader) const
+{
+    return faderDragging_ && faderDragTrack_ == trackIndex && faderDragWhich_ == fader ? &faderDragBase_ : nullptr;
+}
+
 /** Remembers where a fader was when it was grabbed. */
 void MainComponent::beginFaderDrag(int trackIndex, MixerStrip::Fader fader)
 {
     faderDragTrack_ = trackIndex;
     faderDragWhich_ = fader;
     faderDragFrom_  = readFader(history_.current(), trackIndex, fader);
+    faderDragBase_  = history_.current(); // where its edit group's faders were too
     faderDragging_  = true;
 
     const auto param = fader == MixerStrip::Fader::Gain ? model::TrackParam::Gain : model::TrackParam::Pan;
@@ -2165,7 +2173,9 @@ void MainComponent::endFaderDrag(int trackIndex, MixerStrip::Fader fader)
 
     const float landedOn = readFader(history_.current(), trackIndex, fader);
     commitDrag(history_, faderName(fader), faderDragFrom_, landedOn,
-               [trackIndex, fader](model::Song& s, float v) { writeGroupFader(s, trackIndex, fader, v); });
+               [trackIndex, fader, base = faderDragBase_](model::Song& s, float v)
+               { writeGroupFader(s, trackIndex, fader, v, &base); });
+    faderDragBase_ = {};
 }
 
 /** Mutes or unmutes a track, as an undoable edit.
@@ -2236,7 +2246,7 @@ void MainComponent::setTrackSolo(int index, bool solo)
 void MainComponent::setTrackPan(int index, float pan)
 {
     auto& song = history_.mutableCurrent();
-    writeGroupFader(song, index, MixerStrip::Fader::Pan, pan);
+    writeGroupFader(song, index, MixerStrip::Fader::Pan, pan, faderDragBaseFor(index, MixerStrip::Fader::Pan));
     for (const int member : model::groupedit::memberIndices(song, index))
     {
         engine_.setTrackPan(member, song.tracks[(size_t) member].pan);

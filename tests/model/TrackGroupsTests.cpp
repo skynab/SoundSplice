@@ -72,12 +72,19 @@ TEST_CASE("A grouped fader moves the others by as much, within their range", "[m
 
     const auto get = [](const Track& t) { return t.gainDb; };
     const auto set = [](Track& t, float v) { t.gainDb = v; };
-    groupedit::setRelative(song, 0, 3.0f, -60.0f, 6.0f, get, set);
+    const auto before = song;
+    groupedit::setRelative(song, song, 0, 3.0f, -60.0f, 6.0f, get, set);
 
     REQUIRE(song.tracks[0].gainDb == 3.0f);
     REQUIRE(song.tracks[2].gainDb == 6.0f); // 7 kept to the top
     REQUIRE(song.tracks[4].gainDb == -7.0f);
     REQUIRE(song.tracks[1].gainDb == 0.0f); // not in the group
+
+    // Within a drag, measured from where it began: back down, the clamped
+    // one returns to where it was.
+    groupedit::setRelative(song, before, 0, 0.0f, -60.0f, 6.0f, get, set);
+    REQUIRE(song.tracks[2].gainDb == 4.0f);
+    REQUIRE(song.tracks[4].gainDb == -10.0f);
 }
 
 TEST_CASE("A track's edit group round-trips, and none writes nothing", "[model][groups][io]")

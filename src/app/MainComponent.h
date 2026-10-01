@@ -811,6 +811,8 @@ private:
     int                faderDragTrack_ = -1;
     MixerStrip::Fader  faderDragWhich_ = MixerStrip::Fader::Gain;
     float              faderDragFrom_  = 0.0f;
+    model::Song        faderDragBase_; // the song as the drag began: its edit group's faders move from it
+    const model::Song* faderDragBaseFor(int trackIndex, MixerStrip::Fader fader) const;
 
     // Where an effect slot's parameters were before a drag on one of its
     // controls started, so the whole gesture can commit as one undo step —
