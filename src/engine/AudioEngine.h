@@ -80,7 +80,10 @@ class AudioEngine final : public juce::AudioIODeviceCallback,
                           public juce::MidiInputCallback
 {
 public:
-    static constexpr int kMaxTracks = 8;
+    // Tracks and buses together. Each costs its delay-compensation line
+    // (InstrumentTrack::kMaxCompensation) and a mixer strip whether used or
+    // not, and one ClipStream reader slot (see the static_assert).
+    static constexpr int kMaxTracks = 32;
 
     AudioEngine();
     ~AudioEngine() override;
