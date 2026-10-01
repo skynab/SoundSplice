@@ -63,6 +63,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setActive(engine_.retroactiveSeconds() > 0.0 && ! awaitingRecordedTake_);
             break;
 
+        case commands::appendRecord:
+            info.setActive(! awaitingRecordedTake_ && ! awaitingMidiTake_);
+            break;
+
         // "Undo Delete track" rather than a bare "Undo": every edit already
         // records what it was.
         case commands::undo:
@@ -536,6 +540,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::backOneBar:    previousFrameButton.triggerClick(); break;
         case commands::forwardOneBar: nextFrameButton.triggerClick(); break;
         case commands::record:        recordButton.triggerClick(); break;
+        case commands::appendRecord:  recordAtEndOfTrack(); break;
         case commands::loop:          loopButton.triggerClick(); break;
 
         case commands::addMarker:              addMarkerAtPlayhead(); break;
@@ -909,6 +914,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::playPause);
         add(commands::loop);
         add(commands::record);
+        add(commands::appendRecord);
         add(commands::punchRecording);
         menu.addSeparator();
         add(commands::keepRecentInput);

@@ -601,6 +601,31 @@ bool MainComponent::punchRecordedClip(const juce::File& file)
     return true;
 }
 
+/** Append recording (Audacity's Shift+R): the take starts where the
+    selected track's last clip ends, so it carries the track on - or where
+    the song ends, for a track with nothing on it yet. */
+void MainComponent::recordAtEndOfTrack()
+{
+    if (awaitingRecordedTake_ || awaitingMidiTake_)
+        return;
+
+    const auto& song = history_.current();
+    double      end  = songEndBeats();
+    if (selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) song.tracks.size())
+    {
+        const auto& clips = song.tracks[(size_t) selectedTrackIndex_].clips;
+        if (! clips.empty())
+        {
+            end = 0.0;
+            for (const auto& clip : clips)
+                end = juce::jmax(end, clip.startBeats + clip.lengthBeats);
+        }
+    }
+
+    seekToBeat(end);
+    recordButton.triggerClick();
+}
+
 /** Retroactive recording: what came in since playback last started (or
     jumped), kept by the engine, saved as a recording and put on the selected
     audio track (a new one otherwise) where it was played - as if Record had

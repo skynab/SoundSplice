@@ -203,6 +203,7 @@ enum Id : int
     keepRecentInput,
     saveRecentInput,
     recordingFormat,
+    appendRecord,
 };
 
 /** One command's fixed description. */
@@ -336,6 +337,7 @@ inline const std::vector<Definition>& all()
         { loop,             "Loop",                 "Transport", "Loop playback over the time selection, or over what's arranged.", { keys::loop } },
         { keepRecentInput,  "Keep Recent Input",    "Transport", "Keep the last two minutes of input while playing, so a take nobody recorded can still be saved.", {} },
         { saveRecentInput,  "Save Recent Input",    "Transport", "Save what came in since playback last started, onto the selected track where it was played.", {} },
+        { appendRecord,     "Record at End of Track", "Transport", "Start recording where the selected track's last clip ends, carrying it on.", {} },
         { punchRecording,   "Punch Recording",      "Transport", "Record only over the time selection, replacing what's there, with the lead-up to play along to.", {} },
 
         { addMarker,              "Add Marker",                  "Markers", "Put a marker at the playhead.", { keys::addMarker } },

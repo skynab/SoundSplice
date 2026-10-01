@@ -220,6 +220,7 @@ private:
     engine::AudioRecorder::Format savedRecordFormat();
     bool                   punchRecordedClip(const juce::File& file);
     void                   saveRecentInput();
+    void                   recordAtEndOfTrack();
     static constexpr double kRecentInputSeconds = 120.0;
 
     /**
