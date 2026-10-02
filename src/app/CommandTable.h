@@ -233,6 +233,7 @@ enum Id : int
     projectInfo,
     exportCdImage,
     renderQueue,
+    checkDelivery,
 };
 
 /** One command's fixed description. */
@@ -337,6 +338,7 @@ inline const std::vector<Definition>& all()
         { matchEq,          "Match EQ to Reference", "Edit", "Add a 31-band graphic EQ to the selected track that makes this clip's tone (or the selection's) match the reference's.", {} },
         { normalizePeak,    "Normalize...",         "Edit", "Bring the selection, or the whole clip, to a peak level; optionally take out DC offset and even the channels out.", {} },
         { normalizeLoudness, "Normalize Loudness...", "Edit", "Set the selected clip's gain so its integrated loudness reaches a LUFS target.", {} },
+        { checkDelivery,    "Check Delivery",       "Analyze", "Render the mix and check it against a platform's spec - ACX, Spotify, Apple Podcasts, YouTube, broadcast.", {} },
         { diagnostics,      "Diagnostics",          "Analyze", "Scan the selected audio clip for clicks, clipping, silence and DC offset, and list them in the Diagnostics pane to select and fix.", {} },
         { matchLoudness,    "Match Loudness...",    "Edit", "Bring every audio clip in the time selection (or on the selected track) to one LUFS target, each by its own gain.", {} },
         { applyEffects,     "Apply Effects...",     "Edit", "Render a chain of effects into the arrangement's time selection, or the audio editor's selection.", {} },

@@ -51,6 +51,7 @@
 #include "ExportAudioDialog.h"
 #include "ProjectInfoDialog.h"
 #include "RenderQueueDialog.h"
+#include "DeliveryPane.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -224,6 +225,8 @@ private:
     void                   promptSaveRenderPreset(const app::ExportChoice& choice);
     void                   saveRenderQueue();
     void                   showRenderQueue();
+    void                   runDeliveryCheck(int spec);
+    void                   exportToDeliverySpec(int spec);
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
     void                   exportCdImage();
@@ -1088,6 +1091,7 @@ private:
     DiagnosticsPane                    diagnosticsPane_;
     EssentialSoundPane                 essentialSoundPane_;
     ScriptPane                         scriptPane_;
+    DeliveryPane                       deliveryPane_;
     model::EssentialSettings           essentialDragFrom_; // the selected clip's, as a task slider was grabbed
     bool                               essentialDragging_ = false;
     int                                diagnosedClipId_ = 0; // the clip diagnosticsPane_'s rows are for

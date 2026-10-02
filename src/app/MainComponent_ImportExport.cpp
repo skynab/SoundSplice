@@ -1,5 +1,6 @@
 #include "engine/ExportLoudness.h"
 #include "engine/CdImage.h"
+#include "engine/DeliverySpec.h"
 #include "ExportNaming.h"
 #include "RenderReport.h"
 #include "MainComponentInternal.h"
@@ -1382,6 +1383,79 @@ void MainComponent::exportCdImage()
 
         renderJob_ = app::OfflineRenderJob::launch("Exporting CD image", std::move(work), std::move(onFinished));
     });
+}
+
+/** The Delivery pane's Check: the mix rendered (as an export would render
+    it) and measured against the spec, behind a progress window. */
+void MainComponent::runDeliveryCheck(int specIndex)
+{
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+    const auto& specs = engine::delivery::all();
+    if (specIndex < 0 || specIndex >= (int) specs.size())
+        return;
+
+    engine::AudioEngine::OfflineRenderOptions render;
+    render.sampleRate  = 48000.0;
+    // The tail added for reverbs to ring out isn't the mix's own silence: the
+    // tail check is of the audio as it would be delivered, so the render
+    // stops where the arrangement does.
+    render.lengthBeats = juce::jmax(1.0, songEndBeats());
+
+    auto results = std::make_shared<std::vector<engine::delivery::Result>>();
+    deliveryPane_.setBusy();
+    offlineRenderInProgress_ = true;
+
+    auto work = [this, render, specIndex, results](app::OfflineRenderJob& job) mutable
+    {
+        render.onProgress = [&job](double fraction)
+        {
+            job.report(fraction, "Rendering the mix to measure");
+            return ! job.shouldAbort();
+        };
+        const auto mix = engine_.renderOffline(render);
+        if (mix.getNumSamples() == 0)
+            return;
+        const auto m = engine::delivery::measure(mix.getReadPointer(0), mix.getReadPointer(juce::jmin(1, mix.getNumChannels() - 1)),
+                                                 mix.getNumSamples(), render.sampleRate);
+        *results = engine::delivery::check(engine::delivery::all()[(size_t) specIndex], m);
+    };
+
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), results, specIndex](bool)
+    {
+        if (self == nullptr)
+            return;
+        self->offlineRenderInProgress_ = false;
+        self->renderJob_.reset();
+        self->followSystemOutputIfEnabled();
+        self->deliveryPane_.showResults(specIndex, *results);
+    };
+
+    renderJob_ = app::OfflineRenderJob::launch("Checking delivery", std::move(work), std::move(onFinished));
+}
+
+/** Make It Pass: Export Audio, set to the spec's loudness target and
+    ceiling, its file format and its rate. */
+void MainComponent::exportToDeliverySpec(int specIndex)
+{
+    const auto& specs = engine::delivery::all();
+    if (specIndex < 0 || specIndex >= (int) specs.size())
+        return;
+    const auto& spec = specs[(size_t) specIndex];
+
+    app::ExportChoice choice;
+    for (const auto format : engine::allExportFormats())
+        if (engine::extensionFor(format) == spec.exportFormat)
+            choice.options.format = format;
+    choice.options.sampleRate        = spec.exportRate;
+    choice.options.bitsPerSample     = choice.options.format == engine::ExportFormat::Wav ? 24 : 16;
+    choice.options.qualityIndex      = 3;
+    choice.options.loudnessLufs      = spec.exportLufs;
+    choice.options.truePeakCeilingDb = spec.exportCeilingDb;
+    exportAudioDialog(choice);
 }
 
 } // namespace soundsplice

@@ -934,6 +934,9 @@ MainComponent::MainComponent(bool headless)
     workspace_.registerPanel("Diagnostics", diagnosticsPane_);
     workspace_.registerPanel("Essential Sound", essentialSoundPane_);
     workspace_.registerPanel("Script", scriptPane_);
+    workspace_.registerPanel("Delivery", deliveryPane_);
+    deliveryPane_.onCheck      = [this](int spec) { runDeliveryCheck(spec); };
+    deliveryPane_.onMakeItPass = [this](int spec) { exportToDeliverySpec(spec); };
     workspace_.registerPanel("Automation", automationPane_);
     workspace_.registerPanel("Session", sessionView_);
     workspace_.registerPanel("Track FX", effectChain_);

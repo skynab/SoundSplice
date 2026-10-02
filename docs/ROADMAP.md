@@ -340,9 +340,11 @@ voice, podcast and restoration work:
 4. **Stem separation** (vocals/drums/bass/other) via a local ONNX model (Demucs-class)
 5. **AI speech enhancement / noise suppression** (DeepFilterNet or RNNoise-class) alongside the
    classic noise print
-6. **Delivery-spec checker**: pick ACX/Audible, Spotify, Apple Podcasts, YouTube or EBU R128
+6. ✅ **Delivery-spec checker**: pick ACX/Audible, Spotify, Apple Podcasts, YouTube or EBU R128
    broadcast; get pass/fail on loudness, true peak, noise floor and head/tail silence, plus a
-   one-click "make it pass" chain
+   one-click "make it pass" chain: the Delivery pane (Analyze > Check Delivery) renders the mix and checks
+   it, a line per measure with what to do about a fail; Make It Pass opens Export Audio at the spec's
+   loudness, ceiling, format and rate (`src/engine/DeliverySpec.h`, `src/app/DeliveryPane.h`)
 7. **Loudness-matched A/B against a reference track**, so louder never passes for better
 8. **Preview-before-apply everywhere**, with a bypass toggle and a difference ("what was removed")
    solo for every offline effect, not just some

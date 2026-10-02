@@ -100,9 +100,28 @@ public:
         refreshDitherEnablement (window);
         window.getComboBoxComponent ("contents")->setSelectedItemIndex ((int) o.contents, juce::dontSendNotification);
 
+        // A target the list hasn't got (a delivery spec's, say) is added to
+        // it, with the ceiling it came with kept for readOptions.
+        auto* loudness = window.getComboBoxComponent ("loudness");
+        window.getProperties().set ("ceiling", o.truePeakCeilingDb);
+        bool listed = false;
         for (int i = 0; i < (int) std::size (kExportLoudnessTargets); ++i)
             if (kExportLoudnessTargets[i].lufs == o.loudnessLufs)
-                window.getComboBoxComponent ("loudness")->setSelectedItemIndex (i, juce::dontSendNotification);
+            {
+                loudness->setSelectedItemIndex (i, juce::dontSendNotification);
+                listed = true;
+            }
+        if (! listed && o.loudnessLufs < 0.0)
+        {
+            const int custom = (int) std::size (kExportLoudnessTargets);
+            loudness->clear (juce::dontSendNotification); // the listed ones again, then this one
+            for (int i = 0; i < custom; ++i)
+                loudness->addItem (kExportLoudnessTargets[i].name, i + 1);
+            loudness->addItem (juce::String (o.loudnessLufs, 1) + " LUFS, true peak under " + juce::String (o.truePeakCeilingDb, 1) + " dB",
+                               custom + 1);
+            loudness->setSelectedItemIndex (custom, juce::dontSendNotification);
+            window.getProperties().set ("customLufs", o.loudnessLufs);
+        }
 
         // The range only if this project has it to offer.
         auto* range = window.getComboBoxComponent ("range");
@@ -230,8 +249,15 @@ public:
         }
 
         if (auto* loudnessBox = window.getComboBoxComponent ("loudness"))
-            options.loudnessLufs = kExportLoudnessTargets[juce::jlimit (0, (int) std::size (kExportLoudnessTargets) - 1,
-                                                                        loudnessBox->getSelectedItemIndex())].lufs;
+        {
+            const int index = loudnessBox->getSelectedItemIndex();
+            options.loudnessLufs = index >= (int) std::size (kExportLoudnessTargets)
+                                     ? (double) window.getProperties().getWithDefault ("customLufs", 0.0)
+                                     : kExportLoudnessTargets[juce::jmax (0, index)].lufs;
+            options.truePeakCeilingDb = index >= (int) std::size (kExportLoudnessTargets)
+                                          ? (double) window.getProperties().getWithDefault ("ceiling", -1.0)
+                                          : -1.0; // what the listed targets say
+        }
 
         if (auto* contentsBox = window.getComboBoxComponent ("contents"))
             options.contents = (engine::ExportContents)

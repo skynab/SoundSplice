@@ -436,6 +436,13 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::projectInfo:      showProjectInfo(); break;
         case commands::exportCdImage:    exportCdImage(); break;
         case commands::renderQueue:      showRenderQueue(); break;
+        case commands::checkDelivery:
+            if (workspace_.isPanelOpen("Delivery"))
+                workspace_.revealPanel("Delivery");
+            else
+                togglePanel(panelMenuIndex("Delivery"));
+            runDeliveryCheck(deliveryPane_.specIndex());
+            break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -1079,6 +1086,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::plotSpectrum);
         add(commands::measureLoudness);
         add(commands::diagnostics);
+        add(commands::checkDelivery);
         add(commands::amplitudeStatistics);
         menu.addSeparator();
         add(commands::findClipping);
