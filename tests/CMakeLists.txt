@@ -193,6 +193,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/SpeechEnhanceTests.cpp
     gui/TranscriberTests.cpp
     gui/TranscriptPaneTests.cpp
+    gui/PreviewStripTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp

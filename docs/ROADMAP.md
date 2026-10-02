@@ -359,8 +359,12 @@ voice, podcast and restoration work:
    Reference Track measures it and the mix, Compare with Reference turns the louder down to the quieter, and
    Switch A/B (Alt+B) flips between them at the same moment; monitoring only, never exported
    (`src/engine/ReferenceAB.h`)
-8. **Preview-before-apply everywhere**, with a bypass toggle and a difference ("what was removed")
-   solo for every offline effect, not just some
+8. ✅ **Preview-before-apply everywhere**, with a bypass toggle and a difference ("what was removed")
+   solo for every offline effect, not just some: every repair and stretch dialog (Click Removal, Clip Fix, Hum
+   Removal, Vocal Reduction, Adaptive Noise Reduction, Speech Enhancement, DeCrackle, Pitch Correction,
+   DeReverb, Normalize, Paulstretch, Change Tempo, Sliding Stretch) has a Preview strip: the dialog's own
+   Apply, run on up to ten seconds without committing, heard Processed, Original or as the Difference
+   (`src/app/PreviewStrip.h`). Apply Effects keeps its own preview
 9. ✅ **Visual history panel**: jump to any undo step, compare it with the current state, and branch
    from it instead of losing redo: the History pane (View > History) lists every step to go to, compares
    one with now in plain words (`src/model/SongDiff.h`), and keeps the steps an edit after an undo would
@@ -369,7 +373,7 @@ voice, podcast and restoration work:
     immersive audio
 11. **Video track for sync**, showing a reference video for dubbing and podcast video (REAPER,
     Audition). Late and optional, since it's a big dependency.
-12. **Keep the Session view** as a sketchpad for musicians, which none of the three editors has
+12. ✅ **Keep the Session view** as a sketchpad for musicians, which none of the three editors has (kept)
 
 ---
 

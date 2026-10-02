@@ -54,6 +54,7 @@
 #include "DeliveryPane.h"
 #include "HistoryPane.h"
 #include "TranscriptPane.h"
+#include "PreviewStrip.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -238,6 +239,12 @@ private:
     void                   transcribeSelectedTrack();
     void                   deleteTranscriptRanges(const std::vector<std::pair<double, double>>& ranges);
     void                   chooseTranscriptionModel();
+    void                   addPreviewStrip(juce::AlertWindow* window, std::function<void()> run);
+    void                   previewEffect(const std::function<void()>& run, preview::Mode mode);
+    void                   playPreview(preview::Mode mode);
+    void                   endPreview();
+    bool                   capturePreview(const std::vector<std::vector<float>>& original,
+                                          const std::vector<std::vector<float>>& processed, double sampleRate);
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
     void                   exportCdImage();
@@ -1106,6 +1113,15 @@ private:
     DeliveryPane                       deliveryPane_;
     HistoryPane                        historyPane_;
     TranscriptPane                     transcriptPane_;
+
+    // Preview before apply (PreviewStrip.h): while previewing_, the edit
+    // functions run their transform on up to kPreviewSeconds of the
+    // selection and keep the before and after here instead of committing.
+    static constexpr double            kPreviewSeconds = 10.0;
+    bool                               previewing_ = false;
+    std::vector<std::vector<float>>    previewOriginal_, previewProcessed_;
+    double                             previewRate_ = 0.0;
+    std::unique_ptr<PreviewStrip>      previewStrip_;
     unsigned long long                 transcriptShown_ = 0; // the state and track the pane last showed
     unsigned long long                 historyShown_ = 0; // what the History pane last showed (refreshHistoryPane)
 

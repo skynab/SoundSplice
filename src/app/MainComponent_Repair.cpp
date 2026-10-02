@@ -47,6 +47,8 @@ bool MainComponent::editSelectionInContext(
         showError("Select part of the clip first");
         return false;
     }
+    if (previewing_)
+        to = juce::jmin(to, from + (int) (kPreviewSeconds * audio.sequence.sampleRate));
 
     const int readFrom = juce::jmax(0, from - contextFrames);
     const int readTo   = juce::jmin(audio.window.length(), to + contextFrames);
@@ -58,6 +60,12 @@ bool MainComponent::editSelectionInContext(
         return false;
     }
 
+    // The selection as it was, for a preview's Original and Difference.
+    std::vector<std::vector<float>> original;
+    if (previewing_)
+        for (const auto& channel : channels)
+            original.emplace_back(channel.begin() + (from - readFrom), channel.begin() + (to - readFrom));
+
     if (! transform(channels, from - readFrom, to - readFrom, audio.sequence.sampleRate))
         return false;
 
@@ -66,6 +74,9 @@ bool MainComponent::editSelectionInContext(
         channel.erase(channel.begin() + (to - readFrom), channel.end());
         channel.erase(channel.begin(), channel.begin() + (from - readFrom));
     }
+
+    if (previewing_)
+        return capturePreview(original, channels, audio.sequence.sampleRate);
 
     return replaceClipAudio(label, audio, from, to, channels);
 }
@@ -109,23 +120,34 @@ void MainComponent::showClickRemovalDialog()
     window->getComboBoxComponent("sensitivity")->setSelectedItemIndex(settings_.getIntValue("clickRemoval.sensitivity", 1));
     window->addTextEditor("width", juce::String(settings_.getDoubleValue("clickRemoval.widthMs", 2.0)),
                           "Longest click (ms):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const int    sensitivity = juce::jlimit(0, 2, window->getComboBoxComponent("sensitivity")->getSelectedItemIndex());
+        const double widthMs     = juce::jlimit(0.1, 20.0, window->getTextEditorContents("width").getDoubleValue());
+        self->settings_.setValue("clickRemoval.sensitivity", sensitivity);
+        self->settings_.setValue("clickRemoval.widthMs", widthMs);
+
+        static constexpr double kThresholds[] { 12.0, 8.0, 5.0 };
+        self->removeClicksInSelection(kThresholds[sensitivity], widthMs);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Remove Clicks", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const int    sensitivity = juce::jlimit(0, 2, window->getComboBoxComponent("sensitivity")->getSelectedItemIndex());
-            const double widthMs     = juce::jlimit(0.1, 20.0, window->getTextEditorContents("width").getDoubleValue());
-            self->settings_.setValue("clickRemoval.sensitivity", sensitivity);
-            self->settings_.setValue("clickRemoval.widthMs", widthMs);
-
-            static constexpr double kThresholds[] { 12.0, 8.0, 5.0 };
-            self->removeClicksInSelection(kThresholds[sensitivity], widthMs);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -163,21 +185,32 @@ void MainComponent::showClipFixDialog()
                           "Clipped at or above (% of the peak):");
     window->addTextEditor("reduce", juce::String(settings_.getDoubleValue("clipFix.reduceDb", 0.0)),
                           "Then turn down by (dB):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const double threshold = juce::jlimit(50.0, 100.0, window->getTextEditorContents("threshold").getDoubleValue());
+        const double reduce    = juce::jlimit(0.0, 24.0, window->getTextEditorContents("reduce").getDoubleValue());
+        self->settings_.setValue("clipFix.thresholdPercent", threshold);
+        self->settings_.setValue("clipFix.reduceDb", reduce);
+        self->fixClippingInSelection(threshold, reduce);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Fix", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const double threshold = juce::jlimit(50.0, 100.0, window->getTextEditorContents("threshold").getDoubleValue());
-            const double reduce    = juce::jlimit(0.0, 24.0, window->getTextEditorContents("reduce").getDoubleValue());
-            self->settings_.setValue("clipFix.thresholdPercent", threshold);
-            self->settings_.setValue("clipFix.reduceDb", reduce);
-            self->fixClippingInSelection(threshold, reduce);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -229,25 +262,36 @@ void MainComponent::showHumRemovalDialog()
                           "Harmonics to remove (including the fundamental):");
     window->addComboBox("width", { "Narrow (least of the music)", "Medium", "Wide (hum that wanders)" }, "Notch width:");
     window->getComboBoxComponent("width")->setSelectedItemIndex(settings_.getIntValue("humRemoval.width", 1));
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const int mains     = juce::jlimit(0, 1, window->getComboBoxComponent("mains")->getSelectedItemIndex());
+        const int harmonics = juce::jlimit(1, 40, window->getTextEditorContents("harmonics").getIntValue());
+        const int width     = juce::jlimit(0, 2, window->getComboBoxComponent("width")->getSelectedItemIndex());
+        self->settings_.setValue("humRemoval.mains", mains);
+        self->settings_.setValue("humRemoval.harmonics", harmonics);
+        self->settings_.setValue("humRemoval.width", width);
+
+        static constexpr double kQs[] { 60.0, 30.0, 10.0 };
+        self->removeHumInSelection(mains == 0 ? 50.0 : 60.0, harmonics, kQs[width]);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Remove Hum", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const int mains     = juce::jlimit(0, 1, window->getComboBoxComponent("mains")->getSelectedItemIndex());
-            const int harmonics = juce::jlimit(1, 40, window->getTextEditorContents("harmonics").getIntValue());
-            const int width     = juce::jlimit(0, 2, window->getComboBoxComponent("width")->getSelectedItemIndex());
-            self->settings_.setValue("humRemoval.mains", mains);
-            self->settings_.setValue("humRemoval.harmonics", harmonics);
-            self->settings_.setValue("humRemoval.width", width);
-
-            static constexpr double kQs[] { 60.0, 30.0, 10.0 };
-            self->removeHumInSelection(mains == 0 ? 50.0 : 60.0, harmonics, kQs[width]);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -636,29 +680,40 @@ void MainComponent::showVocalReductionDialog()
     window->addTextEditor("strength", juce::String(settings_.getDoubleValue("vocalReduction.strength", 100.0)), "Strength (%):");
     window->addTextEditor("low", juce::String(settings_.getDoubleValue("vocalReduction.lowHz", 120.0)), "From (Hz):");
     window->addTextEditor("high", juce::String(settings_.getDoubleValue("vocalReduction.highHz", 9000.0)), "To (Hz):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        engine::centre::Settings settings;
+        settings.mode     = window->getComboBoxComponent("mode")->getSelectedItemIndex() == 1
+                            ? engine::centre::Mode::Isolate : engine::centre::Mode::Remove;
+        settings.strength = juce::jlimit(0.0, 100.0, window->getTextEditorContents("strength").getDoubleValue()) / 100.0;
+        settings.lowHz    = juce::jlimit(0.0, 24000.0, window->getTextEditorContents("low").getDoubleValue());
+        settings.highHz   = juce::jlimit(settings.lowHz + 1.0, 96000.0, window->getTextEditorContents("high").getDoubleValue());
+
+        auto& stored = self->settings_;
+        stored.setValue("vocalReduction.mode", (int) settings.mode);
+        stored.setValue("vocalReduction.strength", settings.strength * 100.0);
+        stored.setValue("vocalReduction.lowHz", settings.lowHz);
+        stored.setValue("vocalReduction.highHz", settings.highHz);
+        self->reduceVocals(settings);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            engine::centre::Settings settings;
-            settings.mode     = window->getComboBoxComponent("mode")->getSelectedItemIndex() == 1
-                                    ? engine::centre::Mode::Isolate : engine::centre::Mode::Remove;
-            settings.strength = juce::jlimit(0.0, 100.0, window->getTextEditorContents("strength").getDoubleValue()) / 100.0;
-            settings.lowHz    = juce::jlimit(0.0, 24000.0, window->getTextEditorContents("low").getDoubleValue());
-            settings.highHz   = juce::jlimit(settings.lowHz + 1.0, 96000.0, window->getTextEditorContents("high").getDoubleValue());
-
-            auto& stored = self->settings_;
-            stored.setValue("vocalReduction.mode", (int) settings.mode);
-            stored.setValue("vocalReduction.strength", settings.strength * 100.0);
-            stored.setValue("vocalReduction.lowHz", settings.lowHz);
-            stored.setValue("vocalReduction.highHz", settings.highHz);
-            self->reduceVocals(settings);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -703,32 +758,43 @@ void MainComponent::showAdaptiveNoiseReductionDialog()
                           "Reduction (dB):");
     window->addTextEditor("floor", juce::String(settings_.getDoubleValue("adaptiveNoise.floorDb", -18.0)),
                           "Never lower than (dB):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const float reduction = (float) juce::jlimit(0.0, 40.0, window->getTextEditorContents("reduction").getDoubleValue());
+        const float floor     = (float) juce::jlimit(-60.0, 0.0, window->getTextEditorContents("floor").getDoubleValue());
+        self->settings_.setValue("adaptiveNoise.reductionDb", reduction);
+        self->settings_.setValue("adaptiveNoise.floorDb", floor);
+
+        const auto transform = [reduction, floor](std::vector<std::vector<float>>& channels, double rate)
+        {
+        for (auto& channel : channels)
+                channel = engine::noisereduction::reduceNoiseAdaptive(channel, rate, reduction, floor);
+        };
+        self->showBusy("Reducing noise...");
+        const bool whole  = self->audioEditor_.selection().isEmpty();
+        const bool edited = whole ? self->editWholeClip("Adaptive noise reduction", transform)
+                                  : self->editSelection("Adaptive noise reduction", false, transform);
+        if (edited)
+            self->showStatus(juce::String("Noise reduced ") + (whole ? "across the clip" : "in the selection"));
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const float reduction = (float) juce::jlimit(0.0, 40.0, window->getTextEditorContents("reduction").getDoubleValue());
-            const float floor     = (float) juce::jlimit(-60.0, 0.0, window->getTextEditorContents("floor").getDoubleValue());
-            self->settings_.setValue("adaptiveNoise.reductionDb", reduction);
-            self->settings_.setValue("adaptiveNoise.floorDb", floor);
-
-            const auto transform = [reduction, floor](std::vector<std::vector<float>>& channels, double rate)
-            {
-                for (auto& channel : channels)
-                    channel = engine::noisereduction::reduceNoiseAdaptive(channel, rate, reduction, floor);
-            };
-            self->showBusy("Reducing noise...");
-            const bool whole  = self->audioEditor_.selection().isEmpty();
-            const bool edited = whole ? self->editWholeClip("Adaptive noise reduction", transform)
-                                      : self->editSelection("Adaptive noise reduction", false, transform);
-            if (edited)
-                self->showStatus(juce::String("Noise reduced ") + (whole ? "across the clip" : "in the selection"));
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -748,30 +814,41 @@ void MainComponent::showSpeechEnhancementDialog()
                                          juce::MessageBoxIconType::NoIcon, this);
     window->addTextEditor("amount", juce::String(settings_.getDoubleValue("speechEnhance.amount", 100.0)),
                           "Amount (%; less leaves some of the original in):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const double amount = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
+        self->settings_.setValue("speechEnhance.amount", amount);
+
+        const auto transform = [amount](std::vector<std::vector<float>>& channels, double rate)
+        {
+        for (auto& channel : channels)
+                channel = engine::speechenhance::enhance(channel, rate, (float) (amount / 100.0));
+        };
+        self->showBusy("Enhancing speech...");
+        const bool whole  = self->audioEditor_.selection().isEmpty();
+        const bool edited = whole ? self->editWholeClip("Speech enhancement", transform)
+                                  : self->editSelection("Speech enhancement", false, transform);
+        if (edited)
+            self->showStatus(juce::String("Speech enhanced ") + (whole ? "across the clip" : "in the selection"));
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const double amount = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
-            self->settings_.setValue("speechEnhance.amount", amount);
-
-            const auto transform = [amount](std::vector<std::vector<float>>& channels, double rate)
-            {
-                for (auto& channel : channels)
-                    channel = engine::speechenhance::enhance(channel, rate, (float) (amount / 100.0));
-            };
-            self->showBusy("Enhancing speech...");
-            const bool whole  = self->audioEditor_.selection().isEmpty();
-            const bool edited = whole ? self->editWholeClip("Speech enhancement", transform)
-                                      : self->editSelection("Speech enhancement", false, transform);
-            if (edited)
-                self->showStatus(juce::String("Speech enhanced ") + (whole ? "across the clip" : "in the selection"));
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -790,32 +867,43 @@ void MainComponent::showDecrackleDialog()
                                          juce::MessageBoxIconType::NoIcon, this);
     window->addTextEditor("amount", juce::String(settings_.getDoubleValue("decrackle.amount", 50.0)),
                           "Amount (0 gentle to 100 thorough):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const double amount = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
+        self->settings_.setValue("decrackle.amount", amount);
+
+        int        mended    = 0;
+        const auto transform = [amount, &mended](std::vector<std::vector<float>>& channels, double rate)
+        {
+        for (auto& channel : channels)
+                mended += engine::repair::decrackle(channel, 0, (int) channel.size(), rate, amount / 100.0);
+        };
+        self->showBusy("Mending crackle...");
+        const bool whole  = self->audioEditor_.selection().isEmpty();
+        const bool edited = whole ? self->editWholeClip("DeCrackle", transform)
+                                  : self->editSelection("DeCrackle", false, transform);
+        if (edited)
+            self->showStatus(mended == 0 ? juce::String("No crackle found")
+                                         : "Mended " + juce::String(mended) + (mended == 1 ? " crackle" : " crackles"));
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const double amount = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
-            self->settings_.setValue("decrackle.amount", amount);
-
-            int        mended    = 0;
-            const auto transform = [amount, &mended](std::vector<std::vector<float>>& channels, double rate)
-            {
-                for (auto& channel : channels)
-                    mended += engine::repair::decrackle(channel, 0, (int) channel.size(), rate, amount / 100.0);
-            };
-            self->showBusy("Mending crackle...");
-            const bool whole  = self->audioEditor_.selection().isEmpty();
-            const bool edited = whole ? self->editWholeClip("DeCrackle", transform)
-                                      : self->editSelection("DeCrackle", false, transform);
-            if (edited)
-                self->showStatus(mended == 0 ? juce::String("No crackle found")
-                                             : "Mended " + juce::String(mended) + (mended == 1 ? " crackle" : " crackles"));
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -844,59 +932,70 @@ void MainComponent::showPitchCorrectionDialog()
                           "Speed (ms, 0 snaps at once):");
     window->addComboBox("formants", { "Moves with the pitch", "Stays put (for voices)" }, "Voice character:");
     window->getComboBoxComponent("formants")->setSelectedItemIndex(settings_.getIntValue("speedPitch.keepFormants", 1));
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const int    key          = juce::jlimit(0, 11, window->getComboBoxComponent("key")->getSelectedItemIndex());
+        const auto   scale        = (engine::pitch::Scale) juce::jlimit(0, 2, window->getComboBoxComponent("scale")->getSelectedItemIndex());
+        const double strength     = juce::jlimit(0.0, 100.0, window->getTextEditorContents("strength").getDoubleValue()) / 100.0;
+        const double speedMs      = juce::jlimit(0.0, 1000.0, window->getTextEditorContents("speed").getDoubleValue());
+        const bool   keepFormants = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
+
+        auto& stored = self->settings_;
+        stored.setValue("pitchCorrection.key", key);
+        stored.setValue("pitchCorrection.scale", (int) scale);
+        stored.setValue("pitchCorrection.strength", strength * 100.0);
+        stored.setValue("pitchCorrection.speedMs", speedMs);
+        stored.setValue("speedPitch.keepFormants", keepFormants ? 1 : 0);
+
+        constexpr int kHop     = 256;
+        bool          tooShort = false;
+        const auto    transform = [&](std::vector<std::vector<float>>& channels, double rate)
+        {
+        // The pitch is heard in the channels together.
+            std::vector<float> mono(channels[0].size(), 0.0f);
+            for (const auto& channel : channels)
+                for (size_t i = 0; i < mono.size() && i < channel.size(); ++i)
+                    mono[i] += channel[i] / (float) channels.size();
+
+            const auto shift = engine::pitch::correction(engine::pitch::track(mono, rate, kHop), rate, kHop, key,
+                                                         scale, strength, speedMs);
+            auto corrected = engine::hqstretch::transposeCurve(channels, rate, [&shift](int sample)
+            {
+                return shift.empty() ? 0.0 : shift[std::min(shift.size() - 1, (size_t) sample / kHop)];
+            }, keepFormants);
+            if (corrected.empty())
+                tooShort = true;
+            else
+                channels = std::move(corrected);
+        };
+
+        self->showBusy("Correcting pitch...");
+        const bool whole  = self->audioEditor_.selection().isEmpty();
+        const bool edited = whole ? self->editWholeClip("Pitch correction", transform)
+                                  : self->editSelection("Pitch correction", false, transform);
+        if (tooShort)
+            self->showError("That's too short to correct - select at least a quarter of a second");
+        else if (edited)
+            self->showStatus(juce::String("Pitch corrected ") + (whole ? "across the clip" : "in the selection"));
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const int    key          = juce::jlimit(0, 11, window->getComboBoxComponent("key")->getSelectedItemIndex());
-            const auto   scale        = (engine::pitch::Scale) juce::jlimit(0, 2, window->getComboBoxComponent("scale")->getSelectedItemIndex());
-            const double strength     = juce::jlimit(0.0, 100.0, window->getTextEditorContents("strength").getDoubleValue()) / 100.0;
-            const double speedMs      = juce::jlimit(0.0, 1000.0, window->getTextEditorContents("speed").getDoubleValue());
-            const bool   keepFormants = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
-
-            auto& stored = self->settings_;
-            stored.setValue("pitchCorrection.key", key);
-            stored.setValue("pitchCorrection.scale", (int) scale);
-            stored.setValue("pitchCorrection.strength", strength * 100.0);
-            stored.setValue("pitchCorrection.speedMs", speedMs);
-            stored.setValue("speedPitch.keepFormants", keepFormants ? 1 : 0);
-
-            constexpr int kHop     = 256;
-            bool          tooShort = false;
-            const auto    transform = [&](std::vector<std::vector<float>>& channels, double rate)
-            {
-                // The pitch is heard in the channels together.
-                std::vector<float> mono(channels[0].size(), 0.0f);
-                for (const auto& channel : channels)
-                    for (size_t i = 0; i < mono.size() && i < channel.size(); ++i)
-                        mono[i] += channel[i] / (float) channels.size();
-
-                const auto shift = engine::pitch::correction(engine::pitch::track(mono, rate, kHop), rate, kHop, key,
-                                                             scale, strength, speedMs);
-                auto corrected = engine::hqstretch::transposeCurve(channels, rate, [&shift](int sample)
-                {
-                    return shift.empty() ? 0.0 : shift[std::min(shift.size() - 1, (size_t) sample / kHop)];
-                }, keepFormants);
-                if (corrected.empty())
-                    tooShort = true;
-                else
-                    channels = std::move(corrected);
-            };
-
-            self->showBusy("Correcting pitch...");
-            const bool whole  = self->audioEditor_.selection().isEmpty();
-            const bool edited = whole ? self->editWholeClip("Pitch correction", transform)
-                                      : self->editSelection("Pitch correction", false, transform);
-            if (tooShort)
-                self->showError("That's too short to correct - select at least a quarter of a second");
-            else if (edited)
-                self->showStatus(juce::String("Pitch corrected ") + (whole ? "across the clip" : "in the selection"));
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -919,38 +1018,119 @@ void MainComponent::showDereverbDialog()
     window->addTextEditor("amount", juce::String(settings_.getDoubleValue("dereverb.amount", 67.0)), "Amount (%):");
     window->addTextEditor("floor", juce::String(settings_.getDoubleValue("dereverb.floorDb", -18.0)),
                           "Never lower than (dB):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        engine::dereverb::Settings settings;
+        settings.reverbSeconds = juce::jlimit(0.1, 10.0, window->getTextEditorContents("time").getDoubleValue());
+        const double amount    = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
+        settings.amount        = amount / 100.0 * 3.0; // 67% is the engine's 2
+        settings.floorDb       = juce::jlimit(-60.0, 0.0, window->getTextEditorContents("floor").getDoubleValue());
+
+        self->settings_.setValue("dereverb.seconds", settings.reverbSeconds);
+        self->settings_.setValue("dereverb.amount", amount);
+        self->settings_.setValue("dereverb.floorDb", settings.floorDb);
+
+        const auto transform = [settings](std::vector<std::vector<float>>& channels, double rate)
+        {
+        for (auto& channel : channels)
+                channel = engine::dereverb::process(channel, rate, settings);
+        };
+        self->showBusy("Removing reverb...");
+        const bool whole  = self->audioEditor_.selection().isEmpty();
+        const bool edited = whole ? self->editWholeClip("DeReverb", transform)
+                                  : self->editSelection("DeReverb", false, transform);
+        if (edited)
+            self->showStatus(juce::String("Reverb reduced ") + (whole ? "across the clip" : "in the selection"));
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            engine::dereverb::Settings settings;
-            settings.reverbSeconds = juce::jlimit(0.1, 10.0, window->getTextEditorContents("time").getDoubleValue());
-            const double amount    = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
-            settings.amount        = amount / 100.0 * 3.0; // 67% is the engine's 2
-            settings.floorDb       = juce::jlimit(-60.0, 0.0, window->getTextEditorContents("floor").getDoubleValue());
-
-            self->settings_.setValue("dereverb.seconds", settings.reverbSeconds);
-            self->settings_.setValue("dereverb.amount", amount);
-            self->settings_.setValue("dereverb.floorDb", settings.floorDb);
-
-            const auto transform = [settings](std::vector<std::vector<float>>& channels, double rate)
-            {
-                for (auto& channel : channels)
-                    channel = engine::dereverb::process(channel, rate, settings);
-            };
-            self->showBusy("Removing reverb...");
-            const bool whole  = self->audioEditor_.selection().isEmpty();
-            const bool edited = whole ? self->editWholeClip("DeReverb", transform)
-                                      : self->editSelection("DeReverb", false, transform);
-            if (edited)
-                self->showStatus(juce::String("Reverb reduced ") + (whole ? "across the clip" : "in the selection"));
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
+}
+
+// ---- Preview before apply ------------------------------------------------------
+
+/** A Preview strip in @p window, running @p run - what the dialog's Apply
+    does - in preview mode. */
+void MainComponent::addPreviewStrip(juce::AlertWindow* window, std::function<void()> run)
+{
+    previewStrip_            = std::make_unique<PreviewStrip>();
+    previewStrip_->onPreview = [this, run](preview::Mode mode) { previewEffect(run, mode); };
+    previewStrip_->onSwitch  = [this](preview::Mode mode) { playPreview(mode); };
+    previewStrip_->onStop    = [this] { engine_.stopAudition(); };
+    window->addCustomComponent(previewStrip_.get());
+}
+
+/** Runs @p run with the edit functions capturing rather than committing,
+    then plays @p mode of what it made. */
+void MainComponent::previewEffect(const std::function<void()>& run, preview::Mode mode)
+{
+    engine_.stopAudition();
+    previewOriginal_.clear();
+    previewProcessed_.clear();
+    previewing_ = true;
+    run();
+    previewing_ = false;
+
+    if (previewProcessed_.empty())
+    {
+        showStatus("Nothing to preview: select part of an audio clip, or this effect doesn't change the audio itself");
+        return;
+    }
+    if (previewStrip_ != nullptr)
+        previewStrip_->setDifferenceAvailable(! preview::difference(previewOriginal_, previewProcessed_).empty());
+    playPreview(mode);
+}
+
+bool MainComponent::capturePreview(const std::vector<std::vector<float>>& original,
+                                   const std::vector<std::vector<float>>& processed, double sampleRate)
+{
+    previewOriginal_  = original;
+    previewProcessed_ = processed;
+    previewRate_      = sampleRate;
+    return false; // nothing committed
+}
+
+void MainComponent::playPreview(preview::Mode mode)
+{
+    const auto difference = mode == preview::Difference ? preview::difference(previewOriginal_, previewProcessed_)
+                                                        : std::vector<std::vector<float>> {};
+    const auto& chosen = mode == preview::Original ? previewOriginal_ : mode == preview::Difference ? difference : previewProcessed_;
+    if (chosen.empty() || chosen[0].empty() || previewRate_ <= 0.0)
+        return;
+
+    juce::AudioBuffer<float> buffer((int) chosen.size(), (int) chosen[0].size());
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        std::copy_n(chosen[(size_t) ch].data(), juce::jmin(buffer.getNumSamples(), (int) chosen[(size_t) ch].size()),
+                    buffer.getWritePointer(ch));
+    engine_.startAudition(buffer, previewRate_);
+
+    static const char* names[] { "processed", "original", "difference - only what the effect changes" };
+    showStatus(juce::String("Previewing: ") + names[(int) mode]);
+}
+
+/** The dialog closed: the preview stops and its strip goes. */
+void MainComponent::endPreview()
+{
+    engine_.stopAudition();
+    previewStrip_.reset();
+    previewOriginal_.clear();
+    previewProcessed_.clear();
 }
 
 } // namespace soundsplice

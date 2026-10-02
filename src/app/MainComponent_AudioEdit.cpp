@@ -550,12 +550,21 @@ bool MainComponent::editSelection(
         showError("Select part of the clip first");
         return false;
     }
+    if (previewing_)
+        to = juce::jmin(to, from + (int) (kPreviewSeconds * audio.sequence.sampleRate));
 
     auto selection = readClipAudio(audio, from, to);
     if (selection.empty())
     {
         showError("Could not read " + audio.file.getFileName());
         return false;
+    }
+
+    if (previewing_)
+    {
+        const auto original = selection;
+        transform(selection, audio.sequence.sampleRate);
+        return capturePreview(original, selection, audio.sequence.sampleRate);
     }
 
     transform(selection, audio.sequence.sampleRate);
@@ -1164,21 +1173,32 @@ void MainComponent::showPaulstretchDialog()
                           "Stretch by (times):");
     window->addTextEditor("window", juce::String(settings_.getDoubleValue("paulstretch.window", 0.25)),
                           "Window (seconds: longer is smoother):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const double stretch = juce::jlimit(1.0, 100.0, window->getTextEditorContents("stretch").getDoubleValue());
+        const double seconds = juce::jlimit(0.02, 2.0, window->getTextEditorContents("window").getDoubleValue());
+        self->settings_.setValue("paulstretch.factor", stretch);
+        self->settings_.setValue("paulstretch.window", seconds);
+        self->paulstretchSelectedClip(stretch, seconds);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Stretch", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const double stretch = juce::jlimit(1.0, 100.0, window->getTextEditorContents("stretch").getDoubleValue());
-            const double seconds = juce::jlimit(0.02, 2.0, window->getTextEditorContents("window").getDoubleValue());
-            self->settings_.setValue("paulstretch.factor", stretch);
-            self->settings_.setValue("paulstretch.window", seconds);
-            self->paulstretchSelectedClip(stretch, seconds);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -1212,19 +1232,30 @@ void MainComponent::showChangeTempoDialog()
                                          juce::MessageBoxIconType::NoIcon, this);
     window->addTextEditor("percent", juce::String(settings_.getDoubleValue("changeTempo.percent", 10.0)),
                           "Change (%: 50 is half as fast again, -25 a quarter slower):");
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const double percent = juce::jlimit(-90.0, 400.0, window->getTextEditorContents("percent").getDoubleValue());
+        self->settings_.setValue("changeTempo.percent", percent);
+        self->changeTempoOfSelectedClip(percent);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const double percent = juce::jlimit(-90.0, 400.0, window->getTextEditorContents("percent").getDoubleValue());
-            self->settings_.setValue("changeTempo.percent", percent);
-            self->changeTempoOfSelectedClip(percent);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -1279,33 +1310,44 @@ void MainComponent::showSlidingStretchDialog()
     window->addTextEditor("endPitch", value("endPitch", 0.0), "Pitch at the end (semitones):");
     window->addComboBox("formants", { "Moves with the pitch", "Stays put (for voices)" }, "Voice character:");
     window->getComboBoxComponent("formants")->setSelectedItemIndex(settings_.getIntValue("speedPitch.keepFormants", 1));
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const auto number = [window](const char* name, double lo, double hi)
+        { return juce::jlimit(lo, hi, window->getTextEditorContents(name).getDoubleValue()); };
+
+        engine::hqstretch::Slide slide;
+        slide.startTempoPercent = number("startTempo", -90.0, 400.0);
+        slide.endTempoPercent   = number("endTempo", -90.0, 400.0);
+        slide.startSemitones    = number("startPitch", -24.0, 24.0);
+        slide.endSemitones      = number("endPitch", -24.0, 24.0);
+        slide.keepFormants      = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
+
+        auto& stored = self->settings_;
+        stored.setValue("slidingStretch.startTempo", slide.startTempoPercent);
+        stored.setValue("slidingStretch.endTempo", slide.endTempoPercent);
+        stored.setValue("slidingStretch.startPitch", slide.startSemitones);
+        stored.setValue("slidingStretch.endPitch", slide.endSemitones);
+        stored.setValue("speedPitch.keepFormants", slide.keepFormants ? 1 : 0);
+        self->applySlidingStretch(slide);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const auto number = [window](const char* name, double lo, double hi)
-            { return juce::jlimit(lo, hi, window->getTextEditorContents(name).getDoubleValue()); };
-
-            engine::hqstretch::Slide slide;
-            slide.startTempoPercent = number("startTempo", -90.0, 400.0);
-            slide.endTempoPercent   = number("endTempo", -90.0, 400.0);
-            slide.startSemitones    = number("startPitch", -24.0, 24.0);
-            slide.endSemitones      = number("endPitch", -24.0, 24.0);
-            slide.keepFormants      = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
-
-            auto& stored = self->settings_;
-            stored.setValue("slidingStretch.startTempo", slide.startTempoPercent);
-            stored.setValue("slidingStretch.endTempo", slide.endTempoPercent);
-            stored.setValue("slidingStretch.startPitch", slide.startSemitones);
-            stored.setValue("slidingStretch.endPitch", slide.endSemitones);
-            stored.setValue("speedPitch.keepFormants", slide.keepFormants ? 1 : 0);
-            self->applySlidingStretch(slide);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -1357,23 +1399,34 @@ void MainComponent::showNormalizeDialog()
     window->getComboBoxComponent("dc")->setSelectedItemIndex(settings_.getIntValue("normalize.removeDc", 1));
     window->addComboBox("channels", { "Together (keeps their balance)", "Each on its own" }, "Channels:");
     window->getComboBoxComponent("channels")->setSelectedItemIndex(settings_.getIntValue("normalize.independently", 0));
+    // What Apply does, and what Preview runs without committing.
+    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
+    {
+        if (self == nullptr)
+            return;
+
+        const double peakDb        = juce::jlimit(-60.0, 0.0, window->getTextEditorContents("peak").getDoubleValue());
+        const bool   removeDc      = window->getComboBoxComponent("dc")->getSelectedItemIndex() == 1;
+        const bool   independently = window->getComboBoxComponent("channels")->getSelectedItemIndex() == 1;
+        self->settings_.setValue("normalize.peakDb", peakDb);
+        self->settings_.setValue("normalize.removeDc", removeDc ? 1 : 0);
+        self->settings_.setValue("normalize.independently", independently ? 1 : 0);
+        self->normalizeWithOptions(juce::Decibels::decibelsToGain((float) peakDb), removeDc, independently);
+    };
+    addPreviewStrip(window, run);
+
     window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
         {
             std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
+            if (self == nullptr)
                 return;
-
-            const double peakDb        = juce::jlimit(-60.0, 0.0, window->getTextEditorContents("peak").getDoubleValue());
-            const bool   removeDc      = window->getComboBoxComponent("dc")->getSelectedItemIndex() == 1;
-            const bool   independently = window->getComboBoxComponent("channels")->getSelectedItemIndex() == 1;
-            self->settings_.setValue("normalize.peakDb", peakDb);
-            self->settings_.setValue("normalize.removeDc", removeDc ? 1 : 0);
-            self->settings_.setValue("normalize.independently", independently ? 1 : 0);
-            self->normalizeWithOptions(juce::Decibels::decibelsToGain((float) peakDb), removeDc, independently);
+            self->endPreview();
+            if (result == 1)
+                run();
         }));
 }
 
@@ -1681,12 +1734,21 @@ bool MainComponent::editWholeClip(
     ClipAudio                       audio;
     std::vector<std::vector<float>> channels;
     if (openSelectedClipAudio(audio))
-        channels = readClipAudio(audio, 0, audio.window.length());
+        channels = readClipAudio(audio, 0, previewing_ ? juce::jmin(audio.window.length(),
+                                                                    (int) (kPreviewSeconds * audio.sequence.sampleRate))
+                                                       : audio.window.length());
 
     if (channels.empty() || channels[0].empty())
     {
         showError("Could not read that clip");
         return false;
+    }
+
+    if (previewing_)
+    {
+        const auto original = channels;
+        transform(channels, audio.sequence.sampleRate);
+        return capturePreview(original, channels, audio.sequence.sampleRate);
     }
 
     transform(channels, audio.sequence.sampleRate);
