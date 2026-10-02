@@ -271,8 +271,12 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   The `soundsplice` table runs commands and macros by name, reads and sets tracks' volume, pan, mute, solo and
   name, and the playhead and time selection in seconds. Sandboxed (no io, os, package, debug or file loading) and
   stopped if it runs too long (`src/app/Scripting.h`, `src/app/ScriptPane.h`)
-- ⬜ **Accessibility**: full keyboard operation of tracks, clips and selections; screen-reader
-  announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit)
+- ✅ **Accessibility**: full keyboard operation of tracks, clips and selections; screen-reader
+  announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit): View > Keyboard
+  Navigation - previous/next track (Alt+Up/Down), previous/next clip (Ctrl+Alt+Left/Right, moving the
+  playhead), nudge a clip (Ctrl+Shift+Left/Right), selection edges at the playhead ([ and ]), Where Am I
+  (Alt+W) - each said through the screen reader, as is every status message; panes carry their names; the
+  High Contrast theme and focus rings (`src/app/MainComponent_Keyboard.cpp`)
 - ✅ Themes and custom colors; saved screensets (✅ layouts exist): Preferences > Display picks Dark,
   Midnight, Grey or High Contrast, an accent (a list or any colour), and keyboard focus rings; panes take
   their surfaces from the theme by role (`src/app/Theme.h`). All are dark: the panes draw light text of their

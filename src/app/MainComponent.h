@@ -671,6 +671,15 @@ private:
     void                   saveAsTemplate();
     void                   showPreferences(int tab = 0);
     void                   applyTheme();
+    void                   announce(const juce::String& text, bool important = false);
+    juce::String           describeTrack(int index) const;
+    juce::String           describeClip(int trackIndex, int clipIndex) const;
+    juce::String           describeSelection() const;
+    void                   selectAdjacentTrack(int delta);
+    void                   selectAdjacentClip(int delta);
+    void                   nudgeSelectedClip(double beats);
+    void                   setSelectionEdgeAtPlayhead(bool start);
+    void                   announceWhereAmI();
     void                   applyScreenset(int index);
     void                   promptSaveScreenset();
     void                   removeScreenset(int index);

@@ -1240,6 +1240,7 @@ void MainComponent::refreshFromModel()
 void MainComponent::showStatus(const juce::String& message)
 {
     status_.show(message, false);
+    announce(message); // the banner, said, for whoever can't see it
 }
 
 /** As showStatus, for the messages that report something didn't work. Held
@@ -1247,6 +1248,7 @@ void MainComponent::showStatus(const juce::String& message)
 void MainComponent::showError(const juce::String& message)
 {
     status_.show(message, true);
+    announce(message, true);
     juce::Logger::writeToLog("Status: " + message);
 }
 

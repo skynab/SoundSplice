@@ -93,6 +93,9 @@ public:
     void registerPanel(const juce::String& name, juce::Component& content)
     {
         panels_[name] = &content;
+        // What a screen reader calls the pane, where it hasn't a name of its own.
+        if (content.getTitle().isEmpty())
+            content.setTitle(name);
     }
 
     /** The region a fresh workspace starts with — the one every default

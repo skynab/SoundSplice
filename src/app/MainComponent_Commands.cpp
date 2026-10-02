@@ -424,6 +424,15 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::runScript:        chooseScriptToRun(); break;
         case commands::saveAsTemplate:   saveAsTemplate(); break;
         case commands::preferences:      showPreferences(); break;
+        case commands::previousTrack:    selectAdjacentTrack(-1); break;
+        case commands::nextTrack:        selectAdjacentTrack(1); break;
+        case commands::previousClip:     selectAdjacentClip(-1); break;
+        case commands::nextClip:         selectAdjacentClip(1); break;
+        case commands::nudgeClipEarlier: nudgeSelectedClip(-1.0); break;
+        case commands::nudgeClipLater:   nudgeSelectedClip(1.0); break;
+        case commands::selectionStartAtPlayhead: setSelectionEdgeAtPlayhead(true); break;
+        case commands::selectionEndAtPlayhead:   setSelectionEdgeAtPlayhead(false); break;
+        case commands::whereAmI:         announceWhereAmI(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -1000,6 +1009,14 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::autoCrossfades);
         add(commands::resetLayout);
         menu.addSeparator();
+        {
+            juce::PopupMenu navigate;
+            for (auto id : { commands::previousTrack, commands::nextTrack, commands::previousClip, commands::nextClip,
+                             commands::nudgeClipEarlier, commands::nudgeClipLater, commands::selectionStartAtPlayhead,
+                             commands::selectionEndAtPlayhead, commands::whereAmI })
+                navigate.addCommandItem(&commandManager_, id);
+            menu.addSubMenu("Keyboard Navigation", navigate);
+        }
         add(commands::commandPalette);
     }
     else if (topLevelMenuIndex == 3) // Markers

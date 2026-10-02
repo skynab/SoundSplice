@@ -129,6 +129,17 @@ inline const juce::KeyPress fitVertically   = detail::with('F', detail::cmd | de
 inline const juce::KeyPress commandPalette = detail::with('P', detail::cmd | detail::shift);
 inline const juce::KeyPress preferences    = detail::with(',', detail::cmd);
 
+// Working the arrangement from the keyboard (MainComponent_Keyboard.cpp).
+inline const juce::KeyPress previousTrack  = detail::with(juce::KeyPress::upKey, detail::alt);
+inline const juce::KeyPress nextTrack      = detail::with(juce::KeyPress::downKey, detail::alt);
+inline const juce::KeyPress previousClip   = detail::with(juce::KeyPress::leftKey, detail::cmd | detail::alt);
+inline const juce::KeyPress nextClip       = detail::with(juce::KeyPress::rightKey, detail::cmd | detail::alt);
+inline const juce::KeyPress nudgeEarlier   = detail::with(juce::KeyPress::leftKey, detail::cmd | detail::shift);
+inline const juce::KeyPress nudgeLater     = detail::with(juce::KeyPress::rightKey, detail::cmd | detail::shift);
+inline const juce::KeyPress selectionStart = detail::with('[', detail::noMods);
+inline const juce::KeyPress selectionEnd   = detail::with(']', detail::noMods);
+inline const juce::KeyPress whereAmI       = detail::with('W', detail::alt);
+
 /** A shortcut with the name of what it does, so a test that finds a bad one
     can say which. */
 struct NamedShortcut
@@ -194,6 +205,16 @@ inline std::vector<NamedShortcut> all()
 
         { "Command Palette", commandPalette },
         { "Preferences",     preferences },
+
+        { "Previous Track",  previousTrack },
+        { "Next Track",      nextTrack },
+        { "Previous Clip",   previousClip },
+        { "Next Clip",       nextClip },
+        { "Nudge Clip Earlier", nudgeEarlier },
+        { "Nudge Clip Later",   nudgeLater },
+        { "Selection Start at Playhead", selectionStart },
+        { "Selection End at Playhead",   selectionEnd },
+        { "Where Am I",      whereAmI },
     };
 }
 

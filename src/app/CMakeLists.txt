@@ -31,6 +31,7 @@ target_sources(SoundSplice PRIVATE
   MainComponent_Effects.cpp
   MainComponent_Finishing.cpp
   MainComponent_Generate.cpp
+  MainComponent_Keyboard.cpp
   MainComponent_ImportExport.cpp
   MainComponent_Layout.cpp
   MainComponent_Loudness.cpp
