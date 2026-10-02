@@ -52,6 +52,7 @@
 #include "ProjectInfoDialog.h"
 #include "RenderQueueDialog.h"
 #include "DeliveryPane.h"
+#include "HistoryPane.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -227,6 +228,7 @@ private:
     void                   showRenderQueue();
     void                   runDeliveryCheck(int spec);
     void                   exportToDeliverySpec(int spec);
+    void                   refreshHistoryPane(bool force = false);
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
     void                   exportCdImage();
@@ -1092,6 +1094,8 @@ private:
     EssentialSoundPane                 essentialSoundPane_;
     ScriptPane                         scriptPane_;
     DeliveryPane                       deliveryPane_;
+    HistoryPane                        historyPane_;
+    unsigned long long                 historyShown_ = 0; // what the History pane last showed (refreshHistoryPane)
     model::EssentialSettings           essentialDragFrom_; // the selected clip's, as a task slider was grabbed
     bool                               essentialDragging_ = false;
     int                                diagnosedClipId_ = 0; // the clip diagnosticsPane_'s rows are for

@@ -348,8 +348,10 @@ voice, podcast and restoration work:
 7. **Loudness-matched A/B against a reference track**, so louder never passes for better
 8. **Preview-before-apply everywhere**, with a bypass toggle and a difference ("what was removed")
    solo for every offline effect, not just some
-9. **Visual history panel**: jump to any undo step, compare it with the current state, and branch
-   from it instead of losing redo
+9. ✅ **Visual history panel**: jump to any undo step, compare it with the current state, and branch
+   from it instead of losing redo: the History pane (View > History) lists every step to go to, compares
+   one with now in plain words (`src/model/SongDiff.h`), and keeps the steps an edit after an undo would
+   have thrown away as branches to switch back to (`src/model/History.h`, `src/app/HistoryPane.h`)
 10. **Multichannel/ambisonic import and export** (REAPER-grade channel counts) for game and
     immersive audio
 11. **Video track for sync**, showing a reference video for dubbing and podcast video (REAPER,

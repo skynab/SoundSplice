@@ -436,6 +436,13 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::projectInfo:      showProjectInfo(); break;
         case commands::exportCdImage:    exportCdImage(); break;
         case commands::renderQueue:      showRenderQueue(); break;
+        case commands::showHistory:
+            if (workspace_.isPanelOpen("History"))
+                workspace_.revealPanel("History");
+            else
+                togglePanel(panelMenuIndex("History"));
+            refreshHistoryPane(true);
+            break;
         case commands::checkDelivery:
             if (workspace_.isPanelOpen("Delivery"))
                 workspace_.revealPanel("Delivery");
@@ -1021,6 +1028,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::snapToClipEdges);
         add(commands::autoCrossfades);
         add(commands::resetLayout);
+        add(commands::showHistory);
         menu.addSeparator();
         {
             juce::PopupMenu navigate;

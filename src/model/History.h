@@ -12,6 +12,15 @@ namespace soundsplice::model
     Each edit records the previous state with a label; undo/redo move between
     snapshots. Simple and correct; a delta-based command history (smaller
     snapshots, the "an AI edit is just a command" seam) is a future refinement.
+
+    **Positions and branches**, for the History pane. The line of states -
+    everything undo reaches, the present, everything redo reaches - is
+    numbered from 0 (the oldest) and can be jumped along. And an edit made
+    after an undo doesn't throw the redo steps away: they're kept as a
+    branch off the state they left from, and switchToBranch makes them the
+    redo steps again (the ones they replace becoming a branch in their turn),
+    so no line of work is lost to a stray edit. A few branches are kept, the
+    oldest let go first.
 */
 template <typename State>
 class History
@@ -49,6 +58,7 @@ public:
         presentId_ = ++lastId_;
         undo_.clear();
         redo_.clear();
+        branches_.clear();
     }
 
     /** Commit a new state as an undoable edit. */
@@ -57,7 +67,7 @@ public:
         undo_.push_back({ std::move(label), present_, presentId_ });
         present_   = std::move(next);
         presentId_ = ++lastId_;
-        redo_.clear();
+        keepRedoAsBranch(undo_.back().id);
     }
 
     /** Mutate a copy of the current state and commit it. */
@@ -81,6 +91,9 @@ public:
             fn(entry.state);
         for (const auto& entry : redo_)
             fn(entry.state);
+        for (const auto& branch : branches_)
+            for (const auto& entry : branch.entries)
+                fn(entry.state);
     }
 
     bool canUndo() const noexcept { return ! undo_.empty(); }
@@ -109,6 +122,88 @@ public:
         redo_.pop_back();
     }
 
+    // ---- positions: the line of states, 0 the oldest
+
+    int size() const noexcept { return (int) (undo_.size() + 1 + redo_.size()); }
+    int position() const noexcept { return (int) undo_.size(); }
+
+    const State& stateAt(int index) const
+    {
+        if (index < (int) undo_.size())
+            return undo_[(size_t) index].state;
+        if (index == (int) undo_.size())
+            return present_;
+        return redo_[redo_.size() - (size_t) (index - (int) undo_.size())].state;
+    }
+
+    /** What made the state at @p index: the edit's label, or empty for the
+        first state. */
+    std::string labelAt(int index) const
+    {
+        if (index <= 0 || index > size() - 1)
+            return {};
+        if (index <= (int) undo_.size())
+            return undo_[(size_t) index - 1].label;
+        return redo_[redo_.size() - (size_t) (index - (int) undo_.size())].label;
+    }
+
+    unsigned long long idAt(int index) const
+    {
+        if (index < (int) undo_.size())
+            return undo_[(size_t) index].id;
+        if (index == (int) undo_.size())
+            return presentId_;
+        return redo_[redo_.size() - (size_t) (index - (int) undo_.size())].id;
+    }
+
+    /** Undoes or redoes to the state at @p index. */
+    void jumpTo(int index)
+    {
+        index = index < 0 ? 0 : index > size() - 1 ? size() - 1 : index;
+        while (position() > index)
+            undo();
+        while (position() < index)
+            redo();
+    }
+
+    // ---- branches
+
+    struct BranchInfo
+    {
+        std::string firstLabel; // the first edit along it
+        int         steps    = 0;
+        int         fromIndex = -1; // where on the line it leaves from; -1: not on this line
+    };
+
+    std::vector<BranchInfo> branches() const
+    {
+        std::vector<BranchInfo> out;
+        for (const auto& branch : branches_)
+            out.push_back({ branch.entries.empty() ? std::string() : branch.entries.back().label,
+                            (int) branch.entries.size(), indexOfId(branch.fromId) });
+        return out;
+    }
+
+    /** Goes to where branch @p which leaves the line, and makes its steps the
+        redo steps. False if it doesn't leave from this line. */
+    bool switchToBranch(int which)
+    {
+        if (which < 0 || which >= (int) branches_.size())
+            return false;
+        const int from = indexOfId(branches_[(size_t) which].fromId);
+        if (from < 0)
+            return false;
+
+        jumpTo(from);
+        auto branch = std::move(branches_[(size_t) which]);
+        branches_.erase(branches_.begin() + which);
+        keepRedoAsBranch(presentId_);
+        redo_ = std::move(branch.entries);
+        return true;
+    }
+
+    static constexpr int kMaxBranches = 12;
+
 private:
     struct Entry
     {
@@ -117,9 +212,36 @@ private:
         unsigned long long id = 0;
     };
 
-    State              present_ {};
-    std::vector<Entry> undo_;
-    std::vector<Entry> redo_;
+    struct Branch
+    {
+        unsigned long long fromId = 0; // the state it leaves from
+        std::vector<Entry> entries;    // as redo_ holds them: the next step last
+    };
+
+    /** The redo steps, kept as a branch off the state @p fromId rather than
+        lost, and cleared. */
+    void keepRedoAsBranch(unsigned long long fromId)
+    {
+        if (redo_.empty())
+            return;
+        branches_.push_back({ fromId, std::move(redo_) });
+        redo_.clear();
+        while ((int) branches_.size() > kMaxBranches)
+            branches_.erase(branches_.begin());
+    }
+
+    int indexOfId(unsigned long long id) const
+    {
+        for (int i = 0; i < size(); ++i)
+            if (idAt(i) == id)
+                return i;
+        return -1;
+    }
+
+    State               present_ {};
+    std::vector<Entry>  undo_;
+    std::vector<Entry>  redo_;
+    std::vector<Branch> branches_;
 
     // Ids are handed out from a counter that only ever increases, so a state
     // reached by a different route is never mistaken for an earlier one.

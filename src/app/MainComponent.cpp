@@ -1,4 +1,5 @@
 #include "MainComponentInternal.h"
+#include "model/SongDiff.h"
 
 #include "model/ArrangementEdits.h"
 
@@ -935,6 +936,31 @@ MainComponent::MainComponent(bool headless)
     workspace_.registerPanel("Essential Sound", essentialSoundPane_);
     workspace_.registerPanel("Script", scriptPane_);
     workspace_.registerPanel("Delivery", deliveryPane_);
+    workspace_.registerPanel("History", historyPane_);
+    historyPane_.onGoTo = [this](int step)
+    {
+        history_.jumpTo(step);
+        refreshFromModel();
+        showStatus("Went to step " + juce::String(step) + (history_.labelAt(step).empty() ? juce::String()
+                                                                                              : ": " + juce::String(history_.labelAt(step))));
+    };
+    historyPane_.onSwitchBranch = [this](int branch)
+    {
+        if (history_.switchToBranch(branch))
+        {
+            refreshFromModel();
+            showStatus("Switched to a branch: redo goes along it");
+        }
+        refreshHistoryPane(true);
+    };
+    historyPane_.onCompare = [this](int step)
+    {
+        juce::StringArray lines;
+        if (step >= 0 && step < history_.size())
+            for (const auto& line : model::differences(history_.stateAt(step), history_.current()))
+                lines.add(juce::String::fromUTF8(line.c_str()));
+        return lines;
+    };
     deliveryPane_.onCheck      = [this](int spec) { runDeliveryCheck(spec); };
     deliveryPane_.onMakeItPass = [this](int spec) { exportToDeliverySpec(spec); };
     workspace_.registerPanel("Automation", automationPane_);
@@ -1300,6 +1326,7 @@ void MainComponent::timerCallback()
 
     engine_.pump();
     finishRecordingIfReady();
+    refreshHistoryPane();
     finishMidiRecordingIfReady();
 
     // Hot-plugged MIDI, on a slow cadence: enumerating devices is a system
@@ -1554,6 +1581,31 @@ void MainComponent::resized()
 
     // Sits over the workspace, against the bottom of the window.
     status_.updateBounds();
+}
+
+/** The History pane, when the history has changed since it last looked:
+    a new edit, an undo, a jump - each moves the state id - or a branch set
+    aside. Cheap to ask every tick; rebuilt only when something moved. */
+void MainComponent::refreshHistoryPane(bool force)
+{
+    const auto signature = history_.stateId() * 1000003ull + (unsigned long long) history_.size() * 131ull
+                         + (unsigned long long) history_.branches().size();
+    if (! force && signature == historyShown_)
+        return;
+    historyShown_ = signature;
+
+    std::vector<HistoryPane::Step> steps;
+    for (int i = 0; i < history_.size(); ++i)
+    {
+        const auto label = history_.labelAt(i);
+        steps.push_back({ i == 0 ? juce::String("Opened") : juce::String::fromUTF8(label.empty() ? "Edit" : label.c_str()),
+                          i == history_.position(), i > history_.position() });
+    }
+    std::vector<HistoryPane::Branch> branches;
+    for (const auto& branch : history_.branches())
+        branches.push_back({ juce::String::fromUTF8(branch.firstLabel.empty() ? "Edit" : branch.firstLabel.c_str()),
+                             branch.steps, branch.fromIndex });
+    historyPane_.setSteps(std::move(steps), std::move(branches));
 }
 
 } // namespace soundsplice

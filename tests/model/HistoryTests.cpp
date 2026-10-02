@@ -216,3 +216,95 @@ TEST_CASE("A drag that goes nowhere leaves no undo step", "[model][history]")
 
     REQUIRE_FALSE(history.canUndo());
 }
+
+TEST_CASE("The history's states can be numbered and jumped between", "[model][history]")
+{
+    History<int> h(0);
+    h.apply(10, "ten");
+    h.apply(20, "twenty");
+    h.apply(30, "thirty");
+    REQUIRE(h.size() == 4);
+    REQUIRE(h.position() == 3);
+    REQUIRE(h.labelAt(0).empty());
+    REQUIRE(h.labelAt(2) == "twenty");
+
+    h.jumpTo(1);
+    REQUIRE(h.current() == 10);
+    REQUIRE(h.position() == 1);
+    REQUIRE(h.size() == 4); // the rest are redo steps, still there
+    REQUIRE(h.stateAt(3) == 30);
+    REQUIRE(h.labelAt(3) == "thirty");
+
+    h.jumpTo(99); // past the end: to the newest
+    REQUIRE(h.current() == 30);
+    h.jumpTo(-5);
+    REQUIRE(h.current() == 0);
+}
+
+TEST_CASE("An edit after an undo keeps the undone steps as a branch", "[model][history]")
+{
+    History<int> h(0);
+    h.apply(1, "one");
+    h.apply(2, "two");
+    h.apply(3, "three");
+    h.jumpTo(1); // at 1; redo holds 2, 3
+
+    h.apply(50, "fifty"); // a new line from 1
+    REQUIRE_FALSE(h.canRedo());
+    auto branches = h.branches();
+    REQUIRE(branches.size() == 1);
+    REQUIRE(branches[0].firstLabel == "two");
+    REQUIRE(branches[0].steps == 2);
+    REQUIRE(branches[0].fromIndex == 1);
+
+    // Back onto the old line: from 1, with 2 and 3 to redo; the new line is
+    // kept as a branch in its turn.
+    REQUIRE(h.switchToBranch(0));
+    REQUIRE(h.current() == 1);
+    h.redo();
+    h.redo();
+    REQUIRE(h.current() == 3);
+    branches = h.branches();
+    REQUIRE(branches.size() == 1);
+    REQUIRE(branches[0].firstLabel == "fifty");
+
+    // Everything any branch holds is still reachable, for whoever needs to
+    // know what files it refers to.
+    std::vector<int> seen;
+    h.forEachState([&](int s) { seen.push_back(s); });
+    REQUIRE(std::find(seen.begin(), seen.end(), 50) != seen.end());
+
+    // A fresh document lets them all go.
+    h.reset(7);
+    REQUIRE(h.branches().empty());
+}
+
+TEST_CASE("A branch off a state that's gone from the line can't be switched to", "[model][history]")
+{
+    History<int> h(0);
+    h.apply(1);
+    h.apply(2);
+    h.undo();
+    h.apply(3); // branch [2] off state 1
+    h.undo();
+    h.undo();   // at 0
+    h.apply(9); // the line through 1 becomes a branch too; the first branch's state is off the line
+    const auto branches = h.branches();
+    REQUIRE(branches.size() == 2);
+    REQUIRE(branches[0].fromIndex == -1);
+    REQUIRE_FALSE(h.switchToBranch(0));
+    REQUIRE(h.switchToBranch(1));
+    REQUIRE(h.current() == 0);
+}
+
+TEST_CASE("Only so many branches are kept", "[model][history]")
+{
+    History<int> h(0);
+    for (int i = 0; i < History<int>::kMaxBranches + 5; ++i)
+    {
+        h.apply(1000 + i);
+        h.undo();
+        h.apply(2000 + i); // the undone one becomes a branch
+    }
+    REQUIRE((int) h.branches().size() == History<int>::kMaxBranches);
+}

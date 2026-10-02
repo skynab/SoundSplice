@@ -234,6 +234,7 @@ enum Id : int
     exportCdImage,
     renderQueue,
     checkDelivery,
+    showHistory,
 };
 
 /** One command's fixed description. */
@@ -432,6 +433,7 @@ inline const std::vector<Definition>& all()
         { previousClip,     "Previous Clip",        "View", "Select the clip before this one on the track, and move the playhead to it.", { keys::previousClip } },
         { nextClip,         "Next Clip",            "View", "Select the clip after this one on the track, and move the playhead to it.", { keys::nextClip } },
         { whereAmI,         "Where Am I",           "View", "Say where the playhead is, and the selected track, clip and time selection.", { keys::whereAmI } },
+        { showHistory,      "History",              "View", "Every undo step: go to any, compare one with now, and get back work an edit after an undo set aside.", {} },
         { resetLayout,      "Reset Layout",         "View", "Put the panes back where this layout starts them.", {} },
         { recordMacro,      "Record Macro",         "Tools", "Start keeping the commands and effects you use, to save as a macro; again to stop and name it.", {} },
         { manageMacros,     "Macros...",            "Tools", "Build, edit and run macros: lists of commands and effects run one after another.", {} },

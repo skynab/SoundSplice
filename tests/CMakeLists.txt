@@ -82,6 +82,7 @@ add_executable(soundsplice_tests
   model/TemplatesTests.cpp
   engine/CdImageTests.cpp
   engine/DeliverySpecTests.cpp
+  model/SongDiffTests.cpp
   model/EssentialSoundTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp
@@ -186,6 +187,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/RenderReportTests.cpp
     gui/RenderQueueTests.cpp
     gui/DeliveryPaneTests.cpp
+    gui/HistoryPaneTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
