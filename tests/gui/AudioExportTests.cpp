@@ -1,3 +1,4 @@
+#include <engine/AudioFormats.h>
 #include <catch2/catch_test_macros.hpp>
 
 #include <engine/AudioExport.h>
@@ -68,7 +69,7 @@ TEST_CASE ("Every export format writes a file a decoder can read back", "[engine
     // AudioFormatManager - which registers the platform's own codecs, so an
     // MP3 is decoded by CoreAudio here rather than by anything of ours.
     juce::AudioFormatManager manager;
-    manager.registerBasicFormats();
+    soundsplice::engine::audioformats::registerAll (manager); // Opus and WavPack are read back by ours
 
     const auto source = makeTestBuffer();
 
@@ -238,7 +239,9 @@ TEST_CASE ("Every quality option the dialog can offer actually produces a file",
     for (auto format : allExportFormats())
     {
         const auto qualities = qualityOptionsFor (format);
-        CHECK (qualities.isEmpty() == usesBitDepth (format));
+        // A quality for every lossy format, and for WavPack its compression
+        // level (the audio is the same at each); none for the rest.
+        CHECK (qualities.isEmpty() == (usesBitDepth (format) && format != ExportFormat::WavPack));
 
         for (int i = 0; i < qualities.size(); ++i)
         {
@@ -335,7 +338,7 @@ TEST_CASE ("The export dialog offers no combination that fails to write", "[gui]
         // A box with nothing to choose is disabled rather than empty, so it
         // reads as "not applicable" instead of "broken".
         CHECK (bitsBox->isEnabled() == usesBitDepth (format));
-        CHECK (qualityBox->isEnabled() == ! usesBitDepth (format));
+        CHECK (qualityBox->isEnabled() == (! usesBitDepth (format) || format == ExportFormat::WavPack));
         CHECK (rateBox->isEnabled());
 
         // Every selectable value in every box, not just the default: the

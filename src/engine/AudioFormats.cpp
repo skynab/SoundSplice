@@ -4,8 +4,13 @@
 #include <cstring>
 #include <vector>
 
+#include <ogg/ogg.h>
+#include <opus.h>
 #include <opusfile.h>
 #include <wavpack.h>
+
+#include "engine/Dither.h"
+#include "engine/Resample.h"
 
 #include "engine/PcmContainers.h"
 
@@ -430,6 +435,211 @@ void audioformats::registerAll(juce::AudioFormatManager& formats)
     formats.registerFormat(new PcmContainerFormat("Wave64 file", { ".w64" }, pcmcontainer::parseWave64), false);
     formats.registerFormat(new PcmContainerFormat("RF64 file", { ".rf64", ".bw64" }, pcmcontainer::parseRf64), false);
     formats.registerFormat(new PcmContainerFormat("CAF file", { ".caf" }, pcmcontainer::parseCaf), false);
+}
+
+namespace audioformats
+{
+    bool writeWavPack(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bits,
+                      int level, bool dither, const ExportTags& tags)
+    {
+        const int channels = audio.getNumChannels();
+        const int frames   = audio.getNumSamples();
+        if (channels <= 0 || frames <= 0 || sampleRate <= 0.0)
+            return false;
+        bits = bits == 16 ? 16 : bits == 32 ? 32 : 24;
+
+        juce::MemoryOutputStream bytes;
+        auto blockOut = [](void* id, void* data, int32_t count)
+        {
+            return static_cast<juce::MemoryOutputStream*>(id)->write(data, (size_t) count) ? 1 : 0;
+        };
+
+        auto* context = WavpackOpenFileOutput(blockOut, &bytes, nullptr);
+        if (context == nullptr)
+            return false;
+
+        WavpackConfig config {};
+        config.num_channels     = channels;
+        config.channel_mask     = channels == 1 ? 4 : channels == 2 ? 3 : 0;
+        config.sample_rate      = (int32_t) std::lround(sampleRate);
+        config.bytes_per_sample = bits / 8;
+        config.bits_per_sample  = bits;
+        config.float_norm_exp   = bits == 32 ? 127 : 0;
+        static constexpr int kLevelFlags[] { CONFIG_FAST_FLAG, 0, CONFIG_HIGH_FLAG, CONFIG_HIGH_FLAG | CONFIG_VERY_HIGH_FLAG };
+        config.flags |= kLevelFlags[juce::jlimit(0, 3, level)];
+
+        bool ok = WavpackSetConfiguration64(context, &config, frames, nullptr) && WavpackPackInit(context);
+
+        // A block at a time, interleaved as WavPack takes it.
+        constexpr int        kBlock = 8192;
+        std::vector<int32_t> interleaved((size_t) kBlock * (size_t) channels);
+        TpdfDither           ditherer(bits);
+        const double         scale = (double) ((int64_t) 1 << (bits - 1));
+        for (int at = 0; ok && at < frames; at += kBlock)
+        {
+            const int n = juce::jmin(kBlock, frames - at);
+            for (int i = 0; i < n; ++i)
+                for (int ch = 0; ch < channels; ++ch)
+                {
+                    float x = audio.getSample(ch, at + i);
+                    auto& out = interleaved[(size_t) (i * channels + ch)];
+                    if (bits == 32)
+                        std::memcpy(&out, &x, 4);
+                    else
+                    {
+                        if (dither)
+                            x = ditherer.processSample(x);
+                        out = (int32_t) juce::jlimit(-scale, scale - 1.0, std::round((double) x * scale));
+                    }
+                }
+            ok = WavpackPackSamples(context, interleaved.data(), (uint32_t) n) != 0;
+        }
+        ok = ok && WavpackFlushSamples(context);
+
+        // APEv2 tags, as WavPack players read them.
+        if (ok && ! tags.empty())
+        {
+            const std::pair<const char*, const juce::String*> items[] {
+                { "Title", &tags.title }, { "Artist", &tags.artist }, { "Album", &tags.album }, { "Year", &tags.year },
+                { "Genre", &tags.genre }, { "Comment", &tags.comment }, { "Track", &tags.track },
+            };
+            for (const auto& [key, value] : items)
+                if (value->isNotEmpty())
+                    WavpackAppendTagItem(context, key, value->toRawUTF8(), (int) value->getNumBytesAsUTF8());
+
+            juce::MemoryBlock image;
+            if (tags.coverArt.existsAsFile() && tags.coverArt.loadFileAsData(image) && image.getSize() > 0)
+            {
+                juce::MemoryOutputStream item; // "name\0" then the image
+                item.write(tags.coverArt.getFileName().toRawUTF8(), tags.coverArt.getFileName().getNumBytesAsUTF8() + 1);
+                item.write(image.getData(), image.getSize());
+                WavpackAppendBinaryTagItem(context, "Cover Art (Front)", static_cast<const char*>(item.getData()),
+                                           (int) item.getDataSize());
+            }
+            ok = WavpackWriteTag(context) != 0;
+        }
+        WavpackCloseFile(context);
+
+        return ok && file.replaceWithData(bytes.getData(), bytes.getDataSize());
+    }
+
+    bool writeOpus(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bitrateKbps,
+                   const ExportTags& tags)
+    {
+        const int sourceFrames = audio.getNumSamples();
+        if (audio.getNumChannels() <= 0 || sourceFrames <= 0 || sampleRate <= 0.0)
+            return false;
+        const int channels = juce::jmin(2, audio.getNumChannels());
+
+        // Opus runs at 48 kHz: anything else is resampled first.
+        std::vector<std::vector<float>> pcm((size_t) channels);
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            pcm[(size_t) ch].assign(audio.getReadPointer(ch), audio.getReadPointer(ch) + sourceFrames);
+            if (std::abs(sampleRate - 48000.0) > 0.5)
+                pcm[(size_t) ch] = Resampler(sampleRate, 48000.0).processAll(pcm[(size_t) ch]);
+        }
+        const int frames = (int) pcm[0].size();
+
+        int  error   = 0;
+        auto encoder = opus_encoder_create(48000, channels, OPUS_APPLICATION_AUDIO, &error);
+        if (encoder == nullptr)
+            return false;
+        opus_encoder_ctl(encoder, OPUS_SET_BITRATE(juce::jlimit(16, 512, bitrateKbps) * 1000));
+        opus_int32 preSkip = 0;
+        opus_encoder_ctl(encoder, OPUS_GET_LOOKAHEAD(&preSkip));
+
+        juce::MemoryOutputStream bytes;
+        ogg_stream_state         stream;
+        ogg_stream_init(&stream, (int) juce::Random::getSystemRandom().nextInt());
+
+        const auto writePages = [&](bool flush)
+        {
+            ogg_page page;
+            while ((flush ? ogg_stream_flush(&stream, &page) : ogg_stream_pageout(&stream, &page)) != 0)
+            {
+                bytes.write(page.header, (size_t) page.header_len);
+                bytes.write(page.body, (size_t) page.body_len);
+            }
+        };
+        const auto submit = [&](const void* data, size_t size, ogg_int64_t granule, bool bos, bool eos, ogg_int64_t number)
+        {
+            ogg_packet packet {};
+            packet.packet     = static_cast<unsigned char*>(const_cast<void*>(data));
+            packet.bytes      = (long) size;
+            packet.b_o_s      = bos ? 1 : 0;
+            packet.e_o_s      = eos ? 1 : 0;
+            packet.granulepos = granule;
+            packet.packetno   = number;
+            ogg_stream_packetin(&stream, &packet);
+        };
+
+        // OpusHead: version, channels, pre-skip, the original rate, no gain,
+        // mapping family 0.
+        {
+            juce::MemoryOutputStream head;
+            head.write("OpusHead", 8);
+            head.writeByte(1);
+            head.writeByte((char) channels);
+            head.writeShort((short) preSkip);
+            head.writeInt((int) std::lround(sampleRate));
+            head.writeShort(0);
+            head.writeByte(0);
+            submit(head.getData(), head.getDataSize(), 0, true, false, 0);
+            writePages(true);
+        }
+
+        // OpusTags: Vorbis comments, and the cover as METADATA_BLOCK_PICTURE.
+        {
+            auto comments = tags::vorbisComments(tags);
+            if (const auto picture = tags::pictureBlock(tags); picture.getSize() > 0)
+                comments.add("METADATA_BLOCK_PICTURE=" + juce::Base64::toBase64(picture.getData(), picture.getSize()));
+            juce::MemoryOutputStream tagPacket;
+            tagPacket.write("OpusTags", 8);
+            const juce::String vendor = juce::String("SoundSplice (") + opus_get_version_string() + ")";
+            tagPacket.writeInt((int) vendor.getNumBytesAsUTF8());
+            tagPacket.write(vendor.toRawUTF8(), vendor.getNumBytesAsUTF8());
+            tagPacket.writeInt(comments.size());
+            for (const auto& comment : comments)
+            {
+                tagPacket.writeInt((int) comment.getNumBytesAsUTF8());
+                tagPacket.write(comment.toRawUTF8(), comment.getNumBytesAsUTF8());
+            }
+            submit(tagPacket.getData(), tagPacket.getDataSize(), 0, false, false, 1);
+            writePages(true);
+        }
+
+        constexpr int              packetFrames = 960; // 20 ms
+        std::vector<float>         block((size_t) (packetFrames * channels));
+        std::vector<unsigned char> encoded(4000);
+        ogg_int64_t                number = 2;
+        bool                       ok     = true;
+
+        // Encoded past the end, to flush the encoder's lookahead out.
+        for (int at = 0; ok && at < frames + preSkip; at += packetFrames, ++number)
+        {
+            for (int n = 0; n < packetFrames; ++n)
+                for (int ch = 0; ch < channels; ++ch)
+                    block[(size_t) (n * channels + ch)] = at + n < frames ? pcm[(size_t) ch][(size_t) (at + n)] : 0.0f;
+
+            const int size = opus_encode_float(encoder, block.data(), packetFrames, encoded.data(), (opus_int32) encoded.size());
+            if (size <= 0)
+            {
+                ok = false;
+                break;
+            }
+            const bool last = at + packetFrames >= frames + preSkip;
+            // A granule position counts decoded samples, pre-skip included;
+            // the last one says where the audio really ends.
+            submit(encoded.data(), (size_t) size, last ? preSkip + frames : at + packetFrames, false, last, number);
+            writePages(false);
+        }
+        writePages(true);
+
+        ogg_stream_clear(&stream);
+        opus_encoder_destroy(encoder);
+        return ok && file.replaceWithData(bytes.getData(), bytes.getDataSize());
+    }
 }
 
 } // namespace soundsplice::engine

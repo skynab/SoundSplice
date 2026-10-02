@@ -191,3 +191,60 @@ TEST_CASE("Project Info edits a copy and hands it back", "[gui][tags]")
     REQUIRE(saved.artist == "Someone");
     REQUIRE(saved.coverArt == "cover.png");
 }
+
+TEST_CASE("WavPack exports are lossless and tagged", "[gui][tags]")
+{
+    JuceFixture fixture;
+    const auto source = tone();
+
+    for (const int bits : { 24, 32 })
+    {
+        INFO(bits);
+        const juce::TemporaryFile out(".wv");
+        engine::ExportOptions options;
+        options.format        = engine::ExportFormat::WavPack;
+        options.sampleRate    = 44100.0;
+        options.bitsPerSample = bits;
+        options.dither        = false;
+        options.tags          = someTags({});
+        REQUIRE(engine::writeAudioFile(out.getFile(), source, options));
+
+        auto decoded = reader(out.getFile());
+        REQUIRE(decoded != nullptr);
+        REQUIRE(decoded->lengthInSamples == source.getNumSamples());
+        juce::AudioBuffer<float> back(2, source.getNumSamples());
+        REQUIRE(decoded->read(&back, 0, back.getNumSamples(), 0, true, true));
+        const float step = bits == 32 ? 0.0f : 1.0f / 8388608.0f;
+        for (int i = 0; i < source.getNumSamples(); i += 37)
+            REQUIRE(std::abs(back.getSample(0, i) - source.getSample(0, i)) <= step);
+
+        juce::MemoryBlock data;
+        REQUIRE(out.getFile().loadFileAsData(data));
+        REQUIRE(contains(data, "APETAGEX"));
+        REQUIRE(contains(data, "The Host"));
+    }
+}
+
+TEST_CASE("Opus exports run at 48 kHz, keep their length, and carry comments", "[gui][tags]")
+{
+    JuceFixture fixture;
+    const juce::TemporaryFile coverFile(".png"), out(".opus");
+
+    engine::ExportOptions options;
+    options.format       = engine::ExportFormat::Opus;
+    options.sampleRate   = 44100.0; // resampled
+    options.qualityIndex = 2;
+    options.tags         = someTags(writeCover(coverFile));
+    REQUIRE(engine::writeAudioFile(out.getFile(), tone(), options));
+
+    auto decoded = reader(out.getFile());
+    REQUIRE(decoded != nullptr);
+    REQUIRE(decoded->sampleRate == 48000.0);
+    REQUIRE(std::abs((double) decoded->lengthInSamples - 48000.0) <= 2.0); // one second, as it went in
+
+    juce::MemoryBlock data;
+    REQUIRE(out.getFile().loadFileAsData(data));
+    REQUIRE(contains(data, "OpusTags"));
+    REQUIRE(contains(data, "ARTIST=The Host"));
+    REQUIRE(contains(data, "METADATA_BLOCK_PICTURE="));
+}

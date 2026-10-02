@@ -246,6 +246,29 @@ namespace tags
         return c;
     }
 
+    /** The cover as a FLAC PICTURE block's body - which is also what Opus and
+        Vorbis carry, base64'd, as METADATA_BLOCK_PICTURE. Empty if there's
+        no cover, or one too big for a block. */
+    inline juce::MemoryBlock pictureBlock(const ExportTags& t)
+    {
+        juce::MemoryBlock image;
+        if (! t.coverArt.existsAsFile() || ! t.coverArt.loadFileAsData(image) || image.getSize() == 0
+            || image.getSize() >= (1u << 24) - 1024)
+            return {};
+
+        juce::MemoryOutputStream picture; // big-endian
+        const auto mime = detail::imageMime(t.coverArt);
+        detail::bigEndian(picture, 3); // front cover
+        detail::bigEndian(picture, (uint32_t) mime.length());
+        picture.write(mime.toRawUTF8(), (size_t) mime.length());
+        detail::bigEndian(picture, 0); // no description
+        for (int i = 0; i < 4; ++i)
+            detail::bigEndian(picture, 0); // width, height, depth, colours: unknown
+        detail::bigEndian(picture, (uint32_t) image.getSize());
+        picture.write(image.getData(), image.getSize());
+        return picture.getMemoryBlock();
+    }
+
     /** @p data with any VORBIS_COMMENT and PICTURE blocks replaced by ones for
         @p t. False if it isn't a FLAC file. */
     inline bool rewriteFlac(juce::MemoryBlock& data, const ExportTags& t)
@@ -297,24 +320,8 @@ namespace tags
             }
             ours.push_back({ 4, comment.getMemoryBlock() });
         }
-        if (t.coverArt.existsAsFile())
-        {
-            juce::MemoryBlock image;
-            if (t.coverArt.loadFileAsData(image) && image.getSize() > 0 && image.getSize() < (1u << 24) - 1024)
-            {
-                juce::MemoryOutputStream picture; // big-endian
-                const auto mime = detail::imageMime(t.coverArt);
-                detail::bigEndian(picture, 3); // front cover
-                detail::bigEndian(picture, (uint32_t) mime.length());
-                picture.write(mime.toRawUTF8(), (size_t) mime.length());
-                detail::bigEndian(picture, 0); // no description
-                for (int i = 0; i < 4; ++i)
-                    detail::bigEndian(picture, 0); // width, height, depth, colours: unknown
-                detail::bigEndian(picture, (uint32_t) image.getSize());
-                picture.write(image.getData(), image.getSize());
-                ours.push_back({ 6, picture.getMemoryBlock() });
-            }
-        }
+        if (auto picture = pictureBlock(t); picture.getSize() > 0)
+            ours.push_back({ 6, std::move(picture) });
         kept.insert(kept.begin() + (kept.empty() ? 0 : 1), ours.begin(), ours.end());
 
         juce::MemoryOutputStream out;

@@ -5,6 +5,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 
 #include "engine/ExportTags.h"
+#include "engine/AudioFormats.h"
 #include "engine/Dither.h"
 #include "engine/Mp3Encoder.h"
 
@@ -27,16 +28,18 @@ enum class ExportFormat
     Aiff,
     Flac,
     OggVorbis,
-    Mp3
+    Mp3,
+    Opus,
+    WavPack,
 };
 
-inline constexpr int kNumExportFormats = 5;
+inline constexpr int kNumExportFormats = 7;
 
 inline const std::array<ExportFormat, kNumExportFormats>& allExportFormats()
 {
     static const std::array<ExportFormat, kNumExportFormats> formats {
-        ExportFormat::Wav, ExportFormat::Aiff, ExportFormat::Flac,
-        ExportFormat::OggVorbis, ExportFormat::Mp3
+        ExportFormat::Wav, ExportFormat::Aiff, ExportFormat::Flac, ExportFormat::WavPack,
+        ExportFormat::OggVorbis, ExportFormat::Opus, ExportFormat::Mp3
     };
     return formats;
 }
@@ -120,6 +123,8 @@ inline juce::String extensionFor (ExportFormat format)
         case ExportFormat::Flac:      return "flac";
         case ExportFormat::OggVorbis: return "ogg";
         case ExportFormat::Mp3:       return "mp3";
+        case ExportFormat::Opus:      return "opus";
+        case ExportFormat::WavPack:   return "wv";
     }
     return "wav";
 }
@@ -135,6 +140,8 @@ inline juce::String displayNameFor (ExportFormat format)
         case ExportFormat::Flac:      return "FLAC (lossless, compressed)";
         case ExportFormat::OggVorbis: return "Ogg Vorbis (lossy)";
         case ExportFormat::Mp3:       return "MP3 (lossy)";
+        case ExportFormat::Opus:      return "Opus (lossy, best for speech and streaming)";
+        case ExportFormat::WavPack:   return "WavPack (lossless, compressed)";
     }
     return "WAV";
 }
@@ -150,6 +157,8 @@ namespace detail
             case ExportFormat::Flac:      return std::make_unique<juce::FlacAudioFormat>();
             case ExportFormat::OggVorbis: return std::make_unique<juce::OggVorbisAudioFormat>();
             case ExportFormat::Mp3:       return std::make_unique<Mp3AudioFormat>();
+            case ExportFormat::Opus:
+            case ExportFormat::WavPack:   break; // written by their own libraries: see writeAudioFile
         }
         return nullptr;
     }
@@ -161,7 +170,8 @@ inline bool usesBitDepth (ExportFormat format)
 {
     return format == ExportFormat::Wav
         || format == ExportFormat::Aiff
-        || format == ExportFormat::Flac;
+        || format == ExportFormat::Flac
+        || format == ExportFormat::WavPack;
 }
 
 /** The bit depths this format can actually write, out of the ones worth
@@ -181,6 +191,8 @@ inline juce::Array<int> possibleBitDepths (ExportFormat format)
         return {};
 
     static const juce::Array<int> worthOffering { 16, 24, 32 };
+    if (format == ExportFormat::WavPack)
+        return worthOffering; // its library takes any of them
 
     juce::Array<int> depths;
     if (auto codec = detail::audioFormatFor (format))
@@ -201,6 +213,10 @@ inline juce::Array<int> possibleSampleRates (ExportFormat format)
     // 44.1 and 48 are the two that matter; the higher pair is for handing work
     // to someone else's session.
     static const juce::Array<int> worthOffering { 44100, 48000, 88200, 96000 };
+    if (format == ExportFormat::WavPack)
+        return worthOffering;
+    if (format == ExportFormat::Opus)
+        return { 48000 }; // what Opus always runs at
 
     juce::Array<int> rates;
     if (auto codec = detail::audioFormatFor (format))
@@ -215,6 +231,10 @@ inline juce::Array<int> possibleSampleRates (ExportFormat format)
     quality is not a choice. */
 inline juce::StringArray qualityOptionsFor (ExportFormat format)
 {
+    if (format == ExportFormat::WavPack)
+        return { "Fast", "Normal", "High", "Very high" }; // how hard it compresses: the audio is the same
+    if (format == ExportFormat::Opus)
+        return { "64 kbps", "96 kbps", "128 kbps", "160 kbps", "192 kbps", "256 kbps" };
     if (usesBitDepth (format))
         return {};
 
@@ -300,6 +320,20 @@ inline bool writeAudioFile (const juce::File& file,
 {
     if (buffer.getNumSamples() <= 0 || buffer.getNumChannels() <= 0)
         return false;
+
+    // The two written by their own libraries.
+    if (options.format == ExportFormat::WavPack || options.format == ExportFormat::Opus)
+    {
+        static constexpr int kOpusKbps[] { 64, 96, 128, 160, 192, 256 };
+        const bool ok = options.format == ExportFormat::WavPack
+                          ? audioformats::writeWavPack (file, buffer, options.sampleRate, options.bitsPerSample,
+                                                        options.qualityIndex, options.dither, options.tags)
+                          : audioformats::writeOpus (file, buffer, options.sampleRate,
+                                                     kOpusKbps[juce::jlimit (0, 5, options.qualityIndex)], options.tags);
+        if (! ok)
+            file.deleteFile();
+        return ok;
+    }
 
     auto format = detail::audioFormatFor (options.format);
     if (format == nullptr)

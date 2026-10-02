@@ -2,6 +2,8 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include "engine/ExportTags.h"
+
 namespace soundsplice::engine
 {
 /**
@@ -19,6 +21,21 @@ namespace audioformats
 {
     /** registerBasicFormats, and the formats above after it. */
     void registerAll(juce::AudioFormatManager& formats);
+
+    /** The two formats written by their own libraries rather than a JUCE
+        writer. Each writes @p audio whole, with @p tags, or nothing.
+
+        WavPack: lossless, @p bits 16, 24 or 32 (float), @p level 0-3 (fast,
+        normal, high, very high), TPDF dither below 32 bits when @p dither;
+        tags as APEv2, the cover as a binary item. */
+    bool writeWavPack(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bits,
+                      int level, bool dither, const ExportTags& tags);
+
+    /** Ogg Opus at @p bitrateKbps, one or two channels, resampled to the
+        48 kHz Opus always runs at (the original rate goes in its header);
+        tags as Vorbis comments, the cover as METADATA_BLOCK_PICTURE. */
+    bool writeOpus(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bitrateKbps,
+                   const ExportTags& tags);
 }
 
 } // namespace soundsplice::engine
