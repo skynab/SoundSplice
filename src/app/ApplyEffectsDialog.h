@@ -33,6 +33,9 @@ public:
     std::function<void(const std::vector<model::EffectSlot>&)> onApply;
     std::function<void()>                                      onCancel;
 
+    /** Save as Favorite, with the chain as it stands (model/Favorites.h). */
+    std::function<void(const std::vector<model::EffectSlot>&)> onSaveFavorite;
+
     /** Preset saving and deleting, passed through from the chain panel: the
         owner holds the preset library (see EffectChainPanel). */
     std::function<void(const model::EffectSlot& slot)>                        onPresetSaveRequested;
@@ -179,6 +182,11 @@ public:
         previewButton_.onClick = [this] { if (onPreview) onPreview(chain_); };
         addAndMakeVisible(previewButton_);
 
+        favoriteButton_.setButtonText("Save as Favorite...");
+        favoriteButton_.setTooltip("Keep this chain under a name, to apply in one click from the Favorites menu");
+        favoriteButton_.onClick = [this] { if (onSaveFavorite) onSaveFavorite(chain_); };
+        addAndMakeVisible(favoriteButton_);
+
         cancelButton_.setButtonText("Cancel");
         cancelButton_.onClick = [this] { if (onCancel) onCancel(); };
         addAndMakeVisible(cancelButton_);
@@ -200,6 +208,7 @@ public:
         auto area = getLocalBounds().reduced(8);
 
         auto buttons = area.removeFromBottom(kButtonRowHeight);
+        favoriteButton_.setBounds(buttons.removeFromLeft(juce::jmax(1, buttons.getWidth() / 4)).reduced(2));
         cancelButton_.setBounds(buttons.removeFromRight(juce::jmax(1, buttons.getWidth() / 3)).reduced(2));
         applyButton_.setBounds(buttons.removeFromRight(juce::jmax(1, buttons.getWidth() / 2)).reduced(2));
         previewButton_.setBounds(buttons.reduced(2));
@@ -217,7 +226,7 @@ private:
     std::vector<model::EffectSlot> chain_;
 
     EffectChainPanel chainPanel_;
-    juce::TextButton previewButton_, applyButton_, cancelButton_;
+    juce::TextButton previewButton_, applyButton_, cancelButton_, favoriteButton_;
     juce::Label      hintLabel_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ApplyEffectsDialog)

@@ -41,6 +41,7 @@
 #include "EqCurveView.h"
 #include "AnalyserPane.h"
 #include "BatchProcess.h"
+#include "model/Favorites.h"
 #include "DiagnosticsPane.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -500,6 +501,10 @@ private:
     bool                   fixDiagnosticRange(engine::diagnostics::Kind kind, AudioRange range);
     void                   removeDcOffsetInSelection();
     void                   startBatchProcess();
+    void                   applyFavorite(int index);
+    void                   promptSaveFavorite(std::vector<model::EffectSlot> chain);
+    void                   removeFavorite(int index);
+    std::vector<model::Favorite> favorites_; // the Favorites menu, kept in the app's settings
     void                   chooseBatchChain(std::vector<juce::File> inputs);
     void                   chooseBatchOptions(std::vector<juce::File> inputs, std::vector<model::EffectSlot> chain);
     void                   runBatch(std::vector<juce::File> inputs, batch::Settings settings);

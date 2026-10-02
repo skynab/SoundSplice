@@ -30,6 +30,7 @@
 #include "engine/OfflineRenderer.h"
 #include "engine/SequenceAudioFormat.h"
 #include "model/RazorEdits.h"
+#include "model/Favorites.h"
 #include "model/Folders.h"
 #include "model/Routing.h"
 #include "model/TempoChanges.h"
@@ -54,6 +55,12 @@ inline constexpr int kFirstPanelMenuId = 100;
     the panel toggles (kFirstPanelMenuId upward), which is the only free
     range — the panel list is unbounded above, so this can't sit past it. */
 inline constexpr int kFirstLayoutMenuId = 40;
+
+// The Favorites menu: one item per favorite to apply, then one per favorite
+// to remove. Under the command ids, and checked before the panel range.
+inline constexpr int kFirstFavoriteMenuId       = 0x1000;
+inline constexpr int kFirstRemoveFavoriteMenuId = 0x1800;
+inline constexpr int kSaveTrackFavoriteMenuId   = 0x1FFF;
 
 /** Colour entries in the per-track gear menu, clear of that menu's own
     fixed items. */

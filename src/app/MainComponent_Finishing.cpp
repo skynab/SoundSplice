@@ -343,6 +343,76 @@ void MainComponent::runBatch(std::vector<juce::File> inputs, batch::Settings set
     renderJob_ = app::OfflineRenderJob::launch("Batch Process", std::move(work), std::move(onFinished));
 }
 
+/** Applies favorite @p index's chain as Apply Effects would: to the time
+    selection across audio tracks if there is one, else the audio editor's
+    selection. */
+void MainComponent::applyFavorite(int index)
+{
+    if (index < 0 || index >= (int) favorites_.size())
+        return;
+
+    const auto& favorite = favorites_[(size_t) index];
+    const auto& tracks   = history_.current().tracks;
+    const bool  onTime   = ! timeSelection_.isEmpty()
+                        && std::any_of(tracks.begin(), tracks.end(), [this](const model::Track& t)
+                                       { return t.type == model::TrackType::Audio && timeSelection_.includes(t.id); });
+    if (onTime)
+        applyEffectsToTimeSelection(favorite.chain);
+    else if (selectedAudioClip() != nullptr && ! audioEditor_.selection().isEmpty())
+        applyEffectsToSelection(favorite.chain);
+    else
+    {
+        showError("Select part of a clip in the audio editor, or time across audio tracks, to apply \""
+                  + juce::String(favorite.name) + "\" to");
+        return;
+    }
+    showStatus("Applied favorite \"" + juce::String(favorite.name) + "\"");
+}
+
+/** Asks for a name and keeps @p chain as a favorite under it. */
+void MainComponent::promptSaveFavorite(std::vector<model::EffectSlot> chain)
+{
+    if (chain.empty())
+    {
+        showError("Add an effect first - a favorite is a chain of them");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Save as Favorite", "The Favorites menu applies it to the selection in one click.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("name", {}, "Name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, chain](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+            const auto name = window->getTextEditorContents("name").trim();
+            if (name.isEmpty())
+            {
+                self->showError("A favorite needs a name");
+                return;
+            }
+            self->favorites_ = model::withFavorite(self->favorites_, { name.toStdString(), chain });
+            self->settings_.setValue("favorites", juce::String(model::serializeFavorites(self->favorites_)));
+            self->settings_.saveIfNeeded();
+            self->showStatus("Saved \"" + name + "\" in the Favorites menu");
+        }));
+}
+
+void MainComponent::removeFavorite(int index)
+{
+    if (index < 0 || index >= (int) favorites_.size())
+        return;
+    const auto name = juce::String(favorites_[(size_t) index].name);
+    favorites_.erase(favorites_.begin() + index);
+    settings_.setValue("favorites", juce::String(model::serializeFavorites(favorites_)));
+    settings_.saveIfNeeded();
+    showStatus("Removed \"" + name + "\" from Favorites");
+}
+
 /** Takes each channel's mean out of the audio editor's selection. */
 void MainComponent::removeDcOffsetInSelection()
 {

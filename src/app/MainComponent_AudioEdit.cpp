@@ -847,6 +847,7 @@ void MainComponent::showApplyEffectsDialog()
     };
 
     auto* raw = dialog.get();
+    raw->onSaveFavorite = [this](const std::vector<model::EffectSlot>& chain) { promptSaveFavorite(withScratchPluginStates(chain)); };
     raw->onApply = [this, raw, onTimeSelection](const std::vector<model::EffectSlot>& chain)
     {
         engine_.stopAudition();

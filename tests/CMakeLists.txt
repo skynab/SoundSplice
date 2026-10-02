@@ -78,6 +78,7 @@ add_executable(soundsplice_tests
   model/RoutingTests.cpp
   model/TempoChangesTests.cpp
   model/WarpTests.cpp
+  model/FavoritesTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp
   model/TimebaseTests.cpp

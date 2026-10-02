@@ -768,7 +768,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View", "Markers", "Transport", "Generate", "Analyze" };
+    return { "File", "Edit", "View", "Markers", "Transport", "Generate", "Analyze", "Favorites" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String&)
@@ -1018,6 +1018,22 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::contrastBackground);
         add(commands::contrast);
     }
+    else if (topLevelMenuIndex == 7) // Favorites: built from what's saved
+    {
+        if (favorites_.empty())
+            menu.addItem(1, "Save one from Apply Effects, or from a track's effects", false, false);
+        for (int i = 0; i < (int) favorites_.size(); ++i)
+            menu.addItem(kFirstFavoriteMenuId + i, favorites_[(size_t) i].name);
+        menu.addSeparator();
+
+        const bool trackHasEffects = selectedTrackIndex_ >= 0 && selectedTrackIndex_ < trackCount()
+                                  && ! history_.current().tracks[(size_t) selectedTrackIndex_].effectChain.empty();
+        menu.addItem(kSaveTrackFavoriteMenuId, "Save Selected Track's Effects as Favorite...", trackHasEffects);
+        juce::PopupMenu remove;
+        for (int i = 0; i < (int) favorites_.size(); ++i)
+            remove.addItem(kFirstRemoveFavoriteMenuId + i, favorites_[(size_t) i].name);
+        menu.addSubMenu("Remove Favorite", remove, ! favorites_.empty());
+    }
 
     return menu;
 }
@@ -1031,6 +1047,22 @@ void MainComponent::menuItemSelected(int menuItemID, int)
         return;
 
     // Checked before the panel range, which is unbounded above.
+    if (menuItemID == kSaveTrackFavoriteMenuId)
+    {
+        if (selectedTrackIndex_ >= 0 && selectedTrackIndex_ < trackCount())
+            promptSaveFavorite(history_.current().tracks[(size_t) selectedTrackIndex_].effectChain);
+        return;
+    }
+    if (menuItemID >= kFirstRemoveFavoriteMenuId)
+    {
+        removeFavorite(menuItemID - kFirstRemoveFavoriteMenuId);
+        return;
+    }
+    if (menuItemID >= kFirstFavoriteMenuId)
+    {
+        applyFavorite(menuItemID - kFirstFavoriteMenuId);
+        return;
+    }
     if (menuItemID >= kFirstLayoutMenuId && menuItemID < kFirstLayoutMenuId + layouts::kNumWorkspaces)
     {
         applyWorkspaceLayout((layouts::Workspace) (menuItemID - kFirstLayoutMenuId));

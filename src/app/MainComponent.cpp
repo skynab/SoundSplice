@@ -895,6 +895,7 @@ MainComponent::MainComponent()
     // The user's saved effect presets. App settings rather than the project:
     // a sound someone has dialled in is reached for across projects.
     userEffectPresets_ = model::deserializeUserPresets(settings_.getValue("effectPresets").toStdString());
+    favorites_         = model::deserializeFavorites(settings_.getValue("favorites").toStdString());
     effectChain_.setUserPresets(userEffectPresets_);
     effectChain_.onPresetSaveRequested = [this](const model::EffectSlot& slot, int) { promptToSaveEffectPreset(slot); };
     effectChain_.onImpulseResponseRequested = [this](int slot, bool browse) { chooseImpulseResponse(slot, browse); };

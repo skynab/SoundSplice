@@ -247,7 +247,8 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ✅ Media browser with **preview** (✅ file browser and preview exist; ✅ metadata columns: rate, channels,
   bit depth and title, read from each header once; ✅ favorites: star a file, and Places > Favorites lists every
   starred file wherever it is)
-- ⬜ **Favorites**: one-click saved actions or effect settings (Audition)
+- ✅ **Favorites**: one-click saved actions or effect settings (Audition): Save as Favorite in Apply Effects, or
+  Favorites > Save Selected Track's Effects; the Favorites menu applies one to the selection (`src/model/Favorites.h`)
 
 ### Phase 7 — Workflow, customization and accessibility (Audacity, REAPER)
 
