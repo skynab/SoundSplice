@@ -316,7 +316,8 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   the export rate, and the conversions that remain (Opus's 48 kHz, `soundsplice-cli convert`) use the
   windowed-sinc resampler (`src/engine/Resample.h`), so r8brain wasn't needed · Export Audio's Dither offers
   noise-shaped (Wannamaker's F-weighted filter at 44.1/48 kHz, second-order above; `src/engine/Dither.h`)
-- ✅ Export selection only (Export Audio > Range) · ⬜ CD image (CUE/BIN) from labels
+- ✅ Export selection only (Export Audio > Range) · ✅ CD image (CUE/BIN) from labels: File > Export CD Image, a
+  track at each marker on CD frames, Red Book limits kept, CD-TEXT from Project Info (`src/engine/CdImage.h`)
 - 🟡 Chapter markers for podcast files (MP3 CHAP, M4A chapters): markers become MP3 CHAP/CTOC chapters and
   FLAC CHAPTERnnn comments, timed from each file's own start ✅ · M4A ⬜ (no AAC encoder)
 

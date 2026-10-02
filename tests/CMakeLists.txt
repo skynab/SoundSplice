@@ -80,6 +80,7 @@ add_executable(soundsplice_tests
   model/WarpTests.cpp
   model/FavoritesTests.cpp
   model/TemplatesTests.cpp
+  engine/CdImageTests.cpp
   model/EssentialSoundTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp

@@ -1,4 +1,5 @@
 #include "engine/ExportLoudness.h"
+#include "engine/CdImage.h"
 #include "ExportNaming.h"
 #include "MainComponentInternal.h"
 
@@ -1013,6 +1014,91 @@ void MainComponent::showProjectInfo()
     options.useNativeTitleBar            = true;
     options.resizable                    = true;
     options.launchAsync();
+}
+
+/** Export CD Image: the mix as a BIN of CD audio (16-bit, 44.1 kHz, dithered)
+    and a CUE sheet with a track at each marker (and CD-TEXT from Project
+    Info), for any burner. Rendered behind a progress window like an export. */
+void MainComponent::exportCdImage()
+{
+    if (renderJob_ != nullptr)
+    {
+        showError("An export is already running");
+        return;
+    }
+
+    chooser_ = std::make_unique<juce::FileChooser>("Export CD Image (a .cue, with its .bin beside it)", juce::File{}, "*.cue");
+    chooser_->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::warnAboutOverwriting,
+                          [this](const juce::FileChooser& fc)
+    {
+        if (fc.getResult() == juce::File{})
+            return;
+        const auto cueFile = fc.getResult().withFileExtension("cue");
+        const auto binFile = cueFile.withFileExtension("bin");
+
+        const auto& song  = history_.current();
+        const auto  clock = model::clockFor(song);
+        std::vector<std::pair<double, std::string>> marks;
+        for (const auto& marker : song.markers)
+            marks.emplace_back(clock.secondsAt(marker.startBeats), marker.name);
+
+        engine::AudioEngine::OfflineRenderOptions render;
+        render.lengthBeats = songEndBeats() + kBounceTailBeats;
+        render.sampleRate  = engine::cdimage::kSampleRate;
+
+        auto cue = std::make_shared<std::string>();
+        auto ok  = std::make_shared<bool>(false);
+        auto trackCount = std::make_shared<int>(0);
+        const auto title     = song.info.album.empty() ? song.info.title : song.info.album;
+        const auto performer = song.info.artist;
+
+        offlineRenderInProgress_ = true;
+        auto work = [this, render, marks, cueFile, binFile, cue, ok, trackCount, title, performer](app::OfflineRenderJob& job) mutable
+        {
+            render.onProgress = [&job](double fraction)
+            {
+                job.report(fraction, "Rendering the CD image");
+                return ! job.shouldAbort();
+            };
+            auto mix = engine_.renderOffline(render);
+            if (mix.getNumSamples() == 0)
+                return;
+
+            // CD audio is 16-bit: dithered, as a 16-bit export would be.
+            engine::TpdfDither left(16, 0x9E3779B9u), right(16, 0x2545F491u);
+            for (int i = 0; i < mix.getNumSamples(); ++i)
+            {
+                mix.setSample(0, i, left.processSample(mix.getSample(0, i)));
+                mix.setSample(1, i, right.processSample(mix.getSample(1, i)));
+            }
+
+            const auto tracks = engine::cdimage::tracksFor(marks, mix.getNumSamples() / (double) engine::cdimage::kSampleRate);
+            const auto bin    = engine::cdimage::binFor(mix.getReadPointer(0), mix.getReadPointer(1), mix.getNumSamples());
+            *cue        = engine::cdimage::cueSheet(binFile.getFileName().toStdString(), tracks, title, performer);
+            *trackCount = (int) tracks.size();
+            *ok = binFile.replaceWithData(bin.data(), bin.size())
+               && cueFile.replaceWithText(juce::String::fromUTF8(cue->c_str()), false, false, nullptr);
+        };
+
+        auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), ok, trackCount, cueFile](bool cancelled)
+        {
+            if (self == nullptr)
+                return;
+            self->offlineRenderInProgress_ = false;
+            self->renderJob_.reset();
+            self->followSystemOutputIfEnabled();
+            if (cancelled)
+                self->showStatus("CD image cancelled");
+            else if (! *ok)
+                self->showError("Could not write " + cueFile.getFileName());
+            else
+                self->showStatus("Exported a CD image: " + cueFile.getFileName() + ", " + juce::String(*trackCount)
+                                 + (*trackCount == 1 ? " track" : " tracks"));
+        };
+
+        renderJob_ = app::OfflineRenderJob::launch("Exporting CD image", std::move(work), std::move(onFinished));
+    });
 }
 
 } // namespace soundsplice

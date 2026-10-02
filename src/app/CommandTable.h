@@ -231,6 +231,7 @@ enum Id : int
     selectionEndAtPlayhead,
     whereAmI,
     projectInfo,
+    exportCdImage,
 };
 
 /** One command's fixed description. */
@@ -258,6 +259,7 @@ inline const std::vector<Definition>& all()
         { importAudio,      "Import Audio to Track...   (or drag files in)", "File", "Add an audio file to a new track.", {} },
         { importMidi,       "Import MIDI...",       "File", "Add the tracks of a MIDI file to the project.", {} },
         { importRawData,    "Import Raw Data...",   "File", "Add a headerless file of samples to a new track, saying how its bytes are stored.", {} },
+        { exportCdImage,    "Export CD Image...",   "File", "Write the mix as a CUE sheet and BIN for burning an audio CD, a track at each marker.", {} },
         { exportMidi,       "Export MIDI...",       "File", "Write the project's notes to a MIDI file.", {} },
         { exportAudio,      "Export Audio...",      "File", "Render the mix, or each track as a stem, to audio files.", { keys::exportAudio } },
         { setProjectRoot,   "Set Project Root Folder...", "File", "Choose the folder the file browser starts in.", {} },

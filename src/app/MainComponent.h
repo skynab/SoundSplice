@@ -218,6 +218,7 @@ private:
                                          app::ExportTagging tagging = app::ExportTagging::InfoAndChapters);
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
+    void                   exportCdImage();
     std::vector<ExportTask> buildExportTasks(const juce::File& masterFile,
                                              const engine::ExportOptions& options,
                                              bool& folderFailed,
