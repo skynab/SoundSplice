@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,26 @@ enum class ClipType
 {
     Instrument, // holds a MIDI Pattern
     Audio       // references an audio file
+};
+
+/** What a clip is, for Essential Sound (model/EssentialSound.h). The
+    numeric values are written to the project file: append, never renumber. */
+enum class SoundRole
+{
+    None     = 0,
+    Dialogue = 1,
+    Music    = 2,
+    Sfx      = 3,
+    Ambience = 4
+};
+
+/** A clip's Essential Sound tag and its task amounts (0-10, by task id). */
+struct EssentialSettings
+{
+    SoundRole                    role = SoundRole::None;
+    std::map<std::string, float> amounts;
+
+    bool operator==(const EssentialSettings&) const = default;
 };
 
 /** One recording of a stretch of an audio clip: the clip can play any of its
@@ -109,6 +130,10 @@ struct Clip
         isn't known). Audio clips only. */
     bool   warp      = false;
     double sourceBpm = 0.0;
+
+    /** Essential Sound: what the clip is, and its tasks' amounts, which make
+        the slots marked EffectSlot::essential in effects above. */
+    EssentialSettings essential;
 
     bool operator==(const Clip&) const = default;
 };

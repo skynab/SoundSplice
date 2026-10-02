@@ -32,6 +32,7 @@ const model::Clip* MainComponent::selectedAudioClip() const
 
 void MainComponent::refreshAudioEditorForSelected()
 {
+    refreshEssentialSoundForSelected();
     const auto* clip = selectedAudioClip();
 
     // Whatever the editor shows is open, however it got there.

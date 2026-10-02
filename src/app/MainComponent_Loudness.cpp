@@ -193,13 +193,14 @@ void MainComponent::showMatchLoudnessDialog()
             const bool limiting = limit->getToggleState();
             self->settings_.setValue("loudnessTarget", kLoudnessTargets[index].lufs);
             self->settings_.setValue("loudnessLimitPeak", limiting);
-            self->matchLoudness(kLoudnessTargets[index].lufs, limiting);
+            self->matchLoudness(app::clipsToMatch(self->history_.current(), self->timeSelection_, self->selectedTrackIndex_),
+                                kLoudnessTargets[index].lufs, limiting);
         }));
 }
 
 /** Measures every clip to match, each as it plays without its gain, on a
     background job, then sets all their gains as one undo step. */
-void MainComponent::matchLoudness(double targetLufs, bool limitTruePeak)
+void MainComponent::matchLoudness(const std::vector<app::MatchedClip>& clips, double targetLufs, bool limitTruePeak)
 {
     if (renderJob_ != nullptr)
     {
@@ -219,7 +220,7 @@ void MainComponent::matchLoudness(double targetLufs, bool limitTruePeak)
     auto items = std::make_shared<std::vector<Item>>();
 
     const auto& song = history_.current();
-    for (const auto& match : app::clipsToMatch(song, timeSelection_, selectedTrackIndex_))
+    for (const auto& match : clips)
     {
         const auto* track = model::findTrack(song, match.trackId);
         const auto  found = std::find_if(track->clips.begin(), track->clips.end(),

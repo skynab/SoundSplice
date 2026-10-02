@@ -699,6 +699,11 @@ struct EffectSlot
     // (model::canBeKeyed); a track that has gone means its own input again.
     int                sidechainTrackId = 0;
 
+    // Made by Essential Sound from a clip's task amounts (model/
+    // EssentialSound.h), and rebuilt by it whenever they change; a slot added
+    // by hand never is.
+    bool               essential = false;
+
     // Automation for this effect's parameters, keyed by descriptor id (see
     // model/EffectParams.h). Kept on the slot rather than the track so the
     // lanes move with the effect when the chain is reordered, and go with it

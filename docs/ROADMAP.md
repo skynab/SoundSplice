@@ -231,8 +231,11 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 ### Phase 6 — Audition's "finishing" workflows
 
-- ⬜ **Essential Sound panel**: tag a clip as Dialogue, Music, SFX or Ambience to get a simple task
-  panel (loudness match, repair, clarity, ducking) that drives the real effects underneath
+- ✅ **Essential Sound panel**: tag a clip as Dialogue, Music, SFX or Ambience to get a simple task
+  panel (loudness match, repair, clarity, ducking) that drives the real effects underneath: the Essential Sound
+  pane (beside Mastering); each task is an amount that builds marked slots at the front of the clip's own effects
+  (rumble, noise, sibilance, clarity, dynamics, width), Match All matches every clip with the tag, and Music and
+  Ambience duck under the Dialogue clips as editable volume curves (`src/model/EssentialSound.h`)
 - ✅ **Match loudness across clips** (Edit > Match Loudness: every audio clip the time selection touches, or the
   selected track's, each measured and its clip gain set to one LUFS target, true peak held under -1 dBTP; one undo step;
   `src/app/LoudnessMatch.h`)

@@ -1,6 +1,7 @@
 #include "MainComponentInternal.h"
 
 #include "engine/Diagnostics.h"
+#include "model/EssentialSound.h"
 #include "app/ApplyEffectsDialog.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -411,6 +412,137 @@ void MainComponent::removeFavorite(int index)
     settings_.setValue("favorites", juce::String(model::serializeFavorites(favorites_)));
     settings_.saveIfNeeded();
     showStatus("Removed \"" + name + "\" from Favorites");
+}
+
+/** The Essential Sound pane shows the selected audio clip's tag. */
+void MainComponent::refreshEssentialSoundForSelected()
+{
+    const auto* clip = selectedAudioClip();
+    if (clip == nullptr)
+    {
+        essentialSoundPane_.setClip(false, model::SoundRole::None, {}, {});
+        return;
+    }
+    essentialSoundPane_.setClip(true, clip->essential.role, clip->essential.amounts,
+                                juce::File(clip->audioFile).getFileNameWithoutExtension());
+}
+
+/** Tags the selected audio clip (or clears its tag), as one undo step. */
+void MainComponent::setEssentialRole(model::SoundRole role)
+{
+    if (selectedAudioClip() == nullptr)
+        return;
+    const int trackIndex = selectedTrackIndex_, clipIndex = selectedClipIndex_;
+    history_.edit(role == model::SoundRole::None ? "Clear Essential Sound tag" : "Tag clip",
+                  [trackIndex, clipIndex, role](model::Song& s)
+    {
+        model::essential::setRole(s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex], role);
+    });
+    syncEngineTracks();
+    refreshEffectChainForSelected();
+    refreshEssentialSoundForSelected();
+}
+
+/** A task's amount, live as its slider moves; the drag is committed as one
+    undo step on release (endEssentialDrag). */
+void MainComponent::setEssentialAmount(const std::string& task, float amount)
+{
+    if (selectedAudioClip() == nullptr)
+        return;
+    auto& clip = history_.mutableCurrent().tracks[(size_t) selectedTrackIndex_].clips[(size_t) selectedClipIndex_];
+    if (! essentialDragging_)
+    {
+        // A click or a wheel turn: its own undo step.
+        const auto before = clip.essential;
+        model::essential::setAmount(clip, task, amount);
+        const auto after = clip.essential;
+        clip.essential = before;
+        model::essential::apply(clip);
+        const int trackIndex = selectedTrackIndex_, clipIndex = selectedClipIndex_;
+        history_.edit("Essential Sound", [trackIndex, clipIndex, after](model::Song& s)
+        {
+            auto& c     = s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+            c.essential = after;
+            model::essential::apply(c);
+        });
+    }
+    else
+        model::essential::setAmount(clip, task, amount);
+
+    syncEngineTracks();
+    refreshEffectChainForSelected();
+}
+
+void MainComponent::endEssentialDrag()
+{
+    if (! essentialDragging_ || selectedAudioClip() == nullptr)
+        return;
+    essentialDragging_ = false;
+
+    const int  trackIndex = selectedTrackIndex_, clipIndex = selectedClipIndex_;
+    const auto landed     = selectedAudioClip()->essential;
+    commitStructDrag(history_, std::string("Essential Sound"), essentialDragFrom_, landed,
+                     [trackIndex, clipIndex](model::Song& s, const model::EssentialSettings& settings)
+                     {
+                         auto& c     = s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
+                         c.essential = settings;
+                         model::essential::apply(c);
+                     });
+}
+
+/** Match Loudness over every clip tagged @p role, wherever it is. */
+void MainComponent::matchLoudnessForRole(model::SoundRole role, double lufs)
+{
+    std::vector<app::MatchedClip> clips;
+    for (const auto& track : history_.current().tracks)
+        for (const auto& clip : track.clips)
+            if (clip.type == model::ClipType::Audio && clip.essential.role == role)
+                clips.push_back({ track.id, clip.id });
+    if (clips.empty())
+        return;
+    matchLoudness(clips, lufs, true);
+}
+
+/** Ducks every clip tagged @p role under the Dialogue clips: a volume curve
+    dipping @p depthDb wherever Dialogue plays (Auto Duck's curves, so each
+    stays editable). Tracks holding Dialogue themselves are left alone. */
+void MainComponent::duckUnderDialogue(model::SoundRole role, float depthDb)
+{
+    const auto& song = history_.current();
+    std::vector<std::pair<double, double>> dialogue;
+    std::vector<int> dialogueTracks, ducked;
+    for (const auto& track : song.tracks)
+        for (const auto& clip : track.clips)
+        {
+            if (clip.essential.role == model::SoundRole::Dialogue)
+            {
+                dialogue.emplace_back(clip.startBeats, clip.startBeats + clip.lengthBeats);
+                dialogueTracks.push_back(track.id);
+            }
+            else if (clip.essential.role == role)
+                ducked.push_back(track.id);
+        }
+
+    std::sort(ducked.begin(), ducked.end());
+    ducked.erase(std::unique(ducked.begin(), ducked.end()), ducked.end());
+    ducked.erase(std::remove_if(ducked.begin(), ducked.end(), [&](int id)
+                 { return std::find(dialogueTracks.begin(), dialogueTracks.end(), id) != dialogueTracks.end(); }),
+                 ducked.end());
+
+    if (dialogue.empty() || ducked.empty())
+    {
+        showError(dialogue.empty() ? "Tag some clips as Dialogue first"
+                                   : "Those clips share a track with Dialogue - put them on a track of their own to duck them");
+        return;
+    }
+
+    // Gaps under a second between lines don't let the bed back up.
+    const auto merged = model::arrangeedit::mergeRegions(dialogue, model::clockFor(song).beatsAfter(0.0, 1.0));
+    const auto gain   = juce::Decibels::decibelsToGain(depthDb);
+    int        count  = 0;
+    history_.edit("Duck under dialogue", [&](model::Song& s) { count = model::arrangeedit::duckClips(s, ducked, merged, gain, 0.4); });
+    refreshAfterArrangementEdit();
+    showStatus("Ducked " + juce::String(count) + " clips " + juce::String(-depthDb, 1) + " dB under the dialogue");
 }
 
 /** Takes each channel's mean out of the audio editor's selection. */

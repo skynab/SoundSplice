@@ -19,7 +19,7 @@ namespace
         that the two agree. */
     const std::set<std::string> kRegisteredPanels {
         "Files", "Transport", "Tracks", "Keys",
-        "Audio", "Open Files", "Mastering", "Analyser", "Diagnostics", "Session", "Track FX", "Mixer", "Master", "Keyboard"
+        "Audio", "Open Files", "Mastering", "Analyser", "Diagnostics", "Essential Sound", "Session", "Track FX", "Mixer", "Master", "Keyboard"
     };
 }
 

@@ -914,6 +914,7 @@ MainComponent::MainComponent()
     workspace_.registerPanel("Mastering", masteringPane_);
     workspace_.registerPanel("Analyser", analyserPane_);
     workspace_.registerPanel("Diagnostics", diagnosticsPane_);
+    workspace_.registerPanel("Essential Sound", essentialSoundPane_);
     workspace_.registerPanel("Automation", automationPane_);
     workspace_.registerPanel("Session", sessionView_);
     workspace_.registerPanel("Track FX", effectChain_);
@@ -1022,6 +1023,20 @@ MainComponent::MainComponent()
     {
         swipeCompTake(trackIndex, take, fromBeats, toBeats);
     };
+
+    essentialSoundPane_.onRoleChosen      = [this](model::SoundRole role) { setEssentialRole(role); };
+    essentialSoundPane_.onAmountChanged   = [this](const std::string& task, float v) { setEssentialAmount(task, v); };
+    essentialSoundPane_.onAmountDragStart = [this](const std::string&)
+    {
+        if (const auto* clip = selectedAudioClip())
+        {
+            essentialDragFrom_ = clip->essential;
+            essentialDragging_ = true;
+        }
+    };
+    essentialSoundPane_.onAmountDragEnd   = [this](const std::string&) { endEssentialDrag(); };
+    essentialSoundPane_.onMatchLoudness   = [this](model::SoundRole role, double lufs) { matchLoudnessForRole(role, lufs); };
+    essentialSoundPane_.onDuck            = [this](model::SoundRole role, float depthDb) { duckUnderDialogue(role, depthDb); };
 
     diagnosticsPane_.onScan   = [this] { runDiagnostics(); };
     diagnosticsPane_.onSelect = [this](const DiagnosticsPane::Row& row) { selectDiagnostic(row); };

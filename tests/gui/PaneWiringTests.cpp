@@ -8,6 +8,7 @@
 #include <app/EffectChainPanel.h>
 #include <app/FileBrowserPanel.h>
 #include <app/DiagnosticsPane.h>
+#include <app/EssentialSoundPane.h>
 #include <app/MixerStrip.h>
 #include <app/OpenFilesPane.h>
 #include <app/SessionView.h>
@@ -420,4 +421,35 @@ TEST_CASE("The Diagnostics pane's Fix reports the selected problem", "[gui][wiri
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     REQUIRE(fixed == engine::diagnostics::Kind::Silence);
     REQUIRE(DiagnosticsPane::describe(pane.rows()[1]).startsWith("Silence"));
+}
+
+TEST_CASE("The Essential Sound pane offers its tag's tasks and reports them", "[gui][wiring]")
+{
+    JuceFixture fixture;
+
+    EssentialSoundPane pane;
+    pane.setSize(360, 420);
+    REQUIRE(pane.taskCountForTesting() == 0);
+    REQUIRE_FALSE(pane.roleButtonForTesting(0).isEnabled()); // no clip
+
+    model::SoundRole chosen = model::SoundRole::None;
+    std::string      task;
+    float            amount = -1.0f;
+    pane.onRoleChosen    = [&](model::SoundRole role) { chosen = role; };
+    pane.onAmountChanged = [&](const std::string& t, float v) { task = t; amount = v; };
+
+    pane.setClip(true, model::SoundRole::None, {}, "take");
+    pane.roleButtonForTesting(0).triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    REQUIRE(chosen == model::SoundRole::Dialogue);
+
+    pane.setClip(true, model::SoundRole::Dialogue, { { "deEss", 3.0f } }, "take");
+    REQUIRE(pane.taskCountForTesting() == 5);
+    REQUIRE(pane.taskSliderForTesting(2).getValue() == 3.0); // shown, without reporting
+    REQUIRE(amount < 0.0f);
+
+    pane.taskSliderForTesting(0).setValue(6.0);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // the slider tells its listeners async
+    REQUIRE(task == "rumble");
+    REQUIRE(amount == 6.0f);
 }

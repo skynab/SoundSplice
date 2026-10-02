@@ -88,6 +88,13 @@ namespace detail
             out << "CLIPAUTOXF " << (clip.autoFadeIn ? 1 : 0) << " " << (clip.autoFadeOut ? 1 : 0) << "\n";
         if (clip.warp || clip.sourceBpm > 0.0)
             out << "CLIPWARP " << (clip.warp ? 1 : 0) << " " << num(clip.sourceBpm) << "\n";
+        if (clip.essential.role != SoundRole::None)
+        {
+            out << "CLIPESSENTIAL " << (int) clip.essential.role << " " << clip.essential.amounts.size();
+            for (const auto& [task, amount] : clip.essential.amounts)
+                out << " " << task << " " << num((double) amount);
+            out << "\n";
+        }
 
         // Only when there's a curve: a clip without one reads back as unity.
         if (! clip.envelope.isEmpty())
@@ -172,6 +179,8 @@ namespace detail
 
         if (slot.sidechainTrackId != 0)
             out << "FXKEY " << slot.sidechainTrackId << "\n";
+        if (slot.essential)
+            out << "FXESSENTIAL 1\n";
 
         if (slot.kind == EffectKind::Plugin)
         {
@@ -569,6 +578,8 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
         if (readTagged("FXKEY", rest))
             slot.sidechainTrackId = std::atoi(rest.c_str());
+        if (readTagged("FXESSENTIAL", rest))
+            slot.essential = std::atoi(rest.c_str()) != 0;
 
         if (slot.kind == EffectKind::Plugin)
         {
@@ -654,6 +665,21 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             int warp = 0;
             ws >> warp >> clip.sourceBpm;
             clip.warp = warp != 0 && clip.sourceBpm > 0.0;
+        }
+
+        if (readTagged("CLIPESSENTIAL", rest))
+        {
+            std::istringstream es(rest);
+            int role = 0, count = 0;
+            es >> role >> count;
+            clip.essential.role = role >= 1 && role <= 4 ? (SoundRole) role : SoundRole::None;
+            for (int i = 0; i < count; ++i)
+            {
+                std::string task;
+                double      amount = 0.0;
+                if (es >> task >> amount)
+                    clip.essential.amounts[task] = (float) amount;
+            }
         }
 
         if (readTagged("CLIPENV", rest))

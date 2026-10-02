@@ -43,6 +43,8 @@
 #include "BatchProcess.h"
 #include "model/Favorites.h"
 #include "DiagnosticsPane.h"
+#include "EssentialSoundPane.h"
+#include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
 #include "AudioEditorPane.h"
@@ -502,13 +504,19 @@ private:
     void                   removeDcOffsetInSelection();
     void                   startBatchProcess();
     void                   applyFavorite(int index);
+    void                   refreshEssentialSoundForSelected();
+    void                   setEssentialRole(model::SoundRole role);
+    void                   setEssentialAmount(const std::string& task, float amount);
+    void                   endEssentialDrag();
+    void                   matchLoudnessForRole(model::SoundRole role, double lufs);
+    void                   duckUnderDialogue(model::SoundRole role, float depthDb);
     void                   promptSaveFavorite(std::vector<model::EffectSlot> chain);
     void                   removeFavorite(int index);
     std::vector<model::Favorite> favorites_; // the Favorites menu, kept in the app's settings
     void                   chooseBatchChain(std::vector<juce::File> inputs);
     void                   chooseBatchOptions(std::vector<juce::File> inputs, std::vector<model::EffectSlot> chain);
     void                   runBatch(std::vector<juce::File> inputs, batch::Settings settings);
-    void                   matchLoudness(double targetLufs, bool limitTruePeak);
+    void                   matchLoudness(const std::vector<app::MatchedClip>& clips, double targetLufs, bool limitTruePeak);
 
     /** Samples [from, to) counted from the clip's start, one vector per
         channel; only those samples are read. Empty if they can't be. */
@@ -974,6 +982,9 @@ private:
     MasteringPane                      masteringPane_; // ditto — see updateMasteringControls
     AnalyserPane                       analyserPane_;
     DiagnosticsPane                    diagnosticsPane_;
+    EssentialSoundPane                 essentialSoundPane_;
+    model::EssentialSettings           essentialDragFrom_; // the selected clip's, as a task slider was grabbed
+    bool                               essentialDragging_ = false;
     int                                diagnosedClipId_ = 0; // the clip diagnosticsPane_'s rows are for
     app::OpenFiles                     openFiles_;
     OpenFilesPane                      openFilesPane_;
