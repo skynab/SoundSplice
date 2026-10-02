@@ -4,6 +4,7 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include "engine/ExportTags.h"
 #include "engine/Dither.h"
 #include "engine/Mp3Encoder.h"
 
@@ -103,6 +104,10 @@ struct ExportOptions
         truePeakCeilingDb. 0 leaves the loudness as it is. */
     double       loudnessLufs      = 0.0;
     double       truePeakCeilingDb = -1.0;
+
+    /** Tags and chapters, in whichever form the format has (ExportTags.h).
+        Empty writes none. */
+    ExportTags   tags;
 };
 
 /** The file extension, without the dot. */
@@ -314,7 +319,10 @@ inline bool writeAudioFile (const juce::File& file,
     auto writerOptions = juce::AudioFormatWriterOptions{}
                              .withSampleRate (options.sampleRate)
                              .withNumChannels (buffer.getNumChannels())
-                             .withQualityOptionIndex (options.qualityIndex);
+                             .withQualityOptionIndex (options.qualityIndex)
+                             .withMetadataValues (tags::writerMetadata (options.tags,
+                                                                        options.format == ExportFormat::Wav,
+                                                                        options.format == ExportFormat::OggVorbis));
 
     if (usesBitDepth (options.format))
     {
@@ -359,10 +367,14 @@ inline bool writeAudioFile (const juce::File& file,
     // where a meaningful part of the data gets written.
     writer.reset();
 
-    if (! ok)
+    // The tags the writer had no way to take: FLAC's blocks and MP3's ID3.
+    const bool tagged = ok && tags::finishFile (file, options.format == ExportFormat::Flac,
+                                                options.format == ExportFormat::Mp3, options.tags);
+
+    if (! ok || ! tagged)
         file.deleteFile();
 
-    return ok;
+    return ok && tagged;
 }
 
 } // namespace soundsplice::engine

@@ -386,6 +386,23 @@ inline std::string serialize(const Song& song)
             << detail::num((double) m.outputGainDb) << "\n";
     }
     out << "PROJECTROOT " << song.projectRootFolder << "\n";
+
+    // Project info, one optional record per field that's set: META <key>
+    // <value to the end of the line>. A line break in a value would end the
+    // record, so it's written as a space.
+    {
+        auto info = song.info;
+        info.forEachField([&out](const char* key, std::string& value)
+        {
+            if (value.empty())
+                return;
+            std::string flat = value;
+            for (auto& c : flat)
+                if (c == '\n' || c == '\r')
+                    c = ' ';
+            out << "META " << key << " " << flat << "\n";
+        });
+    }
     out << "AUTO " << song.masterGainDb.points().size() << "\n";
     for (const auto& p : song.masterGainDb.points())
         detail::writePoint(out, "APT", p);
@@ -914,6 +931,18 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
 
     if (readTagged("PROJECTROOT", rest))
         song.projectRootFolder = rest;
+
+    while (readTagged("META", rest))
+    {
+        const auto space = rest.find(' ');
+        const auto key   = rest.substr(0, space);
+        const auto value = space == std::string::npos ? std::string() : rest.substr(space + 1);
+        song.info.forEachField([&](const char* name, std::string& field)
+        {
+            if (key == name)
+                field = value;
+        });
+    }
 
     if (readTagged("AUTO", rest))
     {

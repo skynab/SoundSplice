@@ -263,6 +263,24 @@ TEST_CASE("A project with Windows line endings opens the same", "[model][io]")
     REQUIRE(restored == original);
 }
 
+TEST_CASE("Project info round-trips, line breaks flattened", "[model][io]")
+{
+    Song original = makeSampleSong();
+    original.info.title    = "Episode 12: The One With Spaces";
+    original.info.artist   = "The Host";
+    original.info.comment  = "first line";
+    original.info.coverArt = "C:/Art/cover art.png";
+
+    Song restored;
+    REQUIRE(deserialize(serialize(original), restored));
+    REQUIRE(restored.info == original.info);
+
+    original.info.comment = "two\nlines";
+    REQUIRE(deserialize(serialize(original), restored));
+    REQUIRE(restored.info.comment == "two lines");
+    REQUIRE(restored.tracks == original.tracks); // nothing after it was disturbed
+}
+
 TEST_CASE("An empty song round-trips", "[model][io]")
 {
     const Song original;

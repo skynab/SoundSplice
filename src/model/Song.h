@@ -37,6 +37,31 @@ struct Marker
     bool operator==(const Marker&) const = default;
 };
 
+/** What an exported file says about itself (its tags): ID3 in an MP3,
+    Vorbis comments in FLAC and Ogg, INFO and bext in a WAV. Kept with the
+    project, so every export of it carries the same. */
+struct ProjectInfo
+{
+    std::string title, artist, album, year, genre, comment, track;
+    std::string coverArt; // an image file, for the formats that carry one
+
+    bool operator==(const ProjectInfo&) const = default;
+
+    /** Each field by the key the project file and the tags use. */
+    template <typename Fn>
+    void forEachField(Fn&& fn)
+    {
+        fn("title", title);
+        fn("artist", artist);
+        fn("album", album);
+        fn("year", year);
+        fn("genre", genre);
+        fn("comment", comment);
+        fn("track", track);
+        fn("cover", coverArt);
+    }
+};
+
 struct Song
 {
     /** The tempo at the start of the song; tempoChanges holds any after it
@@ -64,6 +89,9 @@ struct Song
     // project so it's the same on every machine that opens it. Empty =
     // unset. See the file-manager's "Places" entry for it.
     std::string projectRootFolder;
+
+    ProjectInfo info; // File > Project Info; written into exports
+
 
     bool operator==(const Song&) const = default;
 };

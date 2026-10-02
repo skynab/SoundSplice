@@ -16,6 +16,24 @@ enum class ExportRange
     MarkerRanges,  // one file per marker range, named from a pattern
 };
 
+/** Whether the files carry the project's info as tags, and its markers as
+    chapters. */
+enum class ExportTagging
+{
+    InfoAndChapters,
+    InfoOnly,
+    None,
+};
+
+/** Everything the dialog asks. */
+struct ExportChoice
+{
+    engine::ExportOptions options;
+    ExportRange           range       = ExportRange::Project;
+    juce::String          namePattern = "$project - $region";
+    ExportTagging         tagging     = ExportTagging::InfoAndChapters;
+};
+
 /** The loudness targets offered, and what each is for. */
 struct ExportLoudnessTarget
 {
@@ -58,7 +76,7 @@ public:
                       double defaultSampleRate,
                       bool hasTimeSelection,
                       int markerRangeCount,
-                      std::function<void (engine::ExportOptions, ExportRange, juce::String)> onAccepted)
+                      std::function<void (ExportChoice)> onAccepted)
     {
         auto* window = new juce::AlertWindow ("Export Audio", {},
                                               juce::MessageBoxIconType::NoIcon, parent);
@@ -75,7 +93,7 @@ public:
                 if (result != 1 || ! onAccepted)
                     return;
 
-                onAccepted (readOptions (*window), readRange (*window), readNamePattern (*window));
+                onAccepted (readChoice (*window));
             }));
     }
 
@@ -125,6 +143,10 @@ public:
         rangeBox->setSelectedId (1 + (int) ExportRange::Project, juce::dontSendNotification);
 
         window.addTextEditor ("names", "$project - $region", "File names ($project $region $index $date):");
+
+        window.addComboBox ("tags", { "Project info, and markers as chapters", "Project info only", "None" },
+                            "Tags (File > Project Info):");
+        window.getComboBoxComponent ("tags")->setSelectedItemIndex (0, juce::dontSendNotification);
         refreshNamesEnablement (window);
         rangeBox->onChange = [&window] { refreshNamesEnablement (window); };
 
@@ -191,6 +213,17 @@ public:
                                                  contentsBox->getSelectedItemIndex());
 
         return options;
+    }
+
+    static ExportChoice readChoice (juce::AlertWindow& window)
+    {
+        ExportChoice choice;
+        choice.options     = readOptions (window);
+        choice.range       = readRange (window);
+        choice.namePattern = readNamePattern (window);
+        if (auto* tags = window.getComboBoxComponent ("tags"))
+            choice.tagging = (ExportTagging) juce::jlimit (0, 2, tags->getSelectedItemIndex());
+        return choice;
     }
 
     static ExportRange readRange (juce::AlertWindow& window)

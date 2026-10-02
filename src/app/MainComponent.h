@@ -49,6 +49,7 @@
 #include "MacrosDialog.h"
 #include "ScriptPane.h"
 #include "ExportAudioDialog.h"
+#include "ProjectInfoDialog.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -213,7 +214,10 @@ private:
     struct ExportTask;
     void                   exportProject(const engine::ExportOptions& options,
                                          app::ExportRange range = app::ExportRange::Project,
-                                         juce::String namePattern = {});
+                                         juce::String namePattern = {},
+                                         app::ExportTagging tagging = app::ExportTagging::InfoAndChapters);
+    engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
+    void                   showProjectInfo();
     std::vector<ExportTask> buildExportTasks(const juce::File& masterFile,
                                              const engine::ExportOptions& options,
                                              bool& folderFailed,

@@ -301,7 +301,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - 🟡 **Export multiple**: one file per label, region or track, with **filename wildcards**: Export Audio's Range
   writes one file per marker range, named by a pattern ($project $region $index $date), with stems per range
   when asked; per track is stems (`src/app/ExportNaming.h`). One file per point label ⬜
-- ⬜ **Metadata**: ID3, Vorbis comments, BWF/iXML, cover art
+- ✅ **Metadata**: ID3, Vorbis comments, BWF/iXML, cover art: File > Project Info (kept in the project); Export
+  Audio's Tags writes ID3v2.4 with APIC into MP3, Vorbis comments and a PICTURE block into FLAC, Vorbis comments
+  into Ogg, and RIFF INFO plus BWF bext into WAV (`src/engine/ExportTags.h`). iXML ⬜
 - ✅ **Loudness-normalize on export** and a true-peak limiter: Export Audio's Loudness (-14 to -24 LUFS, true
   peak under -1 dBTP; the limiter is run until the true peak fits); stems get the mix's gain so they still sum;
   `soundsplice-cli render --loudness` (`src/engine/ExportLoudness.h`)
@@ -309,7 +311,8 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ⬜ **Render statistics report**: peak, LUFS over time, and a clip list, as HTML (REAPER)
 - ⬜ High-quality sample-rate conversion (r8brain-free is MIT) · noise-shaped dither
 - ✅ Export selection only (Export Audio > Range) · ⬜ CD image (CUE/BIN) from labels
-- ⬜ Chapter markers for podcast files (MP3 CHAP, M4A chapters)
+- 🟡 Chapter markers for podcast files (MP3 CHAP, M4A chapters): markers become MP3 CHAP/CTOC chapters and
+  FLAC CHAPTERnnn comments, timed from each file's own start ✅ · M4A ⬜ (no AAC encoder)
 
 ### Phase 9 — Beyond the three (differentiators)
 

@@ -384,11 +384,10 @@ void MainComponent::exportAudioDialog()
             ++markerRanges;
 
     app::ExportAudioDialog::show(this, deviceRate, ! timeSelection_.isEmpty(), markerRanges,
-        [self = juce::Component::SafePointer<MainComponent>(this)](engine::ExportOptions options, app::ExportRange range,
-                                                                   juce::String pattern)
+        [self = juce::Component::SafePointer<MainComponent>(this)](app::ExportChoice choice)
         {
             if (self != nullptr)
-                self->exportProject(options, range, pattern);
+                self->exportProject(choice.options, choice.range, choice.namePattern, choice.tagging);
         });
 }
 
@@ -401,8 +400,14 @@ struct MainComponent::ExportTask
     juce::String                                 label; // shown in the progress window
 };
 
-void MainComponent::exportProject(const engine::ExportOptions& options, app::ExportRange range, juce::String namePattern)
+void MainComponent::exportProject(const engine::ExportOptions& chosen, app::ExportRange range, juce::String namePattern,
+                                  app::ExportTagging tagging)
 {
+    // The tags for the whole project; buildExportTasks gives each file its
+    // own chapters, for the stretch of time it covers.
+    auto options = chosen;
+    options.tags = exportTagsFor(0.0, -1.0, tagging);
+
     if (renderJob_ != nullptr)
     {
         showError("An export is already running");
@@ -472,11 +477,17 @@ MainComponent::buildExportTasks(const juce::File& masterFile,
     if (lengthBeats < 0.0)
         lengthBeats = songEndBeats() + kBounceTailBeats;
 
+    // This file's chapters: the markers inside the stretch it covers, timed
+    // from its start. Only when the export asked for chapters at all.
+    auto ranged = options;
+    if (! options.tags.chapters.empty())
+        ranged.tags.chapters = exportTagsFor(startBeats, lengthBeats, app::ExportTagging::InfoAndChapters).chapters;
+
     if (engine::writesMasterMix(options.contents))
     {
         ExportTask task;
         task.file  = masterFile;
-        task.write = options;
+        task.write = ranged;
         task.label = "master mix";
         // Everything the mix contains, rendered by the mixer itself — see
         // AudioEngine::renderOffline, and the comment there for why an export
@@ -514,7 +525,9 @@ MainComponent::buildExportTasks(const juce::File& masterFile,
         // screen even when a muted track in the middle has been skipped.
         task.file  = folder.getChildFile(
             app::stemFileName(i + 1, song.tracks[(size_t) i].name, extension));
-        task.write = options;
+        task.write = ranged;
+        task.write.tags.title = task.write.tags.title.isEmpty() ? juce::String(song.tracks[(size_t) i].name)
+                                                                : task.write.tags.title + " - " + juce::String(song.tracks[(size_t) i].name);
         task.label = juce::String(song.tracks[(size_t) i].name);
 
         task.render.startBeats     = startBeats;
@@ -883,7 +896,9 @@ bool MainComponent::renderHeadless(const juce::File& project, const juce::File& 
     savedStateId_ = history_.stateId();
 
     bool folderFailed = false;
-    const auto tasks  = buildExportTasks(out, options, folderFailed);
+    auto withTags     = options;
+    withTags.tags     = exportTagsFor(0.0, -1.0, app::ExportTagging::InfoAndChapters);
+    const auto tasks  = buildExportTasks(out, withTags, folderFailed);
     if (folderFailed)
     {
         report = "Could not create the stems folder beside " + out.getFullPathName();
@@ -921,6 +936,83 @@ bool MainComponent::renderHeadless(const juce::File& project, const juce::File& 
         }
     }
     return ok;
+}
+
+/** The project's info as tags, and - for @p tagging with chapters - its
+    markers inside [@p startBeats, + @p lengthBeats) as chapters timed from
+    @p startBeats, each running to the next (the last to the end). A
+    negative length is the whole project. */
+engine::ExportTags MainComponent::exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const
+{
+    engine::ExportTags tags;
+    if (tagging == app::ExportTagging::None)
+        return tags;
+
+    const auto& song = history_.current();
+    const auto  text = [](const std::string& s) { return juce::String::fromUTF8(s.c_str()); };
+    tags.title   = text(song.info.title);
+    tags.artist  = text(song.info.artist);
+    tags.album   = text(song.info.album);
+    tags.year    = text(song.info.year);
+    tags.genre   = text(song.info.genre);
+    tags.comment = text(song.info.comment);
+    tags.track   = text(song.info.track);
+    if (! song.info.coverArt.empty())
+        tags.coverArt = juce::File(text(song.info.coverArt));
+
+    if (tagging != app::ExportTagging::InfoAndChapters)
+        return tags;
+
+    if (lengthBeats < 0.0)
+        lengthBeats = songEndBeats() + kBounceTailBeats;
+    const double endBeats = startBeats + lengthBeats;
+    const auto   clock    = model::clockFor(song);
+
+    auto markers = song.markers;
+    std::stable_sort(markers.begin(), markers.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
+    for (const auto& marker : markers)
+    {
+        if (marker.startBeats < startBeats - 1.0e-9 || marker.startBeats >= endBeats)
+            continue;
+        engine::ExportChapter chapter;
+        chapter.startSeconds = clock.secondsBetween(startBeats, marker.startBeats);
+        chapter.title        = text(marker.name);
+        if (! tags.chapters.empty())
+            tags.chapters.back().endSeconds = chapter.startSeconds;
+        tags.chapters.push_back(chapter);
+    }
+    if (! tags.chapters.empty())
+        tags.chapters.back().endSeconds = clock.secondsBetween(startBeats, endBeats);
+    return tags;
+}
+
+/** File > Project Info: the tags every export carries. */
+void MainComponent::showProjectInfo()
+{
+    auto dialog = std::make_unique<ProjectInfoDialog>(history_.current().info);
+    auto* raw   = dialog.get();
+    raw->onSave = [this, raw](const model::ProjectInfo& info)
+    {
+        if (info != history_.current().info)
+            history_.edit("Edit project info", [info](model::Song& s) { s.info = info; });
+        updateWindowTitle();
+        if (auto* window = raw->findParentComponentOfClass<juce::DialogWindow>())
+            window->exitModalState(0);
+    };
+    raw->onCancel = [raw]
+    {
+        if (auto* window = raw->findParentComponentOfClass<juce::DialogWindow>())
+            window->exitModalState(0);
+    };
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog.release());
+    options.dialogTitle                  = "Project Info";
+    options.dialogBackgroundColour       = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = true;
+    options.resizable                    = true;
+    options.launchAsync();
 }
 
 } // namespace soundsplice

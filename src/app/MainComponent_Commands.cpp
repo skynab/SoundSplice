@@ -433,6 +433,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::selectionStartAtPlayhead: setSelectionEdgeAtPlayhead(true); break;
         case commands::selectionEndAtPlayhead:   setSelectionEdgeAtPlayhead(false); break;
         case commands::whereAmI:         announceWhereAmI(); break;
+        case commands::projectInfo:      showProjectInfo(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -828,6 +829,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::saveProject);
         add(commands::saveProjectAs);
         add(commands::saveAsTemplate);
+        add(commands::projectInfo);
         menu.addSeparator();
         add(commands::previewAudioFile);
         add(commands::importAudio);

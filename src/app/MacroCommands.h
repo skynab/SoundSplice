@@ -21,6 +21,7 @@ inline bool recordable(const commands::Definition& definition)
         case commands::runMacroOnFiles:
         case commands::runScript:
         case commands::preferences:
+        case commands::projectInfo:
         case commands::followSystemOutput:
             return false;
         default:
