@@ -45,6 +45,7 @@
 #include "DiagnosticsPane.h"
 #include "EssentialSoundPane.h"
 #include "CommandPalette.h"
+#include "KeyboardShortcutsDialog.h"
 #include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -647,10 +648,12 @@ private:
     void                   notePluginStateToEngine(const PluginSlotAddress& at, const std::string& state);
     int                    pluginStateSyncTicks_ = 0;
     void                   showPluginManager();
+    void                   showKeyboardShortcuts();
     void                   pluginListsChanged();
 
     // The plugin manager while it's open, to refresh after a scan.
     juce::Component::SafePointer<class PluginManagerDialog> pluginManager_;
+    juce::Component::SafePointer<KeyboardShortcutsDialog>   shortcutsDialog_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   addBusTrack();
     void                   toggleClipWarp(int trackIndex, int clipId);

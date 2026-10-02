@@ -21,6 +21,8 @@ MainComponent::MainComponent()
     // field still gets its own keys first.
     commandManager_.registerAllCommandsForTarget(this);
     commandManager_.setFirstCommandTarget(this);
+    if (const auto custom = shortcutsets::fromXml(settings_.getValue("shortcuts")))
+        shortcutsets::apply(*commandManager_.getKeyMappings(), *custom);
     addKeyListener(commandManager_.getKeyMappings());
     setApplicationCommandManagerToWatch(&commandManager_);
 

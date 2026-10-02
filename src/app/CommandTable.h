@@ -214,6 +214,7 @@ enum Id : int
     pluginManager,
     batchProcess,
     commandPalette,
+    keyboardShortcuts,
 };
 
 /** One command's fixed description. */
@@ -243,6 +244,7 @@ inline const std::vector<Definition>& all()
         { exportAudio,      "Export Audio...",      "File", "Render the mix, or each track as a stem, to audio files.", { keys::exportAudio } },
         { setProjectRoot,   "Set Project Root Folder...", "File", "Choose the folder the file browser starts in.", {} },
         { audioSettings,    "Audio Settings...",    "File", "Choose the audio and MIDI devices.", {} },
+        { keyboardShortcuts, "Keyboard Shortcuts...", "File", "Change the key for any command, and import or export a set of shortcuts.", {} },
         { followSystemOutput, "Follow System Output Device", "File", "Switch output when the system's default device changes.", {} },
         { recordingFormat,  "Recording Format...",  "File", "Choose the bit depth, mono or stereo, and which inputs takes are recorded from.", {} },
         { measureLatency,   "Measure Recording Latency...", "File", "Time a click through a cable from an output to an input, so recordings line up exactly.", {} },

@@ -405,6 +405,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::pluginManager:    showPluginManager(); break;
         case commands::batchProcess:     startBatchProcess(); break;
         case commands::commandPalette:   showCommandPalette(); break;
+        case commands::keyboardShortcuts: showKeyboardShortcuts(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -798,6 +799,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::setProjectRoot);
         menu.addSeparator();
         add(commands::audioSettings);
+        add(commands::keyboardShortcuts);
         // Right next to Audio Settings, which is where anyone whose sound is
         // coming out of the wrong device goes looking.
         add(commands::followSystemOutput);
@@ -1104,6 +1106,39 @@ std::vector<palette::Entry> MainComponent::paletteEntries()
     }
 
     return entries;
+}
+
+/** Keyboard Shortcuts: changes take effect at once and are saved as they're
+    made, as the commands whose keys differ from the defaults. */
+void MainComponent::showKeyboardShortcuts()
+{
+    if (shortcutsDialog_ != nullptr)
+    {
+        if (auto* window = shortcutsDialog_->findParentComponentOfClass<juce::DialogWindow>())
+            window->toFront(true);
+        return;
+    }
+
+    auto dialog       = std::make_unique<KeyboardShortcutsDialog>(*commandManager_.getKeyMappings());
+    dialog->onChanged = [this]
+    {
+        const auto custom = shortcutsets::customised(*commandManager_.getKeyMappings());
+        if (custom.empty())
+            settings_.removeValue("shortcuts");
+        else
+            settings_.setValue("shortcuts", shortcutsets::toXml(custom));
+        settings_.saveIfNeeded();
+    };
+    shortcutsDialog_ = dialog.get();
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog.release());
+    options.dialogTitle                  = "Keyboard Shortcuts";
+    options.dialogBackgroundColour       = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = true;
+    options.resizable                    = true;
+    options.launchAsync();
 }
 
 void MainComponent::showCommandPalette()

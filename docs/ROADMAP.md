@@ -257,7 +257,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 - ⬜ **Macros**: record or build a list of commands and effects with settings, then run it on the
   selection or a batch of files (Audacity Macros, REAPER Actions)
-- ⬜ **Customizable keyboard shortcuts**, with importable and exportable sets
+- ✅ **Customizable keyboard shortcuts**, with importable and exportable sets: File > Keyboard Shortcuts;
+  saved by command name with portable key names ("Cmd+Shift+Left") so a set survives new commands and moves
+  between Windows and macOS (`src/app/ShortcutSets.h`, `src/app/KeyboardShortcutsDialog.h`)
 - ✅ **Command palette** (search every command by name): View > Command Palette (Ctrl+Shift+P) lists every
   command, pane, layout and Favorite; fuzzy matching on the name or category, recently run ones first, greyed
   when unavailable, with each one's shortcut (`src/app/CommandPalette.h`)
