@@ -57,6 +57,13 @@ inline constexpr int kFirstPanelMenuId = 100;
     range — the panel list is unbounded above, so this can't sit past it. */
 inline constexpr int kFirstLayoutMenuId = 40;
 
+// Saved screensets in View > Layout: applying one (60-77), removing one
+// (78-95), and Save Current Layout As (99). Below the panel toggles.
+inline constexpr int kFirstScreensetMenuId       = 60;
+inline constexpr int kFirstRemoveScreensetMenuId = 78;
+inline constexpr int kMaxScreensets              = 18;
+inline constexpr int kSaveScreensetMenuId        = 99;
+
 // The Favorites menu: one item per favorite to apply, then one per favorite
 // to remove. Under the command ids, and checked before the panel range.
 inline constexpr int kFirstFavoriteMenuId       = 0x1000;

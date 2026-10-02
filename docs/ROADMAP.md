@@ -273,7 +273,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   stopped if it runs too long (`src/app/Scripting.h`, `src/app/ScriptPane.h`)
 - ⬜ **Accessibility**: full keyboard operation of tracks, clips and selections; screen-reader
   announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit)
-- ⬜ Themes and custom colors; saved screensets (✅ layouts exist)
+- ✅ Themes and custom colors; saved screensets (✅ layouts exist): Preferences > Display picks Dark,
+  Midnight, Grey or High Contrast, an accent (a list or any colour), and keyboard focus rings; panes take
+  their surfaces from the theme by role (`src/app/Theme.h`). All are dark: the panes draw light text of their
+  own. View > Layout saves the current arrangement under a name and puts it back (`src/app/Screensets.h`)
 - ✅ Preferences dialog (devices, formats, editing defaults, paths, cache): File > Preferences (Ctrl+,), tabs
   for devices, recording format and latency, editing and display, folders (recordings and edits now
   configurable) and the cache, and keyboard. Most rows run the command the menus already have, so there is one

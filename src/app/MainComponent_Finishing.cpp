@@ -1342,4 +1342,55 @@ void MainComponent::chooseCustomAccent(juce::Component& near)
     juce::CallOutBox::launchAsynchronously(std::move(picker), near.getScreenBounds().removeFromRight(40), nullptr);
 }
 
+// ---- Screensets --------------------------------------------------------------
+
+/** Puts a saved arrangement of the panes back, in place of this one. */
+void MainComponent::applyScreenset(int index)
+{
+    if (index < 0 || index >= (int) screensets_.size())
+        return;
+    const auto& set = screensets_[(size_t) index];
+    if (! workspace_.restoreLayout(set.layout))
+    {
+        showError("\"" + set.name + "\" names panes this version doesn't have");
+        return;
+    }
+    saveDockLayout(); // it's what's on screen now: what the next launch opens with
+    showStatus("Layout \"" + set.name + "\"");
+}
+
+void MainComponent::promptSaveScreenset()
+{
+    auto* window = new juce::AlertWindow("Save Current Layout", "View > Layout puts it back.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("name", "My Layout " + juce::String((int) screensets_.size() + 1), "Name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+            const auto name = window->getTextEditorContents("name").trim();
+            if (name.isEmpty())
+                return;
+            self->screensets_ = screensets::with(self->screensets_, { name, self->workspace_.saveLayout() });
+            self->settings_.setValue("screensets", screensets::serialize(self->screensets_));
+            self->settings_.saveIfNeeded();
+            self->showStatus("Saved layout \"" + name + "\" in View > Layout");
+        }));
+}
+
+void MainComponent::removeScreenset(int index)
+{
+    if (index < 0 || index >= (int) screensets_.size())
+        return;
+    const auto name = screensets_[(size_t) index].name;
+    screensets_.erase(screensets_.begin() + index);
+    settings_.setValue("screensets", screensets::serialize(screensets_));
+    settings_.saveIfNeeded();
+    showStatus("Removed layout \"" + name + "\"");
+}
+
 } // namespace soundsplice

@@ -50,6 +50,7 @@
 #include "ScriptPane.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
+#include "Screensets.h"
 #include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -670,6 +671,9 @@ private:
     void                   saveAsTemplate();
     void                   showPreferences(int tab = 0);
     void                   applyTheme();
+    void                   applyScreenset(int index);
+    void                   promptSaveScreenset();
+    void                   removeScreenset(int index);
     void                   chooseCustomAccent(juce::Component& near);
     std::vector<prefs::Page> preferencePages();
     bool                   applyChainToSelection(const std::vector<model::EffectSlot>& chain, const juce::String& what);
@@ -709,6 +713,7 @@ private:
     std::optional<macros::Macro>   recordingMacro_;
     bool                           runningMacro_ = false;
     bool                           headless_     = false;
+    std::vector<screensets::Screenset> screensets_; // View > Layout, kept in the app's settings
     CommandSpy                     commandSpy_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   addBusTrack();

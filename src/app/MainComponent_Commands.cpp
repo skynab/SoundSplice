@@ -949,6 +949,16 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
             layoutMenu.addItem(kFirstLayoutMenuId + i, layouts::workspaceName(workspace),
                                true, workspace == activeWorkspace_);
         }
+        if (! screensets_.empty())
+            layoutMenu.addSeparator();
+        for (int i = 0; i < (int) screensets_.size() && i < kMaxScreensets; ++i)
+            layoutMenu.addItem(kFirstScreensetMenuId + i, screensets_[(size_t) i].name);
+        layoutMenu.addSeparator();
+        layoutMenu.addItem(kSaveScreensetMenuId, "Save Current Layout As...", (int) screensets_.size() < kMaxScreensets);
+        juce::PopupMenu removeMenu;
+        for (int i = 0; i < (int) screensets_.size() && i < kMaxScreensets; ++i)
+            removeMenu.addItem(kFirstRemoveScreensetMenuId + i, screensets_[(size_t) i].name);
+        layoutMenu.addSubMenu("Remove Saved Layout", removeMenu, ! screensets_.empty());
         menu.addSubMenu("Layout", layoutMenu);
 
         juce::PopupMenu timeMenu;
@@ -1143,6 +1153,17 @@ std::vector<palette::Entry> MainComponent::paletteEntries()
         entries.push_back(std::move(entry));
     }
 
+    for (int i = 0; i < (int) screensets_.size(); ++i)
+    {
+        palette::Entry entry;
+        entry.name        = "Layout: " + screensets_[(size_t) i].name;
+        entry.category    = "View";
+        entry.description = "A saved arrangement of the panes.";
+        entry.key         = "screenset:" + screensets_[(size_t) i].name;
+        entry.run         = [this, i] { applyScreenset(i); };
+        entries.push_back(std::move(entry));
+    }
+
     for (int i = 0; i < (int) favorites_.size(); ++i)
     {
         palette::Entry entry;
@@ -1278,6 +1299,21 @@ void MainComponent::menuItemSelected(int menuItemID, int)
     if (menuItemID >= kFirstTemplateMenuId && menuItemID < kFirstTemplateMenuId + (int) std::size(model::templates::kAll))
     {
         newFromTemplate(model::templates::make(model::templates::kAll[menuItemID - kFirstTemplateMenuId]));
+        return;
+    }
+    if (menuItemID == kSaveScreensetMenuId)
+    {
+        promptSaveScreenset();
+        return;
+    }
+    if (menuItemID >= kFirstRemoveScreensetMenuId && menuItemID < kFirstRemoveScreensetMenuId + kMaxScreensets)
+    {
+        removeScreenset(menuItemID - kFirstRemoveScreensetMenuId);
+        return;
+    }
+    if (menuItemID >= kFirstScreensetMenuId && menuItemID < kFirstScreensetMenuId + kMaxScreensets)
+    {
+        applyScreenset(menuItemID - kFirstScreensetMenuId);
         return;
     }
     if (menuItemID >= kFirstLayoutMenuId && menuItemID < kFirstLayoutMenuId + layouts::kNumWorkspaces)

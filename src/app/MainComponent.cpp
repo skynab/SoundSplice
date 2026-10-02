@@ -902,6 +902,7 @@ MainComponent::MainComponent(bool headless)
     userEffectPresets_ = model::deserializeUserPresets(settings_.getValue("effectPresets").toStdString());
     favorites_         = model::deserializeFavorites(settings_.getValue("favorites").toStdString());
     macros_            = macros::deserialize(settings_.getValue("macros"));
+    screensets_        = screensets::deserialize(settings_.getValue("screensets"));
 
     // The Script pane keeps what's in it between runs of the app.
     scriptPane_.setCode(settings_.getValue("script.text",
