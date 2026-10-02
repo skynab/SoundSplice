@@ -1,7 +1,10 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <iterator>
+#include <vector>
 
 namespace soundsplice::engine
 {
@@ -94,6 +97,69 @@ private:
 
     float    lsb_   = 1.0f / 32768.0f;
     uint32_t state_ = 0x9E3779B9u;
+};
+
+/**
+    Noise-shaped dither: TPDF dither whose requantisation error is fed back
+    through a filter, so the noise moves out of the 1-5 kHz region the ear is
+    most sensitive to and up towards Nyquist, where it's far less audible.
+    Worth most for a 16-bit master; more total noise, heard as less.
+
+    Unlike TpdfDither this quantises itself - the feedback needs the error,
+    and the error needs the rounding - so what it returns is already on the
+    word's grid, and the writer's own conversion leaves it exactly as it is.
+
+    At 44.1 and 48 kHz the filter is Wannamaker's nine-tap F-weighted
+    ("Psychoacoustically optimal noise shaping", JAES 1992), designed against
+    the ear's threshold curve. Above that the curve's shape is mostly beyond
+    hearing anyway, and a plain second-order high-pass shape is used.
+
+    One per channel: the feedback is the channel's own history.
+*/
+class NoiseShapedDither
+{
+public:
+    NoiseShapedDither(int bitsPerSample, double sampleRate, uint32_t seed = 0x9E3779B9u) noexcept
+        : tpdf_(bitsPerSample, seed)
+    {
+        static constexpr double kFWeighted[] { 2.412, -3.370, 3.937, -4.174, 3.353, -2.205, 1.281, -0.569, 0.0847 };
+        static constexpr double kSecondOrder[] { 2.0, -1.0 };
+        if (sampleRate < 50000.0)
+            coefficients_.assign(std::begin(kFWeighted), std::end(kFWeighted));
+        else
+            coefficients_.assign(std::begin(kSecondOrder), std::end(kSecondOrder));
+        errors_.assign(coefficients_.size(), 0.0);
+    }
+
+    float lsb() const noexcept { return tpdf_.lsb(); }
+
+    /** @p input, shaped, dithered and rounded to the word's grid. */
+    float processSample(float input) noexcept
+    {
+        const double lsb = tpdf_.lsb();
+
+        double feedback = 0.0;
+        for (size_t k = 0; k < coefficients_.size(); ++k)
+            feedback += coefficients_[k] * errors_[k];
+        const double shaped = (double) input - feedback;
+
+        const double dithered = (double) tpdf_.processSample((float) shaped);
+        const double top      = 1.0 - lsb;
+        const double out      = std::clamp(std::round(dithered / lsb) * lsb, -1.0, top);
+
+        // Held to a few LSBs: when the output clips, the error is the clip,
+        // not noise, and feeding that back would ring the filter.
+        const double error = std::clamp(out - shaped, -4.0 * lsb, 4.0 * lsb);
+        for (size_t k = errors_.size() - 1; k > 0; --k)
+            errors_[k] = errors_[k - 1];
+        errors_[0] = error;
+        return (float) out;
+    }
+
+private:
+    TpdfDither          tpdf_;
+    std::vector<double> coefficients_;
+    std::vector<double> errors_;
 };
 
 } // namespace soundsplice::engine

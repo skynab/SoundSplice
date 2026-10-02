@@ -440,7 +440,7 @@ void audioformats::registerAll(juce::AudioFormatManager& formats)
 namespace audioformats
 {
     bool writeWavPack(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bits,
-                      int level, bool dither, const ExportTags& tags)
+                      int level, bool dither, const ExportTags& tags, bool noiseShaping)
     {
         const int channels = audio.getNumChannels();
         const int frames   = audio.getNumSamples();
@@ -474,6 +474,10 @@ namespace audioformats
         constexpr int        kBlock = 8192;
         std::vector<int32_t> interleaved((size_t) kBlock * (size_t) channels);
         TpdfDither           ditherer(bits);
+        std::vector<NoiseShapedDither> shapers;
+        if (dither && noiseShaping && bits < 32)
+            for (int ch = 0; ch < channels; ++ch)
+                shapers.emplace_back(bits, sampleRate, 0x9E3779B9u + 0x1000193u * (uint32_t) ch);
         const double         scale = (double) ((int64_t) 1 << (bits - 1));
         for (int at = 0; ok && at < frames; at += kBlock)
         {
@@ -487,7 +491,9 @@ namespace audioformats
                         std::memcpy(&out, &x, 4);
                     else
                     {
-                        if (dither)
+                        if (! shapers.empty())
+                            x = shapers[(size_t) ch].processSample(x);
+                        else if (dither)
                             x = ditherer.processSample(x);
                         out = (int32_t) juce::jlimit(-scale, scale - 1.0, std::round((double) x * scale));
                     }

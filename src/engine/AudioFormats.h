@@ -29,7 +29,7 @@ namespace audioformats
         normal, high, very high), TPDF dither below 32 bits when @p dither;
         tags as APEv2, the cover as a binary item. */
     bool writeWavPack(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bits,
-                      int level, bool dither, const ExportTags& tags);
+                      int level, bool dither, const ExportTags& tags, bool noiseShaping = false);
 
     /** Ogg Opus at @p bitrateKbps, one or two channels, resampled to the
         48 kHz Opus always runs at (the original rate goes in its header);

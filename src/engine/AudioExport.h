@@ -102,6 +102,10 @@ struct ExportOptions
         formats, which do their own thing entirely. */
     bool         dither        = true;
 
+    /** With dither: shape its noise out of the ear's most sensitive band
+        (engine::NoiseShapedDither). For a 16-bit master, mostly. */
+    bool         noiseShaping  = false;
+
     /** Loudness-normalize on export (engine/ExportLoudness.h): the mix
         brought to this many LUFS with its true peak held under
         truePeakCeilingDb. 0 leaves the loudness as it is. */
@@ -278,6 +282,13 @@ namespace detail
         const int  channels = buffer.getNumChannels();
         TpdfDither dither (options.bitsPerSample);
 
+        // Shaped: one per channel, each with its own feedback and its own
+        // noise (seeded apart, so the channels' noise isn't correlated).
+        std::vector<NoiseShapedDither> shapers;
+        if (options.noiseShaping)
+            for (int ch = 0; ch < channels; ++ch)
+                shapers.emplace_back (options.bitsPerSample, options.sampleRate, 0x9E3779B9u + 0x1000193u * (uint32_t) ch);
+
         juce::AudioBuffer<float> block (channels, juce::jmin (kBlock, total));
 
         for (int pos = 0; pos < total; pos += kBlock)
@@ -294,8 +305,12 @@ namespace detail
                 // independent noise. Sharing it would put a correlated hiss
                 // dead centre in the stereo image, which is exactly where a
                 // listener notices it.
-                for (int i = 0; i < n; ++i)
-                    out[i] = dither.processSample (in[i]);
+                if (! shapers.empty())
+                    for (int i = 0; i < n; ++i)
+                        out[i] = shapers[(size_t) ch].processSample (in[i]);
+                else
+                    for (int i = 0; i < n; ++i)
+                        out[i] = dither.processSample (in[i]);
             }
 
             if (! writer.writeFromAudioSampleBuffer (block, 0, n))
@@ -327,7 +342,7 @@ inline bool writeAudioFile (const juce::File& file,
         static constexpr int kOpusKbps[] { 64, 96, 128, 160, 192, 256 };
         const bool ok = options.format == ExportFormat::WavPack
                           ? audioformats::writeWavPack (file, buffer, options.sampleRate, options.bitsPerSample,
-                                                        options.qualityIndex, options.dither, options.tags)
+                                                        options.qualityIndex, options.dither, options.tags, options.noiseShaping)
                           : audioformats::writeOpus (file, buffer, options.sampleRate,
                                                      kOpusKbps[juce::jlimit (0, 5, options.qualityIndex)], options.tags);
         if (! ok)

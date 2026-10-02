@@ -312,7 +312,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   `soundsplice-cli render --loudness` (`src/engine/ExportLoudness.h`)
 - ⬜ **Render queue** and saved render presets
 - ⬜ **Render statistics report**: peak, LUFS over time, and a clip list, as HTML (REAPER)
-- ⬜ High-quality sample-rate conversion (r8brain-free is MIT) · noise-shaped dither
+- ✅ High-quality sample-rate conversion (r8brain-free is MIT) · noise-shaped dither: exports render natively at
+  the export rate, and the conversions that remain (Opus's 48 kHz, `soundsplice-cli convert`) use the
+  windowed-sinc resampler (`src/engine/Resample.h`), so r8brain wasn't needed · Export Audio's Dither offers
+  noise-shaped (Wannamaker's F-weighted filter at 44.1/48 kHz, second-order above; `src/engine/Dither.h`)
 - ✅ Export selection only (Export Audio > Range) · ⬜ CD image (CUE/BIN) from labels
 - 🟡 Chapter markers for podcast files (MP3 CHAP, M4A chapters): markers become MP3 CHAP/CTOC chapters and
   FLAC CHAPTERnnn comments, timed from each file's own start ✅ · M4A ⬜ (no AAC encoder)

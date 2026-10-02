@@ -192,3 +192,92 @@ TEST_CASE("Dither scales with the target word length", "[engine][dither]")
     CHECK(sixteen.lsb() > twentyFour.lsb() * 200.0f);
     CHECK(sixteen.lsb() < twentyFour.lsb() * 300.0f);
 }
+
+namespace
+{
+    /** Power of @p signal near @p hz (a Goertzel), for the noise's shape. */
+    double powerAt(const std::vector<double>& signal, double hz, double rate)
+    {
+        const double w = 2.0 * 3.14159265358979 * hz / rate, c = 2.0 * std::cos(w);
+        double s1 = 0.0, s2 = 0.0;
+        for (const double x : signal)
+        {
+            const double s = x + c * s1 - s2;
+            s2 = s1;
+            s1 = s;
+        }
+        return (s1 * s1 + s2 * s2 - c * s1 * s2) / (double) signal.size();
+    }
+
+    /** The error each dither leaves on a quiet sine, as LSBs. */
+    template <typename Dither>
+    std::vector<double> errorOf(Dither& dither, double rate, int count)
+    {
+        std::vector<double> error((size_t) count);
+        const double lsb = dither.lsb();
+        for (int i = 0; i < count; ++i)
+        {
+            const float in  = 0.001f * (float) std::sin(2.0 * 3.14159265358979 * 440.0 * i / rate);
+            const float out = dither.processSample(in);
+            error[(size_t) i] = ((double) out - (double) in) / lsb;
+        }
+        return error;
+    }
+}
+
+TEST_CASE("Noise-shaped dither lands on the grid and moves its noise up", "[engine][dither]")
+{
+    constexpr double rate  = 44100.0;
+    constexpr int    count = 1 << 16;
+
+    soundsplice::engine::NoiseShapedDither shaped(16, rate);
+    soundsplice::engine::TpdfDither        flat(16);
+
+    const auto shapedError = errorOf(shaped, rate, count);
+
+    // Every sample is a whole number of LSBs: the writer won't move it.
+    soundsplice::engine::NoiseShapedDither again(16, rate);
+    for (int i = 0; i < 2000; ++i)
+    {
+        const float out   = again.processSample(0.3f * (float) std::sin(i * 0.01));
+        const double steps = (double) out / again.lsb();
+        REQUIRE(steps == std::round(steps));
+    }
+
+    // Stable: the error stays a handful of LSBs, never running away.
+    for (const double e : shapedError)
+        REQUIRE(std::abs(e) < 40.0);
+
+    // Flat TPDF, quantised the same way, for comparison.
+    std::vector<double> flatError((size_t) count);
+    for (int i = 0; i < count; ++i)
+    {
+        const float in  = 0.001f * (float) std::sin(2.0 * 3.14159265358979 * 440.0 * i / rate);
+        const double q  = std::round((double) flat.processSample(in) / flat.lsb()) * flat.lsb();
+        flatError[(size_t) i] = (q - (double) in) / flat.lsb();
+    }
+
+    // Quieter where hearing is keenest, louder up near Nyquist.
+    for (const double hz : { 2000.0, 3500.0, 5000.0 })
+    {
+        INFO(hz);
+        REQUIRE(powerAt(shapedError, hz, rate) < powerAt(flatError, hz, rate) * 0.25); // over 6 dB down
+    }
+    REQUIRE(powerAt(shapedError, 19000.0, rate) > powerAt(flatError, 19000.0, rate) * 4.0);
+}
+
+TEST_CASE("Noise-shaped dither survives clipping without ringing", "[engine][dither]")
+{
+    soundsplice::engine::NoiseShapedDither shaped(16, 48000.0);
+    for (int i = 0; i < 20000; ++i)
+    {
+        const float in  = 1.5f * (float) std::sin(i * 0.05); // well over full scale
+        const float out = shaped.processSample(in);
+        REQUIRE(std::abs(out) <= 1.0f);
+    }
+    // And quiet straight after: the clip didn't leave the filter ringing.
+    float loudest = 0.0f;
+    for (int i = 0; i < 5000; ++i)
+        loudest = std::max(loudest, std::abs(shaped.processSample(0.0f)));
+    REQUIRE(loudest < 64.0f * shaped.lsb());
+}

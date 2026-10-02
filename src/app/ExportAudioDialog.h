@@ -122,7 +122,7 @@ public:
         window.addComboBox ("rate", {}, "Sample rate:");
         window.addComboBox ("bits", {}, "Bit depth:");
         window.addComboBox ("quality", {}, "Quality:");
-        window.addComboBox ("dither", { "On (TPDF)", "Off" }, "Dither:");
+        window.addComboBox ("dither", { "On (TPDF)", "Noise-shaped (best for 16-bit)", "Off" }, "Dither:");
 
         juce::StringArray loudnessNames;
         for (const auto& target : kExportLoudnessTargets)
@@ -201,7 +201,10 @@ public:
                                                  window.getComboBoxComponent ("quality")->getSelectedItemIndex());
 
         if (auto* ditherBox = window.getComboBoxComponent ("dither"))
-            options.dither = ditherBox->getSelectedItemIndex() == 0;
+        {
+            options.dither       = ditherBox->getSelectedItemIndex() != 2;
+            options.noiseShaping = ditherBox->getSelectedItemIndex() == 1;
+        }
 
         if (auto* loudnessBox = window.getComboBoxComponent ("loudness"))
             options.loudnessLufs = kExportLoudnessTargets[juce::jlimit (0, (int) std::size (kExportLoudnessTargets) - 1,
