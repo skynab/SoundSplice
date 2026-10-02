@@ -213,6 +213,7 @@ enum Id : int
     measureLatency,
     pluginManager,
     batchProcess,
+    commandPalette,
 };
 
 /** One command's fixed description. */
@@ -396,6 +397,7 @@ inline const std::vector<Definition>& all()
         { autoCrossfades,   "Automatic Crossfades", "View", "Crossfade audio clips wherever moving or resizing one makes it overlap its neighbour.", {} },
         { snapToClipEdges,  "Snap to Clip Edges", "View", "Pull dragged clip edges onto the edges of nearby clips.", {} },
         { resetLayout,      "Reset Layout",         "View", "Put the panes back where this layout starts them.", {} },
+        { commandPalette,   "Command Palette...",   "View", "Find any command by typing part of its name, and run it.", { keys::commandPalette } },
     };
 
     return table;

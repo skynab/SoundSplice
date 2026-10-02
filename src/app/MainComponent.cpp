@@ -1070,6 +1070,14 @@ MainComponent::MainComponent()
     logAudioDeviceStatus();
 
     addChildComponent(status_);
+    addChildComponent(palette_);
+    palette_.onChosen = [this](const palette::Entry& entry)
+    {
+        settings_.setValue("paletteRecent", palette::noteRecent(juce::StringArray::fromLines(settings_.getValue("paletteRecent")),
+                                                                entry.key).joinIntoString("\n"));
+        if (entry.run)
+            entry.run();
+    };
     updateZoomControls();     // the readouts must say something before the first click
     updateKeysZoomControls();
     updateKeysTimeZoomControls();
@@ -1508,6 +1516,10 @@ void MainComponent::resized()
     auto full = getLocalBounds();
     menuBar_.setBounds(full.removeFromTop(24));
     workspace_.setBounds(full); // the workspace lays its own tree out from here
+
+    // The palette drops from the top, centred, as VS Code's does.
+    const int paletteWidth = juce::jmin(640, getWidth() - 32);
+    palette_.setBounds((getWidth() - paletteWidth) / 2, 40, paletteWidth, juce::jmin(420, getHeight() - 80));
 
     // Sits over the workspace, against the bottom of the window.
     status_.updateBounds();

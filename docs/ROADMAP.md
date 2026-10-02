@@ -258,7 +258,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ⬜ **Macros**: record or build a list of commands and effects with settings, then run it on the
   selection or a batch of files (Audacity Macros, REAPER Actions)
 - ⬜ **Customizable keyboard shortcuts**, with importable and exportable sets
-- ⬜ **Command palette** (search every command by name)
+- ✅ **Command palette** (search every command by name): View > Command Palette (Ctrl+Shift+P) lists every
+  command, pane, layout and Favorite; fuzzy matching on the name or category, recently run ones first, greyed
+  when unavailable, with each one's shortcut (`src/app/CommandPalette.h`)
 - ⬜ **Scripting**: embedded Lua with the command registry exposed (REAPER ReaScript, Audacity mod-script-pipe)
 - ⬜ **Accessibility**: full keyboard operation of tracks, clips and selections; screen-reader
   announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit)

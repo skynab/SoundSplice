@@ -44,6 +44,7 @@
 #include "model/Favorites.h"
 #include "DiagnosticsPane.h"
 #include "EssentialSoundPane.h"
+#include "CommandPalette.h"
 #include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -504,6 +505,8 @@ private:
     void                   removeDcOffsetInSelection();
     void                   startBatchProcess();
     void                   applyFavorite(int index);
+    void                   showCommandPalette();
+    std::vector<palette::Entry> paletteEntries();
     void                   refreshEssentialSoundForSelected();
     void                   setEssentialRole(model::SoundRole role);
     void                   setEssentialAmount(const std::string& task, float amount);
@@ -913,6 +916,7 @@ private:
     // Transient messages. A child of this component rather than of any pane,
     // so collapsing or closing a pane can't hide what the app is telling you.
     StatusBanner                    status_;
+    CommandPalette                  palette_;
 
     // The whole dockable workspace: a tree of tab groups the user arranges by
     // dragging tabs (onto a region's middle to add a tab there, onto an edge

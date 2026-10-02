@@ -126,6 +126,8 @@ inline const juce::KeyPress zoomToSelection = detail::with('E', detail::cmd);
 inline const juce::KeyPress fitProject      = detail::with('F', detail::cmd);
 inline const juce::KeyPress fitVertically   = detail::with('F', detail::cmd | detail::shift);
 
+inline const juce::KeyPress commandPalette = detail::with('P', detail::cmd | detail::shift);
+
 /** A shortcut with the name of what it does, so a test that finds a bad one
     can say which. */
 struct NamedShortcut
@@ -188,6 +190,8 @@ inline std::vector<NamedShortcut> all()
         { "Zoom to Selection", zoomToSelection },
         { "Fit Project",     fitProject },
         { "Fit Vertically",  fitVertically },
+
+        { "Command Palette", commandPalette },
     };
 }
 

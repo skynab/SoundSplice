@@ -170,6 +170,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/BusRoutingTests.cpp
     gui/BatchProcessTests.cpp
     gui/FileGridTests.cpp
+    gui/CommandPaletteTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 

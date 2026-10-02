@@ -404,6 +404,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::measureLatency:   measureRecordingLatency(); break;
         case commands::pluginManager:    showPluginManager(); break;
         case commands::batchProcess:     startBatchProcess(); break;
+        case commands::commandPalette:   showCommandPalette(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -953,6 +954,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::snapToClipEdges);
         add(commands::autoCrossfades);
         add(commands::resetLayout);
+        menu.addSeparator();
+        add(commands::commandPalette);
     }
     else if (topLevelMenuIndex == 3) // Markers
     {
@@ -1036,6 +1039,82 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
     }
 
     return menu;
+}
+
+/** Everything the command palette lists: every command, each pane and
+    layout, and the Favorites - what the menus offer, in one searchable list. */
+std::vector<palette::Entry> MainComponent::paletteEntries()
+{
+    std::vector<palette::Entry> entries;
+    auto* mappings = commandManager_.getKeyMappings();
+
+    for (const auto& definition : commands::all())
+    {
+        juce::ApplicationCommandInfo info(definition.id);
+        getCommandInfo(definition.id, info);
+
+        palette::Entry entry;
+        // Menu hints ("   (or drag files in)") aren't part of the name.
+        entry.name        = info.shortName.upToFirstOccurrenceOf("   ", false, false);
+        entry.category    = definition.category;
+        entry.description = definition.description;
+        entry.enabled     = (info.flags & juce::ApplicationCommandInfo::isDisabled) == 0;
+        entry.ticked      = (info.flags & juce::ApplicationCommandInfo::isTicked) != 0;
+        if (const auto keys = mappings->getKeyPressesAssignedToCommand(definition.id); ! keys.isEmpty())
+            entry.shortcut = keys.getFirst().getTextDescriptionWithIcons();
+        entry.key = "cmd:" + juce::String(definition.name);
+        const auto id = definition.id;
+        entry.run = [this, id] { commandManager_.invokeDirectly(id, true); };
+        entries.push_back(std::move(entry));
+    }
+
+    for (const auto& name : workspace_.registeredPanels())
+    {
+        palette::Entry entry;
+        entry.name        = (workspace_.isPanelOpen(name) ? "Close " : "Show ") + name + " Pane";
+        entry.category    = "View";
+        entry.description = "Open the " + name + " pane, or close it if it's in front.";
+        entry.key         = "pane:" + name;
+        entry.run         = [this, name] { togglePanel(panelMenuIndex(name)); };
+        entries.push_back(std::move(entry));
+    }
+
+    for (int i = 0; i < layouts::kNumWorkspaces; ++i)
+    {
+        const auto workspace = (layouts::Workspace) i;
+        palette::Entry entry;
+        entry.name        = juce::String("Layout: ") + layouts::workspaceName(workspace);
+        entry.category    = "View";
+        entry.description = "Arrange the panes for this kind of work.";
+        entry.ticked      = workspace == activeWorkspace_;
+        entry.key         = juce::String("layout:") + layouts::workspaceName(workspace);
+        entry.run         = [this, workspace] { applyWorkspaceLayout(workspace); };
+        entries.push_back(std::move(entry));
+    }
+
+    for (int i = 0; i < (int) favorites_.size(); ++i)
+    {
+        palette::Entry entry;
+        entry.name        = "Favorite: " + juce::String(favorites_[(size_t) i].name);
+        entry.category    = "Favorites";
+        entry.description = "Apply this effect chain to the selection.";
+        entry.key         = "fav:" + juce::String(favorites_[(size_t) i].name);
+        entry.run         = [this, i] { applyFavorite(i); };
+        entries.push_back(std::move(entry));
+    }
+
+    return entries;
+}
+
+void MainComponent::showCommandPalette()
+{
+    if (palette_.isVisible())
+    {
+        palette_.close();
+        return;
+    }
+    resized();
+    palette_.open(paletteEntries(), juce::StringArray::fromLines(settings_.getValue("paletteRecent")));
 }
 
 /** The View menu's own entries: its pane toggles and layouts, which are built
