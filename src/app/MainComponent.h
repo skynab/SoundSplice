@@ -40,6 +40,7 @@
 #include "EffectChainPanel.h"
 #include "EqCurveView.h"
 #include "AnalyserPane.h"
+#include "BatchProcess.h"
 #include "DiagnosticsPane.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -498,6 +499,10 @@ private:
     void                   fixAllDiagnostics(engine::diagnostics::Kind kind);
     bool                   fixDiagnosticRange(engine::diagnostics::Kind kind, AudioRange range);
     void                   removeDcOffsetInSelection();
+    void                   startBatchProcess();
+    void                   chooseBatchChain(std::vector<juce::File> inputs);
+    void                   chooseBatchOptions(std::vector<juce::File> inputs, std::vector<model::EffectSlot> chain);
+    void                   runBatch(std::vector<juce::File> inputs, batch::Settings settings);
     void                   matchLoudness(double targetLufs, bool limitTruePeak);
 
     /** Samples [from, to) counted from the clip's start, one vector per

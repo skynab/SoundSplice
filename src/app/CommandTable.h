@@ -212,6 +212,7 @@ enum Id : int
     timerRecord,
     measureLatency,
     pluginManager,
+    batchProcess,
 };
 
 /** One command's fixed description. */
@@ -244,6 +245,7 @@ inline const std::vector<Definition>& all()
         { followSystemOutput, "Follow System Output Device", "File", "Switch output when the system's default device changes.", {} },
         { recordingFormat,  "Recording Format...",  "File", "Choose the bit depth, mono or stereo, and which inputs takes are recorded from.", {} },
         { measureLatency,   "Measure Recording Latency...", "File", "Time a click through a cable from an output to an input, so recordings line up exactly.", {} },
+        { batchProcess,     "Batch Process...",     "File", "Run a chain of effects, and a loudness target if you like, over every audio file in a folder, writing new files.", {} },
         { pluginManager,    "Plugin Manager...",    "File", "See every plugin found: turn ones off, unblock ones that crashed while being scanned, and scan for more.", {} },
         { recordingLatency, "Recording Latency...", "File", "Line recordings up with what was playing, allowing for the device's delay.", {} },
 

@@ -54,6 +54,15 @@ public:
         settings and close it. */
     std::function<void()> onChainAboutToChange;
 
+    /** For Batch Process: nothing to preview, and Apply goes on to the
+        batch's own options rather than applying anything here. */
+    void setForBatch()
+    {
+        previewButton_.setVisible(false);
+        applyButton_.setButtonText("Next...");
+        resized();
+    }
+
     /** Stores a plugin slot's edited state, as model::PluginRef::state. */
     void setPluginState(int slotIndex, const std::string& state)
     {

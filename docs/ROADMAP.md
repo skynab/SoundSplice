@@ -241,7 +241,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   fix and a select button (Audition's DeClicker/DeClipper diagnostics): Analyze > Diagnostics fills the Diagnostics
   pane; Select picks a problem in the audio editor, Fix repairs it with Click Removal, Clip Fix, Delete or DC
   removal, Fix All does every one of its kind (`src/engine/Diagnostics.h`, `src/app/DiagnosticsPane.h`)
-- ⬜ **Batch process**: run an effect chain or preset over a folder of files
+- ✅ **Batch process**: run an effect chain or preset over a folder of files (File > Batch Process: a folder,
+  a chain built in the Apply Effects dialog, a loudness target and a format; new files are written, the originals
+  untouched; on a background job, or one file at a time when the chain hosts a plugin; `src/app/BatchProcess.h`)
 - ⬜ Media browser with **preview** (✅ file browser and preview exist; add metadata columns and
   favorites)
 - ⬜ **Favorites**: one-click saved actions or effect settings (Audition)

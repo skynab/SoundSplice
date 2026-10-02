@@ -403,6 +403,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::recordingLatency: showRecordingLatencyDialog(); break;
         case commands::measureLatency:   measureRecordingLatency(); break;
         case commands::pluginManager:    showPluginManager(); break;
+        case commands::batchProcess:     startBatchProcess(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -791,6 +792,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::importRawData);
         add(commands::exportMidi);
         add(commands::exportAudio);
+        add(commands::batchProcess);
         menu.addSeparator();
         add(commands::setProjectRoot);
         menu.addSeparator();
