@@ -371,8 +371,11 @@ voice, podcast and restoration work:
    have thrown away as branches to switch back to (`src/model/History.h`, `src/app/HistoryPane.h`)
 10. **Multichannel/ambisonic import and export** (REAPER-grade channel counts) for game and
     immersive audio
-11. **Video track for sync**, showing a reference video for dubbing and podcast video (REAPER,
-    Audition). Late and optional, since it's a big dependency.
+11. ✅ **Video track for sync**, showing a reference video for dubbing and podcast video (REAPER,
+    Audition). Late and optional, since it's a big dependency: not one after all - JUCE's juce_video plays
+    through the system's own decoders. File > Load Video keeps a video with the project; the Video pane
+    follows the playhead (playing, seeking and scrubbing), picture only, from a start time you set
+    (`src/app/VideoPane.h`)
 12. ✅ **Keep the Session view** as a sketchpad for musicians, which none of the three editors has (kept)
 
 ---

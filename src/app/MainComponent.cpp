@@ -938,6 +938,17 @@ MainComponent::MainComponent(bool headless)
     workspace_.registerPanel("Delivery", deliveryPane_);
     workspace_.registerPanel("History", historyPane_);
     workspace_.registerPanel("Transcript", transcriptPane_);
+    workspace_.registerPanel("Video", videoPane_);
+    videoPane_.onLoad   = [this] { loadVideo(); };
+    videoPane_.onRemove = [this]
+    {
+        history_.edit("Remove video", [](model::Song& s) { s.videoFile.clear(); });
+        refreshFromModel();
+    };
+    videoPane_.onOffsetChanged = [this](double offset)
+    {
+        history_.edit("Move video", [offset](model::Song& s) { s.videoOffsetSeconds = offset; });
+    };
     transcriptPane_.onSeek       = [this](double seconds) { seekToBeat(model::clockFor(history_.current()).beatAt(seconds)); };
     transcriptPane_.onDelete     = [this](const std::vector<std::pair<double, double>>& ranges) { deleteTranscriptRanges(ranges); };
     transcriptPane_.onTranscribe = [this] { transcribeSelectedTrack(); };
@@ -1332,6 +1343,8 @@ void MainComponent::timerCallback()
     finishRecordingIfReady();
     refreshHistoryPane();
     refreshTranscriptPane();
+    videoPane_.show(juce::File(juce::String::fromUTF8(history_.current().videoFile.c_str())), history_.current().videoOffsetSeconds);
+    videoPane_.sync(model::clockFor(history_.current()).secondsAt(playheadBeat()), engine_.isPlaying());
     if (engine_.isPlaying())
         transcriptPane_.setPlayhead(model::clockFor(history_.current()).secondsAt(playheadBeat()));
     finishMidiRecordingIfReady();

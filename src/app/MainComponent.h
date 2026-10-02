@@ -55,6 +55,7 @@
 #include "HistoryPane.h"
 #include "TranscriptPane.h"
 #include "PreviewStrip.h"
+#include "VideoPane.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -243,6 +244,7 @@ private:
     void                   previewEffect(const std::function<void()>& run, preview::Mode mode);
     void                   playPreview(preview::Mode mode);
     void                   endPreview();
+    void                   loadVideo();
     bool                   capturePreview(const std::vector<std::vector<float>>& original,
                                           const std::vector<std::vector<float>>& processed, double sampleRate);
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
@@ -1113,6 +1115,7 @@ private:
     DeliveryPane                       deliveryPane_;
     HistoryPane                        historyPane_;
     TranscriptPane                     transcriptPane_;
+    VideoPane                          videoPane_;
 
     // Preview before apply (PreviewStrip.h): while previewing_, the edit
     // functions run their transform on up to kPreviewSeconds of the

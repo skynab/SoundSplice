@@ -240,6 +240,7 @@ enum Id : int
     switchAB,
     speechEnhancement,
     transcribe,
+    loadVideo,
 };
 
 /** One command's fixed description. */
@@ -265,6 +266,7 @@ inline const std::vector<Definition>& all()
         { saveAsTemplate,   "Save as Template...",  "File", "Keep this project's tracks, routing and effects, without its audio, to start new projects from.", {} },
         { previewAudioFile, "Preview Audio File...", "File", "Listen to an audio file without adding it to the project.", {} },
         { importAudio,      "Import Audio to Track...   (or drag files in)", "File", "Add an audio file to a new track.", {} },
+        { loadVideo,        "Load Video...",        "File", "A video to work to - dubbing, a podcast's picture - shown in the Video pane in step with the playhead.", {} },
         { importMidi,       "Import MIDI...",       "File", "Add the tracks of a MIDI file to the project.", {} },
         { importRawData,    "Import Raw Data...",   "File", "Add a headerless file of samples to a new track, saying how its bytes are stored.", {} },
         { renderQueue,      "Render Queue...",      "File", "The exports queued from Export Audio, rendered one after another in the background.", {} },

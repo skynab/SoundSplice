@@ -92,6 +92,11 @@ struct Song
 
     ProjectInfo info; // File > Project Info; written into exports
 
+    // A reference video to work to (the Video pane), and where in the song
+    // its first frame is. Empty: none.
+    std::string videoFile;
+    double      videoOffsetSeconds = 0.0;
+
 
     bool operator==(const Song&) const = default;
 };

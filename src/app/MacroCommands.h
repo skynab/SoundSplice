@@ -26,6 +26,7 @@ inline bool recordable(const commands::Definition& definition)
         case commands::renderQueue:
         case commands::loadReference:
         case commands::transcribe:
+        case commands::loadVideo:
         case commands::followSystemOutput:
             return false;
         default:

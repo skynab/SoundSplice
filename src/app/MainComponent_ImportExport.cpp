@@ -1774,4 +1774,29 @@ void MainComponent::chooseTranscriptionModel()
                           });
 }
 
+/** Load Video: a reference video, kept with the project and shown in the
+    Video pane in step with the playhead. Starts with the song unless moved. */
+void MainComponent::loadVideo()
+{
+    chooser_ = std::make_unique<juce::FileChooser>("Load Video", juce::File(settings_.getValue("video.folder")),
+                                                   "*.mp4;*.mov;*.m4v;*.avi;*.wmv;*.mkv;*.webm");
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [this](const juce::FileChooser& fc)
+                          {
+                              const auto file = fc.getResult();
+                              if (file == juce::File{})
+                                  return;
+                              settings_.setValue("video.folder", file.getParentDirectory().getFullPathName());
+                              history_.edit("Load video", [path = file.getFullPathName().toStdString()](model::Song& s)
+                              {
+                                  s.videoFile = path;
+                              });
+                              if (workspace_.isPanelOpen("Video"))
+                                  workspace_.revealPanel("Video");
+                              else
+                                  togglePanel(panelMenuIndex("Video"));
+                              showStatus("Video: " + file.getFileName() + " - it follows the playhead; set where it starts in the Video pane");
+                          });
+}
+
 } // namespace soundsplice

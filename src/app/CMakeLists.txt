@@ -69,6 +69,7 @@ target_compile_definitions(SoundSplice PRIVATE
   JUCE_PLUGINHOST_LV2=1
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
+  JUCE_USE_CAMERA=0
   JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:SoundSplice,JUCE_PRODUCT_NAME>"
   JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:SoundSplice,JUCE_VERSION>")
 
@@ -101,6 +102,7 @@ target_link_libraries(SoundSplice
     rnnoise::rnnoise
     whisper
     juce::juce_audio_utils
+    juce::juce_video
   PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags

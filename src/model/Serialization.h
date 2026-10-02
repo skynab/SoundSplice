@@ -418,6 +418,8 @@ inline std::string serialize(const Song& song)
             out << "META " << key << " " << flat << "\n";
         });
     }
+    if (! song.videoFile.empty())
+        out << "VIDEO " << detail::num(song.videoOffsetSeconds) << " " << song.videoFile << "\n";
     out << "AUTO " << song.masterGainDb.points().size() << "\n";
     for (const auto& p : song.masterGainDb.points())
         detail::writePoint(out, "APT", p);
@@ -974,6 +976,13 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             if (key == name)
                 field = value;
         });
+    }
+
+    if (readTagged("VIDEO", rest))
+    {
+        std::istringstream vs(rest);
+        vs >> song.videoOffsetSeconds;
+        std::getline(vs >> std::ws, song.videoFile);
     }
 
     if (readTagged("AUTO", rest))

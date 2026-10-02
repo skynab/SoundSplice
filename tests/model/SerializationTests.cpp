@@ -299,6 +299,19 @@ TEST_CASE("A clip's transcript round-trips with everything around it", "[model][
     REQUIRE(restored == original);
 }
 
+TEST_CASE("A project's video and where it starts round-trip", "[model][io]")
+{
+    Song original = makeSampleSong();
+    original.videoFile          = "C:/Video/Episode 12 final.mp4";
+    original.videoOffsetSeconds = -1.5;
+
+    Song restored;
+    REQUIRE(deserialize(serialize(original), restored));
+    REQUIRE(restored.videoFile == original.videoFile);
+    REQUIRE(restored.videoOffsetSeconds == -1.5);
+    REQUIRE(restored == original);
+}
+
 TEST_CASE("An empty song round-trips", "[model][io]")
 {
     const Song original;

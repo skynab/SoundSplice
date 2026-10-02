@@ -457,6 +457,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
                 togglePanel(panelMenuIndex("History"));
             refreshHistoryPane(true);
             break;
+        case commands::loadVideo:        loadVideo(); break;
         case commands::transcribe:
             if (workspace_.isPanelOpen("Transcript"))
                 workspace_.revealPanel("Transcript");
@@ -872,6 +873,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::previewAudioFile);
         add(commands::importAudio);
         add(commands::importMidi);
+        add(commands::loadVideo);
         add(commands::importRawData);
         add(commands::exportMidi);
         add(commands::exportAudio);
