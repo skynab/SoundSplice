@@ -238,6 +238,7 @@ enum Id : int
     loadReference,
     compareReference,
     switchAB,
+    speechEnhancement,
 };
 
 /** One command's fixed description. */
@@ -306,6 +307,7 @@ inline const std::vector<Definition>& all()
         { spectralClipEdit, "Add Clip Spectral Edit...", "Edit", "Keep a gain on a box dragged on the spectrogram with the clip, applied as it plays and removable later; the file is untouched.", {} },
         { spectralClipEditsRemove, "Remove Clip Spectral Edits", "Edit", "Take the clip's kept spectral edits off where the selection is, or all of them.", {} },
         { adaptiveNoiseReduction, "Adaptive Noise Reduction...", "Edit", "Take steady noise (hiss, hum, air) down without a noise print, following it as it changes, over the selection or the whole clip.", {} },
+        { speechEnhancement, "Speech Enhancement (AI)...", "Edit", "Take away whatever isn't voice - fans, traffic, keyboards, changing room noise - with a trained network (RNNoise), over the selection or the whole clip.", {} },
         { dereverb,         "DeReverb...",          "Edit", "Take a room's echo out of a recording made in it, over the selection or the whole clip.", {} },
         { decrackle,        "DeCrackle...",         "Edit", "Mend crackle, the many tiny clicks of worn vinyl or a bad cable, over the selection or the whole clip.", {} },
         { pitchCorrection,  "Pitch Correction...",  "Edit", "Pull a voice or instrument onto the notes of a key, over the selection or the whole clip.", {} },

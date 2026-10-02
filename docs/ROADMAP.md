@@ -338,8 +338,10 @@ voice, podcast and restoration work:
    micro-crossfades and room-tone fill. Descript does this; no open desktop editor does.
 3. **Filler-word and long-pause removal** ("um", "uh", gaps over N ms), reviewable before it's applied
 4. **Stem separation** (vocals/drums/bass/other) via a local ONNX model (Demucs-class)
-5. **AI speech enhancement / noise suppression** (DeepFilterNet or RNNoise-class) alongside the
-   classic noise print
+5. ✅ **AI speech enhancement / noise suppression** (DeepFilterNet or RNNoise-class) alongside the
+   classic noise print: Edit > Speech Enhancement (AI), RNNoise 0.2 (BSD-3, its weights in the release
+   tarball, `cmake/rnnoise.cmake`) at 48 kHz, lined up sample for sample, with an amount to blend the
+   original back (`src/engine/SpeechEnhance.h`)
 6. ✅ **Delivery-spec checker**: pick ACX/Audible, Spotify, Apple Podcasts, YouTube or EBU R128
    broadcast; get pass/fail on loudness, true peak, noise floor and head/tail silence, plus a
    one-click "make it pass" chain: the Delivery pane (Analyze > Check Delivery) renders the mix and checks
@@ -390,4 +392,4 @@ its response → `Processor` descriptor → presets → an entry in the effect m
 The code is MIT. Watch for: **Rubber Band** (GPL, or a commercial license), **FFmpeg** (LGPL if
 dynamically linked and built without GPL parts), **LAME** (LGPL, already used), and **Élastique**
 (commercial). MIT/BSD options: Signalsmith Stretch, r8brain-free, whisper.cpp, ONNX Runtime,
-libebur128, and the Opus codec.
+libebur128, the Opus codec, Lua (in use), and RNNoise (in use).

@@ -1,3 +1,4 @@
+#include "engine/SpeechEnhance.h"
 #include "MainComponentInternal.h"
 
 #include "engine/AdaptiveNoiseReduction.h"
@@ -728,6 +729,49 @@ void MainComponent::showAdaptiveNoiseReductionDialog()
                                       : self->editSelection("Adaptive noise reduction", false, transform);
             if (edited)
                 self->showStatus(juce::String("Noise reduced ") + (whole ? "across the clip" : "in the selection"));
+        }));
+}
+
+/** Speech Enhancement (AI): RNNoise over the selection or the whole clip,
+    blended back with the original by an amount. */
+void MainComponent::showSpeechEnhancementDialog()
+{
+    if (selectedAudioClip() == nullptr)
+    {
+        showError("Select an audio clip first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Speech Enhancement (AI)",
+                                         "A trained network (RNNoise) keeps the voice and takes away everything else: fans, "
+                                         "traffic, keyboards, noise that changes. For speech, not music.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("amount", juce::String(settings_.getDoubleValue("speechEnhance.amount", 100.0)),
+                          "Amount (%; less leaves some of the original in):");
+    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const double amount = juce::jlimit(0.0, 100.0, window->getTextEditorContents("amount").getDoubleValue());
+            self->settings_.setValue("speechEnhance.amount", amount);
+
+            const auto transform = [amount](std::vector<std::vector<float>>& channels, double rate)
+            {
+                for (auto& channel : channels)
+                    channel = engine::speechenhance::enhance(channel, rate, (float) (amount / 100.0));
+            };
+            self->showBusy("Enhancing speech...");
+            const bool whole  = self->audioEditor_.selection().isEmpty();
+            const bool edited = whole ? self->editWholeClip("Speech enhancement", transform)
+                                      : self->editSelection("Speech enhancement", false, transform);
+            if (edited)
+                self->showStatus(juce::String("Speech enhanced ") + (whole ? "across the clip" : "in the selection"));
         }));
 }
 

@@ -97,6 +97,7 @@ target_link_libraries(SoundSplice
     opusfile::opusfile
     WavPack::WavPack
     lua::lua
+    rnnoise::rnnoise
     juce::juce_audio_utils
   PUBLIC
     juce::juce_recommended_config_flags

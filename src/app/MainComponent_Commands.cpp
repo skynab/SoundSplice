@@ -226,6 +226,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::pitchCorrection:
         case commands::detectPitch:
         case commands::adaptiveNoiseReduction:
+        case commands::speechEnhancement:
         case commands::decrackle:
         case commands::dereverb:
         case commands::plotSpectrum:
@@ -542,6 +543,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::pitchCorrection: showPitchCorrectionDialog(); break;
         case commands::detectPitch:     detectPitch(); break;
         case commands::adaptiveNoiseReduction: showAdaptiveNoiseReductionDialog(); break;
+        case commands::speechEnhancement: showSpeechEnhancementDialog(); break;
         case commands::decrackle:       showDecrackleDialog(); break;
         case commands::dereverb:        showDereverbDialog(); break;
         case commands::clipFix:         showClipFixDialog(); break;
@@ -919,6 +921,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::humRemoval);
         add(commands::decrackle);
         add(commands::adaptiveNoiseReduction);
+        add(commands::speechEnhancement);
         add(commands::dereverb);
         add(commands::vocalReduction);
         {

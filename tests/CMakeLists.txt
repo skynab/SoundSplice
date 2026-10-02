@@ -189,6 +189,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/RenderQueueTests.cpp
     gui/DeliveryPaneTests.cpp
     gui/HistoryPaneTests.cpp
+    gui/SpeechEnhanceTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
@@ -214,6 +215,7 @@ if (SOUNDSPLICE_BUILD_APP)
       opusfile::opusfile
       WavPack::WavPack
       lua::lua
+      rnnoise::rnnoise
       juce::juce_audio_utils
       Catch2::Catch2WithMain
       juce::juce_recommended_config_flags

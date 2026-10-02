@@ -456,6 +456,7 @@ private:
     void                   showPitchCorrectionDialog();
     void                   detectPitch();
     void                   showAdaptiveNoiseReductionDialog();
+    void                   showSpeechEnhancementDialog();
     void                   showDecrackleDialog();
     void                   showDereverbDialog();
     void                   reduceVocals(const engine::centre::Settings& settings);
