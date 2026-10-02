@@ -48,6 +48,7 @@
 #include "KeyboardShortcutsDialog.h"
 #include "MacrosDialog.h"
 #include "ScriptPane.h"
+#include "PreferencesDialog.h"
 #include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -666,6 +667,8 @@ private:
     juce::File             templatesFolder() const;
     std::vector<juce::File> userTemplates() const;
     void                   saveAsTemplate();
+    void                   showPreferences(int tab = 0);
+    std::vector<prefs::Page> preferencePages();
     bool                   applyChainToSelection(const std::vector<model::EffectSlot>& chain, const juce::String& what);
     void                   toggleMacroRecording();
     void                   noteMacroCommand(juce::CommandID id);
@@ -685,6 +688,7 @@ private:
     juce::Component::SafePointer<class PluginManagerDialog> pluginManager_;
     juce::Component::SafePointer<KeyboardShortcutsDialog>   shortcutsDialog_;
     juce::Component::SafePointer<MacrosDialog>              macrosDialog_;
+    juce::Component::SafePointer<PreferencesDialog>         preferencesDialog_;
 
     // Macros (Tools menu), kept in the app's settings. While one is being
     // recorded, recordingMacro_ gathers the commands and effects used.

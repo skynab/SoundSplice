@@ -1187,6 +1187,9 @@ void MainComponent::showRecordingLatencyDialog()
 
 juce::File MainComponent::recordingsDirectory() const
 {
+    // Where Preferences says, if it says anywhere that can be used.
+    if (const juce::File chosen(settings_.getValue("paths.recordings")); chosen.isDirectory())
+        return chosen;
     auto dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
                   .getChildFile("SoundSplice Recordings");
     dir.createDirectory();

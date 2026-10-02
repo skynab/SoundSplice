@@ -20,6 +20,7 @@ inline bool recordable(const commands::Definition& definition)
         case commands::manageMacros:
         case commands::runMacroOnFiles:
         case commands::runScript:
+        case commands::preferences:
         case commands::followSystemOutput:
             return false;
         default:

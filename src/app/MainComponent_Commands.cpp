@@ -423,6 +423,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::runMacroOnFiles:  chooseMacroForFiles(); break;
         case commands::runScript:        chooseScriptToRun(); break;
         case commands::saveAsTemplate:   saveAsTemplate(); break;
+        case commands::preferences:      showPreferences(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -829,6 +830,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addSeparator();
         add(commands::setProjectRoot);
         menu.addSeparator();
+        add(commands::preferences);
         add(commands::audioSettings);
         add(commands::keyboardShortcuts);
         // Right next to Audio Settings, which is where anyone whose sound is

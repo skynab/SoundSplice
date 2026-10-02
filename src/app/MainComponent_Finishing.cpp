@@ -3,6 +3,7 @@
 #include "engine/Diagnostics.h"
 #include "model/EssentialSound.h"
 #include "model/Templates.h"
+#include "SpectralRender.h"
 #include "app/ApplyEffectsDialog.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -1039,6 +1040,194 @@ void MainComponent::saveAsTemplate()
             }
             self->showStatus("Saved template \"" + name + "\": File > New from Template");
         }));
+}
+
+// ---- Preferences ------------------------------------------------------------
+
+void MainComponent::showPreferences(int tab)
+{
+    if (preferencesDialog_ != nullptr)
+    {
+        preferencesDialog_->tabsForTesting().setCurrentTabIndex(tab);
+        if (auto* window = preferencesDialog_->findParentComponentOfClass<juce::DialogWindow>())
+            window->toFront(true);
+        return;
+    }
+
+    auto dialog        = std::make_unique<PreferencesDialog>(preferencePages(), tab);
+    preferencesDialog_ = dialog.get();
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog.release());
+    options.dialogTitle                  = "Preferences";
+    options.dialogBackgroundColour       = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = true;
+    options.resizable                    = true;
+    options.launchAsync();
+}
+
+/** What Preferences shows. Most rows are a command the menus already have,
+    read through getCommandInfo and changed by running it, so there's one
+    copy of each setting and the menu and the window can't disagree. */
+std::vector<prefs::Page> MainComponent::preferencePages()
+{
+    const auto ticked = [this](commands::Id id)
+    {
+        juce::ApplicationCommandInfo info(id);
+        getCommandInfo(id, info);
+        return (info.flags & juce::ApplicationCommandInfo::isTicked) != 0;
+    };
+    const auto commandToggle = [this, ticked](commands::Id id)
+    {
+        const auto* definition = commands::find(id);
+        return prefs::toggle(juce::String(definition->name).upToFirstOccurrenceOf("   ", false, false),
+                             [ticked, id] { return ticked(id); },
+                             [this, ticked, id](bool on)
+                             {
+                                 if (ticked(id) != on)
+                                     commandManager_.invokeDirectly(id, false);
+                             },
+                             definition->description);
+    };
+    const auto commandChoice = [this, ticked](juce::String label, std::vector<commands::Id> ids, juce::StringArray names)
+    {
+        return prefs::choice(std::move(label), std::move(names),
+                             [ticked, ids]
+                             {
+                                 for (int i = 0; i < (int) ids.size(); ++i)
+                                     if (ticked(ids[(size_t) i]))
+                                         return i;
+                                 return -1;
+                             },
+                             [this, ids](int index) { commandManager_.invokeDirectly(ids[(size_t) index], false); });
+    };
+    const auto savedBool = [this](const char* key, bool fallback)
+    {
+        return [this, key, fallback] { return settings_.getBoolValue(key, fallback); };
+    };
+    const auto storeBool = [this](const char* key)
+    {
+        return [this, key](bool on)
+        {
+            settings_.setValue(key, on);
+            settings_.saveIfNeeded();
+        };
+    };
+
+    std::vector<prefs::Page> pages;
+
+    pages.push_back({ "Devices", {
+        prefs::custom([this]
+        {
+            auto selector = std::make_unique<juce::AudioDeviceSelectorComponent>(engine_.deviceManager(), 0, 2, 1, 2,
+                                                                                  true, true, true, false);
+            return std::unique_ptr<juce::Component>(std::move(selector));
+        }, 380),
+        commandToggle(commands::followSystemOutput),
+    } });
+
+    // The recording format: what Recording Format... sets, without its dialog.
+    const auto setRecordFormat = [this](const char* key, int value)
+    {
+        if (awaitingRecordedTake_)
+        {
+            showError("Stop recording first");
+            return;
+        }
+        settings_.setValue(key, value);
+        settings_.saveIfNeeded();
+        engine_.setRecordFormat(savedRecordFormat());
+    };
+    pages.push_back({ "Recording", {
+        prefs::choice("Bit depth", { "16-bit", "24-bit", "32-bit float" },
+                      [this] { const int bits = settings_.getIntValue("recordBits", 24); return bits == 16 ? 0 : bits == 32 ? 2 : 1; },
+                      [setRecordFormat](int i) { static constexpr int kBits[] { 16, 24, 32 }; setRecordFormat("recordBits", kBits[i]); },
+                      "What takes are written as. 32-bit float can't clip in the file."),
+        prefs::choice("Channels", { "Mono", "Stereo" },
+                      [this] { return settings_.getIntValue("recordChannels", 2) == 1 ? 0 : 1; },
+                      [setRecordFormat](int i) { setRecordFormat("recordChannels", i == 0 ? 1 : 2); }),
+        prefs::toggle("Line takes up with what played", savedBool("compensateRecordingLatency", true),
+                      storeBool("compensateRecordingLatency"),
+                      "Move each take earlier by the device's delay, measured or reported, so it lines up."),
+        prefs::number("Latency adjustment", -200.0, 200.0, 0.1, " ms",
+                      [this] { return settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0); },
+                      [this](double ms) { settings_.setValue("recordingLatencyAdjustMs", ms); },
+                      "Added to the device's delay: more moves takes earlier."),
+        prefs::action("Latency", "Measure...", [this] { measureRecordingLatency(); }, {},
+                      "Time a click through a cable from an output to an input."),
+        commandToggle(commands::punchRecording),
+        commandToggle(commands::keepRecentInput),
+        commandToggle(commands::soundActivatedRecording),
+    } });
+
+    pages.push_back({ "Editing", {
+        commandToggle(commands::snapToGrid),
+        commandToggle(commands::snapToMarkers),
+        commandToggle(commands::snapToClipEdges),
+        commandToggle(commands::autoCrossfades),
+        commandChoice("Time shown in",
+                      { commands::timeFormatBarsBeats, commands::timeFormatMinutesSeconds, commands::timeFormatSamples,
+                        commands::timeFormatTimecode },
+                      { "Bars and beats", "Minutes and seconds", "Samples", "Timecode" }),
+        commandChoice("Timecode frames", { commands::timecode24, commands::timecode25, commands::timecode30 },
+                      { "24 fps", "25 fps", "30 fps" }),
+    } });
+
+    pages.push_back({ "Display", {
+        commandToggle(commands::showClipEnvelopes),
+        commandToggle(commands::showTakeLanes),
+        commandToggle(commands::waveformDbScale),
+        commandToggle(commands::trackSpectrograms),
+    } });
+
+    const auto folderSize = [](const juce::File& folder)
+    {
+        juce::int64 bytes = 0;
+        if (folder.isDirectory())
+            for (const auto& entry : juce::RangedDirectoryIterator(folder, true, "*", juce::File::findFiles))
+                bytes += entry.getFileSize();
+        return juce::File::descriptionOfSizeInBytes(bytes);
+    };
+    pages.push_back({ "Folders", {
+        prefs::folder("Recordings", [this] { return recordingsDirectory(); },
+                      [this](const juce::File& folder)
+                      {
+                          settings_.setValue("paths.recordings", folder.getFullPathName());
+                          settings_.saveIfNeeded();
+                          fileBrowser_.setRecordingsDirectory(recordingsDirectory());
+                      },
+                      "Where takes go until a project is saved; then they're kept beside it."),
+        prefs::folder("Edits", [this] { return editsDirectory(); },
+                      [this](const juce::File& folder)
+                      {
+                          settings_.setValue("paths.edits", folder.getFullPathName());
+                          settings_.saveIfNeeded();
+                      },
+                      "Where edited audio goes until a project is saved."),
+        prefs::folder("Templates", [this] { return templatesFolder(); }),
+        prefs::folder("Settings", [this] { return settings_.getFile().getParentDirectory(); }),
+        prefs::heading("Cache"),
+        prefs::action("Spectral edits", "Clear",
+                      [this]
+                      {
+                          for (const auto& entry : juce::RangedDirectoryIterator(spectralrender::cacheFolder(), false, "*",
+                                                                                 juce::File::findFiles))
+                              entry.getFile().deleteFile(); // one in use stays
+                          syncEngineTracks(); // remakes what this project needs
+                      },
+                      [folderSize] { return folderSize(spectralrender::cacheFolder()); },
+                      "Audio made with a clip's kept spectral edits applied. Remade when needed."),
+        prefs::action("Plugins", "Plugin Manager...", [this] { showPluginManager(); }),
+    } });
+
+    pages.push_back({ "Keyboard", {
+        prefs::action("Shortcuts", "Edit Shortcuts...", [this] { showKeyboardShortcuts(); }, {},
+                      "Change the key for any command, and import or export a set."),
+        prefs::action("Find a command", "Command Palette", [this] { showCommandPalette(); }),
+    } });
+
+    return pages;
 }
 
 } // namespace soundsplice

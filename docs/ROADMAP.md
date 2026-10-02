@@ -274,7 +274,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ⬜ **Accessibility**: full keyboard operation of tracks, clips and selections; screen-reader
   announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit)
 - ⬜ Themes and custom colors; saved screensets (✅ layouts exist)
-- ⬜ Preferences dialog (devices, formats, editing defaults, paths, cache)
+- ✅ Preferences dialog (devices, formats, editing defaults, paths, cache): File > Preferences (Ctrl+,), tabs
+  for devices, recording format and latency, editing and display, folders (recordings and edits now
+  configurable) and the cache, and keyboard. Most rows run the command the menus already have, so there is one
+  copy of each setting (`src/app/PreferencesDialog.h`)
 - ✅ **Project templates** (podcast, audiobook, music, voice-over): File > New from Template; each is named,
   routed tracks with effects ready (the voice-over's music bed ducks under the voice by sidechain). File > Save as
   Template keeps any project's tracks, routing and effects without its audio (`src/model/Templates.h`)

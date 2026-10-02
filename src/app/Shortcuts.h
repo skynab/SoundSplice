@@ -127,6 +127,7 @@ inline const juce::KeyPress fitProject      = detail::with('F', detail::cmd);
 inline const juce::KeyPress fitVertically   = detail::with('F', detail::cmd | detail::shift);
 
 inline const juce::KeyPress commandPalette = detail::with('P', detail::cmd | detail::shift);
+inline const juce::KeyPress preferences    = detail::with(',', detail::cmd);
 
 /** A shortcut with the name of what it does, so a test that finds a bad one
     can say which. */
@@ -192,6 +193,7 @@ inline std::vector<NamedShortcut> all()
         { "Fit Vertically",  fitVertically },
 
         { "Command Palette", commandPalette },
+        { "Preferences",     preferences },
     };
 }
 

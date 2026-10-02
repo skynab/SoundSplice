@@ -220,6 +220,7 @@ enum Id : int
     runMacroOnFiles,
     runScript,
     saveAsTemplate,
+    preferences,
 };
 
 /** One command's fixed description. */
@@ -249,6 +250,7 @@ inline const std::vector<Definition>& all()
         { exportMidi,       "Export MIDI...",       "File", "Write the project's notes to a MIDI file.", {} },
         { exportAudio,      "Export Audio...",      "File", "Render the mix, or each track as a stem, to audio files.", { keys::exportAudio } },
         { setProjectRoot,   "Set Project Root Folder...", "File", "Choose the folder the file browser starts in.", {} },
+        { preferences,      "Preferences...",       "File", "Every setting in one place: devices, recording, editing, display, folders and the cache.", { keys::preferences } },
         { audioSettings,    "Audio Settings...",    "File", "Choose the audio and MIDI devices.", {} },
         { keyboardShortcuts, "Keyboard Shortcuts...", "File", "Change the key for any command, and import or export a set of shortcuts.", {} },
         { followSystemOutput, "Follow System Output Device", "File", "Switch output when the system's default device changes.", {} },

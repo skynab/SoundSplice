@@ -1635,6 +1635,8 @@ juce::File MainComponent::editsDirectory() const
     // Separate from Recordings: these are derived files, and mixing them in
     // with takes makes it impossible to tell which is which when clearing
     // out space later.
+    if (const juce::File chosen(settings_.getValue("paths.edits")); chosen.isDirectory())
+        return chosen;
     auto dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
                   .getChildFile("SoundSplice Edits");
     dir.createDirectory();
