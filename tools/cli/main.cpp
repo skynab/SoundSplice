@@ -4,7 +4,7 @@
 //   soundsplice-cli analyze <file>...
 //   soundsplice-cli apply <macro> <file or folder>... --out <folder> [--loudness LUFS] [--bits N]
 //   soundsplice-cli macros
-//   soundsplice-cli render <project> <out> [--rate HZ] [--bits N] [--stems | --stems-only] [--app PATH]
+//   soundsplice-cli render <project> <out> [--rate HZ] [--bits N] [--stems | --stems-only] [--loudness LUFS] [--app PATH]
 //
 // Everything here goes through the app's own code: the same readers and
 // writers, the same effect renderer and loudness meter, the macros the app
@@ -50,7 +50,7 @@ const char* const kUsageText =
     "      --macro-file <xml> instead of <macro> reads macros from a file.\n"
     "  macros\n"
     "      List the macros saved in the app.\n"
-    "  render <project> <out> [--rate HZ] [--bits N] [--stems | --stems-only] [--app PATH]\n"
+    "  render <project> <out> [--rate HZ] [--bits N] [--stems | --stems-only] [--loudness LUFS] [--app PATH]\n"
     "      Render a project as File > Export Audio does, by running the app with\n"
     "      no window. --app (or SOUNDSPLICE_APP) says where it is if it isn't\n"
     "      installed beside this tool.\n";
@@ -388,8 +388,9 @@ juce::File findApp(const std::optional<juce::String>& given)
 
 int render(Args args)
 {
-    const auto app  = findApp(args.take("--app"));
-    const auto rate = args.take("--rate");
+    const auto app      = findApp(args.take("--app"));
+    const auto rate     = args.take("--rate");
+    const auto loudness = args.take("--loudness");
     engine::ExportOptions options;
     juce::String          error;
     if (! bitsOption(args, options, error))
@@ -415,7 +416,8 @@ int render(Args args)
     const juce::StringArray   command { app.getFullPathName(), "--render", project.getFullPathName(), out.getFullPathName(),
                                         juce::String(rate ? rate->getDoubleValue() : 48000.0),
                                         juce::String(options.bitsPerSample), juce::String(contents),
-                                        report.getFile().getFullPathName() };
+                                        report.getFile().getFullPathName(),
+                                        juce::String(loudness ? juce::jmin(0.0, loudness->getDoubleValue()) : 0.0) };
     if (! child.start(command, 0))
         return fail("couldn't start " + app.getFullPathName());
     child.waitForProcessToFinish(-1);

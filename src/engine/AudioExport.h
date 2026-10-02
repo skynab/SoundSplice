@@ -97,6 +97,12 @@ struct ExportOptions
         ignored where nothing is quantised - 32-bit float, and the lossy
         formats, which do their own thing entirely. */
     bool         dither        = true;
+
+    /** Loudness-normalize on export (engine/ExportLoudness.h): the mix
+        brought to this many LUFS with its true peak held under
+        truePeakCeilingDb. 0 leaves the loudness as it is. */
+    double       loudnessLufs      = 0.0;
+    double       truePeakCeilingDb = -1.0;
 };
 
 /** The file extension, without the dot. */

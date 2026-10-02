@@ -1,3 +1,5 @@
+#include "engine/ExportLoudness.h"
+#include "ExportNaming.h"
 #include "MainComponentInternal.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -376,11 +378,17 @@ void MainComponent::exportAudioDialog()
 {
     const double deviceRate = engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0;
 
-    app::ExportAudioDialog::show(this, deviceRate,
-        [self = juce::Component::SafePointer<MainComponent>(this)](engine::ExportOptions options)
+    int markerRanges = 0;
+    for (const auto& marker : history_.current().markers)
+        if (marker.lengthBeats > 0.0)
+            ++markerRanges;
+
+    app::ExportAudioDialog::show(this, deviceRate, ! timeSelection_.isEmpty(), markerRanges,
+        [self = juce::Component::SafePointer<MainComponent>(this)](engine::ExportOptions options, app::ExportRange range,
+                                                                   juce::String pattern)
         {
             if (self != nullptr)
-                self->exportProject(options);
+                self->exportProject(options, range, pattern);
         });
 }
 
@@ -393,7 +401,7 @@ struct MainComponent::ExportTask
     juce::String                                 label; // shown in the progress window
 };
 
-void MainComponent::exportProject(const engine::ExportOptions& options)
+void MainComponent::exportProject(const engine::ExportOptions& options, app::ExportRange range, juce::String namePattern)
 {
     if (renderJob_ != nullptr)
     {
@@ -403,13 +411,17 @@ void MainComponent::exportProject(const engine::ExportOptions& options)
 
     const auto extension = engine::extensionFor(options.format);
 
-    chooser_ = std::make_unique<juce::FileChooser>("Export " + extension.toUpperCase(),
+    // One file per marker range: what's chosen is where they go, and its
+    // name stands in for $project; each file is named from the pattern.
+    chooser_ = std::make_unique<juce::FileChooser>(range == app::ExportRange::MarkerRanges
+                                                       ? "Export " + extension.toUpperCase() + " - one file per marker range, in this folder"
+                                                       : "Export " + extension.toUpperCase(),
                                                    juce::File{}, "*." + extension);
     const auto flags = juce::FileBrowserComponent::saveMode
                      | juce::FileBrowserComponent::canSelectFiles
                      | juce::FileBrowserComponent::warnAboutOverwriting;
 
-    chooser_->launchAsync(flags, [this, options, extension](const juce::FileChooser& fc)
+    chooser_->launchAsync(flags, [this, options, extension, range, namePattern](const juce::FileChooser& fc)
     {
         auto file = fc.getResult();
         if (file == juce::File{})
@@ -418,7 +430,7 @@ void MainComponent::exportProject(const engine::ExportOptions& options)
         file = file.withFileExtension(extension);
 
         bool       folderFailed = false;
-        const auto tasks        = buildExportTasks(file, options, folderFailed);
+        const auto tasks        = buildRangeExportTasks(file, options, range, namePattern, folderFailed);
 
         if (folderFailed)
         {
@@ -447,15 +459,18 @@ void MainComponent::exportProject(const engine::ExportOptions& options)
 std::vector<MainComponent::ExportTask>
 MainComponent::buildExportTasks(const juce::File& masterFile,
                                 const engine::ExportOptions& options,
-                                bool& folderFailed)
+                                bool& folderFailed,
+                                double startBeats,
+                                double lengthBeats)
 {
     std::vector<ExportTask> tasks;
 
-    // A tail past the last clip so reverb and delay decay into the file rather
-    // than being cut off mid-ring at the final beat. Shared by the mix and
-    // every stem, so they all come out the same length and line up when
-    // dropped into another session.
-    const double lengthBeats = songEndBeats() + kBounceTailBeats;
+    // The whole project: a tail past the last clip so reverb and delay decay
+    // into the file rather than being cut off mid-ring at the final beat.
+    // Shared by the mix and every stem, so they all come out the same length
+    // and line up when dropped into another session.
+    if (lengthBeats < 0.0)
+        lengthBeats = songEndBeats() + kBounceTailBeats;
 
     if (engine::writesMasterMix(options.contents))
     {
@@ -466,6 +481,7 @@ MainComponent::buildExportTasks(const juce::File& masterFile,
         // Everything the mix contains, rendered by the mixer itself — see
         // AudioEngine::renderOffline, and the comment there for why an export
         // calling the mixer rather than copying it is the whole design.
+        task.render.startBeats  = startBeats;
         task.render.lengthBeats = lengthBeats;
         task.render.sampleRate  = options.sampleRate;
         tasks.push_back(std::move(task));
@@ -501,6 +517,7 @@ MainComponent::buildExportTasks(const juce::File& masterFile,
         task.write = options;
         task.label = juce::String(song.tracks[(size_t) i].name);
 
+        task.render.startBeats     = startBeats;
         task.render.lengthBeats    = lengthBeats;
         task.render.sampleRate     = options.sampleRate;
         task.render.soloTrack      = i;
@@ -512,6 +529,74 @@ MainComponent::buildExportTasks(const juce::File& masterFile,
     return tasks;
 }
 
+/** The tasks for @p range: the project or the time selection into
+    @p chosenFile, or one file per marker range beside it, named by
+    @p namePattern (app/ExportNaming.h). */
+std::vector<MainComponent::ExportTask>
+MainComponent::buildRangeExportTasks(const juce::File& chosenFile, const engine::ExportOptions& options,
+                                     app::ExportRange range, const juce::String& namePattern, bool& folderFailed)
+{
+    if (range == app::ExportRange::TimeSelection && ! timeSelection_.isEmpty())
+        return buildExportTasks(chosenFile, options, folderFailed, timeSelection_.startBeats, timeSelection_.lengthBeats());
+    if (range != app::ExportRange::MarkerRanges)
+        return buildExportTasks(chosenFile, options, folderFailed);
+
+    std::vector<model::Marker> regions;
+    for (const auto& marker : history_.current().markers)
+        if (marker.lengthBeats > 0.0)
+            regions.push_back(marker);
+    std::stable_sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
+
+    const auto project = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension()
+                                                      : chosenFile.getFileNameWithoutExtension();
+    juce::StringArray names;
+    for (int i = 0; i < (int) regions.size(); ++i)
+        names.add(app::exportnaming::expand(namePattern,
+                                            app::exportnaming::regionFields(project, juce::String(regions[(size_t) i].name),
+                                                                            i, (int) regions.size())));
+    names = app::exportnaming::distinct(names);
+
+    std::vector<ExportTask> tasks;
+    for (int i = 0; i < (int) regions.size(); ++i)
+    {
+        const auto file = chosenFile.getSiblingFile(names[i]).withFileExtension(chosenFile.getFileExtension());
+        auto more = buildExportTasks(file, options, folderFailed, regions[(size_t) i].startBeats, regions[(size_t) i].lengthBeats);
+        if (folderFailed)
+            return {};
+        for (auto& task : more)
+        {
+            if (task.render.soloTrack < 0)
+                task.label = names[i];
+            tasks.push_back(std::move(task));
+        }
+    }
+    return tasks;
+}
+
+namespace
+{
+    /** Loudness-normalize on export, for one rendered file. A mix is brought
+        to the target, limited as it must be; its stems after it get the
+        same gain without the limiter, so they still sum to it. A stem with
+        no mix before it (stems only) is brought to the target itself. */
+    engine::ExportLoudnessResult applyExportLoudness(bool isStem, const engine::ExportOptions& options,
+                                                     juce::AudioBuffer<float>& buffer, std::optional<double>& mixGainDb)
+    {
+        if (options.loudnessLufs >= 0.0)
+            return {};
+        if (isStem && mixGainDb)
+        {
+            buffer.applyGain(juce::Decibels::decibelsToGain((float) *mixGainDb));
+            return {};
+        }
+        const auto result = engine::normalizeForExport(buffer, options.sampleRate, options.loudnessLufs,
+                                                       options.truePeakCeilingDb);
+        if (! isStem && result.measured)
+            mixGainDb = result.gainDb;
+        return result;
+    }
+}
+
 /** Runs @p tasks on a background thread behind a progress window. */
 void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce::File& masterFile)
 {
@@ -520,6 +605,7 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
         int  written  = 0;
         int  stems    = 0;
         bool anyFailure = false;
+        engine::ExportLoudnessResult loudness; // the last mix's
     };
 
     auto result = std::make_shared<Result>();
@@ -531,6 +617,7 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
     auto work = [this, tasks, result](app::OfflineRenderJob& job)
     {
         const int count = (int) tasks.size();
+        std::optional<double> mixGainDb;
 
         for (int i = 0; i < count; ++i)
         {
@@ -548,7 +635,7 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
                 return ! job.shouldAbort();
             };
 
-            const auto buffer = engine_.renderOffline(task.render);
+            auto buffer = engine_.renderOffline(task.render);
 
             // Empty means cancelled, or nothing to render. Either way there is
             // no file worth writing — see OfflineRenderOptions::onProgress for
@@ -556,6 +643,12 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
             // a partial buffer.
             if (buffer.getNumSamples() == 0)
                 continue;
+
+            if (task.render.soloTrack < 0)
+                mixGainDb.reset(); // a new range: its own mix sets its stems' gain
+            if (const auto loudness = applyExportLoudness(task.render.soloTrack >= 0, task.write, buffer, mixGainDb);
+                loudness.measured && task.render.soloTrack < 0)
+                result->loudness = loudness;
 
             if (engine::writeAudioFile(task.file, buffer, task.write))
             {
@@ -610,11 +703,18 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
         // The stem count is said plainly because it is the only place the
         // mute/solo rule becomes visible: stems are the tracks that sound in
         // the mix, so exporting with solo left on legitimately writes one.
+        // The loudness it reached, which a limited mix may fall a little short of.
+        const auto loudness = result->loudness.measured
+                                ? ", " + juce::String(result->loudness.integratedLufs, 1) + " LUFS, "
+                                      + juce::String(result->loudness.truePeakDb, 1) + " dBTP"
+                                : juce::String();
         if (result->stems > 0)
             self->showStatus("Exported: " + masterFile.getFileName() + " + "
-                             + juce::String(result->stems) + " stem(s)");
+                             + juce::String(result->stems) + " stem(s)" + loudness);
+        else if (result->written > 1)
+            self->showStatus("Exported " + juce::String(result->written) + " files to " + masterFile.getParentDirectory().getFileName() + loudness);
         else
-            self->showStatus("Exported: " + masterFile.getFileName());
+            self->showStatus("Exported: " + masterFile.getFileName() + loudness);
     };
 
     renderJob_ = app::OfflineRenderJob::launch("Exporting audio", std::move(work),
@@ -796,9 +896,16 @@ bool MainComponent::renderHeadless(const juce::File& project, const juce::File& 
     }
 
     bool ok = true;
+    std::optional<double> mixGainDb;
     for (const auto& task : tasks)
     {
-        const auto buffer = engine_.renderOffline(task.render);
+        auto buffer = engine_.renderOffline(task.render);
+        if (task.render.soloTrack < 0)
+            mixGainDb.reset();
+        if (const auto loudness = applyExportLoudness(task.render.soloTrack >= 0, task.write, buffer, mixGainDb);
+            loudness.measured)
+            report << task.label << ": " << juce::String(loudness.integratedLufs, 1) << " LUFS, "
+                   << juce::String(loudness.truePeakDb, 1) << " dBTP\n";
         if (buffer.getNumSamples() == 0)
         {
             report << "Nothing rendered for " << task.label << "\n";

@@ -48,6 +48,7 @@
 #include "KeyboardShortcutsDialog.h"
 #include "MacrosDialog.h"
 #include "ScriptPane.h"
+#include "ExportAudioDialog.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -210,10 +211,18 @@ private:
     static bool            isSilentAudioFile(const juce::File& file);
     void                   exportAudioDialog();
     struct ExportTask;
-    void                   exportProject(const engine::ExportOptions& options);
+    void                   exportProject(const engine::ExportOptions& options,
+                                         app::ExportRange range = app::ExportRange::Project,
+                                         juce::String namePattern = {});
     std::vector<ExportTask> buildExportTasks(const juce::File& masterFile,
                                              const engine::ExportOptions& options,
-                                             bool& folderFailed);
+                                             bool& folderFailed,
+                                             double startBeats = 0.0,
+                                             double lengthBeats = -1.0);
+    std::vector<ExportTask> buildRangeExportTasks(const juce::File& chosenFile,
+                                                  const engine::ExportOptions& options,
+                                                  app::ExportRange range, const juce::String& namePattern,
+                                                  bool& folderFailed);
     void                   startExport(const std::vector<ExportTask>& tasks,
                                        const juce::File& masterFile);
     void                   showAudioSettings();

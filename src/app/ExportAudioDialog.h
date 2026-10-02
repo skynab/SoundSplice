@@ -8,6 +8,30 @@
 
 namespace soundsplice::app
 {
+/** What an export covers. */
+enum class ExportRange
+{
+    Project,       // everything arranged, with a tail for reverbs to ring out
+    TimeSelection, // exactly the time selection
+    MarkerRanges,  // one file per marker range, named from a pattern
+};
+
+/** The loudness targets offered, and what each is for. */
+struct ExportLoudnessTarget
+{
+    double      lufs; // 0: leave it
+    const char* name;
+};
+
+inline constexpr ExportLoudnessTarget kExportLoudnessTargets[] {
+    { 0.0, "Leave it" },
+    { -14.0, "-14 LUFS (streaming music)" },
+    { -16.0, "-16 LUFS (podcasts)" },
+    { -18.0, "-18 LUFS (audiobooks, quieter podcasts)" },
+    { -23.0, "-23 LUFS (EBU R128 broadcast)" },
+    { -24.0, "-24 LUFS (ATSC A/85 broadcast)" },
+};
+
 /**
     The "what kind of file?" step of an audio export.
 
@@ -32,12 +56,14 @@ public:
         matches what is being heard unless the user says otherwise. */
     static void show (juce::Component* parent,
                       double defaultSampleRate,
-                      std::function<void (engine::ExportOptions)> onAccepted)
+                      bool hasTimeSelection,
+                      int markerRangeCount,
+                      std::function<void (engine::ExportOptions, ExportRange, juce::String)> onAccepted)
     {
         auto* window = new juce::AlertWindow ("Export Audio", {},
                                               juce::MessageBoxIconType::NoIcon, parent);
 
-        buildControls (*window, defaultSampleRate);
+        buildControls (*window, defaultSampleRate, hasTimeSelection, markerRangeCount);
 
         window->addButton ("Export", 1, juce::KeyPress (juce::KeyPress::returnKey));
         window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
@@ -49,7 +75,7 @@ public:
                 if (result != 1 || ! onAccepted)
                     return;
 
-                onAccepted (readOptions (*window));
+                onAccepted (readOptions (*window), readRange (*window), readNamePattern (*window));
             }));
     }
 
@@ -62,7 +88,8 @@ public:
         thing that asked for it dereferenced a null and took the test binary
         down with a segfault.
     */
-    static void buildControls (juce::AlertWindow& window, double defaultSampleRate)
+    static void buildControls (juce::AlertWindow& window, double defaultSampleRate,
+                               bool hasTimeSelection = false, int markerRangeCount = 0)
     {
         juce::StringArray formatNames;
         for (auto format : engine::allExportFormats())
@@ -78,6 +105,28 @@ public:
         window.addComboBox ("bits", {}, "Bit depth:");
         window.addComboBox ("quality", {}, "Quality:");
         window.addComboBox ("dither", { "On (TPDF)", "Off" }, "Dither:");
+
+        juce::StringArray loudnessNames;
+        for (const auto& target : kExportLoudnessTargets)
+            loudnessNames.add (target.name);
+        window.addComboBox ("loudness", loudnessNames, "Loudness (true peak under -1 dB):");
+        window.getComboBoxComponent ("loudness")->setSelectedItemIndex (0, juce::dontSendNotification);
+
+        // What it covers: only what there is to cover, by item id so the
+        // reading doesn't depend on which were offered.
+        window.addComboBox ("range", {}, "Range:");
+        auto* rangeBox = window.getComboBoxComponent ("range");
+        rangeBox->addItem ("Whole project", 1 + (int) ExportRange::Project);
+        if (hasTimeSelection)
+            rangeBox->addItem ("Time selection", 1 + (int) ExportRange::TimeSelection);
+        if (markerRangeCount > 0)
+            rangeBox->addItem ("Each marker range (" + juce::String (markerRangeCount) + " files)",
+                               1 + (int) ExportRange::MarkerRanges);
+        rangeBox->setSelectedId (1 + (int) ExportRange::Project, juce::dontSendNotification);
+
+        window.addTextEditor ("names", "$project - $region", "File names ($project $region $index $date):");
+        refreshNamesEnablement (window);
+        rangeBox->onChange = [&window] { refreshNamesEnablement (window); };
 
         auto* formatBox = window.getComboBoxComponent ("format");
         formatBox->setSelectedItemIndex (0, juce::dontSendNotification);
@@ -132,12 +181,37 @@ public:
         if (auto* ditherBox = window.getComboBoxComponent ("dither"))
             options.dither = ditherBox->getSelectedItemIndex() == 0;
 
+        if (auto* loudnessBox = window.getComboBoxComponent ("loudness"))
+            options.loudnessLufs = kExportLoudnessTargets[juce::jlimit (0, (int) std::size (kExportLoudnessTargets) - 1,
+                                                                        loudnessBox->getSelectedItemIndex())].lufs;
+
         if (auto* contentsBox = window.getComboBoxComponent ("contents"))
             options.contents = (engine::ExportContents)
                                    juce::jlimit (0, engine::kNumExportContents - 1,
                                                  contentsBox->getSelectedItemIndex());
 
         return options;
+    }
+
+    static ExportRange readRange (juce::AlertWindow& window)
+    {
+        if (auto* rangeBox = window.getComboBoxComponent ("range"); rangeBox != nullptr && rangeBox->getSelectedId() > 0)
+            return (ExportRange) (rangeBox->getSelectedId() - 1);
+        return ExportRange::Project;
+    }
+
+    static juce::String readNamePattern (juce::AlertWindow& window)
+    {
+        auto* names = window.getTextEditor ("names");
+        const auto pattern = names != nullptr ? names->getText().trim() : juce::String();
+        return pattern.isEmpty() ? juce::String ("$project - $region") : pattern;
+    }
+
+    /** The name pattern only means anything for one file per range. */
+    static void refreshNamesEnablement (juce::AlertWindow& window)
+    {
+        if (auto* names = window.getTextEditor ("names"))
+            names->setEnabled (readRange (window) == ExportRange::MarkerRanges);
     }
 
     /** Rebuilds the rate/depth/quality boxes for whichever format is selected.

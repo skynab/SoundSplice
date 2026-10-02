@@ -5,7 +5,7 @@
 
 namespace soundsplice
 {
-/** `SoundSplice --render <project> <out> <rate> <bits> <contents> <report>`:
+/** `SoundSplice --render <project> <out> <rate> <bits> <contents> <report> [lufs]`:
     renders a project with no window and quits. soundsplice-cli runs this
     rather than having a mixer of its own, so a render from the command line
     is the app's own export and can't drift from it. What happened goes to
@@ -31,6 +31,8 @@ inline int runHeadlessRender(const juce::StringArray& args)
     options.sampleRate    = juce::jlimit(8000.0, 384000.0, args[at + 3].getDoubleValue());
     options.bitsPerSample = args[at + 4].getIntValue() == 16 ? 16 : args[at + 4].getIntValue() == 32 ? 32 : 24;
     options.contents      = (engine::ExportContents) juce::jlimit(0, engine::kNumExportContents - 1, args[at + 5].getIntValue());
+    if (args.size() > at + 7)
+        options.loudnessLufs = juce::jmin(0.0, args[at + 7].getDoubleValue());
 
     juce::String report;
     bool         ok = false;
