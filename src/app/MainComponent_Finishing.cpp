@@ -3,6 +3,7 @@
 #include "engine/Diagnostics.h"
 #include "model/EssentialSound.h"
 #include "model/Templates.h"
+#include "engine/Transcriber.h"
 #include "SpectralRender.h"
 #include "app/ApplyEffectsDialog.h"
 
@@ -1268,6 +1269,30 @@ std::vector<prefs::Page> MainComponent::preferencePages()
                       [folderSize] { return folderSize(spectralrender::cacheFolder()); },
                       "Audio made with a clip's kept spectral edits applied. Remade when needed."),
         prefs::action("Plugins", "Plugin Manager...", [this] { showPluginManager(); }),
+        prefs::heading("Transcription"),
+        prefs::action("Model", "Choose...", [this] { chooseTranscriptionModel(); },
+                      [this]
+                      {
+                          const juce::File model(settings_.getValue("transcribe.model"));
+                          return model.existsAsFile() ? model.getFileName() : juce::String("None chosen");
+                      },
+                      "A whisper.cpp model file (ggml-base.en.bin, say): larger is slower and more accurate"),
+        prefs::action("Models", "Get Models...", [] { juce::URL(engine::kModelsUrl).launchInDefaultBrowser(); }, {},
+                      "Open the page whisper.cpp's models come from, in your browser"),
+        prefs::choice("Language", { "Detect it", "English", "Spanish", "French", "German", "Italian", "Portuguese", "Dutch",
+                                    "Japanese", "Chinese" },
+                      [this]
+                      {
+                          static const juce::StringArray codes { "auto", "en", "es", "fr", "de", "it", "pt", "nl", "ja", "zh" };
+                          return juce::jmax(0, codes.indexOf(settings_.getValue("transcribe.language", "auto")));
+                      },
+                      [this](int i)
+                      {
+                          static const juce::StringArray codes { "auto", "en", "es", "fr", "de", "it", "pt", "nl", "ja", "zh" };
+                          settings_.setValue("transcribe.language", codes[i]);
+                          settings_.saveIfNeeded();
+                      },
+                      "What's spoken. A \".en\" model is English only."),
     } });
 
     pages.push_back({ "Keyboard", {

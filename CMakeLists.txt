@@ -69,6 +69,9 @@ if(SOUNDSPLICE_BUILD_APP)
   # RNNoise, for AI speech enhancement - see cmake/rnnoise.cmake.
   include(cmake/rnnoise.cmake)
 
+  # whisper.cpp, for transcription - see cmake/whisper.cmake.
+  include(cmake/whisper.cmake)
+
   add_subdirectory(src/app)
 
   # Tools link JUCE, so they build only when the app (and thus JUCE) is enabled.

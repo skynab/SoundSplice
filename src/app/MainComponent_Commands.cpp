@@ -457,6 +457,13 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
                 togglePanel(panelMenuIndex("History"));
             refreshHistoryPane(true);
             break;
+        case commands::transcribe:
+            if (workspace_.isPanelOpen("Transcript"))
+                workspace_.revealPanel("Transcript");
+            else
+                togglePanel(panelMenuIndex("Transcript"));
+            transcribeSelectedTrack();
+            break;
         case commands::checkDelivery:
             if (workspace_.isPanelOpen("Delivery"))
                 workspace_.revealPanel("Delivery");
@@ -1115,6 +1122,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::measureLoudness);
         add(commands::diagnostics);
         add(commands::checkDelivery);
+        add(commands::transcribe);
         add(commands::amplitudeStatistics);
         menu.addSeparator();
         add(commands::findClipping);

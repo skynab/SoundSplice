@@ -96,6 +96,21 @@ namespace detail
             out << "\n";
         }
 
+        // Its words, one to a line, the text last since it may hold spaces.
+        if (! clip.transcript.empty())
+        {
+            out << "CLIPWORDS " << clip.transcript.size() << "\n";
+            for (const auto& word : clip.transcript)
+            {
+                std::string text = word.text;
+                for (auto& c : text)
+                    if (c == '\n' || c == '\r')
+                        c = ' ';
+                out << "WORD " << num(word.start) << " " << num(word.end) << " " << num((double) word.confidence) << " "
+                    << text << "\n";
+            }
+        }
+
         // Only when there's a curve: a clip without one reads back as unity.
         if (! clip.envelope.isEmpty())
         {
@@ -705,6 +720,23 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
                 double      amount = 0.0;
                 if (es >> task >> amount)
                     clip.essential.amounts[task] = (float) amount;
+            }
+        }
+
+        if (readTagged("CLIPWORDS", rest))
+        {
+            const int count = std::atoi(rest.c_str());
+            for (int i = 0; i < count; ++i)
+            {
+                if (! readTagged("WORD", rest))
+                    return fail("truncated transcript");
+                std::istringstream ws(rest);
+                TranscriptWord     word;
+                double             confidence = 1.0;
+                ws >> word.start >> word.end >> confidence;
+                word.confidence = (float) confidence;
+                std::getline(ws >> std::ws, word.text);
+                clip.transcript.push_back(std::move(word));
             }
         }
 

@@ -98,7 +98,7 @@ inline std::unique_ptr<DockLayoutNode> buildWorkspaceLayout(Workspace workspace)
                              above(0.25,
                                    leaf({ "Tracks" }),
                                    above(0.80,
-                                         leaf({ "Audio" }),
+                                         leaf({ "Audio", "Transcript" }, "Audio"),
                                          leaf({ "Transport", "Keyboard" }, "Transport"))),
                              above(0.45,
                                    leaf({ "Mastering", "Essential Sound" }, "Mastering"),

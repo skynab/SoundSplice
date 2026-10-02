@@ -1,6 +1,8 @@
 #include "engine/ExportLoudness.h"
 #include "engine/CdImage.h"
 #include "engine/DeliverySpec.h"
+#include "engine/Transcriber.h"
+#include "model/TextEdit.h"
 #include "ExportNaming.h"
 #include "RenderReport.h"
 #include "MainComponentInternal.h"
@@ -1589,6 +1591,187 @@ void MainComponent::switchReferenceAB()
     reference.setMode(toB ? engine::ReferenceAB::B : engine::ReferenceAB::A);
     commandManager_.commandStatusChanged();
     showStatus(toB ? "B: the reference, \"" + referenceName_ + "\"" : juce::String("A: the mix"));
+}
+
+// ---- Transcription and editing by text ------------------------------------------
+
+/** The Transcript pane, when the document or the selected track has changed
+    since it last looked (it keeps its selection otherwise). */
+void MainComponent::refreshTranscriptPane(bool force)
+{
+    const auto signature = history_.stateId() * 131ull + (unsigned long long) (selectedTrackIndex_ + 1);
+    if (! force && signature == transcriptShown_)
+        return;
+    transcriptShown_ = signature;
+
+    const auto& song  = history_.current();
+    const auto  words = model::textedit::wordsOn(song, selectedTrackIndex_);
+    juce::String empty;
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
+        empty = "Select a track to see what's said on it.";
+    else
+    {
+        bool hasAudio = false;
+        for (const auto& clip : song.tracks[(size_t) selectedTrackIndex_].clips)
+            hasAudio = hasAudio || clip.type == model::ClipType::Audio;
+        empty = hasAudio ? "Transcribe this track to edit its audio as text: delete words to cut them, "
+                           "find the ums and long pauses to take out. It runs on this computer."
+                         : "This track has no audio to transcribe.";
+    }
+    transcriptPane_.setWords(words, empty);
+}
+
+/** Transcribe Track: every file the selected track's audio clips play,
+    transcribed whole (so a trimmed clip's words are there if it's extended
+    again), behind a progress window. Every clip of those files, on any
+    track, gets the words. */
+void MainComponent::transcribeSelectedTrack()
+{
+    if (renderJob_ != nullptr)
+    {
+        showError("Something is already rendering");
+        return;
+    }
+    const juce::File model(settings_.getValue("transcribe.model"));
+    if (! model.existsAsFile())
+    {
+        showError("Choose a transcription model first: Preferences > Folders > Transcription");
+        showPreferences(4);
+        return;
+    }
+    const auto& song = history_.current();
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
+        return;
+
+    std::vector<std::string> files;
+    for (const auto& clip : song.tracks[(size_t) selectedTrackIndex_].clips)
+        if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty() && ! clip.warp
+            && std::find(files.begin(), files.end(), clip.audioFile) == files.end())
+            files.push_back(clip.audioFile);
+    if (files.empty())
+    {
+        showError("The selected track has no audio to transcribe (warped clips can't be)");
+        return;
+    }
+
+    const auto language = settings_.getValue("transcribe.language", "auto").toStdString();
+    auto results = std::make_shared<std::vector<std::pair<std::string, std::vector<model::TranscriptWord>>>>();
+    auto error   = std::make_shared<juce::String>();
+
+    auto work = [files, model, language, results, error](app::OfflineRenderJob& job)
+    {
+        juce::AudioFormatManager formats;
+        engine::audioformats::registerAll(formats);
+        const int count = (int) files.size();
+        for (int f = 0; f < count && ! job.shouldAbort(); ++f)
+        {
+            const juce::File file(juce::String::fromUTF8(files[(size_t) f].c_str()));
+            std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+            if (reader == nullptr || reader->lengthInSamples <= 0 || reader->lengthInSamples > std::numeric_limits<int>::max())
+            {
+                *error = "Could not read " + file.getFileName();
+                continue;
+            }
+            const int channels = (int) juce::jlimit(1u, 8u, reader->numChannels);
+            juce::AudioBuffer<float> audio(channels, (int) reader->lengthInSamples);
+            reader->read(&audio, 0, audio.getNumSamples(), 0, true, true);
+            std::vector<float> mono((size_t) audio.getNumSamples(), 0.0f);
+            for (int ch = 0; ch < channels; ++ch)
+                for (int i = 0; i < audio.getNumSamples(); ++i)
+                    mono[(size_t) i] += audio.getSample(ch, i) / (float) channels;
+
+            const auto result = engine::transcribe(model, mono, reader->sampleRate, language, [&job, f, count, file](double p)
+            {
+                job.report(app::overallProgress(f, count, p), "Transcribing " + file.getFileName());
+                return ! job.shouldAbort();
+            });
+            if (! result.ok)
+            {
+                *error = juce::String::fromUTF8(result.error.c_str());
+                continue;
+            }
+            std::vector<model::TranscriptWord> words;
+            for (const auto& w : result.words)
+                words.push_back({ w.text, w.start, w.end, w.confidence });
+            results->emplace_back(files[(size_t) f], std::move(words));
+        }
+    };
+
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), results, error](bool cancelled)
+    {
+        if (self == nullptr)
+            return;
+        self->renderJob_.reset();
+        if (cancelled)
+        {
+            self->showStatus("Transcription stopped");
+            return;
+        }
+        if (results->empty())
+        {
+            self->showError(error->isNotEmpty() ? *error : juce::String("Nothing was transcribed"));
+            return;
+        }
+        int words = 0;
+        for (const auto& [file, list] : *results)
+            words += (int) list.size();
+        self->history_.edit("Transcribe", [results](model::Song& s)
+        {
+            for (auto& track : s.tracks)
+                for (auto& clip : track.clips)
+                    for (const auto& entry : *results)
+                        if (clip.audioFile == entry.first)
+                            clip.transcript = entry.second;
+        });
+        self->refreshTranscriptPane(true);
+        self->showStatus("Transcribed " + juce::String(words) + " words" + (error->isNotEmpty() ? " (" + *error + ")" : juce::String())
+                         + " - edit the audio as text in the Transcript pane");
+    };
+
+    renderJob_ = app::OfflineRenderJob::launch("Transcribing", std::move(work), std::move(onFinished));
+}
+
+/** The Transcript pane's Delete: the stretches cut from the selected track,
+    gaps closed and joins crossfaded, as one undo step. */
+void MainComponent::deleteTranscriptRanges(const std::vector<std::pair<double, double>>& ranges)
+{
+    const auto& song = history_.current();
+    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size() || ranges.empty())
+        return;
+    const int  trackId     = song.tracks[(size_t) selectedTrackIndex_].id;
+    const auto fileSeconds = [this](const std::string& file)
+    {
+        return engine_.probeDurationSeconds(juce::File(juce::String::fromUTF8(file.c_str())));
+    };
+
+    double removed = 0.0;
+    for (const auto& r : ranges)
+        removed += r.second - r.first;
+    int cuts = 0;
+    history_.edit(ranges.size() == 1 ? "Delete words" : "Delete words and pauses", [&](model::Song& s)
+    {
+        cuts = model::textedit::cutRanges(s, trackId, ranges, 0.01, fileSeconds);
+    });
+    refreshAfterArrangementEdit();
+    refreshTranscriptPane(true);
+    showStatus("Cut " + juce::String(cuts) + (cuts == 1 ? " stretch, " : " stretches, ") + juce::String(removed, 1)
+               + " s - Undo puts them back");
+}
+
+/** Preferences' Transcription model: a whisper.cpp ggml file. */
+void MainComponent::chooseTranscriptionModel()
+{
+    chooser_ = std::make_unique<juce::FileChooser>("Transcription Model (a whisper.cpp ggml .bin file)",
+                                                   juce::File(settings_.getValue("transcribe.model")), "*.bin");
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [this](const juce::FileChooser& fc)
+                          {
+                              if (fc.getResult() == juce::File{})
+                                  return;
+                              settings_.setValue("transcribe.model", fc.getResult().getFullPathName());
+                              settings_.saveIfNeeded();
+                              showStatus("Transcription model: " + fc.getResult().getFileName());
+                          });
 }
 
 } // namespace soundsplice

@@ -25,6 +25,7 @@ inline bool recordable(const commands::Definition& definition)
         case commands::exportCdImage:
         case commands::renderQueue:
         case commands::loadReference:
+        case commands::transcribe:
         case commands::followSystemOutput:
             return false;
         default:

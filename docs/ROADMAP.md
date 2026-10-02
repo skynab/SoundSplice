@@ -332,11 +332,19 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 Things none of the three apps do well, or that would make SoundSplice the obvious choice for
 voice, podcast and restoration work:
 
-1. **Local speech transcription** (whisper.cpp): word-timed transcript as a label track (Audacity 3.4+
-   does this through OpenVINO; bundling it makes it one click)
-2. **Edit audio by editing text**: delete words in the transcript to cut the audio, with automatic
-   micro-crossfades and room-tone fill. Descript does this; no open desktop editor does.
-3. **Filler-word and long-pause removal** ("um", "uh", gaps over N ms), reviewable before it's applied
+1. ✅ **Local speech transcription** (whisper.cpp): word-timed transcript as a label track (Audacity 3.4+
+   does this through OpenVINO; bundling it makes it one click): whisper.cpp 1.9.4 (MIT, `cmake/whisper.cmake`),
+   CPU only, a model the user picks in Preferences (Get Models opens where they come from); Analyze > Transcribe
+   Track keeps each clip's words in file time, so trims and splits keep them on their audio
+   (`src/engine/Transcriber.cpp`)
+2. ✅ **Edit audio by editing text**: delete words in the transcript to cut the audio, with automatic
+   micro-crossfades and room-tone fill. Descript does this; no open desktop editor does: the Transcript pane
+   shows the track's words as text; selecting them and Delete cuts that track and closes the gap, crossfading
+   each join from the audio beyond its edges, as one undo step (`src/model/TextEdit.h`,
+   `src/app/TranscriptPane.h`). The crossfade replaces room-tone fill: nothing is left to fill
+3. ✅ **Filler-word and long-pause removal** ("um", "uh", gaps over N ms), reviewable before it's applied:
+   Find Fillers and Find Long Pauses select them in the Transcript pane; Ctrl-click keeps any one, and nothing
+   changes until Delete (pauses are shortened, not closed up)
 4. **Stem separation** (vocals/drums/bass/other) via a local ONNX model (Demucs-class)
 5. ✅ **AI speech enhancement / noise suppression** (DeepFilterNet or RNNoise-class) alongside the
    classic noise print: Edit > Speech Enhancement (AI), RNNoise 0.2 (BSD-3, its weights in the release

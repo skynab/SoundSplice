@@ -39,6 +39,18 @@ struct EssentialSettings
     bool operator==(const EssentialSettings&) const = default;
 };
 
+/** One transcribed word: its text, where it is in the clip's file, and how
+    sure the transcriber was (0-1). */
+struct TranscriptWord
+{
+    std::string text;
+    double      start      = 0.0; // seconds into the file
+    double      end        = 0.0;
+    float       confidence = 1.0f;
+
+    bool operator==(const TranscriptWord&) const = default;
+};
+
 /** One recording of a stretch of an audio clip: the clip can play any of its
     takes (model/Takes.h). @c shiftSeconds places it against the other takes -
     where in this take's file the clip is, minus where in the active take's -
@@ -134,6 +146,12 @@ struct Clip
     /** Essential Sound: what the clip is, and its tasks' amounts, which make
         the slots marked EffectSlot::essential in effects above. */
     EssentialSettings essential;
+
+    /** What's said in it, word by word (Analyze > Transcribe), each timed in
+        seconds into its file like the volume curve, so trims, moves and
+        splits keep every word on the audio it came from. Audio clips only;
+        see model/Transcript.h. */
+    std::vector<TranscriptWord> transcript;
 
     bool operator==(const Clip&) const = default;
 };

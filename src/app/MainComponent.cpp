@@ -937,6 +937,10 @@ MainComponent::MainComponent(bool headless)
     workspace_.registerPanel("Script", scriptPane_);
     workspace_.registerPanel("Delivery", deliveryPane_);
     workspace_.registerPanel("History", historyPane_);
+    workspace_.registerPanel("Transcript", transcriptPane_);
+    transcriptPane_.onSeek       = [this](double seconds) { seekToBeat(model::clockFor(history_.current()).beatAt(seconds)); };
+    transcriptPane_.onDelete     = [this](const std::vector<std::pair<double, double>>& ranges) { deleteTranscriptRanges(ranges); };
+    transcriptPane_.onTranscribe = [this] { transcribeSelectedTrack(); };
     historyPane_.onGoTo = [this](int step)
     {
         history_.jumpTo(step);
@@ -1327,6 +1331,9 @@ void MainComponent::timerCallback()
     engine_.pump();
     finishRecordingIfReady();
     refreshHistoryPane();
+    refreshTranscriptPane();
+    if (engine_.isPlaying())
+        transcriptPane_.setPlayhead(model::clockFor(history_.current()).secondsAt(playheadBeat()));
     finishMidiRecordingIfReady();
 
     // Hot-plugged MIDI, on a slow cadence: enumerating devices is a system

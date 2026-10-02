@@ -44,7 +44,8 @@ target_sources(SoundSplice PRIVATE
   MainComponent_Transport.cpp
   ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
   ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
-  ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
+  ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp
+  ${PROJECT_SOURCE_DIR}/src/engine/Transcriber.cpp)
 
 # Microphone permission is a per-platform question with only one real answer
 # today (see app/MicrophonePermission.h): macOS gates it and can prompt for it,
@@ -98,6 +99,7 @@ target_link_libraries(SoundSplice
     WavPack::WavPack
     lua::lua
     rnnoise::rnnoise
+    whisper
     juce::juce_audio_utils
   PUBLIC
     juce::juce_recommended_config_flags

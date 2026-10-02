@@ -148,7 +148,7 @@ tools/      soundsplice-cli — convert, analyze, apply a macro, render a projec
             soundsplice_bounce — headless offline render and audio smoke test
 tests/      Unit tests (rt, engine, model, app) and GUI tests
 docs/       PLAN.md — the original Looper-Audio build plan, for reference
-cmake/      CPM bootstrap, and the LAME, codec and Lua builds
+cmake/      CPM bootstrap, and the LAME, codec, Lua, RNNoise and whisper.cpp builds
 ```
 
 ## License

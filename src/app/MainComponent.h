@@ -53,6 +53,7 @@
 #include "RenderQueueDialog.h"
 #include "DeliveryPane.h"
 #include "HistoryPane.h"
+#include "TranscriptPane.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -233,6 +234,10 @@ private:
     void                   measureMixForReference(std::function<void()> then);
     void                   setReferenceComparing(bool on);
     void                   switchReferenceAB();
+    void                   refreshTranscriptPane(bool force = false);
+    void                   transcribeSelectedTrack();
+    void                   deleteTranscriptRanges(const std::vector<std::pair<double, double>>& ranges);
+    void                   chooseTranscriptionModel();
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
     void                   exportCdImage();
@@ -1100,6 +1105,8 @@ private:
     ScriptPane                         scriptPane_;
     DeliveryPane                       deliveryPane_;
     HistoryPane                        historyPane_;
+    TranscriptPane                     transcriptPane_;
+    unsigned long long                 transcriptShown_ = 0; // the state and track the pane last showed
     unsigned long long                 historyShown_ = 0; // what the History pane last showed (refreshHistoryPane)
 
     // A/B against a reference (Transport menu): its name and loudness, and the

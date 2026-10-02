@@ -83,6 +83,7 @@ add_executable(soundsplice_tests
   engine/CdImageTests.cpp
   engine/DeliverySpecTests.cpp
   model/SongDiffTests.cpp
+  model/TextEditTests.cpp
   engine/ReferenceABTests.cpp
   model/EssentialSoundTests.cpp
   model/EffectParamsTests.cpp
@@ -190,9 +191,12 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/DeliveryPaneTests.cpp
     gui/HistoryPaneTests.cpp
     gui/SpeechEnhanceTests.cpp
+    gui/TranscriberTests.cpp
+    gui/TranscriptPaneTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
-    ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
+    ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp
+    ${PROJECT_SOURCE_DIR}/src/engine/Transcriber.cpp)
 
   target_include_directories(soundsplice_gui_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
@@ -216,6 +220,7 @@ if (SOUNDSPLICE_BUILD_APP)
       WavPack::WavPack
       lua::lua
       rnnoise::rnnoise
+      whisper
       juce::juce_audio_utils
       Catch2::Catch2WithMain
       juce::juce_recommended_config_flags

@@ -281,6 +281,24 @@ TEST_CASE("Project info round-trips, line breaks flattened", "[model][io]")
     REQUIRE(restored.tracks == original.tracks); // nothing after it was disturbed
 }
 
+TEST_CASE("A clip's transcript round-trips with everything around it", "[model][io]")
+{
+    Song original = makeSampleSong();
+    auto& clip    = original.tracks[0].clips[0];
+    clip.type      = ClipType::Audio;
+    clip.audioFile = "voice.wav";
+    clip.essential.role = SoundRole::Dialogue;     // written before the words
+    clip.essential.amounts["noise"] = 4.0f;
+    clip.transcript = { { "Hello,", 0.25, 0.6, 0.97f }, { "rock 'n' roll", 0.6, 1.4, 0.5f } };
+    clip.envelope.addPoint(0.5, 0.8f);              // and after them
+
+    Song restored;
+    std::string error;
+    REQUIRE(deserialize(serialize(original), restored, &error));
+    REQUIRE(restored.tracks[0].clips[0].transcript == clip.transcript);
+    REQUIRE(restored == original);
+}
+
 TEST_CASE("An empty song round-trips", "[model][io]")
 {
     const Song original;
