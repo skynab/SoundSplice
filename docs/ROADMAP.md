@@ -278,8 +278,12 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ✅ **Project templates** (podcast, audiobook, music, voice-over): File > New from Template; each is named,
   routed tracks with effects ready (the voice-over's music bed ducks under the voice by sidechain). File > Save as
   Template keeps any project's tracks, routing and effects without its audio (`src/model/Templates.h`)
-- ⬜ Headless CLI: extend `soundsplice_bounce` into `soundsplice-cli` for convert, render, apply macro
-  and analyze
+- ✅ Headless CLI: extend `soundsplice_bounce` into `soundsplice-cli` for convert, render, apply macro
+  and analyze: a tool of its own beside the bounce smoke test (`tools/cli`). `convert` (format, rate by the
+  sinc resampler, bit depth), `analyze` (R128 loudness, true peak, peak, RMS, DC, dynamic range), `apply` (a
+  saved macro of effects, or one from a file, over files or folders, with a loudness target), `macros`, and
+  `render`, which runs the app with `--render` - no window, no audio device, nothing autosaved - so a project
+  renders through the app's own export rather than a second mixer
 
 ### Phase 8 — Render and export parity (REAPER, Audition)
 

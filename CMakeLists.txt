@@ -71,6 +71,7 @@ if(SOUNDSPLICE_BUILD_APP)
   # Tools link JUCE, so they build only when the app (and thus JUCE) is enabled.
   if(SOUNDSPLICE_BUILD_TOOLS)
     add_subdirectory(tools/bounce)
+    add_subdirectory(tools/cli)
   endif()
 endif()
 

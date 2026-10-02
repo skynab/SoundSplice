@@ -8,9 +8,10 @@
 
 namespace soundsplice
 {
-MainComponent::MainComponent()
-    : settings_(makeSettingsOptions())
+MainComponent::MainComponent(bool headless)
+    : engine_(! headless), settings_(makeSettingsOptions())
 {
+    headless_ = headless;
     menuBar_.setModel(this);
     addAndMakeVisible(menuBar_);
 
@@ -1118,6 +1119,9 @@ MainComponent::MainComponent()
     recoveryPending_ = autosaveFile().existsAsFile();
     lastAutosaveMs_  = juce::Time::getMillisecondCounterHiRes();
 
+    if (headless_)
+        return;
+
     startTimerHz(30);
 
     // Offered once the window is up rather than from inside the constructor,
@@ -1143,10 +1147,12 @@ MainComponent::~MainComponent()
     // A clean document leaves nothing to recover. A dirty one only gets here
     // past the discard prompt, which has already cleared it, so an autosave
     // that survives into the next launch is one a crash left behind.
-    if (! hasUnsavedChanges() && ! recoveryPending_)
-        discardAutosave();
-
-    saveDockLayout();
+    if (! headless_)
+    {
+        if (! hasUnsavedChanges() && ! recoveryPending_)
+            discardAutosave();
+        saveDockLayout();
+    }
     stopTimer();
     removeKeyListener(commandManager_.getKeyMappings());
     commandManager_.removeListener(&commandSpy_);

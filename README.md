@@ -80,7 +80,22 @@ CMake options, all `ON` by default:
 | --- | --- |
 | `SOUNDSPLICE_BUILD_APP` | the application (pulls JUCE) |
 | `SOUNDSPLICE_BUILD_TESTS` | the unit and GUI tests (pulls Catch2) |
-| `SOUNDSPLICE_BUILD_TOOLS` | the headless `soundsplice_bounce` render/smoke-test tool (needs the app) |
+| `SOUNDSPLICE_BUILD_TOOLS` | `soundsplice-cli` and the headless `soundsplice_bounce` render/smoke-test tool (needs the app) |
+
+## Command line
+
+`soundsplice-cli` converts, analyzes and processes audio, and renders projects, with no window:
+
+```bash
+soundsplice-cli convert take.wav take.flac --rate 44100 --bits 16
+soundsplice-cli analyze mix.wav
+soundsplice-cli apply "Podcast clean-up" raw/ --out cleaned/ --loudness -16
+soundsplice-cli render show.soundsplice show.wav --stems
+```
+
+`apply` runs a macro saved in the app (Tools > Macros) when it's made of effects; `soundsplice-cli
+macros` lists them. `render` runs the app itself with `--render`, so a project renders exactly as
+File > Export Audio would; it finds the app beside the tool, or say where with `--app`.
 
 ## Tests
 
@@ -128,10 +143,11 @@ src/rt/     Lock-free real-time primitives (no JUCE dependency)
 src/engine/ Headless audio engine: transport, sequencer, tracks, effects, export, recording
 src/model/  Project document: Song, Track, Clip, undo history, save/load (no JUCE)
 src/app/    Application shell and UI panes
-tools/      soundsplice_bounce — headless offline render and audio smoke test
+tools/      soundsplice-cli — convert, analyze, apply a macro, render a project;
+            soundsplice_bounce — headless offline render and audio smoke test
 tests/      Unit tests (rt, engine, model, app) and GUI tests
 docs/       PLAN.md — the original Looper-Audio build plan, for reference
-cmake/      CPM bootstrap and the LAME build
+cmake/      CPM bootstrap, and the LAME, codec and Lua builds
 ```
 
 ## License

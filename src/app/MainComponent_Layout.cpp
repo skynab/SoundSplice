@@ -169,6 +169,8 @@ void MainComponent::loadDockLayout()
 
 void MainComponent::saveDockLayout()
 {
+    if (headless_)
+        return; // a headless render's window was never the user's to keep
     // Both the active layout's own slot and the flat key: the flat one is
     // what an older build reads, so writing it keeps a downgrade from
     // landing on an empty workspace.

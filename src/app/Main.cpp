@@ -5,6 +5,46 @@
 
 namespace soundsplice
 {
+/** `SoundSplice --render <project> <out> <rate> <bits> <contents> <report>`:
+    renders a project with no window and quits. soundsplice-cli runs this
+    rather than having a mixer of its own, so a render from the command line
+    is the app's own export and can't drift from it. What happened goes to
+    the report file (a GUI app has no console to print to); the exit code is
+    0 when every file was written. */
+inline constexpr const char* kRenderFlag = "--render";
+
+inline int runHeadlessRender(const juce::StringArray& args)
+{
+    const int at = args.indexOf(kRenderFlag);
+    if (at < 0 || args.size() < at + 7)
+        return 2;
+
+    const juce::File project(args[at + 1].unquoted());
+    const juce::File out(args[at + 2].unquoted());
+    const juce::File reportFile(args[at + 6].unquoted());
+
+    engine::ExportOptions options;
+    options.format = engine::ExportFormat::Wav;
+    for (int i = 0; i < engine::kNumExportFormats; ++i)
+        if (out.hasFileExtension(engine::extensionFor((engine::ExportFormat) i)))
+            options.format = (engine::ExportFormat) i;
+    options.sampleRate    = juce::jlimit(8000.0, 384000.0, args[at + 3].getDoubleValue());
+    options.bitsPerSample = args[at + 4].getIntValue() == 16 ? 16 : args[at + 4].getIntValue() == 32 ? 32 : 24;
+    options.contents      = (engine::ExportContents) juce::jlimit(0, engine::kNumExportContents - 1, args[at + 5].getIntValue());
+
+    juce::String report;
+    bool         ok = false;
+    {
+        MainComponent main(true);
+        ok = main.renderHeadless(project, out, options, report);
+    }
+    reportFile.replaceWithText(report);
+    return ok ? 0 : 1;
+}
+} // namespace soundsplice
+
+namespace soundsplice
+{
 /** Application entry point and top-level window for Phase 0. */
 class SoundSpliceApplication final : public juce::JUCEApplication
 {
@@ -25,6 +65,14 @@ public:
         if (const auto args = getCommandLineParameterArray(); args.contains(kProbePluginFlag))
         {
             setApplicationReturnValue(runPluginProbe(args));
+            quit();
+            return;
+        }
+
+        // Run by soundsplice-cli to render a project: see runHeadlessRender.
+        if (const auto args = getCommandLineParameterArray(); args.contains(kRenderFlag))
+        {
+            setApplicationReturnValue(runHeadlessRender(args));
             quit();
             return;
         }

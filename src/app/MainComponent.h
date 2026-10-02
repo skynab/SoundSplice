@@ -104,8 +104,18 @@ class MainComponent final : public juce::Component,
                             public juce::DragAndDropContainer
 {
 public:
-    MainComponent();
+    /** @p headless: for a render with no window (renderHeadless) - no audio
+        device is opened, nothing is autosaved or offered for recovery, and
+        the window layout isn't saved. */
+    explicit MainComponent(bool headless = false);
     ~MainComponent() override;
+
+    /** `SoundSplice --render`, which soundsplice-cli runs: opens @p project
+        and exports it to @p out exactly as File > Export Audio would - the
+        same tasks and the same renderer - on this thread. False on failure;
+        @p report says what was written, or why not. */
+    bool renderHeadless(const juce::File& project, const juce::File& out,
+                        const engine::ExportOptions& options, juce::String& report);
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -691,6 +701,7 @@ private:
     std::vector<macros::Macro>     macros_;
     std::optional<macros::Macro>   recordingMacro_;
     bool                           runningMacro_ = false;
+    bool                           headless_     = false;
     CommandSpy                     commandSpy_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   addBusTrack();

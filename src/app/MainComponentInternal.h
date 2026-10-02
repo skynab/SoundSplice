@@ -5,6 +5,7 @@
 // class split across several files by area (see src/app/CMakeLists.txt); this
 // is what those files have in common. Not for use anywhere else.
 
+#include "SettingsLocation.h"
 #include "MainComponent.h"
 
 #include "ScrollFollow.h"
@@ -142,12 +143,7 @@ namespace mainui
 
     inline juce::PropertiesFile::Options makeSettingsOptions()
     {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName     = "SoundSplice";
-        opts.filenameSuffix      = ".settings";
-        opts.folderName          = "SoundSplice";
-        opts.osxLibrarySubFolder = "Application Support";
-        return opts;
+        return app::settingsOptions();
     }
 }
 

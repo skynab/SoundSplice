@@ -6,7 +6,6 @@
 
 #include <juce_core/juce_core.h>
 
-#include "CommandTable.h"
 #include "model/EffectParams.h"
 #include "model/Favorites.h"
 
@@ -24,7 +23,9 @@ namespace soundsplice::macros
     every time it ran, and an effect chain is how a macro carries settings.
 
     Kept in the app's settings, like Favorites, and for the same reason: a
-    way of working is reached for across projects.
+    way of working is reached for across projects. JUCE's core only, so
+    soundsplice-cli can read them; which commands can be steps is
+    MacroCommands.h, which needs the command table.
 */
 struct Step
 {
@@ -42,40 +43,6 @@ struct Macro
 
     bool operator==(const Macro&) const = default;
 };
-
-/** Whether @p definition can be a step: it acts without asking anything,
-    and isn't about macros or the app's own settings. */
-inline bool recordable(const commands::Definition& definition)
-{
-    if (juce::String(definition.name).trimEnd().endsWith("..."))
-        return false;
-    switch (definition.id)
-    {
-        case commands::newProject:
-        case commands::commandPalette:
-        case commands::keyboardShortcuts:
-        case commands::recordMacro:
-        case commands::manageMacros:
-        case commands::runMacroOnFiles:
-        case commands::runScript:
-        case commands::followSystemOutput:
-            return false;
-        default:
-            return true;
-    }
-}
-
-/** The command a step runs, or nullptr for an effects step or a command
-    that no longer exists. */
-inline const commands::Definition* commandFor(const Step& step)
-{
-    if (step.isEffects())
-        return nullptr;
-    for (const auto& definition : commands::all())
-        if (step.command == definition.name)
-            return &definition;
-    return nullptr;
-}
 
 /** "Effects: Compressor, Reverb", or the command's name. */
 inline juce::String describe(const Step& step)

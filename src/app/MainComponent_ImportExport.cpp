@@ -768,4 +768,52 @@ void MainComponent::mixAndRenderToNewTrack()
     renderJob_ = app::OfflineRenderJob::launch("Mix and Render", std::move(work), std::move(onFinished));
 }
 
+bool MainComponent::renderHeadless(const juce::File& project, const juce::File& out,
+                                   const engine::ExportOptions& options, juce::String& report)
+{
+    model::Song song;
+    std::string error;
+    if (! project.existsAsFile() || ! model::deserialize(project.loadFileAsString().toStdString(), song, &error))
+    {
+        report = "Could not open " + project.getFullPathName() + (error.empty() ? "" : ": " + juce::String(error));
+        return false;
+    }
+    loadSongIntoEditor(app::media::withResolvedPaths(song, project));
+    projectFile_  = project;
+    savedStateId_ = history_.stateId();
+
+    bool folderFailed = false;
+    const auto tasks  = buildExportTasks(out, options, folderFailed);
+    if (folderFailed)
+    {
+        report = "Could not create the stems folder beside " + out.getFullPathName();
+        return false;
+    }
+    if (tasks.empty())
+    {
+        report = "Nothing to render: every track is muted or silenced by a solo";
+        return false;
+    }
+
+    bool ok = true;
+    for (const auto& task : tasks)
+    {
+        const auto buffer = engine_.renderOffline(task.render);
+        if (buffer.getNumSamples() == 0)
+        {
+            report << "Nothing rendered for " << task.label << "\n";
+            ok = false;
+        }
+        else if (engine::writeAudioFile(task.file, buffer, task.write))
+            report << "Wrote " << task.file.getFullPathName() << "  ("
+                   << juce::String(buffer.getNumSamples() / options.sampleRate, 2) << " s)\n";
+        else
+        {
+            report << "Could not write " << task.file.getFullPathName() << "\n";
+            ok = false;
+        }
+    }
+    return ok;
+}
+
 } // namespace soundsplice
