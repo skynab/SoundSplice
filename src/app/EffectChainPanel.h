@@ -6,6 +6,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "LayoutHelpers.h"
 #include "ParametricEqView.h"
 #include "TransferCurveView.h"
@@ -262,7 +263,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1e1e22));
+        g.fillAll(theme::surface(*this, theme::paneId));
         if (! contentVisible_)
             return;
 

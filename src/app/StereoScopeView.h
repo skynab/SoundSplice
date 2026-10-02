@@ -6,6 +6,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 namespace soundsplice
 {
 /**
@@ -55,7 +57,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         auto area = getLocalBounds().toFloat();
-        g.setColour(juce::Colour(0xff111115));
+        g.setColour(theme::surface(*this, theme::insetId));
         g.fillRoundedRectangle(area, 3.0f);
 
         auto meter = area.removeFromBottom(16.0f).reduced(4.0f, 3.0f);

@@ -7,6 +7,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 namespace soundsplice
 {
 /**
@@ -209,7 +211,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         const auto area = getLocalBounds().toFloat();
-        g.setColour(juce::Colour(0xff26292e));
+        g.setColour(theme::surface(*this, theme::popupId));
         g.fillRoundedRectangle(area, 6.0f);
         g.setColour(juce::Colours::white.withAlpha(0.18f));
         g.drawRoundedRectangle(area.reduced(0.5f), 6.0f, 1.0f);

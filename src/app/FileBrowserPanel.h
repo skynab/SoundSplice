@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "Theme.h"
 #include "FileGrid.h"
 #include "Icons.h"
 
@@ -185,7 +186,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1e1e22));
+        g.fillAll(theme::surface(*this, theme::paneId));
     }
 
     void resized() override

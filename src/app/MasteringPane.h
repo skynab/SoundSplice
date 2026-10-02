@@ -5,6 +5,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "AudioFileTypes.h"
 
 #include "engine/EqCurve.h"
@@ -156,7 +157,7 @@ public:
         repaint();
     }
 
-    void paint(juce::Graphics& g) override { g.fillAll(juce::Colour(0xff1a1a1e)); }
+    void paint(juce::Graphics& g) override { g.fillAll(theme::surface(*this, theme::paneId)); }
 
     /** Over the children, not behind them: the controls live inside a
         viewport that covers the whole pane, so a highlight drawn in paint()

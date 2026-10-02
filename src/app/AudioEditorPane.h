@@ -7,6 +7,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "engine/ClipSpectralEdits.h"
 #include "model/Track.h"
 
@@ -534,7 +535,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1a1a1e));
+        g.fillAll(theme::surface(*this, theme::paneId));
         if (! contentVisible_)
             return;
 
@@ -545,7 +546,7 @@ public:
         if (area.isEmpty())
             return;
 
-        g.setColour(juce::Colour(0xff121216));
+        g.setColour(theme::surface(*this, theme::insetId));
         g.fillRect(area);
 
         // The selection is painted under the waveform, so the waveform stays

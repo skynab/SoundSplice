@@ -5,6 +5,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "model/Song.h"
 
 namespace soundsplice
@@ -113,7 +114,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1a1a1e));
+        g.fillAll(theme::surface(*this, theme::paneId));
 
         const int trackCount = (int) song_.tracks.size();
         const int sceneCount = (int) song_.scenes.size();

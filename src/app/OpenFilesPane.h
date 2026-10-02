@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 namespace soundsplice
 {
 /**
@@ -88,7 +90,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1a1a1e));
+        g.fillAll(theme::surface(*this, theme::paneId));
 
         if (entries_.empty())
         {

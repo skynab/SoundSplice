@@ -4,6 +4,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "engine/Loudness.h"
 #include "engine/Spectrum.h"
 
@@ -87,13 +88,13 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1a1a1e));
+        g.fillAll(theme::surface(*this, theme::paneId));
 
         const auto area = graphBounds().toFloat();
         if (area.isEmpty())
             return;
 
-        g.setColour(juce::Colour(0xff121216));
+        g.setColour(theme::surface(*this, theme::insetId));
         g.fillRoundedRectangle(area, 3.0f);
 
         paintGrid(g, area);

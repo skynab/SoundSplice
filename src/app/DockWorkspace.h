@@ -7,6 +7,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "DockLayoutTree.h"
 #include "DockRegion.h"
 
@@ -31,7 +32,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff26262a));
+        g.fillAll(theme::surface(*this, theme::workspaceId));
         g.setColour(juce::Colours::white.withAlpha(hovered_ ? 0.30f : 0.10f));
 
         // A short grip mark in the middle, so the bar reads as draggable.

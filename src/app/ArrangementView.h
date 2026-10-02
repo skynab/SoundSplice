@@ -6,6 +6,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "model/Song.h"
 
 #include "AudioFileTypes.h"
@@ -378,7 +379,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff1e1e22));
+        g.fillAll(theme::surface(*this, theme::paneId));
 
         const float  ppb       = geometry_.pixelsPerBeat();
         const double qpb       = quartersPerBar();

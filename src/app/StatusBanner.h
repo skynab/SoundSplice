@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 namespace soundsplice
 {
 /**
@@ -70,7 +72,7 @@ public:
     {
         const auto area = getLocalBounds().toFloat();
 
-        g.setColour(juce::Colour(0xff1c1c20).withAlpha(0.94f * opacity_));
+        g.setColour(theme::surface(*this, theme::popupId).withAlpha(0.94f * opacity_));
         g.fillRoundedRectangle(area, 5.0f);
 
         g.setColour((isError_ ? juce::Colour(0xffe05c4a) : juce::Colours::white).withAlpha(0.45f * opacity_));

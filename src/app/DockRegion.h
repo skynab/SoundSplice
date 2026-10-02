@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include <functional>
 #include <memory>
 #include <vector>
@@ -35,7 +37,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(active_ ? juce::Colour(0xff3d3d44) : juce::Colour(0xff2a2a2e));
+        g.fillAll(theme::surface(*this, active_ ? theme::tabActiveId : theme::tabInactiveId));
         g.setColour(juce::Colours::white.withAlpha(active_ ? 0.95f : 0.55f));
 
         // The label gives up the right-hand strip to the close cross, so a

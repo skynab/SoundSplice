@@ -5,6 +5,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "app/AutomationGeometry.h"
 #include "app/TimelineGeometry.h"
 #include "app/TrackColours.h"
@@ -188,7 +189,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         auto bounds = getLocalBounds();
-        g.fillAll(juce::Colour(0xff1b1b1f));
+        g.fillAll(theme::surface(*this, theme::paneId));
 
         bounds.removeFromTop(kToolbarHeight);
 
@@ -203,7 +204,7 @@ public:
         const auto lane  = laneBounds();
         const auto& range = currentRange();
 
-        g.setColour(juce::Colour(0xff141417));
+        g.setColour(theme::surface(*this, theme::insetId));
         g.fillRect(lane);
 
         drawGrid(g, lane, range);

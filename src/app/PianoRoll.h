@@ -6,6 +6,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
 #include "engine/MidiNote.h"
 #include "engine/Pattern.h"
 
@@ -526,7 +527,7 @@ public:
     {
         if (noClipSelected_)
         {
-            g.fillAll(juce::Colour(0xff1e1e22));
+            g.fillAll(theme::surface(*this, theme::paneId));
             g.setColour(juce::Colours::white.withAlpha(0.45f));
             g.setFont(juce::FontOptions(13.0f));
             g.drawText("Select a track and clip to edit its notes",
