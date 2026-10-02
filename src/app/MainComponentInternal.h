@@ -61,6 +61,12 @@ inline constexpr int kFirstLayoutMenuId = 40;
 inline constexpr int kFirstFavoriteMenuId       = 0x1000;
 inline constexpr int kFirstRemoveFavoriteMenuId = 0x1800;
 inline constexpr int kFirstMacroMenuId          = 0x1400; // within the favorites' range, which stops short of it
+
+// File > New from Template: the built-in templates, then the user's own
+// (from kFirstUserTemplateMenuId), then Show Templates Folder.
+inline constexpr int kFirstTemplateMenuId       = 0x0E00;
+inline constexpr int kFirstUserTemplateMenuId   = 0x0E10;
+inline constexpr int kShowTemplatesMenuId       = 0x0EFF;
 inline constexpr int kSaveTrackFavoriteMenuId   = 0x1FFF;
 
 /** Colour entries in the per-track gear menu, clear of that menu's own

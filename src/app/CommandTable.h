@@ -219,6 +219,7 @@ enum Id : int
     manageMacros,
     runMacroOnFiles,
     runScript,
+    saveAsTemplate,
 };
 
 /** One command's fixed description. */
@@ -240,6 +241,7 @@ inline const std::vector<Definition>& all()
         { openProject,      "Open Project...",      "File", "Open a saved project.", { keys::open } },
         { saveProject,      "Save Project",         "File", "Save the project over its file, or choose one the first time.", { keys::save } },
         { saveProjectAs,    "Save Project As...",   "File", "Save the project to a new file.", { keys::saveAs } },
+        { saveAsTemplate,   "Save as Template...",  "File", "Keep this project's tracks, routing and effects, without its audio, to start new projects from.", {} },
         { previewAudioFile, "Preview Audio File...", "File", "Listen to an audio file without adding it to the project.", {} },
         { importAudio,      "Import Audio to Track...   (or drag files in)", "File", "Add an audio file to a new track.", {} },
         { importMidi,       "Import MIDI...",       "File", "Add the tracks of a MIDI file to the project.", {} },

@@ -31,8 +31,12 @@ model::Song MainComponent::makeEmptySong()
 
 void MainComponent::createEmptyProject()
 {
-    const model::Song song = makeEmptySong();
+    startProject(makeEmptySong());
+}
 
+/** Starts a new, unsaved project from @p song. */
+void MainComponent::startProject(const model::Song& song)
+{
     history_.reset(song);
     selectedTrackIndex_ = 0;
     tempoSlider.setValue(song.bpm, juce::dontSendNotification);

@@ -1,6 +1,7 @@
 #include "MainComponentInternal.h"
 
 #include "CommandTable.h"
+#include "model/Templates.h"
 #include "model/Markers.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -421,6 +422,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::manageMacros:     showMacros(); break;
         case commands::runMacroOnFiles:  chooseMacroForFiles(); break;
         case commands::runScript:        chooseScriptToRun(); break;
+        case commands::saveAsTemplate:   saveAsTemplate(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -799,9 +801,23 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
     if (topLevelMenuIndex == 0) // File
     {
         add(commands::newProject);
+        {
+            juce::PopupMenu templates;
+            for (int i = 0; i < (int) std::size(model::templates::kAll); ++i)
+                templates.addItem(kFirstTemplateMenuId + i, model::templates::name(model::templates::kAll[i]));
+            const auto own = userTemplates();
+            if (! own.empty())
+                templates.addSeparator();
+            for (int i = 0; i < (int) own.size() && kFirstUserTemplateMenuId + i < kShowTemplatesMenuId; ++i)
+                templates.addItem(kFirstUserTemplateMenuId + i, own[(size_t) i].getFileNameWithoutExtension());
+            templates.addSeparator();
+            templates.addItem(kShowTemplatesMenuId, "Show Templates Folder");
+            menu.addSubMenu("New from Template", templates);
+        }
         add(commands::openProject);
         add(commands::saveProject);
         add(commands::saveProjectAs);
+        add(commands::saveAsTemplate);
         menu.addSeparator();
         add(commands::previewAudioFile);
         add(commands::importAudio);
@@ -1136,6 +1152,17 @@ std::vector<palette::Entry> MainComponent::paletteEntries()
         entries.push_back(std::move(entry));
     }
 
+    for (const auto which : model::templates::kAll)
+    {
+        palette::Entry entry;
+        entry.name        = juce::String("New from Template: ") + model::templates::name(which);
+        entry.category    = "File";
+        entry.description = model::templates::description(which);
+        entry.key         = juce::String("template:") + model::templates::name(which);
+        entry.run         = [this, which] { newFromTemplate(model::templates::make(which)); };
+        entries.push_back(std::move(entry));
+    }
+
     for (int i = 0; i < (int) macros_.size(); ++i)
     {
         palette::Entry entry;
@@ -1223,6 +1250,32 @@ void MainComponent::menuItemSelected(int menuItemID, int)
     if (menuItemID >= kFirstFavoriteMenuId)
     {
         applyFavorite(menuItemID - kFirstFavoriteMenuId);
+        return;
+    }
+    if (menuItemID == kShowTemplatesMenuId)
+    {
+        templatesFolder().createDirectory();
+        templatesFolder().revealToUser();
+        return;
+    }
+    if (menuItemID >= kFirstUserTemplateMenuId && menuItemID < kShowTemplatesMenuId)
+    {
+        const auto own  = userTemplates();
+        const int  index = menuItemID - kFirstUserTemplateMenuId;
+        if (index < (int) own.size())
+        {
+            model::Song song;
+            std::string error;
+            if (model::deserialize(own[(size_t) index].loadFileAsString().toStdString(), song, &error))
+                newFromTemplate(std::move(song));
+            else
+                showError("Could not read the template " + own[(size_t) index].getFileName() + ": " + error);
+        }
+        return;
+    }
+    if (menuItemID >= kFirstTemplateMenuId && menuItemID < kFirstTemplateMenuId + (int) std::size(model::templates::kAll))
+    {
+        newFromTemplate(model::templates::make(model::templates::kAll[menuItemID - kFirstTemplateMenuId]));
         return;
     }
     if (menuItemID >= kFirstLayoutMenuId && menuItemID < kFirstLayoutMenuId + layouts::kNumWorkspaces)

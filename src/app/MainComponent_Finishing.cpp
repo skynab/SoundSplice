@@ -2,6 +2,7 @@
 
 #include "engine/Diagnostics.h"
 #include "model/EssentialSound.h"
+#include "model/Templates.h"
 #include "app/ApplyEffectsDialog.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -973,6 +974,71 @@ void MainComponent::chooseScriptToRun()
                                   togglePanel(panelMenuIndex("Script"));
                               runScript(file.loadFileAsString(), file.getFileName());
                           });
+}
+
+// ---- Project templates ------------------------------------------------------
+
+/** A new project from a template, after asking to save this one. */
+void MainComponent::newFromTemplate(model::Song song)
+{
+    confirmDiscardChanges([this, song = std::move(song)]
+    {
+        startProject(song);
+        showStatus("New project from a template: its tracks are ready for audio");
+    });
+}
+
+juce::File MainComponent::templatesFolder() const
+{
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("SoundSplice").getChildFile("Templates");
+}
+
+/** The user's templates, by name. */
+std::vector<juce::File> MainComponent::userTemplates() const
+{
+    std::vector<juce::File> found;
+    if (! templatesFolder().isDirectory())
+        return found;
+    for (const auto& entry : juce::RangedDirectoryIterator(templatesFolder(), false, "*.soundsplice", juce::File::findFiles))
+        found.push_back(entry.getFile());
+    std::sort(found.begin(), found.end(), [](const juce::File& a, const juce::File& b)
+              { return a.getFileName().compareNatural(b.getFileName()) < 0; });
+    return found;
+}
+
+/** Save as Template: this project without its audio, under a name, in the
+    templates folder File > New from Template lists. */
+void MainComponent::saveAsTemplate()
+{
+    auto* window = new juce::AlertWindow("Save as Template",
+                                         "Keeps the tracks, their routing and effects, and the tempo - not the audio, notes or markers.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("name", projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("My Template"),
+                          "Name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+            const auto name = juce::File::createLegalFileName(window->getTextEditorContents("name").trim());
+            if (name.isEmpty())
+                return;
+
+            const auto folder = self->templatesFolder();
+            folder.createDirectory();
+            const auto file = folder.getChildFile(name + ".soundsplice");
+            const auto text = model::serialize(model::templates::asTemplate(self->history_.current()));
+            if (! file.replaceWithText(juce::String::fromUTF8(text.c_str())))
+            {
+                self->showError("Could not write " + file.getFullPathName());
+                return;
+            }
+            self->showStatus("Saved template \"" + name + "\": File > New from Template");
+        }));
 }
 
 } // namespace soundsplice

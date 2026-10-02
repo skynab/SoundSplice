@@ -651,6 +651,11 @@ private:
     int                    pluginStateSyncTicks_ = 0;
     void                   showPluginManager();
     void                   showKeyboardShortcuts();
+    void                   startProject(const model::Song& song);
+    void                   newFromTemplate(model::Song song);
+    juce::File             templatesFolder() const;
+    std::vector<juce::File> userTemplates() const;
+    void                   saveAsTemplate();
     bool                   applyChainToSelection(const std::vector<model::EffectSlot>& chain, const juce::String& what);
     void                   toggleMacroRecording();
     void                   noteMacroCommand(juce::CommandID id);

@@ -275,7 +275,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit)
 - ⬜ Themes and custom colors; saved screensets (✅ layouts exist)
 - ⬜ Preferences dialog (devices, formats, editing defaults, paths, cache)
-- ⬜ **Project templates** (podcast, audiobook, music, voice-over)
+- ✅ **Project templates** (podcast, audiobook, music, voice-over): File > New from Template; each is named,
+  routed tracks with effects ready (the voice-over's music bed ducks under the voice by sidechain). File > Save as
+  Template keeps any project's tracks, routing and effects without its audio (`src/model/Templates.h`)
 - ⬜ Headless CLI: extend `soundsplice_bounce` into `soundsplice-cli` for convert, render, apply macro
   and analyze
 
