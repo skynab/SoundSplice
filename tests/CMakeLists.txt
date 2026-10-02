@@ -177,6 +177,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/ScriptingTests.cpp
     gui/OfflineRenderTests.cpp
     gui/PreferencesDialogTests.cpp
+    gui/ThemeTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)

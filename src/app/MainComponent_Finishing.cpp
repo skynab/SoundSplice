@@ -1179,6 +1179,55 @@ std::vector<prefs::Page> MainComponent::preferencePages()
         commandToggle(commands::showTakeLanes),
         commandToggle(commands::waveformDbScale),
         commandToggle(commands::trackSpectrograms),
+        prefs::heading("Theme"),
+        prefs::choice("Theme",
+                      [] { juce::StringArray names; for (const auto& t : theme::all()) names.add(t.name); return names; }(),
+                      [this]
+                      {
+                          const auto& current = theme::named(settings_.getValue("theme", "Dark"));
+                          for (int i = 0; i < (int) theme::all().size(); ++i)
+                              if (&theme::all()[(size_t) i] == &current)
+                                  return i;
+                          return 0;
+                      },
+                      [this](int i)
+                      {
+                          settings_.setValue("theme", theme::all()[(size_t) i].name);
+                          applyTheme();
+                      },
+                      "High Contrast is black, white and yellow, with a ring round whatever has keyboard focus."),
+        prefs::choice("Accent",
+                      [] { juce::StringArray names; for (const auto& a : theme::accents()) names.add(a.name); names.add("Custom"); return names; }(),
+                      [this]
+                      {
+                          const auto saved = settings_.getValue("theme.accent");
+                          if (saved.isEmpty())
+                              return 0;
+                          for (int i = 1; i < (int) theme::accents().size(); ++i)
+                              if (theme::accents()[(size_t) i].colour.toString() == saved)
+                                  return i;
+                          return (int) theme::accents().size(); // Custom
+                      },
+                      [this](int i)
+                      {
+                          if (i >= (int) theme::accents().size())
+                          {
+                              if (preferencesDialog_ != nullptr)
+                                  chooseCustomAccent(*preferencesDialog_);
+                              return;
+                          }
+                          settings_.setValue("theme.accent", i == 0 ? juce::String() : theme::accents()[(size_t) i].colour.toString());
+                          applyTheme();
+                      },
+                      "The colour of what's on or chosen: buttons, sliders, ticks."),
+        prefs::toggle("Show keyboard focus",
+                      [this] { return settings_.getBoolValue("theme.focusRings", false); },
+                      [this](bool on)
+                      {
+                          settings_.setValue("theme.focusRings", on);
+                          applyTheme();
+                      },
+                      "A ring round the control the keyboard is on, in every theme (High Contrast always has it)."),
     } });
 
     const auto folderSize = [](const juce::File& folder)
@@ -1228,6 +1277,69 @@ std::vector<prefs::Page> MainComponent::preferencePages()
     } });
 
     return pages;
+}
+
+// ---- Themes -----------------------------------------------------------------
+
+/** Puts the saved theme and accent on the app's look and feel, and has every
+    window take them up. Nothing to do where the look and feel isn't the
+    app's (a headless render, a test). */
+void MainComponent::applyTheme()
+{
+    auto* appLook = dynamic_cast<AppLookAndFeel*>(&juce::LookAndFeel::getDefaultLookAndFeel());
+    if (appLook == nullptr)
+        return;
+
+    const auto accentText = settings_.getValue("theme.accent");
+    appLook->apply(theme::named(settings_.getValue("theme", "Dark")),
+                       accentText.isEmpty() ? juce::Colours::transparentBlack : juce::Colour::fromString(accentText),
+                       settings_.getBoolValue("theme.focusRings", false));
+    settings_.saveIfNeeded();
+
+    const auto background = appLook->findColour(juce::ResizableWindow::backgroundColourId);
+    auto&      desktop    = juce::Desktop::getInstance();
+    for (int i = 0; i < desktop.getNumComponents(); ++i)
+    {
+        auto* window = desktop.getComponent(i);
+        if (auto* resizable = dynamic_cast<juce::ResizableWindow*>(window))
+            resizable->setBackgroundColour(background);
+        window->sendLookAndFeelChange();
+        window->repaint();
+    }
+}
+
+/** Any accent at all, from a colour picker beside the Preferences window. */
+void MainComponent::chooseCustomAccent(juce::Component& near)
+{
+    struct Picker final : juce::Component, juce::ChangeListener
+    {
+        juce::ColourSelector                  selector { juce::ColourSelector::showColourspace | juce::ColourSelector::showSliders };
+        std::function<void(juce::Colour)>     onChange;
+
+        Picker()
+        {
+            selector.addChangeListener(this);
+            addAndMakeVisible(selector);
+            setSize(300, 280);
+        }
+        ~Picker() override { selector.removeChangeListener(this); }
+        void resized() override { selector.setBounds(getLocalBounds()); }
+        void changeListenerCallback(juce::ChangeBroadcaster*) override { if (onChange) onChange(selector.getCurrentColour()); }
+    };
+
+    auto picker = std::make_unique<Picker>();
+    const auto saved = settings_.getValue("theme.accent");
+    picker->selector.setCurrentColour(saved.isEmpty() ? theme::named(settings_.getValue("theme", "Dark")).accent
+                                                      : juce::Colour::fromString(saved),
+                                      juce::dontSendNotification);
+    picker->onChange = [safe = juce::Component::SafePointer<MainComponent>(this)](juce::Colour colour)
+    {
+        if (safe == nullptr)
+            return;
+        safe->settings_.setValue("theme.accent", colour.withAlpha(1.0f).toString());
+        safe->applyTheme();
+    };
+    juce::CallOutBox::launchAsynchronously(std::move(picker), near.getScreenBounds().removeFromRight(40), nullptr);
 }
 
 } // namespace soundsplice

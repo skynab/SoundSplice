@@ -1122,6 +1122,7 @@ MainComponent::MainComponent(bool headless)
     if (headless_)
         return;
 
+    applyTheme();
     startTimerHz(30);
 
     // Offered once the window is up rather than from inside the constructor,

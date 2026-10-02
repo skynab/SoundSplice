@@ -77,6 +77,9 @@ public:
             return;
         }
 
+        // Before any window: everything takes its colours from it.
+        juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
+
         logger.reset(juce::FileLogger::createDefaultAppLogger(
             "SoundSplice", "SoundSplice.log",
             "SoundSplice " + getApplicationVersion() + " starting up"));
@@ -90,6 +93,7 @@ public:
     void shutdown() override
     {
         mainWindow = nullptr;
+        juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         juce::Logger::writeToLog("SoundSplice shutting down");
         juce::Logger::setCurrentLogger(nullptr);
         logger = nullptr;
@@ -149,6 +153,7 @@ private:
 
     std::unique_ptr<MainWindow> mainWindow;
     std::unique_ptr<juce::FileLogger> logger;
+    AppLookAndFeel                    lookAndFeel; // see app/Theme.h
 };
 
 } // namespace soundsplice

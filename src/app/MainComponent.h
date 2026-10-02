@@ -49,6 +49,7 @@
 #include "MacrosDialog.h"
 #include "ScriptPane.h"
 #include "PreferencesDialog.h"
+#include "Theme.h"
 #include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -668,6 +669,8 @@ private:
     std::vector<juce::File> userTemplates() const;
     void                   saveAsTemplate();
     void                   showPreferences(int tab = 0);
+    void                   applyTheme();
+    void                   chooseCustomAccent(juce::Component& near);
     std::vector<prefs::Page> preferencePages();
     bool                   applyChainToSelection(const std::vector<model::EffectSlot>& chain, const juce::String& what);
     void                   toggleMacroRecording();

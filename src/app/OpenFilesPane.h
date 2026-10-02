@@ -51,7 +51,6 @@ public:
 
         list_.setModel(this);
         list_.setRowHeight(kRowHeight);
-        list_.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1a1a1e));
         list_.setOutlineThickness(0);
         addAndMakeVisible(list_);
 
