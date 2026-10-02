@@ -301,12 +301,13 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   **WavPack** (16/24/32-bit float, four compression levels), each written by its own BSD library with tags and
   cover (`src/engine/AudioFormats.cpp`) · ✅ RF64 (JUCE's WAV writer switches to it past 4 GB) · ⬜ M4A/AAC (no
   BSD-licensed encoder), BW64, W64
-- 🟡 **Export multiple**: one file per label, region or track, with **filename wildcards**: Export Audio's Range
+- ✅ **Export multiple**: one file per label, region or track, with **filename wildcards**: Export Audio's Range
   writes one file per marker range, named by a pattern ($project $region $index $date), with stems per range
-  when asked; per track is stems (`src/app/ExportNaming.h`). One file per point label ⬜
+  when asked; per track is stems (`src/app/ExportNaming.h`). ✅ One file per point label: Range > Split at every
+  marker
 - ✅ **Metadata**: ID3, Vorbis comments, BWF/iXML, cover art: File > Project Info (kept in the project); Export
   Audio's Tags writes ID3v2.4 with APIC into MP3, Vorbis comments and a PICTURE block into FLAC, Vorbis comments
-  into Ogg, and RIFF INFO plus BWF bext into WAV (`src/engine/ExportTags.h`). iXML ⬜
+  into Ogg, and RIFF INFO, BWF bext and iXML (ASWG) into WAV (`src/engine/ExportTags.h`)
 - ✅ **Loudness-normalize on export** and a true-peak limiter: Export Audio's Loudness (-14 to -24 LUFS, true
   peak under -1 dBTP; the limiter is run until the true peak fits); stems get the mix's gain so they still sum;
   `soundsplice-cli render --loudness` (`src/engine/ExportLoudness.h`)

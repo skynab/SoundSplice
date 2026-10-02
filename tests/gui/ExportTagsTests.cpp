@@ -154,6 +154,7 @@ TEST_CASE("A WAV export carries INFO and BWF tags", "[gui][tags]")
     REQUIRE(meta[juce::WavAudioFormat::riffInfoArtist] == "The Host");
     REQUIRE(meta[juce::WavAudioFormat::riffInfoProductName] == "The Show");
     REQUIRE(meta[juce::WavAudioFormat::bwavOriginator] == "The Host");
+    REQUIRE(meta[juce::WavAudioFormat::aswgArtist] == "The Host"); // iXML
 }
 
 TEST_CASE("No tags writes the files as before", "[gui][tags]")

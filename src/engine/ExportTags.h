@@ -64,6 +64,12 @@ namespace tags
             put(juce::WavAudioFormat::riffInfoGenre, t.genre);
             put(juce::WavAudioFormat::riffInfoComment, t.comment);
             put(juce::WavAudioFormat::riffInfoTrackNumber, t.track);
+            // iXML, as JUCE writes it: the ASWG block game and post audio read.
+            put(juce::WavAudioFormat::aswgSongTitle, t.title);
+            put(juce::WavAudioFormat::aswgArtist, t.artist);
+            put(juce::WavAudioFormat::aswgProject, t.album);
+            put(juce::WavAudioFormat::aswgGenre, t.genre);
+            put(juce::WavAudioFormat::aswgNotes, t.comment);
             if (! t.empty())
             {
                 // Broadcast WAV: what it is, who made it, and when.

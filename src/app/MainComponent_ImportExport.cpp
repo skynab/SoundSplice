@@ -413,7 +413,8 @@ void MainComponent::exportAudioDialog(std::optional<app::ExportChoice> initial)
     for (const auto& preset : renderPresets_)
         presets.push_back({ preset.name, preset.choice });
 
-    app::ExportAudioDialog::show(this, deviceRate, ! timeSelection_.isEmpty(), markerRanges, presets,
+    app::ExportAudioDialog::show(this, deviceRate, ! timeSelection_.isEmpty(), markerRanges,
+                                 (int) history_.current().markers.size(), presets,
                                  initial ? &*initial : nullptr,
         [self = juce::Component::SafePointer<MainComponent>(this)](app::ExportChoice choice, app::ExportAction action)
         {
@@ -512,8 +513,8 @@ void MainComponent::exportProject(const app::ExportChoice& choice)
 
     // One file per marker range: what's chosen is where they go, and its
     // name stands in for $project; each file is named from the pattern.
-    chooser_ = std::make_unique<juce::FileChooser>(choice.range == app::ExportRange::MarkerRanges
-                                                       ? "Export " + extension.toUpperCase() + " - one file per marker range, in this folder"
+    const bool many = choice.range == app::ExportRange::MarkerRanges || choice.range == app::ExportRange::BetweenMarkers;
+    chooser_ = std::make_unique<juce::FileChooser>(many ? "Export " + extension.toUpperCase() + " - a file per range, in this folder"
                                                        : "Export " + extension.toUpperCase(),
                                                    juce::File{}, "*." + extension);
     const auto flags = juce::FileBrowserComponent::saveMode
@@ -839,14 +840,37 @@ MainComponent::buildRangeExportTasks(const juce::File& chosenFile, const engine:
         return buildExportTasks(chosenFile, options, folderFailed, selectionStartBeats, selectionLengthBeats);
     if (range == app::ExportRange::TimeSelection && ! timeSelection_.isEmpty())
         return buildExportTasks(chosenFile, options, folderFailed, timeSelection_.startBeats, timeSelection_.lengthBeats());
-    if (range != app::ExportRange::MarkerRanges)
+    if (range != app::ExportRange::MarkerRanges && range != app::ExportRange::BetweenMarkers)
         return buildExportTasks(chosenFile, options, folderFailed);
 
     std::vector<model::Marker> regions;
-    for (const auto& marker : history_.current().markers)
-        if (marker.lengthBeats > 0.0)
-            regions.push_back(marker);
-    std::stable_sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
+    if (range == app::ExportRange::MarkerRanges)
+    {
+        for (const auto& marker : history_.current().markers)
+            if (marker.lengthBeats > 0.0)
+                regions.push_back(marker);
+        std::stable_sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
+    }
+    else
+    {
+        // Split at every marker (Audacity's Export Multiple by labels): a
+        // stretch from each to the next, the first from the start, the last
+        // with the usual tail. Each named for the marker it starts at.
+        auto markers = history_.current().markers;
+        std::stable_sort(markers.begin(), markers.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
+        const double end = songEndBeats() + kBounceTailBeats;
+        double from = 0.0;
+        juce::String name = "Start";
+        for (const auto& marker : markers)
+        {
+            if (marker.startBeats > from + 1.0e-6)
+                regions.push_back({ 0, from, marker.startBeats - from, name.toStdString() });
+            from = marker.startBeats;
+            name = juce::String(marker.name);
+        }
+        if (end > from + 1.0e-6)
+            regions.push_back({ 0, from, end - from, name.toStdString() });
+    }
 
     const auto project = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension()
                                                       : chosenFile.getFileNameWithoutExtension();

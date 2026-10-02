@@ -56,7 +56,7 @@ namespace exportchoices
         o.noiseShaping      = e.getBoolAttribute("noiseShaping", false);
         o.loudnessLufs      = juce::jmin(0.0, e.getDoubleAttribute("loudness", 0.0));
         o.truePeakCeilingDb = e.getDoubleAttribute("ceiling", -1.0);
-        c.range                = (ExportRange) juce::jlimit(0, 2, e.getIntAttribute("range"));
+        c.range                = (ExportRange) juce::jlimit(0, 3, e.getIntAttribute("range"));
         c.namePattern          = e.getStringAttribute("names", "$project - $region");
         c.tagging              = (ExportTagging) juce::jlimit(0, 2, e.getIntAttribute("tagging"));
         c.report               = e.getBoolAttribute("report", false);

@@ -116,6 +116,16 @@ TEST_CASE("The export dialog offers only the ranges there are", "[gui][exportnam
         REQUIRE(app::ExportAudioDialog::readNamePattern(window) == "$project - $region");
 
         window.getComboBoxComponent("loudness")->setSelectedItemIndex(2, juce::sendNotificationSync);
+
+        // Point markers too: split at each.
+        juce::AlertWindow split("Export", {}, juce::MessageBoxIconType::NoIcon);
+        app::ExportAudioDialog::buildControls(split, 48000.0, false, 0, 5);
+        auto* splitRange = split.getComboBoxComponent("range");
+        REQUIRE(splitRange->getNumItems() == 2);
+        REQUIRE(splitRange->getItemText(1).contains("6 files"));
+        splitRange->setSelectedId(1 + (int) app::ExportRange::BetweenMarkers, juce::sendNotificationSync);
+        REQUIRE(app::ExportAudioDialog::readRange(split) == app::ExportRange::BetweenMarkers);
+        REQUIRE(split.getTextEditor("names")->isEnabled());
         REQUIRE(app::ExportAudioDialog::readOptions(window).loudnessLufs == -16.0);
     }
 }

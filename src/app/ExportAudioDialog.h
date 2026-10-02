@@ -37,6 +37,7 @@ public:
                       double defaultSampleRate,
                       bool hasTimeSelection,
                       int markerRangeCount,
+                      int markerCount,
                       std::vector<NamedExportChoice> presets,
                       const ExportChoice* initial,
                       std::function<void (ExportChoice, ExportAction)> onAccepted)
@@ -52,7 +53,7 @@ public:
         window->getComboBoxComponent ("preset")->setSelectedItemIndex (0, juce::dontSendNotification);
         window->getComboBoxComponent ("preset")->setEnabled (! presets.empty());
 
-        buildControls (*window, defaultSampleRate, hasTimeSelection, markerRangeCount);
+        buildControls (*window, defaultSampleRate, hasTimeSelection, markerRangeCount, markerCount);
         if (initial != nullptr)
             applyChoice (*window, *initial, defaultSampleRate);
 
@@ -123,7 +124,7 @@ public:
         down with a segfault.
     */
     static void buildControls (juce::AlertWindow& window, double defaultSampleRate,
-                               bool hasTimeSelection = false, int markerRangeCount = 0)
+                               bool hasTimeSelection = false, int markerRangeCount = 0, int markerCount = 0)
     {
         juce::StringArray formatNames;
         for (auto format : engine::allExportFormats())
@@ -156,6 +157,9 @@ public:
         if (markerRangeCount > 0)
             rangeBox->addItem ("Each marker range (" + juce::String (markerRangeCount) + " files)",
                                1 + (int) ExportRange::MarkerRanges);
+        if (markerCount > 0)
+            rangeBox->addItem ("Split at every marker (" + juce::String (markerCount + 1) + " files)",
+                               1 + (int) ExportRange::BetweenMarkers);
         rangeBox->setSelectedId (1 + (int) ExportRange::Project, juce::dontSendNotification);
 
         window.addTextEditor ("names", "$project - $region", "File names ($project $region $index $date):");
@@ -253,7 +257,7 @@ public:
     static ExportRange readRange (juce::AlertWindow& window)
     {
         if (auto* rangeBox = window.getComboBoxComponent ("range"); rangeBox != nullptr && rangeBox->getSelectedId() > 0)
-            return (ExportRange) (rangeBox->getSelectedId() - 1);
+            return (ExportRange) juce::jlimit (0, 3, rangeBox->getSelectedId() - 1);
         return ExportRange::Project;
     }
 
@@ -268,7 +272,7 @@ public:
     static void refreshNamesEnablement (juce::AlertWindow& window)
     {
         if (auto* names = window.getTextEditor ("names"))
-            names->setEnabled (readRange (window) == ExportRange::MarkerRanges);
+            names->setEnabled (readRange (window) == ExportRange::MarkerRanges || readRange (window) == ExportRange::BetweenMarkers);
     }
 
     /** Rebuilds the rate/depth/quality boxes for whichever format is selected.

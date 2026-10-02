@@ -16,6 +16,7 @@ enum class ExportRange
     Project,       // everything arranged, with a tail for reverbs to ring out
     TimeSelection, // exactly the time selection
     MarkerRanges,  // one file per marker range, named from a pattern
+    BetweenMarkers, // one file from each marker to the next (and the start to the first)
 };
 
 /** Whether the files carry the project's info as tags, and its markers as
