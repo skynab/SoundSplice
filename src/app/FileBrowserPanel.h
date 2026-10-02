@@ -107,6 +107,10 @@ public:
         addAndMakeVisible(homeButton_);
         addAndMakeVisible(recordingsButton_);
 
+        favoritesButton_.setTooltip("Every file you've starred, wherever it is");
+        favoritesButton_.onClick = [this] { fileGrid_.showFavorites(); };
+        addAndMakeVisible(favoritesButton_);
+
         addBookmarkButton_.setTooltip("Bookmark the folder currently being browsed");
         addBookmarkButton_.onClick = [this] { promptAddBookmark(); };
         addAndMakeVisible(addBookmarkButton_);
@@ -197,14 +201,15 @@ public:
         placesRow.removeFromLeft(4);
         if (projectRootButton_.isVisible())
         {
-            projectRootButton_.setBounds(placesRow.removeFromLeft(placesRow.getWidth() / 3).reduced(2, 0));
-            homeButton_.setBounds(placesRow.removeFromLeft(placesRow.getWidth() / 2).reduced(2, 0));
+            projectRootButton_.setBounds(placesRow.removeFromLeft(placesRow.getWidth() / 4).reduced(2, 0));
+            homeButton_.setBounds(placesRow.removeFromLeft(placesRow.getWidth() / 3).reduced(2, 0));
         }
         else
         {
-            homeButton_.setBounds(placesRow.removeFromLeft(placesRow.getWidth() / 2).reduced(2, 0));
+            homeButton_.setBounds(placesRow.removeFromLeft(placesRow.getWidth() / 3).reduced(2, 0));
         }
-        recordingsButton_.setBounds(placesRow.reduced(2, 0));
+        recordingsButton_.setBounds(placesRow.removeFromLeft(placesRow.getWidth() / 2).reduced(2, 0));
+        favoritesButton_.setBounds(placesRow.reduced(2, 0));
 
         for (auto* button : bookmarkButtons_)
         {
@@ -388,6 +393,7 @@ private:
 
     juce::TextButton homeButton_        { "Home" };
     juce::TextButton recordingsButton_  { "Recordings" };
+    juce::TextButton favoritesButton_   { "Favorites" };
     juce::TextButton projectRootButton_ { "Project" };
     juce::TextButton addBookmarkButton_ { "+" };
     juce::DrawableButton toggleTreeButton_ { "ToggleTree", juce::DrawableButton::ImageFitted };

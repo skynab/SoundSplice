@@ -54,6 +54,11 @@ public:
         header.addColumn("Size", 3, 72, 50, 120);
         header.addColumn("Modified", 4, 130, 90, 200);
         header.addColumn("Duration", 5, 70, 50, 100);
+        // What a file holds, read from its header once and kept.
+        header.addColumn("Rate", kRateColumnId, 64, 50, 100);
+        header.addColumn("Channels", kChannelsColumnId, 64, 50, 100);
+        header.addColumn("Bits", kBitsColumnId, 44, 36, 80);
+        header.addColumn("Title", kTitleColumnId, 140, 60, -1);
         header.setSortColumnId(1, true);
 
         table_.setModel(this);
@@ -86,14 +91,36 @@ public:
     /** Shows @p dir's files (not its subfolders — the tree handles those). */
     void setDirectory(const juce::File& dir)
     {
-        directory_ = dir;
+        directory_        = dir;
+        showingFavorites_ = false;
         refresh();
     }
+
+    /** Shows every starred file, wherever it is - the Favorites place. */
+    void showFavorites()
+    {
+        showingFavorites_ = true;
+        refresh();
+    }
+
+    bool showingFavorites() const noexcept { return showingFavorites_; }
+
+    int  rowCountForTesting() const noexcept { return (int) entries_.size(); }
+    void toggleFavoriteForTesting(const juce::File& file) { toggleFavorite(file); }
+    double sampleRateForTesting(const juce::File& file) { return infoFor(file).sampleRate; }
+    int    channelsForTesting(const juce::File& file) { return infoFor(file).channels; }
+    int    bitsForTesting(const juce::File& file) { return infoFor(file).bits; }
 
     void refresh()
     {
         entries_.clear();
-        if (directory_.isDirectory())
+        if (showingFavorites_)
+        {
+            for (const auto& path : favorites_)
+                if (juce::File(path).existsAsFile())
+                    entries_.push_back(juce::File(path));
+        }
+        else if (directory_.isDirectory())
         {
             for (const auto& entry : juce::RangedDirectoryIterator(directory_, false, kWildcard, juce::File::findFiles))
                 entries_.push_back(entry.getFile());
@@ -106,7 +133,11 @@ public:
     void resized() override { table_.setBounds(getLocalBounds()); }
 
 private:
-    static constexpr int kFavColumnId = 6;
+    static constexpr int kFavColumnId      = 6;
+    static constexpr int kRateColumnId     = 7;
+    static constexpr int kChannelsColumnId = 8;
+    static constexpr int kBitsColumnId     = 9;
+    static constexpr int kTitleColumnId    = 10;
     static constexpr const char* kWildcard =
         "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.m4a;*.mp4;*.mid;*.midi;*.soundsplice";
 
@@ -117,6 +148,8 @@ private:
         const auto path = file.getFullPathName();
         if (! favorites_.erase(path))
             favorites_.insert(path);
+        if (showingFavorites_)
+            refresh(); // an unstarred file leaves the list
         table_.repaint();
         if (onFavoritesChanged)
             onFavoritesChanged();
@@ -136,30 +169,58 @@ private:
                 case 3:  less = a.getSize() < b.getSize(); break;
                 case 4:  less = a.getLastModificationTime() < b.getLastModificationTime(); break;
                 case 5:  less = durationSecondsFor(a) < durationSecondsFor(b); break;
+                case kRateColumnId:     less = infoFor(a).sampleRate < infoFor(b).sampleRate; break;
+                case kChannelsColumnId: less = infoFor(a).channels < infoFor(b).channels; break;
+                case kBitsColumnId:     less = infoFor(a).bits < infoFor(b).bits; break;
+                case kTitleColumnId:    less = infoFor(a).title.compareIgnoreCase(infoFor(b).title) < 0; break;
                 default: less = a.getFileName().compareIgnoreCase(b.getFileName()) < 0; break;
             }
             return forwards ? less : ! less;
         });
     }
 
-    double durationSecondsFor(const juce::File& file)
+    /** What an audio file's header says: its length, rate, channels, bit
+        depth and title. Read once per path and kept, so sorting never reads
+        a header twice. Empty for anything that isn't audio. */
+    struct AudioInfo
     {
-        if (classifyFile(file) != FileKind::Audio)
-            return 0.0;
+        double       seconds    = 0.0;
+        double       sampleRate = 0.0;
+        int          channels   = 0;
+        int          bits       = 0;
+        juce::String title;
+    };
 
+    const AudioInfo& infoFor(const juce::File& file)
+    {
         const auto path = file.getFullPathName();
-        auto       it    = durationCache_.find(path);
-        if (it != durationCache_.end())
+        if (auto it = infoCache_.find(path); it != infoCache_.end())
             return it->second;
 
-        double seconds = 0.0;
-        if (std::unique_ptr<juce::AudioFormatReader> reader(formatManager_.createReaderFor(file)); reader != nullptr
-            && reader->sampleRate > 0.0)
-            seconds = (double) reader->lengthInSamples / reader->sampleRate;
-
-        durationCache_[path] = seconds;
-        return seconds;
+        AudioInfo info;
+        if (classifyFile(file) == FileKind::Audio)
+            if (std::unique_ptr<juce::AudioFormatReader> reader(formatManager_.createReaderFor(file));
+                reader != nullptr && reader->sampleRate > 0.0)
+            {
+                info.seconds    = (double) reader->lengthInSamples / reader->sampleRate;
+                info.sampleRate = reader->sampleRate;
+                info.channels   = (int) reader->numChannels;
+                info.bits       = reader->usesFloatingPointData ? 32 : (int) reader->bitsPerSample;
+                info.title      = titleFrom(reader->metadataValues);
+            }
+        return infoCache_[path] = info;
     }
+
+    /** A title, from whichever tag the format keeps one in. */
+    static juce::String titleFrom(const juce::StringPairArray& metadata)
+    {
+        for (const auto* key : { "title", "Title", "TITLE", "INAM", "TIT2", "bwav description" })
+            if (const auto value = metadata.getValue(key, {}); value.isNotEmpty())
+                return value;
+        return {};
+    }
+
+    double durationSecondsFor(const juce::File& file) { return infoFor(file).seconds; }
 
     juce::String durationTextFor(const juce::File& file)
     {
@@ -232,6 +293,19 @@ private:
             case 3: text = file.getSize() > 0 ? juce::File::descriptionOfSizeInBytes(file.getSize()) : juce::String(); break;
             case 4: text = file.getLastModificationTime().toString(true, true, false, true); break;
             case 5: text = durationTextFor(file); break;
+            case kRateColumnId:
+                if (const auto rate = infoFor(file).sampleRate; rate > 0.0)
+                    text = juce::String(rate / 1000.0, rate == std::round(rate / 1000.0) * 1000.0 ? 0 : 1) + " kHz";
+                break;
+            case kChannelsColumnId:
+                if (const int channels = infoFor(file).channels; channels > 0)
+                    text = channels == 1 ? "Mono" : channels == 2 ? "Stereo" : juce::String(channels);
+                break;
+            case kBitsColumnId:
+                if (const int bits = infoFor(file).bits; bits > 0)
+                    text = juce::String(bits);
+                break;
+            case kTitleColumnId: text = infoFor(file).title; break;
             default: break;
         }
 
@@ -272,7 +346,8 @@ private:
     juce::AudioFormatManager     formatManager_;
     juce::File                   directory_;
     std::vector<juce::File>      entries_;
-    std::map<juce::String, double> durationCache_;
+    std::map<juce::String, AudioInfo> infoCache_;
+    bool                         showingFavorites_ = false;
     std::set<juce::String>       favorites_; // full paths of starred files
     std::unique_ptr<juce::Drawable> starOn_, starOff_;
 

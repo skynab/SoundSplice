@@ -244,8 +244,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ✅ **Batch process**: run an effect chain or preset over a folder of files (File > Batch Process: a folder,
   a chain built in the Apply Effects dialog, a loudness target and a format; new files are written, the originals
   untouched; on a background job, or one file at a time when the chain hosts a plugin; `src/app/BatchProcess.h`)
-- ⬜ Media browser with **preview** (✅ file browser and preview exist; add metadata columns and
-  favorites)
+- ✅ Media browser with **preview** (✅ file browser and preview exist; ✅ metadata columns: rate, channels,
+  bit depth and title, read from each header once; ✅ favorites: star a file, and Places > Favorites lists every
+  starred file wherever it is)
 - ⬜ **Favorites**: one-click saved actions or effect settings (Audition)
 
 ### Phase 7 — Workflow, customization and accessibility (Audacity, REAPER)
