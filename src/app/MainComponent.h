@@ -489,6 +489,9 @@ private:
         SampleWindow                     window;
     };
     bool                   openSelectedClipAudio(ClipAudio& out) const;
+    bool                   openClipAudio(const model::Clip& clip, ClipAudio& out) const;
+    void                   showMatchLoudnessDialog();
+    void                   matchLoudness(double targetLufs, bool limitTruePeak);
 
     /** Samples [from, to) counted from the clip's start, one vector per
         channel; only those samples are read. Empty if they can't be. */

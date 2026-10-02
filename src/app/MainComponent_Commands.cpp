@@ -540,6 +540,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::generateRoomTone: showGenerateDialog(engine::GeneratorKind::RoomTone); break;
         case commands::captureRoomTone: captureRoomTone(); break;
         case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
+        case commands::matchLoudness:     showMatchLoudnessDialog(); break;
         case commands::normalizePeak:   showNormalizeDialog(); break;
         case commands::matchEqReference:  setMatchEqReference(); break;
         case commands::matchEq:           matchEqToReference(); break;
@@ -851,6 +852,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addSeparator();
         add(commands::normalizePeak);
         add(commands::normalizeLoudness);
+        add(commands::matchLoudness);
         add(commands::matchEqReference);
         add(commands::matchEq);
         menu.addSeparator();

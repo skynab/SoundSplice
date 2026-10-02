@@ -3,6 +3,7 @@
 
 #include "engine/ClipChannels.h"
 #include "engine/Loudness.h"
+#include "app/LoudnessMatch.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // Loudness: measuring a clip or selection (EBU R128) and normalizing a clip to
@@ -141,6 +142,199 @@ void MainComponent::showNormalizeLoudnessDialog()
             self->settings_.setValue("loudnessLimitPeak", limiting);
             self->normalizeSelectedClipLoudness(kLoudnessTargets[index].lufs, limiting);
         }));
+}
+
+/** Match Loudness: asks for the target, as Normalize Loudness does, for
+    every clip app::clipsToMatch picks. */
+void MainComponent::showMatchLoudnessDialog()
+{
+    const auto clips = app::clipsToMatch(history_.current(), timeSelection_, selectedTrackIndex_);
+    if (clips.empty())
+    {
+        showError("Select time over some audio clips, or a track with audio clips, first");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Match Loudness",
+                                         "Sets each of the " + juce::String((int) clips.size())
+                                             + " clips' gain so its integrated loudness (EBU R128) reaches the target. "
+                                               "The audio itself isn't changed.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+
+    juce::StringArray names;
+    for (const auto& target : kLoudnessTargets)
+        names.add(target.name);
+    window->addComboBox("target", names, "Target:");
+
+    const double remembered = settings_.getDoubleValue("loudnessTarget", -16.0);
+    int          selected   = 1;
+    for (int i = 0; i < (int) std::size(kLoudnessTargets); ++i)
+        if (std::abs(kLoudnessTargets[i].lufs - remembered) < 0.01)
+            selected = i;
+    window->getComboBoxComponent("target")->setSelectedItemIndex(selected);
+
+    auto limit = std::make_shared<juce::ToggleButton>("Keep true peaks at or under -1 dBTP");
+    limit->setToggleState(settings_.getBoolValue("loudnessLimitPeak", true), juce::dontSendNotification);
+    limit->setSize(320, 24);
+    window->addCustomComponent(limit.get());
+
+    window->addButton("Match", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, limit](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+
+            const int  index    = juce::jlimit(0, (int) std::size(kLoudnessTargets) - 1,
+                                               window->getComboBoxComponent("target")->getSelectedItemIndex());
+            const bool limiting = limit->getToggleState();
+            self->settings_.setValue("loudnessTarget", kLoudnessTargets[index].lufs);
+            self->settings_.setValue("loudnessLimitPeak", limiting);
+            self->matchLoudness(kLoudnessTargets[index].lufs, limiting);
+        }));
+}
+
+/** Measures every clip to match, each as it plays without its gain, on a
+    background job, then sets all their gains as one undo step. */
+void MainComponent::matchLoudness(double targetLufs, bool limitTruePeak)
+{
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+
+    struct Item
+    {
+        app::MatchedClip            clip;
+        juce::File                  file;
+        std::int64_t                start = 0, count = 0;
+        engine::ClipChannels        channels = engine::ClipChannels::Both;
+        engine::LoudnessReport      report;
+        bool                        measured = false;
+    };
+    auto items = std::make_shared<std::vector<Item>>();
+
+    const auto& song = history_.current();
+    for (const auto& match : app::clipsToMatch(song, timeSelection_, selectedTrackIndex_))
+    {
+        const auto* track = model::findTrack(song, match.trackId);
+        const auto  found = std::find_if(track->clips.begin(), track->clips.end(),
+                                         [&](const model::Clip& c) { return c.id == match.clipId; });
+        ClipAudio audio;
+        if (found == track->clips.end() || ! openClipAudio(*found, audio) || audio.window.isEmpty())
+            continue;
+        items->push_back({ match, audio.file, audio.window.start, audio.window.length(), found->channels, {}, false });
+    }
+    if (items->empty())
+    {
+        showError("None of those clips could be read");
+        return;
+    }
+
+    auto work = [items](app::OfflineRenderJob& job)
+    {
+        juce::AudioFormatManager formats;
+        engine::sequencefile::registerFormats(formats);
+
+        std::int64_t total = 0, done = 0;
+        for (const auto& item : *items)
+            total += item.count;
+
+        for (auto& item : *items)
+        {
+            std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(item.file));
+            if (reader == nullptr || reader->sampleRate <= 0.0)
+                continue;
+
+            engine::LoudnessMeter meter;
+            meter.prepare(reader->sampleRate, 2);
+            const int                fileChannels = juce::jmax(1, (int) reader->numChannels);
+            constexpr int            kChunk       = 1 << 16;
+            juce::AudioBuffer<float> buffer(fileChannels, kChunk);
+
+            for (std::int64_t at = 0; at < item.count; at += kChunk)
+            {
+                if (job.shouldAbort())
+                    return;
+                const int n = (int) juce::jmin<std::int64_t>(kChunk, item.count - at);
+                if (! reader->read(buffer.getArrayOfWritePointers(), fileChannels, item.start + at, n))
+                    break;
+                const float* outputs[2] {
+                    buffer.getReadPointer(engine::sourceChannelFor(item.channels, 0, fileChannels)),
+                    buffer.getReadPointer(engine::sourceChannelFor(item.channels, 1, fileChannels)),
+                };
+                meter.process(outputs, 2, n);
+                done += n;
+                job.report((double) done / (double) juce::jmax<std::int64_t>(1, total), "Measuring loudness");
+            }
+
+            item.report   = engine::LoudnessReport::of(meter, (double) item.count / reader->sampleRate);
+            item.measured = true;
+        }
+    };
+
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), items, targetLufs,
+                       limitTruePeak](bool cancelled)
+    {
+        if (self == nullptr)
+            return;
+        self->renderJob_.reset();
+        if (cancelled)
+        {
+            self->showStatus("Match Loudness cancelled");
+            return;
+        }
+
+        struct Gain
+        {
+            app::MatchedClip clip;
+            float            gainDb = 0.0f;
+        };
+        std::vector<Gain> gains;
+        int quiet = 0, limited = 0;
+        for (const auto& item : *items)
+        {
+            engine::LoudnessGain gain;
+            if (! item.measured
+                || ! engine::loudnessGainFor(item.report.integratedLufs, item.report.truePeakDb, targetLufs,
+                                             kTruePeakCeiling, limitTruePeak, gain))
+            {
+                ++quiet;
+                continue;
+            }
+            limited += gain.limited ? 1 : 0;
+            gains.push_back({ item.clip, (float) juce::jlimit(-60.0, 60.0, gain.gainDb) });
+        }
+
+        if (gains.empty())
+        {
+            self->showError("Those clips are too short or too quiet to measure - each needs at least 400 ms of sound");
+            return;
+        }
+
+        self->history_.edit("Match loudness", [gains](model::Song& s)
+        {
+            for (const auto& gain : gains)
+                if (auto* track = model::findTrack(s, gain.clip.trackId))
+                    for (auto& clip : track->clips)
+                        if (clip.id == gain.clip.clipId)
+                            clip.gainDb = gain.gainDb;
+        });
+        self->refreshAfterArrangementEdit();
+
+        auto message = "Matched " + juce::String((int) gains.size()) + " clips to " + formatLevel(targetLufs, "LUFS");
+        if (limited > 0)
+            message += " - " + juce::String(limited) + " held back by the -1 dBTP ceiling";
+        if (quiet > 0)
+            message += " - " + juce::String(quiet) + " too quiet or short to measure, left as they were";
+        self->showStatus(message);
+    };
+
+    renderJob_ = app::OfflineRenderJob::launch("Match Loudness", std::move(work), std::move(onFinished));
 }
 
 /** Loudness normalization, non-destructive like Normalize: measures the whole

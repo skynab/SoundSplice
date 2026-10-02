@@ -393,8 +393,26 @@ void MainComponent::normaliseSelectedClipTo(float targetPeak)
 bool MainComponent::openSelectedClipAudio(ClipAudio& out) const
 {
     const auto* clip = selectedAudioClip();
-    if (clip == nullptr)
-        return false;
+    return clip != nullptr && openClipAudio(*clip, out);
+}
+
+/** @p clip's audio as a sequence, and which of its samples the clip plays -
+    of a warped clip too, mapped back to the file's own time (model/Warp.h).
+    Reads the header but no samples. */
+bool MainComponent::openClipAudio(const model::Clip& clipIn, ClipAudio& out) const
+{
+    // A warped clip measures its offset and window in the stretched time it
+    // plays in: in the file they're that divided by the stretch.
+    auto       mapped  = clipIn;
+    const auto stretch = model::warpedit::factorFor(history_.current(), clipIn);
+    const auto* clip   = &mapped;
+    if (stretch != 1.0)
+    {
+        const auto clock     = model::clockFor(history_.current());
+        const double seconds = clock.secondsBetween(clipIn.startBeats, clipIn.startBeats + clipIn.lengthBeats) / stretch;
+        mapped.sourceOffsetSeconds = clipIn.sourceOffsetSeconds / stretch;
+        mapped.lengthBeats         = clock.beatsAfter(clipIn.startBeats, seconds);
+    }
 
     out.file      = juce::File(clip->audioFile);
     auto sequence = engine::sequencefile::sequenceOf(out.file);

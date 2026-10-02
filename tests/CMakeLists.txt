@@ -113,7 +113,8 @@ add_executable(soundsplice_tests
   app/TimeFormatTests.cpp
   app/SnapTargetsTests.cpp
   app/OpenFilesTests.cpp
-  app/TakeLanesTests.cpp)
+  app/TakeLanesTests.cpp
+  app/LoudnessMatchTests.cpp)
 
 target_link_libraries(soundsplice_tests
   PRIVATE

@@ -233,7 +233,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 - ⬜ **Essential Sound panel**: tag a clip as Dialogue, Music, SFX or Ambience to get a simple task
   panel (loudness match, repair, clarity, ducking) that drives the real effects underneath
-- ⬜ **Match loudness across clips** (non-destructive clip gain to a LUFS target)
+- ✅ **Match loudness across clips** (Edit > Match Loudness: every audio clip the time selection touches, or the
+  selected track's, each measured and its clip gain set to one LUFS target, true peak held under -1 dBTP; one undo step;
+  `src/app/LoudnessMatch.h`)
 - ✅ **Auto-ducking** of music under dialogue, as clip volume curves rather than baked in (Edit > Auto Duck)
 - ⬜ **Diagnostics panel**: scan a file and list clicks, clipping, silence and DC offset, each with a
   fix and a select button (Audition's DeClicker/DeClipper diagnostics)
