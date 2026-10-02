@@ -175,7 +175,9 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/ShortcutSetsTests.cpp
     gui/MacrosTests.cpp
     gui/ScriptingTests.cpp
+    gui/OfflineRenderTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
+    ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
   target_include_directories(soundsplice_gui_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)

@@ -240,6 +240,29 @@ TEST_CASE("Song survives a serialize/deserialize round trip", "[model][io]")
     REQUIRE(restored == original);
 }
 
+TEST_CASE("A project with Windows line endings opens the same", "[model][io]")
+{
+    // As git with autocrlf, or JUCE's File::replaceWithText on Windows,
+    // leaves it. The audio file path runs to the end of its line, so a \r
+    // left on it named a file that doesn't exist.
+    Song original = makeSampleSong();
+    original.tracks[0].clips[0].type      = ClipType::Audio;
+    original.tracks[0].clips[0].audioFile = "C:\\Audio\\take one.wav";
+
+    std::string crlf;
+    for (const char c : serialize(original))
+    {
+        if (c == '\n')
+            crlf += '\r';
+        crlf += c;
+    }
+
+    Song restored;
+    REQUIRE(deserialize(crlf, restored));
+    REQUIRE(restored.tracks[0].clips[0].audioFile == "C:\\Audio\\take one.wav");
+    REQUIRE(restored == original);
+}
+
 TEST_CASE("An empty song round-trips", "[model][io]")
 {
     const Song original;

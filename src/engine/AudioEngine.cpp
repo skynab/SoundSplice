@@ -15,7 +15,7 @@ namespace
 {
 }
 
-AudioEngine::AudioEngine()
+AudioEngine::AudioEngine(bool openDevice)
 {
     // Sequences too: an edited clip's audio is one (engine/SequenceAudioFormat.h).
     sequencefile::registerFormats(formatManager_);
@@ -47,6 +47,9 @@ AudioEngine::AudioEngine()
     // microphone access. Before then the OS handed over silent input without
     // gating it; now a denied permission is a genuine failure to open the
     // input, and it must cost recording rather than all audio.
+    if (! openDevice)
+        return;
+
     inputOpenError_ = deviceManager_.initialiseWithDefaultDevices(2, 2);
 
     if (inputOpenError_.isNotEmpty())
@@ -941,7 +944,7 @@ void AudioEngine::setTrackSynthUnisonDetuneCents(int index, float cents)
         tracks_[(size_t) index].synth.setUnisonDetuneCents(cents);
 }
 
-void AudioEngine::rebuildTrackEffectChain(int index)
+void AudioEngine::rebuildTrackEffectChain(int index, double rate)
 {
     if (index < 0 || index >= kMaxTracks)
         return;
@@ -951,10 +954,17 @@ void AudioEngine::rebuildTrackEffectChain(int index)
         if (auto node = makeSlotNode(spec))
             chain->add(std::move(node));
 
+    // Its settings, as last set (see chainParams_). Before it's submitted,
+    // while this thread is still the only one that can see it.
+    const auto& params = chainParams_[(size_t) index];
+    for (size_t i = 0; i < params.size(); ++i)
+        chain->applyParams(i, params[i]); // a slot of another kind is left alone
+
     // Prepared here, on the message thread, where allocating a delay line is
     // allowed. A rate of zero means the device hasn't started yet; the rebuild
     // in audioDeviceAboutToStart covers that case.
-    const double rate = sampleRate_.load(std::memory_order_relaxed);
+    if (rate <= 0.0)
+        rate = sampleRate_.load(std::memory_order_relaxed);
     if (rate > 0.0)
         chain->prepare(rate, currentBlockSize_);
 
@@ -992,7 +1002,10 @@ bool AudioEngine::setTrackEffectChain(int index, const std::vector<EffectSlotSpe
         return false;
     }
 
+    // A new shape: the old slots' settings no longer line up with it. The
+    // caller sends the new ones next (MainComponent::syncEngineTracks).
     chainStructure_[(size_t) index] = slots;
+    chainParams_[(size_t) index].clear();
     rebuildTrackEffectChain(index);
     return true;
 }
@@ -1001,6 +1014,11 @@ void AudioEngine::setTrackEffectSlotParams(int index, int slotIndex, const Effec
 {
     if (index < 0 || index >= kMaxTracks || slotIndex < 0)
         return;
+
+    auto& kept = chainParams_[(size_t) index];
+    if ((size_t) slotIndex >= kept.size())
+        kept.resize((size_t) slotIndex + 1);
+    kept[(size_t) slotIndex] = values;
 
     if (auto* chain = submittedChain_[(size_t) index])
         chain->applyParams((size_t) slotIndex, values);
@@ -1011,6 +1029,9 @@ void AudioEngine::setTrackEffectParam(int index, int slotIndex, EffectKind kind,
 {
     if (index < 0 || index >= kMaxTracks || slotIndex < 0)
         return;
+
+    if (auto& kept = chainParams_[(size_t) index]; (size_t) slotIndex < kept.size() && kept[(size_t) slotIndex].kind == kind)
+        kept[(size_t) slotIndex].set(paramId, value);
 
     if (auto* chain = submittedChain_[(size_t) index])
         if (auto* node = chain->nodeAt((size_t) slotIndex); node != nullptr && node->kind() == kind)
@@ -1464,23 +1485,18 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
     const double startBeats  = options.startBeats;
     const double lengthBeats = options.lengthBeats;
 
-    const double deviceRate = sampleRate_.load(std::memory_order_relaxed);
-    const double sampleRate = options.sampleRate > 0.0 ? options.sampleRate : deviceRate;
-    const double bpm        = transport_.tempoMap().tempo();
+    // With no device (a headless render) there is no device rate to return
+    // to afterwards, so the render's own stands in for it.
+    const double deviceRate  = sampleRate_.load(std::memory_order_relaxed);
+    const double sampleRate  = options.sampleRate > 0.0 ? options.sampleRate : deviceRate;
+    const double restoreRate = deviceRate > 0.0 ? deviceRate : sampleRate;
+    const double bpm         = transport_.tempoMap().tempo();
 
     juce::AudioBuffer<float> output(2, 0);
-    if (deviceRate <= 0.0 || sampleRate <= 0.0 || bpm <= 0.0 || lengthBeats <= 0.0)
+    if (sampleRate <= 0.0 || bpm <= 0.0 || lengthBeats <= 0.0)
         return output;
 
     const int blockSize = juce::jmax(1, options.blockSize);
-
-    // Through the map: a render's length in samples is the distance between
-    // two musical positions, not a beat count times one tempo.
-    const auto&   tempoMap     = transport_.tempoMap();
-    const int64_t startSample  = tempoMap.samplesFromPpq(startBeats);
-    const int     totalSamples = (int) (tempoMap.samplesFromPpq(startBeats + lengthBeats) - startSample);
-    if (totalSamples <= 0)
-        return output;
 
     // Suspending the device is what makes this safe rather than a race: the
     // mixer's state has exactly one writer by design, and the device thread
@@ -1503,6 +1519,16 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
     // device a native render rather than a resample.
     prepareAll(sampleRate, blockSize);
 
+    // Through the map: a render's length in samples is the distance between
+    // two musical positions, not a beat count times one tempo. Worked out
+    // only now that the map is at the *render* rate: before the prepare above
+    // it counted at the device's, which made an export at another rate the
+    // wrong length - at 48 kHz from a 44.1 kHz device, about 8% short, cut
+    // off before the end of the song.
+    const auto&   tempoMap     = transport_.tempoMap();
+    const int64_t startSample  = tempoMap.samplesFromPpq(startBeats);
+    const int     totalSamples = juce::jmax(0, (int) (tempoMap.samplesFromPpq(startBeats + lengthBeats) - startSample));
+
     // Looping off for the duration: a loop region set for auditioning would
     // otherwise wrap the playhead mid-export and repeat a section.
     transport_.setLooping(false);
@@ -1514,7 +1540,7 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
     // and trimmed from the start below, so the file lines up with the song
     // rather than starting late.
     const int latency = latestTrackLatency() + (options.applyMasterBus ? mastering_.latencySamples() : 0);
-    const int rendered = totalSamples + latency;
+    const int rendered = totalSamples > 0 ? totalSamples + latency : 0;
 
     output.setSize(2, rendered);
     output.clear();
@@ -1563,7 +1589,7 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
     // playback running at the wrong rate the moment the callback returns.
     // Also again on the way out at all, so playback doesn't start up holding
     // the render's delay and reverb tails.
-    prepareAll(deviceRate, blockSize);
+    prepareAll(restoreRate, blockSize);
 
     // After that prepare, because wasPlayhead is a sample count at the device
     // rate and prepareAll is what puts the transport's tempo map back on that
@@ -1575,7 +1601,7 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
 
     deviceManager_.addAudioCallback(this);
 
-    if (cancelled)
+    if (cancelled || totalSamples <= 0)
         output.setSize(2, 0); // see OfflineRenderOptions::onProgress
     else if (latency > 0)
     {
@@ -1623,7 +1649,7 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
     // prepared for the wrong rate, or not at all. Rebuilding here guarantees
     // it; device starts are rare enough that the cost doesn't matter.
     for (int i = 0; i < kMaxTracks; ++i)
-        rebuildTrackEffectChain(i);
+        rebuildTrackEffectChain(i, sampleRate);
 
     // Clips' chains are prepared again rather than rebuilt: nothing is playing
     // them while this runs, and rebuilding would lose their settings.

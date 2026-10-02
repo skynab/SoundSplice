@@ -526,7 +526,16 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         std::istringstream in(text);
         std::string        line;
         while (std::getline(in, line))
+        {
+            // Windows line endings, from a project that went through git
+            // with autocrlf or an editor: the \r would otherwise stay on the
+            // end of every rest-of-line field - a clip's audio file path
+            // among them, naming a file that doesn't exist, so the project
+            // opened with all its audio missing.
+            if (! line.empty() && line.back() == '\r')
+                line.pop_back();
             lines.push_back(line);
+        }
     }
 
     size_t cursor = 0;

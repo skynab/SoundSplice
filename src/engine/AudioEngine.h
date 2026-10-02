@@ -91,7 +91,10 @@ public:
     // not, and one ClipStream reader slot (see the static_assert).
     static constexpr int kMaxTracks = 32;
 
-    AudioEngine();
+    /** @p openDevice false: no audio or MIDI device is opened - for a
+        headless render (soundsplice-cli), which only ever renders offline
+        and must not take over the user's audio interface to do it. */
+    explicit AudioEngine(bool openDevice = true);
     ~AudioEngine() override;
 
     juce::AudioDeviceManager& deviceManager() noexcept { return deviceManager_; }
@@ -850,14 +853,25 @@ private:
 
     /** Rebuilds and submits a track's chain from chainStructure_. Message
         thread. Also called when the device (re)starts, since a chain must be
-        prepared for the sample rate it will actually run at. */
-    void rebuildTrackEffectChain(int index);
+        prepared for the sample rate it will actually run at - @p rate when
+        given (prepareAll's, which for an offline render isn't the device's),
+        otherwise the device's. */
+    void rebuildTrackEffectChain(int index, double rate = 0.0);
 
     // Message-thread view of each track's chain: the structure it was built
     // from, and a pointer to the chain last submitted. The pointer is how
     // parameter setters reach live nodes — safe because the newest chain is
     // never the one being reclaimed.
     std::array<std::vector<EffectSlotSpec>, kMaxTracks> chainStructure_;
+
+    // And each slot's settings as last set, so a rebuild can give them back.
+    // A rebuild makes fresh nodes from chainStructure_, which is only the
+    // chain's shape: without these every effect came back at its defaults.
+    // That mattered most in renderOffline, whose prepareAll rebuilds every
+    // chain just before rendering - an export ran each track's effects at
+    // their defaults rather than as set, until the next edit happened to
+    // resend them, which an export never waits for.
+    std::array<std::vector<EffectParamValues>, kMaxTracks> chainParams_;
 
     /** Each clip's effect chain, by clip id: kept across clip-list
         resubmissions, so an unrelated edit doesn't rebuild a clip's effects
