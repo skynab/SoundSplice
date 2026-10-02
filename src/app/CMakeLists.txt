@@ -95,6 +95,7 @@ target_link_libraries(SoundSplice
     lame::mp3
     opusfile::opusfile
     WavPack::WavPack
+    lua::lua
     juce::juce_audio_utils
   PUBLIC
     juce::juce_recommended_config_flags

@@ -657,13 +657,13 @@ void MainComponent::noteMacroEffects(const std::vector<model::EffectSlot>& chain
 
 /** Runs a macro's steps in order on the selection, stopping at the first
     one that can't run. */
-void MainComponent::runMacro(int index)
+bool MainComponent::runMacro(int index)
 {
     if (runningMacro_ || index < 0 || index >= (int) macros_.size())
-        return;
+        return false;
     const auto macro = macros_[(size_t) index]; // a step may change the list
     if (macro.steps.empty())
-        return;
+        return false;
 
     runningMacro_ = true;
     int number    = 0;
@@ -693,7 +693,7 @@ void MainComponent::runMacro(int index)
             showError("Macro \"" + juce::String(macro.name) + "\" stopped at step " + juce::String(number) + " ("
                       + macros::describe(step) + "): " + problem);
             commandManager_.commandStatusChanged();
-            return;
+            return false;
         }
     }
     runningMacro_ = false;
@@ -704,6 +704,7 @@ void MainComponent::runMacro(int index)
 
     commandManager_.commandStatusChanged();
     showStatus("Ran macro \"" + juce::String(macro.name) + "\": " + juce::String(number) + (number == 1 ? " step" : " steps"));
+    return true;
 }
 
 /** Apply Macro to Files: which macro, from those that are all effects. */
@@ -815,6 +816,163 @@ void MainComponent::editMacroEffects(int macro, int step, std::vector<model::Eff
     options.useNativeTitleBar            = true;
     options.resizable                    = true;
     options.launchAsync();
+}
+
+// ---- Scripting --------------------------------------------------------------
+
+/** What a script can see and do (scripting::Host): the commands and macros,
+    the tracks, the playhead and the time selection, in seconds. Each change
+    is an undo step of its own, as it would be made by hand. */
+scripting::Host MainComponent::makeScriptHost()
+{
+    scripting::Host host;
+
+    host.commandNames = []
+    {
+        std::vector<std::string> names;
+        for (const auto& definition : commands::all())
+            names.push_back(juce::String(definition.name).upToFirstOccurrenceOf("   ", false, false).toStdString());
+        return names;
+    };
+    host.runCommand = [this](const std::string& name)
+    {
+        // "Fade In", or "Normalize" for "Normalize...".
+        for (const auto& definition : commands::all())
+        {
+            const auto full = juce::String(definition.name).upToFirstOccurrenceOf("   ", false, false);
+            if (full != juce::String(name) && full.trimCharactersAtEnd(".") != juce::String(name))
+                continue;
+            juce::ApplicationCommandInfo info(definition.id);
+            getCommandInfo(definition.id, info);
+            return (info.flags & juce::ApplicationCommandInfo::isDisabled) == 0
+                && commandManager_.invokeDirectly(definition.id, false);
+        }
+        return false;
+    };
+    host.macroNames = [this]
+    {
+        std::vector<std::string> names;
+        for (const auto& macro : macros_)
+            names.push_back(macro.name);
+        return names;
+    };
+    host.runMacro = [this](const std::string& name)
+    {
+        for (int i = 0; i < (int) macros_.size(); ++i)
+            if (macros_[(size_t) i].name == name)
+                return runMacro(i);
+        return false;
+    };
+    host.status = [this](const std::string& text) { showStatus(juce::String::fromUTF8(text.c_str())); };
+
+    host.tracks = [this]
+    {
+        std::vector<scripting::TrackInfo> list;
+        const auto& song = history_.current();
+        for (int i = 0; i < (int) song.tracks.size(); ++i)
+        {
+            const auto& track = song.tracks[(size_t) i];
+            scripting::TrackInfo info;
+            info.name     = track.name;
+            info.type     = track.type == model::TrackType::Audio ? "audio"
+                          : track.type == model::TrackType::Bus   ? "bus" : "midi";
+            info.clips    = (int) track.clips.size();
+            info.volumeDb = track.gainDb;
+            info.pan      = track.pan;
+            info.muted    = track.muted;
+            info.soloed   = track.solo;
+            info.selected = i == selectedTrackIndex_;
+            list.push_back(std::move(info));
+        }
+        return list;
+    };
+    host.setTrackVolume = [this](int index, double db)
+    {
+        const auto gain = (float) juce::jlimit(-96.0, 12.0, db);
+        history_.edit("Set track volume", [index, gain](model::Song& s) { s.tracks[(size_t) index].gainDb = gain; });
+        engine_.setTrackGainDb(index, gain);
+        updateMixerStrips();
+        return true;
+    };
+    host.setTrackPan = [this](int index, double pan)
+    {
+        const auto value = (float) juce::jlimit(-1.0, 1.0, pan);
+        history_.edit("Set track pan", [index, value](model::Song& s) { s.tracks[(size_t) index].pan = value; });
+        engine_.setTrackPan(index, value);
+        updateMixerStrips();
+        return true;
+    };
+    host.setTrackMuted  = [this](int index, bool on) { setTrackMuted(index, on); return true; };
+    host.setTrackSoloed = [this](int index, bool on) { setTrackSolo(index, on); return true; };
+    host.renameTrack    = [this](int index, const std::string& name)
+    {
+        if (juce::String(name).trim().isEmpty())
+            return false;
+        const int id = history_.current().tracks[(size_t) index].id;
+        history_.edit("Rename track", [id, name](model::Song& s) { model::renameTrack(s, id, name); });
+        syncEngineTracks();
+        updateMixerStrips();
+        refreshSessionView();
+        arrangementView_.setSong(history_.current());
+        updateEditingLabel();
+        return true;
+    };
+    host.selectTrack = [this](int index) { selectTrackAndRefreshAll(index); return true; };
+
+    host.playhead    = [this] { return model::clockFor(history_.current()).secondsAt(playheadBeat()); };
+    host.setPlayhead = [this](double seconds) { seekToBeat(model::clockFor(history_.current()).beatAt(seconds)); };
+    host.selection   = [this]() -> std::optional<std::pair<double, double>>
+    {
+        if (timeSelection_.isEmpty())
+            return std::nullopt;
+        const auto clock = model::clockFor(history_.current());
+        return std::pair(clock.secondsAt(timeSelection_.startBeats), clock.secondsAt(timeSelection_.endBeats));
+    };
+    host.setSelection = [this](double start, double end)
+    {
+        const auto& song  = history_.current();
+        const auto  clock = model::clockFor(song);
+        model::TimeSelection selection;
+        selection.startBeats = clock.beatAt(start);
+        selection.endBeats   = clock.beatAt(end);
+        for (const auto& track : song.tracks)
+            if (track.type == model::TrackType::Audio)
+                selection.trackIds.push_back(track.id);
+        if (selection.trackIds.empty())
+            return false;
+        setTimeSelection(selection);
+        return true;
+    };
+    host.bpm = [this] { return history_.current().bpm; };
+    return host;
+}
+
+void MainComponent::runScript(const juce::String& code, const juce::String& name)
+{
+    scripting::Engine engine(makeScriptHost());
+    const auto result = engine.run(code.toStdString(), name.toStdString());
+    scriptPane_.showResult(result);
+    if (! result.ok)
+        showError("The script stopped: " + juce::String::fromUTF8(result.error.c_str()).upToFirstOccurrenceOf("\n", false, false));
+}
+
+/** Run Script: a .lua file, run as it is; what it prints goes to the Script pane. */
+void MainComponent::chooseScriptToRun()
+{
+    chooser_ = std::make_unique<juce::FileChooser>("Run Script", juce::File(settings_.getValue("script.folder")), "*.lua");
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [this](const juce::FileChooser& fc)
+                          {
+                              const auto file = fc.getResult();
+                              if (file == juce::File {})
+                                  return;
+                              settings_.setValue("script.folder", file.getParentDirectory().getFullPathName());
+                              if (workspace_.isPanelOpen("Script"))
+                                  workspace_.revealPanel("Script");
+                              else
+                                  togglePanel(panelMenuIndex("Script"));
+                              runScript(file.loadFileAsString(), file.getFileName());
+                          });
 }
 
 } // namespace soundsplice

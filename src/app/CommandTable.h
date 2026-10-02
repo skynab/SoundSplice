@@ -218,6 +218,7 @@ enum Id : int
     recordMacro,
     manageMacros,
     runMacroOnFiles,
+    runScript,
 };
 
 /** One command's fixed description. */
@@ -405,6 +406,7 @@ inline const std::vector<Definition>& all()
         { recordMacro,      "Record Macro",         "Tools", "Start keeping the commands and effects you use, to save as a macro; again to stop and name it.", {} },
         { manageMacros,     "Macros...",            "Tools", "Build, edit and run macros: lists of commands and effects run one after another.", {} },
         { runMacroOnFiles,  "Apply Macro to Files...", "Tools", "Run a macro of effects over every audio file in a folder, writing new files.", {} },
+        { runScript,        "Run Script...",        "Tools", "Run a Lua script file: it can run commands and macros, and read and change the tracks.", {} },
         { commandPalette,   "Command Palette...",   "View", "Find any command by typing part of its name, and run it.", { keys::commandPalette } },
     };
 

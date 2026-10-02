@@ -173,6 +173,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/CommandPaletteTests.cpp
     gui/ShortcutSetsTests.cpp
     gui/MacrosTests.cpp
+    gui/ScriptingTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
@@ -196,6 +197,7 @@ if (SOUNDSPLICE_BUILD_APP)
       lame::mp3
       opusfile::opusfile
       WavPack::WavPack
+      lua::lua
       juce::juce_audio_utils
       Catch2::Catch2WithMain
       juce::juce_recommended_config_flags

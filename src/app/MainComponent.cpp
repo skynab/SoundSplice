@@ -901,6 +901,15 @@ MainComponent::MainComponent()
     userEffectPresets_ = model::deserializeUserPresets(settings_.getValue("effectPresets").toStdString());
     favorites_         = model::deserializeFavorites(settings_.getValue("favorites").toStdString());
     macros_            = macros::deserialize(settings_.getValue("macros"));
+
+    // The Script pane keeps what's in it between runs of the app.
+    scriptPane_.setCode(settings_.getValue("script.text",
+        "-- Lua: Help lists what a script can call. Ctrl+Return runs it.\n"
+        "for i, track in ipairs(soundsplice.tracks()) do\n"
+        "    print(i, track.name, track.volume .. \" dB\")\n"
+        "end\n"));
+    scriptPane_.onRun         = [this](const juce::String& code, const juce::String& name) { runScript(code, name); };
+    scriptPane_.onCodeChanged = [this](const juce::String& code) { settings_.setValue("script.text", code); };
     effectChain_.setUserPresets(userEffectPresets_);
     effectChain_.onPresetSaveRequested = [this](const model::EffectSlot& slot, int) { promptToSaveEffectPreset(slot); };
     effectChain_.onImpulseResponseRequested = [this](int slot, bool browse) { chooseImpulseResponse(slot, browse); };
@@ -920,6 +929,7 @@ MainComponent::MainComponent()
     workspace_.registerPanel("Analyser", analyserPane_);
     workspace_.registerPanel("Diagnostics", diagnosticsPane_);
     workspace_.registerPanel("Essential Sound", essentialSoundPane_);
+    workspace_.registerPanel("Script", scriptPane_);
     workspace_.registerPanel("Automation", automationPane_);
     workspace_.registerPanel("Session", sessionView_);
     workspace_.registerPanel("Track FX", effectChain_);

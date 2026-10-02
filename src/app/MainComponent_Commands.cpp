@@ -420,6 +420,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::recordMacro:      toggleMacroRecording(); break;
         case commands::manageMacros:     showMacros(); break;
         case commands::runMacroOnFiles:  chooseMacroForFiles(); break;
+        case commands::runScript:        chooseScriptToRun(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -1063,6 +1064,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::recordMacro);
         add(commands::manageMacros);
         add(commands::runMacroOnFiles);
+        menu.addSeparator();
+        add(commands::runScript);
         menu.addSeparator();
         add(commands::commandPalette);
         add(commands::keyboardShortcuts);

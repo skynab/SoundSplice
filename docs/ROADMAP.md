@@ -266,7 +266,11 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 - ✅ **Command palette** (search every command by name): View > Command Palette (Ctrl+Shift+P) lists every
   command, pane, layout and Favorite; fuzzy matching on the name or category, recently run ones first, greyed
   when unavailable, with each one's shortcut (`src/app/CommandPalette.h`)
-- ⬜ **Scripting**: embedded Lua with the command registry exposed (REAPER ReaScript, Audacity mod-script-pipe)
+- ✅ **Scripting**: embedded Lua with the command registry exposed (REAPER ReaScript, Audacity mod-script-pipe):
+  Lua 5.4 (MIT, `cmake/lua.cmake`) in a Script pane with a Lua editor, and Tools > Run Script for .lua files.
+  The `soundsplice` table runs commands and macros by name, reads and sets tracks' volume, pan, mute, solo and
+  name, and the playhead and time selection in seconds. Sandboxed (no io, os, package, debug or file loading) and
+  stopped if it runs too long (`src/app/Scripting.h`, `src/app/ScriptPane.h`)
 - ⬜ **Accessibility**: full keyboard operation of tracks, clips and selections; screen-reader
   announcements via JUCE's accessibility API; high-contrast theme (Audacity's strong suit)
 - ⬜ Themes and custom colors; saved screensets (✅ layouts exist)

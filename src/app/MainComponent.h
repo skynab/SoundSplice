@@ -47,6 +47,7 @@
 #include "CommandPalette.h"
 #include "KeyboardShortcutsDialog.h"
 #include "MacrosDialog.h"
+#include "ScriptPane.h"
 #include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -654,7 +655,10 @@ private:
     void                   toggleMacroRecording();
     void                   noteMacroCommand(juce::CommandID id);
     void                   noteMacroEffects(const std::vector<model::EffectSlot>& chain);
-    void                   runMacro(int index);
+    bool                   runMacro(int index);
+    scripting::Host        makeScriptHost();
+    void                   runScript(const juce::String& code, const juce::String& name);
+    void                   chooseScriptToRun();
     void                   chooseMacroForFiles();
     void                   runMacroOnFiles(int index);
     void                   showMacros();
@@ -1019,6 +1023,7 @@ private:
     AnalyserPane                       analyserPane_;
     DiagnosticsPane                    diagnosticsPane_;
     EssentialSoundPane                 essentialSoundPane_;
+    ScriptPane                         scriptPane_;
     model::EssentialSettings           essentialDragFrom_; // the selected clip's, as a task slider was grabbed
     bool                               essentialDragging_ = false;
     int                                diagnosedClipId_ = 0; // the clip diagnosticsPane_'s rows are for
