@@ -66,6 +66,17 @@ public:
         resized();
     }
 
+    /** For a macro's effects step: nothing to preview, and Apply hands the
+        chain back to be kept rather than applying it. */
+    void setForMacro(std::vector<model::EffectSlot> chain)
+    {
+        chain_ = std::move(chain);
+        refresh();
+        previewButton_.setVisible(false);
+        applyButton_.setButtonText("OK");
+        resized();
+    }
+
     /** Stores a plugin slot's edited state, as model::PluginRef::state. */
     void setPluginState(int slotIndex, const std::string& state)
     {

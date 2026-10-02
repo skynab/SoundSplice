@@ -215,6 +215,9 @@ enum Id : int
     batchProcess,
     commandPalette,
     keyboardShortcuts,
+    recordMacro,
+    manageMacros,
+    runMacroOnFiles,
 };
 
 /** One command's fixed description. */
@@ -399,6 +402,9 @@ inline const std::vector<Definition>& all()
         { autoCrossfades,   "Automatic Crossfades", "View", "Crossfade audio clips wherever moving or resizing one makes it overlap its neighbour.", {} },
         { snapToClipEdges,  "Snap to Clip Edges", "View", "Pull dragged clip edges onto the edges of nearby clips.", {} },
         { resetLayout,      "Reset Layout",         "View", "Put the panes back where this layout starts them.", {} },
+        { recordMacro,      "Record Macro",         "Tools", "Start keeping the commands and effects you use, to save as a macro; again to stop and name it.", {} },
+        { manageMacros,     "Macros...",            "Tools", "Build, edit and run macros: lists of commands and effects run one after another.", {} },
+        { runMacroOnFiles,  "Apply Macro to Files...", "Tools", "Run a macro of effects over every audio file in a folder, writing new files.", {} },
         { commandPalette,   "Command Palette...",   "View", "Find any command by typing part of its name, and run it.", { keys::commandPalette } },
     };
 

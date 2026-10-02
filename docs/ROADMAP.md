@@ -255,8 +255,11 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 ### Phase 7 — Workflow, customization and accessibility (Audacity, REAPER)
 
-- ⬜ **Macros**: record or build a list of commands and effects with settings, then run it on the
-  selection or a batch of files (Audacity Macros, REAPER Actions)
+- ✅ **Macros**: record or build a list of commands and effects with settings, then run it on the
+  selection or a batch of files (Audacity Macros, REAPER Actions): a new Tools menu runs them; Record Macro keeps
+  the commands and applied effects as you work; the Macros window builds, edits and reorders steps; a macro of
+  effects runs over a folder through Batch Process. A step is a command that acts at once (one that asks first
+  can't be a step) or an effect chain with its settings (`src/app/Macros.h`, `src/app/MacrosDialog.h`)
 - ✅ **Customizable keyboard shortcuts**, with importable and exportable sets: File > Keyboard Shortcuts;
   saved by command name with portable key names ("Cmd+Shift+Left") so a set survives new commands and moves
   between Windows and macOS (`src/app/ShortcutSets.h`, `src/app/KeyboardShortcutsDialog.h`)

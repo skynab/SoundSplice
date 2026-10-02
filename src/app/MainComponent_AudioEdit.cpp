@@ -852,10 +852,13 @@ void MainComponent::showApplyEffectsDialog()
     raw->onApply = [this, raw, onTimeSelection](const std::vector<model::EffectSlot>& chain)
     {
         engine_.stopAudition();
+        const auto before = history_.stateId();
         if (onTimeSelection)
             applyEffectsToTimeSelection(chain);
         else
             applyEffectsToSelection(chain);
+        if (history_.stateId() != before)
+            noteMacroEffects(withScratchPluginStates(chain));
         if (auto* window = raw->findParentComponentOfClass<juce::DialogWindow>())
             window->exitModalState(0);
     };

@@ -60,6 +60,7 @@ inline constexpr int kFirstLayoutMenuId = 40;
 // to remove. Under the command ids, and checked before the panel range.
 inline constexpr int kFirstFavoriteMenuId       = 0x1000;
 inline constexpr int kFirstRemoveFavoriteMenuId = 0x1800;
+inline constexpr int kFirstMacroMenuId          = 0x1400; // within the favorites' range, which stops short of it
 inline constexpr int kSaveTrackFavoriteMenuId   = 0x1FFF;
 
 /** Colour entries in the per-track gear menu, clear of that menu's own

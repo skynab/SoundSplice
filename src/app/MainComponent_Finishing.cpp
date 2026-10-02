@@ -138,12 +138,12 @@ void MainComponent::fixAllDiagnostics(engine::diagnostics::Kind kind)
 
 /** Batch Process (app/BatchProcess.h): asks for the folder of files, then
     the chain, then the options and where to write, then runs. */
-void MainComponent::startBatchProcess()
+void MainComponent::startBatchProcess(std::optional<std::vector<model::EffectSlot>> chain)
 {
     chooser_ = std::make_unique<juce::FileChooser>("Batch Process: choose a folder of audio files",
                                                    juce::File(settings_.getValue("batch.inputFolder")));
     chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-        [this](const juce::FileChooser& fc)
+        [this, chain](const juce::FileChooser& fc)
         {
             const auto folder = fc.getResult();
             if (folder == juce::File {})
@@ -156,7 +156,10 @@ void MainComponent::startBatchProcess()
                 return;
             }
             settings_.setValue("batch.inputFolder", folder.getFullPathName());
-            chooseBatchChain(std::move(inputs));
+            if (chain)
+                chooseBatchOptions(std::move(inputs), *chain); // a macro's
+            else
+                chooseBatchChain(std::move(inputs));
         });
 }
 
@@ -352,22 +355,33 @@ void MainComponent::applyFavorite(int index)
     if (index < 0 || index >= (int) favorites_.size())
         return;
 
-    const auto& favorite = favorites_[(size_t) index];
-    const auto& tracks   = history_.current().tracks;
-    const bool  onTime   = ! timeSelection_.isEmpty()
-                        && std::any_of(tracks.begin(), tracks.end(), [this](const model::Track& t)
-                                       { return t.type == model::TrackType::Audio && timeSelection_.includes(t.id); });
+    const auto favorite = favorites_[(size_t) index];
+    if (! applyChainToSelection(favorite.chain, "\"" + juce::String(favorite.name) + "\""))
+        return;
+    noteMacroEffects(favorite.chain);
+    showStatus("Applied favorite \"" + juce::String(favorite.name) + "\"");
+}
+
+/** Applies @p chain to the time selection across audio tracks, or else the
+    audio editor's selection - whichever there is. True if it changed
+    anything; if there's no selection, says so, naming @p what. */
+bool MainComponent::applyChainToSelection(const std::vector<model::EffectSlot>& chain, const juce::String& what)
+{
+    const auto& tracks = history_.current().tracks;
+    const bool  onTime = ! timeSelection_.isEmpty()
+                      && std::any_of(tracks.begin(), tracks.end(), [this](const model::Track& t)
+                                     { return t.type == model::TrackType::Audio && timeSelection_.includes(t.id); });
+    const auto before = history_.stateId();
     if (onTime)
-        applyEffectsToTimeSelection(favorite.chain);
+        applyEffectsToTimeSelection(chain);
     else if (selectedAudioClip() != nullptr && ! audioEditor_.selection().isEmpty())
-        applyEffectsToSelection(favorite.chain);
+        applyEffectsToSelection(chain);
     else
     {
-        showError("Select part of a clip in the audio editor, or time across audio tracks, to apply \""
-                  + juce::String(favorite.name) + "\" to");
-        return;
+        showError("Select part of a clip in the audio editor, or time across audio tracks, to apply " + what + " to");
+        return false;
     }
-    showStatus("Applied favorite \"" + juce::String(favorite.name) + "\"");
+    return history_.stateId() != before;
 }
 
 /** Asks for a name and keeps @p chain as a favorite under it. */
@@ -563,6 +577,244 @@ void MainComponent::removeDcOffsetInSelection()
             }
         }))
         showStatus("Removed the DC offset");
+}
+
+// ---- Macros -----------------------------------------------------------------
+
+void MainComponent::saveMacros()
+{
+    settings_.setValue("macros", macros::serialize(macros_));
+    settings_.saveIfNeeded();
+    if (macrosDialog_ != nullptr)
+        macrosDialog_->setMacros(macros_);
+    commandManager_.commandStatusChanged();
+}
+
+/** Record Macro: starts gathering, or stops and asks for a name. */
+void MainComponent::toggleMacroRecording()
+{
+    if (! recordingMacro_)
+    {
+        recordingMacro_ = macros::Macro {};
+        showStatus("Recording a macro: the commands and effects you use now are kept - Tools > Stop Recording Macro when done");
+        commandManager_.commandStatusChanged();
+        return;
+    }
+
+    auto recorded = std::move(*recordingMacro_);
+    recordingMacro_.reset();
+    commandManager_.commandStatusChanged();
+    if (recorded.steps.empty())
+    {
+        showStatus("Stopped recording: nothing was recorded");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Save Macro", juce::String((int) recorded.steps.size()) + " steps recorded.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("name", "Macro " + juce::String((int) macros_.size() + 1), "Name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Discard", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, recorded](int result) mutable
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr || result != 1)
+                return;
+            const auto name = window->getTextEditorContents("name").trim();
+            if (name.isEmpty())
+                return;
+            recorded.name  = name.toStdString();
+            self->macros_ = macros::with(self->macros_, std::move(recorded));
+            self->saveMacros();
+            self->showStatus("Saved macro \"" + name + "\" in the Tools menu");
+        }));
+}
+
+/** A command was run: kept, if a macro is being recorded and it can be a step. */
+void MainComponent::noteMacroCommand(juce::CommandID id)
+{
+    if (! recordingMacro_ || runningMacro_)
+        return;
+    const auto* definition = commands::find(id);
+    if (definition == nullptr || definition->id == commands::recordMacro)
+        return;
+    if (! macros::recordable(*definition))
+    {
+        // Apply Effects is recorded as its effects, once they're applied.
+        if (definition->id != commands::applyEffects)
+            showStatus(juce::String(definition->name) + " isn't recorded: a macro step can't stop to ask anything");
+        return;
+    }
+    recordingMacro_->steps.push_back({ definition->name, {} });
+}
+
+void MainComponent::noteMacroEffects(const std::vector<model::EffectSlot>& chain)
+{
+    if (recordingMacro_ && ! runningMacro_ && ! chain.empty())
+        recordingMacro_->steps.push_back({ {}, chain });
+}
+
+/** Runs a macro's steps in order on the selection, stopping at the first
+    one that can't run. */
+void MainComponent::runMacro(int index)
+{
+    if (runningMacro_ || index < 0 || index >= (int) macros_.size())
+        return;
+    const auto macro = macros_[(size_t) index]; // a step may change the list
+    if (macro.steps.empty())
+        return;
+
+    runningMacro_ = true;
+    int number    = 0;
+    for (const auto& step : macro.steps)
+    {
+        ++number;
+        juce::String problem;
+        if (step.isEffects())
+        {
+            if (! applyChainToSelection(step.effects, "the macro"))
+                problem = "it needs a selection to apply its effects to";
+        }
+        else if (const auto* definition = macros::commandFor(step); definition == nullptr)
+            problem = "there's no such command any more";
+        else
+        {
+            juce::ApplicationCommandInfo info(definition->id);
+            getCommandInfo(definition->id, info);
+            if ((info.flags & juce::ApplicationCommandInfo::isDisabled) != 0
+                || ! commandManager_.invokeDirectly(definition->id, false))
+                problem = "it can't be used right now";
+        }
+
+        if (problem.isNotEmpty())
+        {
+            runningMacro_ = false;
+            showError("Macro \"" + juce::String(macro.name) + "\" stopped at step " + juce::String(number) + " ("
+                      + macros::describe(step) + "): " + problem);
+            commandManager_.commandStatusChanged();
+            return;
+        }
+    }
+    runningMacro_ = false;
+
+    // Running a macro while recording one records its steps.
+    if (recordingMacro_)
+        recordingMacro_->steps.insert(recordingMacro_->steps.end(), macro.steps.begin(), macro.steps.end());
+
+    commandManager_.commandStatusChanged();
+    showStatus("Ran macro \"" + juce::String(macro.name) + "\": " + juce::String(number) + (number == 1 ? " step" : " steps"));
+}
+
+/** Apply Macro to Files: which macro, from those that are all effects. */
+void MainComponent::chooseMacroForFiles()
+{
+    juce::PopupMenu menu;
+    for (int i = 0; i < (int) macros_.size(); ++i)
+    {
+        const bool ok = ! macros_[(size_t) i].steps.empty() && macros::effectsOnly(macros_[(size_t) i]).has_value();
+        menu.addItem(i + 1, macros_[(size_t) i].name + (ok ? "" : "   (has command steps)"), ok);
+    }
+    menu.showMenuAsync(juce::PopupMenu::Options().withMousePosition(),
+                       [self = juce::Component::SafePointer<MainComponent>(this)](int chosen)
+                       {
+                           if (self != nullptr && chosen > 0)
+                               self->runMacroOnFiles(chosen - 1);
+                       });
+}
+
+/** A macro of effects over a folder: Batch Process with its chain. */
+void MainComponent::runMacroOnFiles(int index)
+{
+    if (index < 0 || index >= (int) macros_.size())
+        return;
+    const auto chain = macros::effectsOnly(macros_[(size_t) index]);
+    if (! chain || chain->empty())
+    {
+        showError("Only a macro made of effects can run over files: commands act on the project");
+        return;
+    }
+    startBatchProcess(*chain);
+}
+
+void MainComponent::showMacros()
+{
+    if (macrosDialog_ != nullptr)
+    {
+        if (auto* window = macrosDialog_->findParentComponentOfClass<juce::DialogWindow>())
+            window->toFront(true);
+        return;
+    }
+
+    auto dialog = std::make_unique<MacrosDialog>();
+    dialog->setMacros(macros_);
+    dialog->onChanged = [this](const std::vector<macros::Macro>& edited)
+    {
+        macros_ = edited;
+        settings_.setValue("macros", macros::serialize(macros_));
+        settings_.saveIfNeeded();
+        commandManager_.commandStatusChanged();
+    };
+    dialog->onRun         = [this](int index) { runMacro(index); };
+    dialog->onRunOnFiles  = [this](int index) { runMacroOnFiles(index); };
+    dialog->onEditEffects = [this](int macro, int step, const std::vector<model::EffectSlot>& current)
+    {
+        editMacroEffects(macro, step, current);
+    };
+    macrosDialog_ = dialog.get();
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog.release());
+    options.dialogTitle                  = "Macros";
+    options.dialogBackgroundColour       = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = true;
+    options.resizable                    = true;
+    options.launchAsync();
+}
+
+/** The effects of a macro step, in the Apply Effects dialog. */
+void MainComponent::editMacroEffects(int macro, int step, std::vector<model::EffectSlot> current)
+{
+    auto dialog = std::make_unique<ApplyEffectsDialog>();
+    dialog->setSize(520, 460);
+    dialog->setUserPresets(userEffectPresets_);
+    dialog->setAvailablePlugins(engine_.pluginHost().offeredPlugins());
+    dialog->onPluginEditorRequested = [this](int slotIndex, const model::EffectSlot& slot) { openScratchPluginEditor(slotIndex, slot); };
+    dialog->onChainAboutToChange    = [this] { closeScratchPluginEditors(); };
+    dialog->onPresetSaveRequested   = [this](const model::EffectSlot& slot) { promptToSaveEffectPreset(slot); };
+    dialog->onUserPresetDeleted     = [this](const std::string& effectId, const std::string& name) { deleteUserEffectPreset(effectId, name); };
+    dialog->onDismissed = [safe = juce::Component::SafePointer<MainComponent>(this)]
+    {
+        if (safe != nullptr)
+            safe->closeScratchPluginEditors();
+    };
+    dialog->setForMacro(std::move(current));
+    applyEffectsDialog_ = dialog.get();
+
+    auto* raw = dialog.get();
+    raw->onApply = [this, raw, macro, step](const std::vector<model::EffectSlot>& chain)
+    {
+        const auto kept = withScratchPluginStates(chain);
+        if (auto* window = raw->findParentComponentOfClass<juce::DialogWindow>())
+            window->exitModalState(0);
+        if (macrosDialog_ != nullptr && ! kept.empty())
+            macrosDialog_->setEffects(macro, step, kept);
+    };
+    raw->onCancel = [raw]
+    {
+        if (auto* window = raw->findParentComponentOfClass<juce::DialogWindow>())
+            window->exitModalState(0);
+    };
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog.release());
+    options.dialogTitle                  = step < 0 ? "Macro: Add Effects" : "Macro: Edit Effects";
+    options.dialogBackgroundColour       = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = true;
+    options.resizable                    = true;
+    options.launchAsync();
 }
 
 } // namespace soundsplice

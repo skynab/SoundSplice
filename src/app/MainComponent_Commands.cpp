@@ -51,6 +51,17 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(followSystemOutput_);
             break;
 
+        case commands::recordMacro:
+            info.shortName = recordingMacro_ ? "Stop Recording Macro" : "Record Macro";
+            info.setTicked(recordingMacro_.has_value());
+            info.setActive(! runningMacro_);
+            break;
+
+        case commands::runMacroOnFiles:
+            info.setActive(std::any_of(macros_.begin(), macros_.end(), [](const macros::Macro& m)
+                                       { return ! m.steps.empty() && macros::effectsOnly(m).has_value(); }));
+            break;
+
         case commands::punchRecording:
             info.setTicked(settings_.getBoolValue("punchRecording", false));
             break;
@@ -406,6 +417,9 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::batchProcess:     startBatchProcess(); break;
         case commands::commandPalette:   showCommandPalette(); break;
         case commands::keyboardShortcuts: showKeyboardShortcuts(); break;
+        case commands::recordMacro:      toggleMacroRecording(); break;
+        case commands::manageMacros:     showMacros(); break;
+        case commands::runMacroOnFiles:  chooseMacroForFiles(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -770,7 +784,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
 
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Edit", "View", "Markers", "Transport", "Generate", "Analyze", "Favorites" };
+    return { "File", "Edit", "View", "Markers", "Transport", "Generate", "Analyze", "Favorites", "Tools" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String&)
@@ -1039,6 +1053,20 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
             remove.addItem(kFirstRemoveFavoriteMenuId + i, favorites_[(size_t) i].name);
         menu.addSubMenu("Remove Favorite", remove, ! favorites_.empty());
     }
+    else if (topLevelMenuIndex == 8) // Tools: the macros, to run, and the commands about them
+    {
+        if (macros_.empty())
+            menu.addItem(1, "Record one, or build one in Macros...", false, false);
+        for (int i = 0; i < (int) macros_.size(); ++i)
+            menu.addItem(kFirstMacroMenuId + i, macros_[(size_t) i].name, ! macros_[(size_t) i].steps.empty() && ! runningMacro_);
+        menu.addSeparator();
+        add(commands::recordMacro);
+        add(commands::manageMacros);
+        add(commands::runMacroOnFiles);
+        menu.addSeparator();
+        add(commands::commandPalette);
+        add(commands::keyboardShortcuts);
+    }
 
     return menu;
 }
@@ -1102,6 +1130,18 @@ std::vector<palette::Entry> MainComponent::paletteEntries()
         entry.description = "Apply this effect chain to the selection.";
         entry.key         = "fav:" + juce::String(favorites_[(size_t) i].name);
         entry.run         = [this, i] { applyFavorite(i); };
+        entries.push_back(std::move(entry));
+    }
+
+    for (int i = 0; i < (int) macros_.size(); ++i)
+    {
+        palette::Entry entry;
+        entry.name        = "Macro: " + juce::String(macros_[(size_t) i].name);
+        entry.category    = "Tools";
+        entry.description = juce::String((int) macros_[(size_t) i].steps.size()) + " steps, run in order on the selection.";
+        entry.enabled     = ! macros_[(size_t) i].steps.empty() && ! runningMacro_;
+        entry.key         = "macro:" + juce::String(macros_[(size_t) i].name);
+        entry.run         = [this, i] { runMacro(i); };
         entries.push_back(std::move(entry));
     }
 
@@ -1170,6 +1210,11 @@ void MainComponent::menuItemSelected(int menuItemID, int)
     if (menuItemID >= kFirstRemoveFavoriteMenuId)
     {
         removeFavorite(menuItemID - kFirstRemoveFavoriteMenuId);
+        return;
+    }
+    if (menuItemID >= kFirstMacroMenuId)
+    {
+        runMacro(menuItemID - kFirstMacroMenuId);
         return;
     }
     if (menuItemID >= kFirstFavoriteMenuId)

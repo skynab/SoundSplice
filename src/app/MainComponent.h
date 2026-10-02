@@ -46,6 +46,7 @@
 #include "EssentialSoundPane.h"
 #include "CommandPalette.h"
 #include "KeyboardShortcutsDialog.h"
+#include "MacrosDialog.h"
 #include "LoudnessMatch.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
@@ -504,7 +505,7 @@ private:
     void                   fixAllDiagnostics(engine::diagnostics::Kind kind);
     bool                   fixDiagnosticRange(engine::diagnostics::Kind kind, AudioRange range);
     void                   removeDcOffsetInSelection();
-    void                   startBatchProcess();
+    void                   startBatchProcess(std::optional<std::vector<model::EffectSlot>> chain = std::nullopt);
     void                   applyFavorite(int index);
     void                   showCommandPalette();
     std::vector<palette::Entry> paletteEntries();
@@ -649,11 +650,39 @@ private:
     int                    pluginStateSyncTicks_ = 0;
     void                   showPluginManager();
     void                   showKeyboardShortcuts();
+    bool                   applyChainToSelection(const std::vector<model::EffectSlot>& chain, const juce::String& what);
+    void                   toggleMacroRecording();
+    void                   noteMacroCommand(juce::CommandID id);
+    void                   noteMacroEffects(const std::vector<model::EffectSlot>& chain);
+    void                   runMacro(int index);
+    void                   chooseMacroForFiles();
+    void                   runMacroOnFiles(int index);
+    void                   showMacros();
+    void                   saveMacros();
+    void                   editMacroEffects(int macro, int step, std::vector<model::EffectSlot> current);
     void                   pluginListsChanged();
 
     // The plugin manager while it's open, to refresh after a scan.
     juce::Component::SafePointer<class PluginManagerDialog> pluginManager_;
     juce::Component::SafePointer<KeyboardShortcutsDialog>   shortcutsDialog_;
+    juce::Component::SafePointer<MacrosDialog>              macrosDialog_;
+
+    // Macros (Tools menu), kept in the app's settings. While one is being
+    // recorded, recordingMacro_ gathers the commands and effects used.
+    struct CommandSpy final : juce::ApplicationCommandManagerListener
+    {
+        std::function<void(juce::CommandID)> onInvoked;
+        void applicationCommandInvoked(const juce::ApplicationCommandTarget::InvocationInfo& info) override
+        {
+            if (onInvoked)
+                onInvoked(info.commandID);
+        }
+        void applicationCommandListChanged() override {}
+    };
+    std::vector<macros::Macro>     macros_;
+    std::optional<macros::Macro>   recordingMacro_;
+    bool                           runningMacro_ = false;
+    CommandSpy                     commandSpy_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   addBusTrack();
     void                   toggleClipWarp(int trackIndex, int clipId);

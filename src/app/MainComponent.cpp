@@ -23,6 +23,8 @@ MainComponent::MainComponent()
     commandManager_.setFirstCommandTarget(this);
     if (const auto custom = shortcutsets::fromXml(settings_.getValue("shortcuts")))
         shortcutsets::apply(*commandManager_.getKeyMappings(), *custom);
+    commandSpy_.onInvoked = [this](juce::CommandID id) { noteMacroCommand(id); };
+    commandManager_.addListener(&commandSpy_);
     addKeyListener(commandManager_.getKeyMappings());
     setApplicationCommandManagerToWatch(&commandManager_);
 
@@ -898,6 +900,7 @@ MainComponent::MainComponent()
     // a sound someone has dialled in is reached for across projects.
     userEffectPresets_ = model::deserializeUserPresets(settings_.getValue("effectPresets").toStdString());
     favorites_         = model::deserializeFavorites(settings_.getValue("favorites").toStdString());
+    macros_            = macros::deserialize(settings_.getValue("macros"));
     effectChain_.setUserPresets(userEffectPresets_);
     effectChain_.onPresetSaveRequested = [this](const model::EffectSlot& slot, int) { promptToSaveEffectPreset(slot); };
     effectChain_.onImpulseResponseRequested = [this](int slot, bool browse) { chooseImpulseResponse(slot, browse); };
@@ -1136,6 +1139,7 @@ MainComponent::~MainComponent()
     saveDockLayout();
     stopTimer();
     removeKeyListener(commandManager_.getKeyMappings());
+    commandManager_.removeListener(&commandSpy_);
     setApplicationCommandManagerToWatch(nullptr);
     menuBar_.setModel(nullptr);
     engine_.deviceManager().removeChangeListener(this);
