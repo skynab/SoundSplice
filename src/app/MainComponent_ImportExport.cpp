@@ -1,6 +1,7 @@
 #include "engine/ExportLoudness.h"
 #include "engine/CdImage.h"
 #include "ExportNaming.h"
+#include "RenderReport.h"
 #include "MainComponentInternal.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
@@ -388,7 +389,7 @@ void MainComponent::exportAudioDialog()
         [self = juce::Component::SafePointer<MainComponent>(this)](app::ExportChoice choice)
         {
             if (self != nullptr)
-                self->exportProject(choice.options, choice.range, choice.namePattern, choice.tagging);
+                self->exportProject(choice.options, choice.range, choice.namePattern, choice.tagging, choice.report);
         });
 }
 
@@ -399,10 +400,15 @@ struct MainComponent::ExportTask
     engine::AudioEngine::OfflineRenderOptions    render;
     engine::ExportOptions                        write;
     juce::String                                 label; // shown in the progress window
+
+    // A render report beside the file (app/RenderReport.h), and what it lists.
+    bool                                         writeReport = false;
+    std::vector<app::renderreport::ClipLine>     clips;
+    juce::String                                 project;
 };
 
 void MainComponent::exportProject(const engine::ExportOptions& chosen, app::ExportRange range, juce::String namePattern,
-                                  app::ExportTagging tagging)
+                                  app::ExportTagging tagging, bool writeReport)
 {
     // The tags for the whole project; buildExportTasks gives each file its
     // own chapters, for the stretch of time it covers.
@@ -427,7 +433,7 @@ void MainComponent::exportProject(const engine::ExportOptions& chosen, app::Expo
                      | juce::FileBrowserComponent::canSelectFiles
                      | juce::FileBrowserComponent::warnAboutOverwriting;
 
-    chooser_->launchAsync(flags, [this, options, extension, range, namePattern](const juce::FileChooser& fc)
+    chooser_->launchAsync(flags, [this, options, extension, range, namePattern, writeReport](const juce::FileChooser& fc)
     {
         auto file = fc.getResult();
         if (file == juce::File{})
@@ -436,7 +442,41 @@ void MainComponent::exportProject(const engine::ExportOptions& chosen, app::Expo
         file = file.withFileExtension(extension);
 
         bool       folderFailed = false;
-        const auto tasks        = buildRangeExportTasks(file, options, range, namePattern, folderFailed);
+        auto       tasks        = buildRangeExportTasks(file, options, range, namePattern, folderFailed);
+
+        // What each file's report lists: the clips in its stretch of time, on
+        // its track for a stem. Gathered here, where the document is.
+        if (writeReport)
+        {
+            const auto& song  = history_.current();
+            const auto  clock = model::clockFor(song);
+            const auto  name  = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("Untitled");
+            for (auto& task : tasks)
+            {
+                task.writeReport = true;
+                task.project     = name;
+                const double from = task.render.startBeats, to = from + task.render.lengthBeats;
+                for (int t = 0; t < (int) song.tracks.size(); ++t)
+                {
+                    if (task.render.soloTrack >= 0 && t != task.render.soloTrack)
+                        continue;
+                    for (const auto& clip : song.tracks[(size_t) t].clips)
+                    {
+                        if (clip.startBeats + clip.lengthBeats <= from || clip.startBeats >= to)
+                            continue;
+                        app::renderreport::ClipLine line;
+                        line.track         = juce::String(song.tracks[(size_t) t].name);
+                        line.file          = clip.type == model::ClipType::Audio ? juce::File(clip.audioFile).getFileName()
+                                                                                 : juce::String("(notes)");
+                        line.startSeconds  = clock.secondsBetween(from, clip.startBeats);
+                        line.lengthSeconds = clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);
+                        task.clips.push_back(line);
+                    }
+                }
+                std::stable_sort(task.clips.begin(), task.clips.end(),
+                                 [](const auto& a, const auto& b) { return a.startSeconds < b.startSeconds; });
+            }
+        }
 
         if (folderFailed)
         {
@@ -666,6 +706,15 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
 
             if (engine::writeAudioFile(task.file, buffer, task.write))
             {
+                if (task.writeReport)
+                {
+                    auto report     = app::renderreport::analyse(buffer, task.write.sampleRate);
+                    report.fileName = task.file.getFileName();
+                    report.format   = engine::displayNameFor(task.write.format);
+                    report.project  = task.project;
+                    report.clips    = task.clips;
+                    app::renderreport::fileFor(task.file).replaceWithText(app::renderreport::html(report));
+                }
                 ++result->written;
                 if (task.render.soloTrack >= 0)
                     ++result->stems;

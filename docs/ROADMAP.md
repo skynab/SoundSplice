@@ -311,7 +311,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   peak under -1 dBTP; the limiter is run until the true peak fits); stems get the mix's gain so they still sum;
   `soundsplice-cli render --loudness` (`src/engine/ExportLoudness.h`)
 - ⬜ **Render queue** and saved render presets
-- ⬜ **Render statistics report**: peak, LUFS over time, and a clip list, as HTML (REAPER)
+- ✅ **Render statistics report**: peak, LUFS over time, and a clip list, as HTML (REAPER): Export Audio's Render
+  report writes "<file> report.html" beside each file: loudness, range, true and sample peak, RMS, DC, dynamic
+  range, a short-term loudness chart, and the clips in it (`src/app/RenderReport.h`)
 - ✅ High-quality sample-rate conversion (r8brain-free is MIT) · noise-shaped dither: exports render natively at
   the export rate, and the conversions that remain (Opus's 48 kHz, `soundsplice-cli convert`) use the
   windowed-sinc resampler (`src/engine/Resample.h`), so r8brain wasn't needed · Export Audio's Dither offers

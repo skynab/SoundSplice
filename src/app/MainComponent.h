@@ -215,7 +215,8 @@ private:
     void                   exportProject(const engine::ExportOptions& options,
                                          app::ExportRange range = app::ExportRange::Project,
                                          juce::String namePattern = {},
-                                         app::ExportTagging tagging = app::ExportTagging::InfoAndChapters);
+                                         app::ExportTagging tagging = app::ExportTagging::InfoAndChapters,
+                                         bool writeReport = false);
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
     void                   exportCdImage();

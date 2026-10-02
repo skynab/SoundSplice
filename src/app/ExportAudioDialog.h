@@ -32,6 +32,7 @@ struct ExportChoice
     ExportRange           range       = ExportRange::Project;
     juce::String          namePattern = "$project - $region";
     ExportTagging         tagging     = ExportTagging::InfoAndChapters;
+    bool                  report      = false; // an HTML render report beside each file
 };
 
 /** The loudness targets offered, and what each is for. */
@@ -147,6 +148,9 @@ public:
         window.addComboBox ("tags", { "Project info, and markers as chapters", "Project info only", "None" },
                             "Tags (File > Project Info):");
         window.getComboBoxComponent ("tags")->setSelectedItemIndex (0, juce::dontSendNotification);
+
+        window.addComboBox ("report", { "None", "An HTML report beside each file" }, "Render report:");
+        window.getComboBoxComponent ("report")->setSelectedItemIndex (0, juce::dontSendNotification);
         refreshNamesEnablement (window);
         rangeBox->onChange = [&window] { refreshNamesEnablement (window); };
 
@@ -226,6 +230,8 @@ public:
         choice.namePattern = readNamePattern (window);
         if (auto* tags = window.getComboBoxComponent ("tags"))
             choice.tagging = (ExportTagging) juce::jlimit (0, 2, tags->getSelectedItemIndex());
+        if (auto* report = window.getComboBoxComponent ("report"))
+            choice.report = report->getSelectedItemIndex() == 1;
         return choice;
     }
 
