@@ -330,6 +330,14 @@ public:
         action fires rather than tracked separately. */
     AudioRange selection() const { return selection_; }
 
+    /** Selects @p range, seconds from the clip's start, as a drag would. */
+    void selectRange(AudioRange range)
+    {
+        setSelection(range.clampedTo(geometry_.fileLengthSeconds));
+        if (onSelectionChanged)
+            onSelectionChanged(selection_);
+    }
+
     /** What's painted on the spectrogram, if anything: with the healing brush
         (Ctrl-drag, Cmd on a Mac), the harmonic brush (with Alt too) or the
         lasso (with Shift). The selection then spans its time. */

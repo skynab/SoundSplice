@@ -29,6 +29,7 @@ target_sources(SoundSplice PRIVATE
   MainComponent_AutomationWrite.cpp
   MainComponent_Commands.cpp
   MainComponent_Effects.cpp
+  MainComponent_Finishing.cpp
   MainComponent_Generate.cpp
   MainComponent_ImportExport.cpp
   MainComponent_Layout.cpp

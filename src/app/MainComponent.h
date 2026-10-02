@@ -40,6 +40,7 @@
 #include "EffectChainPanel.h"
 #include "EqCurveView.h"
 #include "AnalyserPane.h"
+#include "DiagnosticsPane.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
 #include "AudioEditorPane.h"
@@ -491,6 +492,12 @@ private:
     bool                   openSelectedClipAudio(ClipAudio& out) const;
     bool                   openClipAudio(const model::Clip& clip, ClipAudio& out) const;
     void                   showMatchLoudnessDialog();
+    void                   runDiagnostics();
+    void                   selectDiagnostic(const DiagnosticsPane::Row& row);
+    void                   fixDiagnostic(const DiagnosticsPane::Row& row);
+    void                   fixAllDiagnostics(engine::diagnostics::Kind kind);
+    bool                   fixDiagnosticRange(engine::diagnostics::Kind kind, AudioRange range);
+    void                   removeDcOffsetInSelection();
     void                   matchLoudness(double targetLufs, bool limitTruePeak);
 
     /** Samples [from, to) counted from the clip's start, one vector per
@@ -956,6 +963,8 @@ private:
     AudioEditorPane                    audioEditor_; // its own dock panel — see refreshAudioEditorForSelected
     MasteringPane                      masteringPane_; // ditto — see updateMasteringControls
     AnalyserPane                       analyserPane_;
+    DiagnosticsPane                    diagnosticsPane_;
+    int                                diagnosedClipId_ = 0; // the clip diagnosticsPane_'s rows are for
     app::OpenFiles                     openFiles_;
     OpenFilesPane                      openFilesPane_;
     AutomationPane                     automationPane_;

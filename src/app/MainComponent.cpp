@@ -912,6 +912,7 @@ MainComponent::MainComponent()
     workspace_.registerPanel("Open Files", openFilesPane_);
     workspace_.registerPanel("Mastering", masteringPane_);
     workspace_.registerPanel("Analyser", analyserPane_);
+    workspace_.registerPanel("Diagnostics", diagnosticsPane_);
     workspace_.registerPanel("Automation", automationPane_);
     workspace_.registerPanel("Session", sessionView_);
     workspace_.registerPanel("Track FX", effectChain_);
@@ -1020,6 +1021,11 @@ MainComponent::MainComponent()
     {
         swipeCompTake(trackIndex, take, fromBeats, toBeats);
     };
+
+    diagnosticsPane_.onScan   = [this] { runDiagnostics(); };
+    diagnosticsPane_.onSelect = [this](const DiagnosticsPane::Row& row) { selectDiagnostic(row); };
+    diagnosticsPane_.onFix    = [this](const DiagnosticsPane::Row& row) { fixDiagnostic(row); };
+    diagnosticsPane_.onFixAll = [this](engine::diagnostics::Kind kind) { fixAllDiagnostics(kind); };
 
     arrangementView_.onFileDropped = [this](const juce::File& file, double dropBeat, int trackIndex)
     {

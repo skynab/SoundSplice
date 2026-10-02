@@ -541,6 +541,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::captureRoomTone: captureRoomTone(); break;
         case commands::normalizeLoudness: showNormalizeLoudnessDialog(); break;
         case commands::matchLoudness:     showMatchLoudnessDialog(); break;
+        case commands::diagnostics:       runDiagnostics(); break;
         case commands::normalizePeak:   showNormalizeDialog(); break;
         case commands::matchEqReference:  setMatchEqReference(); break;
         case commands::matchEq:           matchEqToReference(); break;
@@ -1004,6 +1005,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
     {
         add(commands::plotSpectrum);
         add(commands::measureLoudness);
+        add(commands::diagnostics);
         add(commands::amplitudeStatistics);
         menu.addSeparator();
         add(commands::findClipping);

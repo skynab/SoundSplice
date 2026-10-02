@@ -7,6 +7,7 @@
 #include <app/MasteringPane.h>
 #include <app/EffectChainPanel.h>
 #include <app/FileBrowserPanel.h>
+#include <app/DiagnosticsPane.h>
 #include <app/MixerStrip.h>
 #include <app/OpenFilesPane.h>
 #include <app/SessionView.h>
@@ -398,4 +399,25 @@ TEST_CASE("The input meter's clip light stays lit until it's clicked", "[gui][wi
     meter.setHorizontal(false);
     meter.setBounds(0, 0, 20, 60);
     meter.paint(g);
+}
+
+TEST_CASE("The Diagnostics pane's Fix reports the selected problem", "[gui][wiring]")
+{
+    JuceFixture fixture;
+
+    DiagnosticsPane pane;
+    pane.setSize(400, 300);
+    pane.setRows({ { { engine::diagnostics::Kind::Click, 100, 120, 0.0 }, 1.0, 1.001 },
+                   { { engine::diagnostics::Kind::Silence, 48000, 96000, 0.0 }, 2.0, 4.0 } },
+                 "take");
+
+    engine::diagnostics::Kind fixed = engine::diagnostics::Kind::DcOffset;
+    pane.onFix = [&](const DiagnosticsPane::Row& row) { fixed = row.issue.kind; };
+
+    REQUIRE_FALSE(pane.fixButtonForTesting().isEnabled()); // nothing selected
+    pane.selectRowForTesting(1);
+    pane.fixButtonForTesting().triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    REQUIRE(fixed == engine::diagnostics::Kind::Silence);
+    REQUIRE(DiagnosticsPane::describe(pane.rows()[1]).startsWith("Silence"));
 }

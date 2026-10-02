@@ -237,8 +237,10 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   selected track's, each measured and its clip gain set to one LUFS target, true peak held under -1 dBTP; one undo step;
   `src/app/LoudnessMatch.h`)
 - ✅ **Auto-ducking** of music under dialogue, as clip volume curves rather than baked in (Edit > Auto Duck)
-- ⬜ **Diagnostics panel**: scan a file and list clicks, clipping, silence and DC offset, each with a
-  fix and a select button (Audition's DeClicker/DeClipper diagnostics)
+- ✅ **Diagnostics panel**: scan a file and list clicks, clipping, silence and DC offset, each with a
+  fix and a select button (Audition's DeClicker/DeClipper diagnostics): Analyze > Diagnostics fills the Diagnostics
+  pane; Select picks a problem in the audio editor, Fix repairs it with Click Removal, Clip Fix, Delete or DC
+  removal, Fix All does every one of its kind (`src/engine/Diagnostics.h`, `src/app/DiagnosticsPane.h`)
 - ⬜ **Batch process**: run an effect chain or preset over a folder of files
 - ⬜ Media browser with **preview** (✅ file browser and preview exist; add metadata columns and
   favorites)

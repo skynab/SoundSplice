@@ -103,7 +103,7 @@ inline std::unique_ptr<DockLayoutNode> buildWorkspaceLayout(Workspace workspace)
                              above(0.45,
                                    leaf({ "Mastering" }),
                                    above(0.55,
-                                         leaf({ "Analyser" }),
+                                         leaf({ "Analyser", "Diagnostics" }, "Analyser"),
                                          leaf({ "Master" })))));
     }
 
