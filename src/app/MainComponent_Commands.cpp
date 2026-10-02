@@ -52,6 +52,16 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             info.setTicked(followSystemOutput_);
             break;
 
+        case commands::compareReference:
+            info.setActive(referenceName_.isNotEmpty());
+            info.setTicked(engine_.reference().mode() != engine::ReferenceAB::Off);
+            break;
+
+        case commands::switchAB:
+            info.setActive(engine_.reference().mode() != engine::ReferenceAB::Off);
+            info.setTicked(engine_.reference().mode() == engine::ReferenceAB::B);
+            break;
+
         case commands::recordMacro:
             info.shortName = recordingMacro_ ? "Stop Recording Macro" : "Record Macro";
             info.setTicked(recordingMacro_.has_value());
@@ -436,6 +446,9 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::projectInfo:      showProjectInfo(); break;
         case commands::exportCdImage:    exportCdImage(); break;
         case commands::renderQueue:      showRenderQueue(); break;
+        case commands::loadReference:    loadReferenceTrack(); break;
+        case commands::compareReference: setReferenceComparing(engine_.reference().mode() == engine::ReferenceAB::Off); break;
+        case commands::switchAB:         switchReferenceAB(); break;
         case commands::showHistory:
             if (workspace_.isPanelOpen("History"))
                 workspace_.revealPanel("History");
@@ -1062,6 +1075,10 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::soundActivatedRecording);
         add(commands::timerRecord);
         add(commands::punchRecording);
+        menu.addSeparator();
+        add(commands::loadReference);
+        add(commands::compareReference);
+        add(commands::switchAB);
         menu.addSeparator();
         add(commands::keepRecentInput);
         add(commands::saveRecentInput);

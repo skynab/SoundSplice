@@ -83,6 +83,7 @@ add_executable(soundsplice_tests
   engine/CdImageTests.cpp
   engine/DeliverySpecTests.cpp
   model/SongDiffTests.cpp
+  engine/ReferenceABTests.cpp
   model/EssentialSoundTests.cpp
   model/EffectParamsTests.cpp
   model/EffectPresetsTests.cpp

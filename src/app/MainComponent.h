@@ -229,6 +229,10 @@ private:
     void                   runDeliveryCheck(int spec);
     void                   exportToDeliverySpec(int spec);
     void                   refreshHistoryPane(bool force = false);
+    void                   loadReferenceTrack();
+    void                   measureMixForReference(std::function<void()> then);
+    void                   setReferenceComparing(bool on);
+    void                   switchReferenceAB();
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
     void                   exportCdImage();
@@ -1096,6 +1100,14 @@ private:
     DeliveryPane                       deliveryPane_;
     HistoryPane                        historyPane_;
     unsigned long long                 historyShown_ = 0; // what the History pane last showed (refreshHistoryPane)
+
+    // A/B against a reference (Transport menu): its name and loudness, and the
+    // mix's as last measured, with the document state it was measured at.
+    juce::String                       referenceName_;
+    double                             referenceLufs_       = 0.0;
+    double                             mixLufs_             = 0.0;
+    unsigned long long                 mixMeasuredAtState_  = 0;
+    bool                               mixMeasured_         = false;
     model::EssentialSettings           essentialDragFrom_; // the selected clip's, as a task slider was grabbed
     bool                               essentialDragging_ = false;
     int                                diagnosedClipId_ = 0; // the clip diagnosticsPane_'s rows are for

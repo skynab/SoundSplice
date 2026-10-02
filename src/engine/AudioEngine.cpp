@@ -1065,6 +1065,7 @@ void AudioEngine::pump() noexcept
 
     filePlayer_.collectRetiredClips();
     audition_.collectRetired();
+    reference_.collectRetired();
 
     TempoMap* retiredTempo = nullptr;
     while (tempoReclaim_.pop(retiredTempo))
@@ -1156,6 +1157,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         }
         processBlock(output, incomingMidi_, context);
     }
+
+    // A/B against a reference: on what the song made, before monitoring and
+    // the click, which stay as they are whichever is heard.
+    reference_.process(outputChannelData, numOutputChannels, numSamples, context.transport.playheadSamples,
+                       context.sampleRate, context.transport.playing);
 
     // Dry input monitoring, mixed in *after* the master bus for the same
     // reasons the metronome is: it stays out of the meter, out of the master

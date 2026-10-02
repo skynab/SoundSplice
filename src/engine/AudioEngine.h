@@ -14,6 +14,7 @@
 
 #include "rt/SpscRingBuffer.h"
 
+#include "engine/ReferenceAB.h"
 #include "engine/AudioClipSlot.h"
 #include "engine/AudioFilePlayerNode.h"
 #include "engine/AuditionPlayer.h"
@@ -113,6 +114,10 @@ public:
     void startAudition(const juce::AudioBuffer<float>& audio, double sampleRate);
     void stopAudition();
     bool isAuditioning() const noexcept { return audition_.isPlaying(); }
+
+    /** Loudness-matched A/B against a reference track (engine/ReferenceAB.h):
+        monitoring only, never in an export. */
+    ReferenceAB& reference() noexcept { return reference_; }
 
     /** Reads just @p file's header to get its duration — cheap (no sample
         decode), unlike loadAudioFile/setTrackAudioClips. Returns 0.0 if the
@@ -794,6 +799,7 @@ private:
     std::atomic<int>                        armedTrack_ { 0 };
 
     AudioFilePlayerNode filePlayer_;
+    ReferenceAB         reference_;
     AuditionPlayer      audition_;
     FilterEffect        masterFilter_;
     DelayEffect         masterDelay_;

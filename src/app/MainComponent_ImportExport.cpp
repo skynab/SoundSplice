@@ -1458,4 +1458,137 @@ void MainComponent::exportToDeliverySpec(int specIndex)
     exportAudioDialog(choice);
 }
 
+// ---- Reference A/B ----------------------------------------------------------
+
+/** Load Reference Track: decoded whole and measured, then the mix measured
+    too, so the two can be heard at one loudness. */
+void MainComponent::loadReferenceTrack()
+{
+    chooser_ = std::make_unique<juce::FileChooser>("Load Reference Track", juce::File(settings_.getValue("reference.folder")),
+                                                   audiofiles::wildcards());
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [this](const juce::FileChooser& fc)
+    {
+        const auto file = fc.getResult();
+        if (file == juce::File{})
+            return;
+        settings_.setValue("reference.folder", file.getParentDirectory().getFullPathName());
+
+        juce::AudioFormatManager formats;
+        engine::audioformats::registerAll(formats);
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+        if (reader == nullptr || reader->lengthInSamples <= 0 || reader->lengthInSamples > std::numeric_limits<int>::max())
+        {
+            showError("Could not read " + file.getFileName());
+            return;
+        }
+        const int channels = (int) juce::jlimit(1u, 2u, reader->numChannels);
+        juce::AudioBuffer<float> audio(channels, (int) reader->lengthInSamples);
+        reader->read(&audio, 0, audio.getNumSamples(), 0, true, true);
+
+        const auto loudness = engine::exportloudness::measure(audio, reader->sampleRate);
+        auto* reference       = new engine::ReferenceAudio();
+        reference->sampleRate = reader->sampleRate;
+        for (int ch = 0; ch < channels; ++ch)
+            reference->channels.emplace_back(audio.getReadPointer(ch), audio.getReadPointer(ch) + audio.getNumSamples());
+        engine_.reference().setAudio(reference);
+
+        referenceName_ = file.getFileNameWithoutExtension();
+        referenceLufs_ = loudness.integratedLufs;
+        mixMeasured_   = false;
+        measureMixForReference([this] { setReferenceComparing(true); });
+    });
+}
+
+/** Renders the mix to measure its loudness, then @p then. */
+void MainComponent::measureMixForReference(std::function<void()> then)
+{
+    if (renderJob_ != nullptr)
+    {
+        showError("A render is already running");
+        return;
+    }
+    engine::AudioEngine::OfflineRenderOptions render;
+    render.lengthBeats = juce::jmax(1.0, songEndBeats());
+    render.sampleRate  = 48000.0;
+    auto lufs = std::make_shared<double>(engine::LoudnessMeter::kSilence);
+
+    offlineRenderInProgress_ = true;
+    auto work = [this, render, lufs](app::OfflineRenderJob& job) mutable
+    {
+        render.onProgress = [&job](double fraction)
+        {
+            job.report(fraction, "Measuring the mix's loudness");
+            return ! job.shouldAbort();
+        };
+        const auto mix = engine_.renderOffline(render);
+        if (mix.getNumSamples() > 0)
+            *lufs = engine::exportloudness::measure(mix, render.sampleRate).integratedLufs;
+    };
+    auto onFinished = [self = juce::Component::SafePointer<MainComponent>(this), lufs, then](bool cancelled)
+    {
+        if (self == nullptr)
+            return;
+        self->offlineRenderInProgress_ = false;
+        self->renderJob_.reset();
+        self->followSystemOutputIfEnabled();
+        if (cancelled)
+            return;
+        self->mixLufs_            = *lufs;
+        self->mixMeasured_        = true;
+        self->mixMeasuredAtState_ = self->history_.stateId();
+        if (then)
+            then();
+    };
+    renderJob_ = app::OfflineRenderJob::launch("Measuring the mix", std::move(work), std::move(onFinished));
+}
+
+/** Compare with Reference: on, the mix (A) at the matched level, ready to
+    switch; off, the mix as it is. A mix edited since it was measured is
+    measured again first. */
+void MainComponent::setReferenceComparing(bool on)
+{
+    auto& reference = engine_.reference();
+    if (! on)
+    {
+        reference.setMode(engine::ReferenceAB::Off);
+        showStatus("Comparison off: hearing the mix as it is");
+        commandManager_.commandStatusChanged();
+        return;
+    }
+    if (referenceName_.isEmpty())
+    {
+        showError("Load a reference track first (Transport > Load Reference Track)");
+        return;
+    }
+    if (! mixMeasured_ || mixMeasuredAtState_ != history_.stateId())
+    {
+        measureMixForReference([this] { setReferenceComparing(true); });
+        return;
+    }
+
+    float mixGain = 1.0f, referenceGain = 1.0f;
+    engine::matchedGains(mixLufs_, referenceLufs_, mixGain, referenceGain);
+    reference.setGains(mixGain, referenceGain);
+    reference.setMode(engine::ReferenceAB::A);
+    commandManager_.commandStatusChanged();
+
+    const auto db = [](float gain) { return juce::String(juce::Decibels::gainToDecibels(gain), 1); };
+    showStatus("Comparing with \"" + referenceName_ + "\" (" + juce::String(referenceLufs_, 1) + " LUFS) - the mix is "
+               + juce::String(mixLufs_, 1) + " LUFS. "
+               + (mixGain < 1.0f ? "The mix is turned down " + db(mixGain) + " dB" : "The reference is turned down " + db(referenceGain) + " dB")
+               + " to match. Hearing A, the mix: Alt+B switches");
+}
+
+void MainComponent::switchReferenceAB()
+{
+    auto& reference = engine_.reference();
+    if (reference.mode() == engine::ReferenceAB::Off)
+        return;
+    const bool toB = reference.mode() == engine::ReferenceAB::A;
+    reference.setMode(toB ? engine::ReferenceAB::B : engine::ReferenceAB::A);
+    commandManager_.commandStatusChanged();
+    showStatus(toB ? "B: the reference, \"" + referenceName_ + "\"" : juce::String("A: the mix"));
+}
+
 } // namespace soundsplice

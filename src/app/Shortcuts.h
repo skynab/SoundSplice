@@ -139,6 +139,7 @@ inline const juce::KeyPress nudgeLater     = detail::with(juce::KeyPress::rightK
 inline const juce::KeyPress selectionStart = detail::with('[', detail::noMods);
 inline const juce::KeyPress selectionEnd   = detail::with(']', detail::noMods);
 inline const juce::KeyPress whereAmI       = detail::with('W', detail::alt);
+inline const juce::KeyPress switchAB       = detail::with('B', detail::alt);
 
 /** A shortcut with the name of what it does, so a test that finds a bad one
     can say which. */
@@ -215,6 +216,7 @@ inline std::vector<NamedShortcut> all()
         { "Selection Start at Playhead", selectionStart },
         { "Selection End at Playhead",   selectionEnd },
         { "Where Am I",      whereAmI },
+        { "Switch A/B",      switchAB },
     };
 }
 

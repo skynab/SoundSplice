@@ -235,6 +235,9 @@ enum Id : int
     renderQueue,
     checkDelivery,
     showHistory,
+    loadReference,
+    compareReference,
+    switchAB,
 };
 
 /** One command's fixed description. */
@@ -383,6 +386,9 @@ inline const std::vector<Definition>& all()
         { forwardOneBar,    "Forward One Bar",      "Transport", "Move the playhead forward a bar.", { keys::onOneBar } },
         { record,           "Record",               "Transport", "Start or stop recording onto the selected track.", { keys::record } },
         { loop,             "Loop",                 "Transport", "Loop playback over the time selection, or over what's arranged.", { keys::loop } },
+        { loadReference,    "Load Reference Track...", "Transport", "Choose a finished record to compare the mix with, at the same loudness.", {} },
+        { compareReference, "Compare with Reference", "Transport", "Hear the mix and the reference turned to the same loudness, so louder can't pass for better.", {} },
+        { switchAB,         "Switch A/B",           "Transport", "While comparing: switch between the mix (A) and the reference (B), at the same moment.", { keys::switchAB } },
         { keepRecentInput,  "Keep Recent Input",    "Transport", "Keep the last two minutes of input while playing, so a take nobody recorded can still be saved.", {} },
         { saveRecentInput,  "Save Recent Input",    "Transport", "Save what came in since playback last started, onto the selected track where it was played.", {} },
         { appendRecord,     "Record at End of Track", "Transport", "Start recording where the selected track's last clip ends, carrying it on.", {} },

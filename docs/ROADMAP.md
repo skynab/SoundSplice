@@ -345,7 +345,10 @@ voice, podcast and restoration work:
    one-click "make it pass" chain: the Delivery pane (Analyze > Check Delivery) renders the mix and checks
    it, a line per measure with what to do about a fail; Make It Pass opens Export Audio at the spec's
    loudness, ceiling, format and rate (`src/engine/DeliverySpec.h`, `src/app/DeliveryPane.h`)
-7. **Loudness-matched A/B against a reference track**, so louder never passes for better
+7. ✅ **Loudness-matched A/B against a reference track**, so louder never passes for better: Transport > Load
+   Reference Track measures it and the mix, Compare with Reference turns the louder down to the quieter, and
+   Switch A/B (Alt+B) flips between them at the same moment; monitoring only, never exported
+   (`src/engine/ReferenceAB.h`)
 8. **Preview-before-apply everywhere**, with a bypass toggle and a difference ("what was removed")
    solo for every offline effect, not just some
 9. ✅ **Visual history panel**: jump to any undo step, compare it with the current state, and branch
