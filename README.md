@@ -91,11 +91,12 @@ soundsplice-cli convert take.wav take.flac --rate 44100 --bits 16
 soundsplice-cli analyze mix.wav
 soundsplice-cli apply "Podcast clean-up" raw/ --out cleaned/ --loudness -16
 soundsplice-cli render show.soundsplice show.wav --stems
+soundsplice-cli render show.soundsplice show.mp3 --preset "Podcast MP3" --report
 ```
 
 `apply` runs a macro saved in the app (Tools > Macros) when it's made of effects; `soundsplice-cli
-macros` lists them. `render` runs the app itself with `--render`, so a project renders exactly as
-File > Export Audio would; it finds the app beside the tool, or say where with `--app`.
+macros` lists them. `render` runs the app itself with no window, so a project renders exactly as
+File > Export Audio would - with a render preset saved there, if you like; it finds the app beside the tool, or say where with `--app`.
 
 ## Tests
 

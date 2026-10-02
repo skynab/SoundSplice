@@ -4,7 +4,8 @@
 //   soundsplice-cli analyze <file>...
 //   soundsplice-cli apply <macro> <file or folder>... --out <folder> [--loudness LUFS] [--bits N]
 //   soundsplice-cli macros
-//   soundsplice-cli render <project> <out> [--rate HZ] [--bits N] [--stems | --stems-only] [--loudness LUFS] [--app PATH]
+//   soundsplice-cli render <project> <out> [--preset NAME] [--rate HZ] [--bits N] [--stems | --stems-only]
+//                          [--loudness LUFS] [--report] [--no-tags] [--app PATH]
 //
 // Everything here goes through the app's own code: the same readers and
 // writers, the same effect renderer and loudness meter, the macros the app
@@ -23,6 +24,7 @@
 #include <juce_events/juce_events.h>
 
 #include "app/BatchProcess.h"
+#include "app/ExportChoices.h"
 #include "app/Macros.h"
 #include "app/SettingsLocation.h"
 #include "engine/AmplitudeAnalysis.h"
@@ -50,10 +52,12 @@ const char* const kUsageText =
     "      --macro-file <xml> instead of <macro> reads macros from a file.\n"
     "  macros\n"
     "      List the macros saved in the app.\n"
-    "  render <project> <out> [--rate HZ] [--bits N] [--stems | --stems-only] [--loudness LUFS] [--app PATH]\n"
+    "  render <project> <out> [--preset NAME] [--rate HZ] [--bits N] [--stems | --stems-only]\n"
+    "         [--loudness LUFS] [--report] [--no-tags] [--app PATH]\n"
     "      Render a project as File > Export Audio does, by running the app with\n"
-    "      no window. --app (or SOUNDSPLICE_APP) says where it is if it isn't\n"
-    "      installed beside this tool.\n";
+    "      no window: with a render preset saved in Export Audio, or the format from\n"
+    "      <out>'s extension and these options. --app (or SOUNDSPLICE_APP) says\n"
+    "      where the app is if it isn't installed beside this tool.\n";
 
 /** The command line, with --name value options taken out as they're asked for. */
 struct Args
@@ -160,7 +164,7 @@ int convert(Args args)
     const juce::File out(juce::File::getCurrentWorkingDirectory().getChildFile(args.words[1]));
     const auto       format = formatFor(out);
     if (! format)
-        return fail("can't tell the format from " + out.getFileName() + ": use .wav, .aiff, .flac, .ogg or .mp3");
+        return fail("can't tell the format from " + out.getFileName() + ": use .wav, .aiff, .flac, .wv, .ogg, .opus or .mp3");
     options.format = *format;
     if (quality)
         options.qualityIndex = quality->getIntValue();
@@ -391,13 +395,15 @@ int render(Args args)
     const auto app      = findApp(args.take("--app"));
     const auto rate     = args.take("--rate");
     const auto loudness = args.take("--loudness");
+    const auto preset   = args.take("--preset");
+    const bool report   = args.flag("--report");
+    const bool noTags   = args.flag("--no-tags");
     engine::ExportOptions options;
     juce::String          error;
     if (! bitsOption(args, options, error))
         return fail(error);
-    const int contents = args.flag("--stems-only") ? (int) engine::ExportContents::StemsOnly
-                       : args.flag("--stems")      ? (int) engine::ExportContents::MasterMixAndStems
-                                                   : (int) engine::ExportContents::MasterMix;
+    const bool stemsOnly = args.flag("--stems-only");
+    const bool stems     = args.flag("--stems");
     if (args.words.size() != 2)
         return kUsage;
 
@@ -408,21 +414,53 @@ int render(Args args)
     const juce::File out(juce::File::getCurrentWorkingDirectory().getChildFile(args.words[1]));
     if (! project.existsAsFile())
         return fail("no project at " + project.getFullPathName());
-    if (! formatFor(out))
-        return fail("can't tell the format from " + out.getFileName() + ": use .wav, .aiff, .flac, .ogg or .mp3");
 
-    const juce::TemporaryFile report(".txt");
-    juce::ChildProcess        child;
-    const juce::StringArray   command { app.getFullPathName(), "--render", project.getFullPathName(), out.getFullPathName(),
-                                        juce::String(rate ? rate->getDoubleValue() : 48000.0),
-                                        juce::String(options.bitsPerSample), juce::String(contents),
-                                        report.getFile().getFullPathName(),
-                                        juce::String(loudness ? juce::jmin(0.0, loudness->getDoubleValue()) : 0.0) };
-    if (! child.start(command, 0))
+    // Everything Export Audio would ask: from a saved preset, or the flags.
+    app::ExportChoice choice;
+    if (preset)
+    {
+        juce::PropertiesFile settings(app::settingsOptions());
+        const auto presets = app::exportchoices::deserializePresets(settings.getValue("renderPresets"));
+        const auto found   = std::find_if(presets.begin(), presets.end(), [&](const auto& p) { return p.name == *preset; });
+        if (found == presets.end())
+            return fail("no render preset called \"" + *preset + "\" - save one from Export Audio");
+        choice = found->choice;
+    }
+    else
+    {
+        const auto format = formatFor(out);
+        if (! format)
+            return fail("can't tell the format from " + out.getFileName() + ": use .wav, .aiff, .flac, .wv, .ogg, .opus or .mp3");
+        choice.options               = options;
+        choice.options.format        = *format;
+        choice.options.sampleRate    = 48000.0;
+    }
+    if (rate)
+        choice.options.sampleRate = rate->getDoubleValue();
+    if (loudness)
+        choice.options.loudnessLufs = juce::jmin(0.0, loudness->getDoubleValue());
+    if (stems || stemsOnly)
+        choice.options.contents = stemsOnly ? engine::ExportContents::StemsOnly : engine::ExportContents::MasterMixAndStems;
+    if (report)
+        choice.report = true;
+    if (noTags)
+        choice.tagging = app::ExportTagging::None;
+    if (choice.range == app::ExportRange::TimeSelection)
+        choice.range = app::ExportRange::Project; // there's no selection from here
+
+    const auto output = out.withFileExtension(engine::extensionFor(choice.options.format));
+    const juce::TemporaryFile jobFile(".xml"), reportFile(".txt");
+    if (! jobFile.getFile().replaceWithText(app::exportchoices::serializeJob({ project, output, choice, output.getFileName() })))
+        return fail("couldn't write a temporary file");
+
+    juce::ChildProcess child;
+    if (! child.start(juce::StringArray { app.getFullPathName(), "--render-job", jobFile.getFile().getFullPathName(),
+                                          reportFile.getFile().getFullPathName() },
+                      0))
         return fail("couldn't start " + app.getFullPathName());
     child.waitForProcessToFinish(-1);
 
-    const auto text = report.getFile().loadFileAsString();
+    const auto text = reportFile.getFile().loadFileAsString();
     const auto code = child.getExitCode();
     (code == 0 ? std::cout : std::cerr) << text << (text.endsWith("\n") || text.isEmpty() ? "" : "\n");
     if (code != 0 && text.isEmpty())

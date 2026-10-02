@@ -183,6 +183,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/ExportLoudnessTests.cpp
     gui/ExportTagsTests.cpp
     gui/RenderReportTests.cpp
+    gui/RenderQueueTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)

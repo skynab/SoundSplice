@@ -903,6 +903,8 @@ MainComponent::MainComponent(bool headless)
     favorites_         = model::deserializeFavorites(settings_.getValue("favorites").toStdString());
     macros_            = macros::deserialize(settings_.getValue("macros"));
     screensets_        = screensets::deserialize(settings_.getValue("screensets"));
+    renderPresets_     = app::exportchoices::deserializePresets(settings_.getValue("renderPresets"));
+    renderQueue_       = app::exportchoices::deserializeQueue(settings_.getValue("renderQueue"));
 
     // The Script pane keeps what's in it between runs of the app.
     scriptPane_.setCode(settings_.getValue("script.text",

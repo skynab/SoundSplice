@@ -232,6 +232,7 @@ enum Id : int
     whereAmI,
     projectInfo,
     exportCdImage,
+    renderQueue,
 };
 
 /** One command's fixed description. */
@@ -259,6 +260,7 @@ inline const std::vector<Definition>& all()
         { importAudio,      "Import Audio to Track...   (or drag files in)", "File", "Add an audio file to a new track.", {} },
         { importMidi,       "Import MIDI...",       "File", "Add the tracks of a MIDI file to the project.", {} },
         { importRawData,    "Import Raw Data...",   "File", "Add a headerless file of samples to a new track, saying how its bytes are stored.", {} },
+        { renderQueue,      "Render Queue...",      "File", "The exports queued from Export Audio, rendered one after another in the background.", {} },
         { exportCdImage,    "Export CD Image...",   "File", "Write the mix as a CUE sheet and BIN for burning an audio CD, a track at each marker.", {} },
         { exportMidi,       "Export MIDI...",       "File", "Write the project's notes to a MIDI file.", {} },
         { exportAudio,      "Export Audio...",      "File", "Render the mix, or each track as a stem, to audio files.", { keys::exportAudio } },

@@ -13,6 +13,34 @@ namespace soundsplice
     0 when every file was written. */
 inline constexpr const char* kRenderFlag = "--render";
 
+/** `SoundSplice --render-job <job.xml> <report>`: a render queue job (or
+    soundsplice-cli's render with a preset) - a project snapshot, where the
+    file goes, and every choice Export Audio makes (app/ExportChoices.h). */
+inline constexpr const char* kRenderJobFlag = "--render-job";
+
+inline int runRenderJob(const juce::StringArray& args)
+{
+    const int at = args.indexOf(kRenderJobFlag);
+    if (at < 0 || args.size() < at + 3)
+        return 2;
+    const juce::File reportFile(args[at + 2].unquoted());
+    const auto job = app::exportchoices::deserializeJob(juce::File(args[at + 1].unquoted()).loadFileAsString());
+    if (! job)
+    {
+        reportFile.replaceWithText("That isn't a render job");
+        return 2;
+    }
+
+    juce::String report;
+    bool         ok = false;
+    {
+        MainComponent main(true);
+        ok = main.renderHeadless(job->project, job->output, job->choice, report);
+    }
+    reportFile.replaceWithText(report);
+    return ok ? 0 : 1;
+}
+
 inline int runHeadlessRender(const juce::StringArray& args)
 {
     const int at = args.indexOf(kRenderFlag);
@@ -67,6 +95,14 @@ public:
         if (const auto args = getCommandLineParameterArray(); args.contains(kProbePluginFlag))
         {
             setApplicationReturnValue(runPluginProbe(args));
+            quit();
+            return;
+        }
+
+        // Run by the render queue: see runRenderJob.
+        if (const auto args = getCommandLineParameterArray(); args.contains(kRenderJobFlag))
+        {
+            setApplicationReturnValue(runRenderJob(args));
             quit();
             return;
         }

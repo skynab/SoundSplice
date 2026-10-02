@@ -435,6 +435,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::whereAmI:         announceWhereAmI(); break;
         case commands::projectInfo:      showProjectInfo(); break;
         case commands::exportCdImage:    exportCdImage(); break;
+        case commands::renderQueue:      showRenderQueue(); break;
         case commands::recordingFormat:  showRecordingFormatDialog(); break;
 
         case commands::keepRecentInput:
@@ -839,6 +840,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::exportMidi);
         add(commands::exportAudio);
         add(commands::exportCdImage);
+        add(commands::renderQueue);
         add(commands::batchProcess);
         menu.addSeparator();
         add(commands::setProjectRoot);

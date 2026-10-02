@@ -367,6 +367,30 @@ bool MainComponent::isSilentAudioFile(const juce::File& file)
     return true;
 }
 
+namespace
+{
+    /** Loudness-normalize on export, for one rendered file. A mix is brought
+        to the target, limited as it must be; its stems after it get the
+        same gain without the limiter, so they still sum to it. A stem with
+        no mix before it (stems only) is brought to the target itself. */
+    engine::ExportLoudnessResult applyExportLoudness(bool isStem, const engine::ExportOptions& options,
+                                                     juce::AudioBuffer<float>& buffer, std::optional<double>& mixGainDb)
+    {
+        if (options.loudnessLufs >= 0.0)
+            return {};
+        if (isStem && mixGainDb)
+        {
+            buffer.applyGain(juce::Decibels::decibelsToGain((float) *mixGainDb));
+            return {};
+        }
+        const auto result = engine::normalizeForExport(buffer, options.sampleRate, options.loudnessLufs,
+                                                       options.truePeakCeilingDb);
+        if (! isStem && result.measured)
+            mixGainDb = result.gainDb;
+        return result;
+    }
+}
+
 /** Asks what kind of file to write, then where to put it, then writes it.
 
     Two dialogs in sequence rather than one: the format decides the file
@@ -376,7 +400,7 @@ bool MainComponent::isSilentAudioFile(const juce::File& file)
 
     This replaced a WAV-only "Bounce" that hardcoded both the extension and
     24-bit depth. */
-void MainComponent::exportAudioDialog()
+void MainComponent::exportAudioDialog(std::optional<app::ExportChoice> initial)
 {
     const double deviceRate = engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0;
 
@@ -385,11 +409,22 @@ void MainComponent::exportAudioDialog()
         if (marker.lengthBeats > 0.0)
             ++markerRanges;
 
-    app::ExportAudioDialog::show(this, deviceRate, ! timeSelection_.isEmpty(), markerRanges,
-        [self = juce::Component::SafePointer<MainComponent>(this)](app::ExportChoice choice)
+    std::vector<app::NamedExportChoice> presets;
+    for (const auto& preset : renderPresets_)
+        presets.push_back({ preset.name, preset.choice });
+
+    app::ExportAudioDialog::show(this, deviceRate, ! timeSelection_.isEmpty(), markerRanges, presets,
+                                 initial ? &*initial : nullptr,
+        [self = juce::Component::SafePointer<MainComponent>(this)](app::ExportChoice choice, app::ExportAction action)
         {
-            if (self != nullptr)
-                self->exportProject(choice.options, choice.range, choice.namePattern, choice.tagging, choice.report);
+            if (self == nullptr)
+                return;
+            switch (action)
+            {
+                case app::ExportAction::Export:     self->exportProject(choice); break;
+                case app::ExportAction::Queue:      self->queueExport(choice); break;
+                case app::ExportAction::SavePreset: self->promptSaveRenderPreset(choice); break;
+            }
         });
 }
 
@@ -407,25 +442,77 @@ struct MainComponent::ExportTask
     juce::String                                 project;
 };
 
-void MainComponent::exportProject(const engine::ExportOptions& chosen, app::ExportRange range, juce::String namePattern,
-                                  app::ExportTagging tagging, bool writeReport)
+/** What rendering and writing one task came to. */
+struct MainComponent::TaskOutcome
+{
+    bool                         rendered = false; // false: cancelled, or nothing to render
+    bool                         written  = false;
+    engine::ExportLoudnessResult loudness;
+};
+
+/** Every file @p choice asks for, with @p chosenFile as the one named. */
+std::vector<MainComponent::ExportTask> MainComponent::tasksForChoice(const juce::File& chosenFile, const app::ExportChoice& choice,
+                                                                     bool& folderFailed)
 {
     // The tags for the whole project; buildExportTasks gives each file its
     // own chapters, for the stretch of time it covers.
-    auto options = chosen;
-    options.tags = exportTagsFor(0.0, -1.0, tagging);
+    auto options = choice.options;
+    options.tags = exportTagsFor(0.0, -1.0, choice.tagging);
 
+    auto tasks = buildRangeExportTasks(chosenFile, options, choice.range, choice.namePattern, folderFailed,
+                                       choice.selectionStartBeats, choice.selectionLengthBeats);
+    if (choice.report)
+        addReportDetails(tasks);
+    return tasks;
+}
+
+/** What each file's report lists: the clips in its stretch of time, on its
+    track for a stem. Gathered on the message thread, where the document is. */
+void MainComponent::addReportDetails(std::vector<ExportTask>& tasks) const
+{
+    const auto& song  = history_.current();
+    const auto  clock = model::clockFor(song);
+    const auto  name  = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("Untitled");
+    for (auto& task : tasks)
+    {
+        task.writeReport = true;
+        task.project     = name;
+        const double from = task.render.startBeats, to = from + task.render.lengthBeats;
+        for (int t = 0; t < (int) song.tracks.size(); ++t)
+        {
+            if (task.render.soloTrack >= 0 && t != task.render.soloTrack)
+                continue;
+            for (const auto& clip : song.tracks[(size_t) t].clips)
+            {
+                if (clip.startBeats + clip.lengthBeats <= from || clip.startBeats >= to)
+                    continue;
+                app::renderreport::ClipLine line;
+                line.track         = juce::String(song.tracks[(size_t) t].name);
+                line.file          = clip.type == model::ClipType::Audio ? juce::File(clip.audioFile).getFileName()
+                                                                         : juce::String("(notes)");
+                line.startSeconds  = clock.secondsBetween(from, clip.startBeats);
+                line.lengthSeconds = clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);
+                task.clips.push_back(line);
+            }
+        }
+        std::stable_sort(task.clips.begin(), task.clips.end(),
+                         [](const auto& a, const auto& b) { return a.startSeconds < b.startSeconds; });
+    }
+}
+
+void MainComponent::exportProject(const app::ExportChoice& choice)
+{
     if (renderJob_ != nullptr)
     {
         showError("An export is already running");
         return;
     }
 
-    const auto extension = engine::extensionFor(options.format);
+    const auto extension = engine::extensionFor(choice.options.format);
 
     // One file per marker range: what's chosen is where they go, and its
     // name stands in for $project; each file is named from the pattern.
-    chooser_ = std::make_unique<juce::FileChooser>(range == app::ExportRange::MarkerRanges
+    chooser_ = std::make_unique<juce::FileChooser>(choice.range == app::ExportRange::MarkerRanges
                                                        ? "Export " + extension.toUpperCase() + " - one file per marker range, in this folder"
                                                        : "Export " + extension.toUpperCase(),
                                                    juce::File{}, "*." + extension);
@@ -433,7 +520,7 @@ void MainComponent::exportProject(const engine::ExportOptions& chosen, app::Expo
                      | juce::FileBrowserComponent::canSelectFiles
                      | juce::FileBrowserComponent::warnAboutOverwriting;
 
-    chooser_->launchAsync(flags, [this, options, extension, range, namePattern, writeReport](const juce::FileChooser& fc)
+    chooser_->launchAsync(flags, [this, choice, extension](const juce::FileChooser& fc)
     {
         auto file = fc.getResult();
         if (file == juce::File{})
@@ -442,41 +529,7 @@ void MainComponent::exportProject(const engine::ExportOptions& chosen, app::Expo
         file = file.withFileExtension(extension);
 
         bool       folderFailed = false;
-        auto       tasks        = buildRangeExportTasks(file, options, range, namePattern, folderFailed);
-
-        // What each file's report lists: the clips in its stretch of time, on
-        // its track for a stem. Gathered here, where the document is.
-        if (writeReport)
-        {
-            const auto& song  = history_.current();
-            const auto  clock = model::clockFor(song);
-            const auto  name  = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("Untitled");
-            for (auto& task : tasks)
-            {
-                task.writeReport = true;
-                task.project     = name;
-                const double from = task.render.startBeats, to = from + task.render.lengthBeats;
-                for (int t = 0; t < (int) song.tracks.size(); ++t)
-                {
-                    if (task.render.soloTrack >= 0 && t != task.render.soloTrack)
-                        continue;
-                    for (const auto& clip : song.tracks[(size_t) t].clips)
-                    {
-                        if (clip.startBeats + clip.lengthBeats <= from || clip.startBeats >= to)
-                            continue;
-                        app::renderreport::ClipLine line;
-                        line.track         = juce::String(song.tracks[(size_t) t].name);
-                        line.file          = clip.type == model::ClipType::Audio ? juce::File(clip.audioFile).getFileName()
-                                                                                 : juce::String("(notes)");
-                        line.startSeconds  = clock.secondsBetween(from, clip.startBeats);
-                        line.lengthSeconds = clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);
-                        task.clips.push_back(line);
-                    }
-                }
-                std::stable_sort(task.clips.begin(), task.clips.end(),
-                                 [](const auto& a, const auto& b) { return a.startSeconds < b.startSeconds; });
-            }
-        }
+        const auto tasks        = tasksForChoice(file, choice, folderFailed);
 
         if (folderFailed)
         {
@@ -492,6 +545,196 @@ void MainComponent::exportProject(const engine::ExportOptions& chosen, app::Expo
 
         startExport(tasks, file);
     });
+}
+
+/** Renders @p task and writes it, with its loudness and report. */
+MainComponent::TaskOutcome MainComponent::renderAndWrite(const ExportTask& task, std::optional<double>& mixGainDb)
+{
+    TaskOutcome outcome;
+    auto        buffer = engine_.renderOffline(task.render);
+
+    // Empty means cancelled, or nothing to render. Either way there is no
+    // file worth writing - see OfflineRenderOptions::onProgress for why a
+    // cancelled render deliberately returns nothing rather than a partial
+    // buffer.
+    if (buffer.getNumSamples() == 0)
+        return outcome;
+    outcome.rendered = true;
+
+    if (task.render.soloTrack < 0)
+        mixGainDb.reset(); // a new range: its own mix sets its stems' gain
+    outcome.loudness = applyExportLoudness(task.render.soloTrack >= 0, task.write, buffer, mixGainDb);
+
+    if (! engine::writeAudioFile(task.file, buffer, task.write))
+        return outcome;
+    outcome.written = true;
+
+    if (task.writeReport)
+    {
+        auto report     = app::renderreport::analyse(buffer, task.write.sampleRate);
+        report.fileName = task.file.getFileName();
+        report.format   = engine::displayNameFor(task.write.format);
+        report.project  = task.project;
+        report.clips    = task.clips;
+        app::renderreport::fileFor(task.file).replaceWithText(app::renderreport::html(report));
+    }
+    return outcome;
+}
+
+// ---- Render presets and the render queue --------------------------------------
+
+void MainComponent::promptSaveRenderPreset(const app::ExportChoice& choice)
+{
+    auto* window = new juce::AlertWindow("Save Render Preset", "Export Audio's Preset box puts these choices back.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("name", engine::displayNameFor(choice.options.format).upToFirstOccurrenceOf(" ", false, false)
+                                      + (choice.options.loudnessLufs < 0.0 ? " " + juce::String((int) choice.options.loudnessLufs) + " LUFS"
+                                                                           : juce::String()),
+                          "Name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    window->enterModalState(true, juce::ModalCallbackFunction::create(
+        [self = juce::Component::SafePointer<MainComponent>(this), window, choice](int result)
+        {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (self == nullptr)
+                return;
+            const auto name = window->getTextEditorContents("name").trim();
+            if (result == 1 && name.isNotEmpty())
+            {
+                self->renderPresets_ = app::exportchoices::withPreset(self->renderPresets_, { name, choice });
+                self->settings_.setValue("renderPresets", app::exportchoices::serializePresets(self->renderPresets_));
+                self->settings_.saveIfNeeded();
+                self->showStatus("Saved render preset \"" + name + "\"");
+            }
+            self->exportAudioDialog(choice); // back to the export, as it was
+        }));
+}
+
+/** Add to Render Queue: a snapshot of the project as it is now, rendered
+    later from File > Render Queue. */
+void MainComponent::queueExport(app::ExportChoice choice)
+{
+    const auto extension = engine::extensionFor(choice.options.format);
+    chooser_ = std::make_unique<juce::FileChooser>("Queue " + extension.toUpperCase() + " export: where it goes",
+                                                   juce::File{}, "*." + extension);
+    chooser_->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::warnAboutOverwriting,
+                          [this, choice, extension](const juce::FileChooser& fc) mutable
+    {
+        if (fc.getResult() == juce::File{})
+            return;
+        const auto output = fc.getResult().withFileExtension(extension);
+
+        // The time selection as it is now: the queue renders later.
+        if (choice.range == app::ExportRange::TimeSelection && ! timeSelection_.isEmpty())
+        {
+            choice.selectionStartBeats  = timeSelection_.startBeats;
+            choice.selectionLengthBeats = timeSelection_.lengthBeats();
+        }
+
+        const auto folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                .getChildFile("SoundSplice").getChildFile("Render Queue");
+        folder.createDirectory();
+        const auto snapshot = folder.getNonexistentChildFile(projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension()
+                                                                                         : juce::String("Untitled"),
+                                                             ".soundsplice");
+        if (! snapshot.replaceWithText(juce::String::fromUTF8(model::serialize(history_.current()).c_str())))
+        {
+            showError("Could not save the project for the queue");
+            return;
+        }
+
+        const auto project = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("Untitled");
+        renderQueue_.push_back({ snapshot, output, choice, output.getFileName() + "  (" + project + ")" });
+        saveRenderQueue();
+        showStatus("Queued " + output.getFileName() + " - File > Render Queue renders it");
+    });
+}
+
+void MainComponent::saveRenderQueue()
+{
+    settings_.setValue("renderQueue", app::exportchoices::serializeQueue(renderQueue_));
+    settings_.saveIfNeeded();
+    if (renderQueueDialog_ != nullptr && ! renderQueueDialog_->running())
+        renderQueueDialog_->setJobs(renderQueue_);
+}
+
+/** File > Render Queue. Each job runs in a child process: this app, headless
+    (`--render-job`), so nothing here waits on it. */
+void MainComponent::showRenderQueue()
+{
+    if (renderQueueDialog_ != nullptr)
+    {
+        if (auto* window = renderQueueDialog_->findParentComponentOfClass<juce::DialogWindow>())
+            window->toFront(true);
+        return;
+    }
+
+    auto runner = [](const app::exportchoices::Job& job, juce::String& report, std::function<bool()> shouldStop)
+    {
+        const juce::TemporaryFile jobFile(".xml"), reportFile(".txt");
+        if (! jobFile.getFile().replaceWithText(app::exportchoices::serializeJob(job)))
+        {
+            report = "couldn't write the job";
+            return false;
+        }
+        juce::ChildProcess child;
+        if (! child.start(juce::StringArray { juce::File::getSpecialLocation(juce::File::currentExecutableFile).getFullPathName(),
+                                              "--render-job", jobFile.getFile().getFullPathName(),
+                                              reportFile.getFile().getFullPathName() },
+                          0))
+        {
+            report = "couldn't start the render";
+            return false;
+        }
+        while (child.isRunning())
+        {
+            if (shouldStop())
+            {
+                child.kill();
+                report = "stopped";
+                return false;
+            }
+            child.waitForProcessToFinish(200);
+        }
+        report = reportFile.getFile().loadFileAsString();
+        return child.getExitCode() == 0;
+    };
+
+    auto dialog = std::make_unique<RenderQueueDialog>(runner);
+    dialog->setJobs(renderQueue_);
+    dialog->onRemove = [this](int index)
+    {
+        if (index < 0 || index >= (int) renderQueue_.size())
+            return;
+        renderQueue_[(size_t) index].project.deleteFile();
+        renderQueue_.erase(renderQueue_.begin() + index);
+        saveRenderQueue();
+    };
+    dialog->onRunFinished = [this](const std::vector<int>& rendered)
+    {
+        // Rendered ones are done with, snapshot and all.
+        for (auto it = rendered.rbegin(); it != rendered.rend(); ++it)
+            if (*it >= 0 && *it < (int) renderQueue_.size())
+            {
+                renderQueue_[(size_t) *it].project.deleteFile();
+                renderQueue_.erase(renderQueue_.begin() + *it);
+            }
+        settings_.setValue("renderQueue", app::exportchoices::serializeQueue(renderQueue_));
+        settings_.saveIfNeeded();
+        showStatus("Render queue: " + juce::String((int) rendered.size()) + " rendered");
+    };
+    renderQueueDialog_ = dialog.get();
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog.release());
+    options.dialogTitle                  = "Render Queue";
+    options.dialogBackgroundColour       = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar            = true;
+    options.resizable                    = true;
+    options.launchAsync();
 }
 
 /**
@@ -588,8 +831,12 @@ MainComponent::buildExportTasks(const juce::File& masterFile,
     @p namePattern (app/ExportNaming.h). */
 std::vector<MainComponent::ExportTask>
 MainComponent::buildRangeExportTasks(const juce::File& chosenFile, const engine::ExportOptions& options,
-                                     app::ExportRange range, const juce::String& namePattern, bool& folderFailed)
+                                     app::ExportRange range, const juce::String& namePattern, bool& folderFailed,
+                                     double selectionStartBeats, double selectionLengthBeats)
 {
+    // A queued export carries its own selection; otherwise, the one there is.
+    if (range == app::ExportRange::TimeSelection && selectionLengthBeats > 0.0)
+        return buildExportTasks(chosenFile, options, folderFailed, selectionStartBeats, selectionLengthBeats);
     if (range == app::ExportRange::TimeSelection && ! timeSelection_.isEmpty())
         return buildExportTasks(chosenFile, options, folderFailed, timeSelection_.startBeats, timeSelection_.lengthBeats());
     if (range != app::ExportRange::MarkerRanges)
@@ -627,29 +874,6 @@ MainComponent::buildRangeExportTasks(const juce::File& chosenFile, const engine:
     return tasks;
 }
 
-namespace
-{
-    /** Loudness-normalize on export, for one rendered file. A mix is brought
-        to the target, limited as it must be; its stems after it get the
-        same gain without the limiter, so they still sum to it. A stem with
-        no mix before it (stems only) is brought to the target itself. */
-    engine::ExportLoudnessResult applyExportLoudness(bool isStem, const engine::ExportOptions& options,
-                                                     juce::AudioBuffer<float>& buffer, std::optional<double>& mixGainDb)
-    {
-        if (options.loudnessLufs >= 0.0)
-            return {};
-        if (isStem && mixGainDb)
-        {
-            buffer.applyGain(juce::Decibels::decibelsToGain((float) *mixGainDb));
-            return {};
-        }
-        const auto result = engine::normalizeForExport(buffer, options.sampleRate, options.loudnessLufs,
-                                                       options.truePeakCeilingDb);
-        if (! isStem && result.measured)
-            mixGainDb = result.gainDb;
-        return result;
-    }
-}
 
 /** Runs @p tasks on a background thread behind a progress window. */
 void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce::File& masterFile)
@@ -689,32 +913,14 @@ void MainComponent::startExport(const std::vector<ExportTask>& tasks, const juce
                 return ! job.shouldAbort();
             };
 
-            auto buffer = engine_.renderOffline(task.render);
-
-            // Empty means cancelled, or nothing to render. Either way there is
-            // no file worth writing — see OfflineRenderOptions::onProgress for
-            // why a cancelled render deliberately returns nothing rather than
-            // a partial buffer.
-            if (buffer.getNumSamples() == 0)
+            const auto outcome = renderAndWrite(task, mixGainDb);
+            if (! outcome.rendered)
                 continue;
+            if (outcome.loudness.measured && task.render.soloTrack < 0)
+                result->loudness = outcome.loudness;
 
-            if (task.render.soloTrack < 0)
-                mixGainDb.reset(); // a new range: its own mix sets its stems' gain
-            if (const auto loudness = applyExportLoudness(task.render.soloTrack >= 0, task.write, buffer, mixGainDb);
-                loudness.measured && task.render.soloTrack < 0)
-                result->loudness = loudness;
-
-            if (engine::writeAudioFile(task.file, buffer, task.write))
+            if (outcome.written)
             {
-                if (task.writeReport)
-                {
-                    auto report     = app::renderreport::analyse(buffer, task.write.sampleRate);
-                    report.fileName = task.file.getFileName();
-                    report.format   = engine::displayNameFor(task.write.format);
-                    report.project  = task.project;
-                    report.clips    = task.clips;
-                    app::renderreport::fileFor(task.file).replaceWithText(app::renderreport::html(report));
-                }
                 ++result->written;
                 if (task.render.soloTrack >= 0)
                     ++result->stems;
@@ -934,6 +1140,16 @@ void MainComponent::mixAndRenderToNewTrack()
 bool MainComponent::renderHeadless(const juce::File& project, const juce::File& out,
                                    const engine::ExportOptions& options, juce::String& report)
 {
+    app::ExportChoice choice;
+    choice.options = options;
+    return renderHeadless(project, out, choice, report);
+}
+
+/** A render queue job, or soundsplice-cli's render: opens @p project and
+    writes what @p choice asks for, as Export Audio would, on this thread. */
+bool MainComponent::renderHeadless(const juce::File& project, const juce::File& out, const app::ExportChoice& choice,
+                                   juce::String& report)
+{
     model::Song song;
     std::string error;
     if (! project.existsAsFile() || ! model::deserialize(project.loadFileAsString().toStdString(), song, &error))
@@ -946,9 +1162,7 @@ bool MainComponent::renderHeadless(const juce::File& project, const juce::File& 
     savedStateId_ = history_.stateId();
 
     bool folderFailed = false;
-    auto withTags     = options;
-    withTags.tags     = exportTagsFor(0.0, -1.0, app::ExportTagging::InfoAndChapters);
-    const auto tasks  = buildExportTasks(out, withTags, folderFailed);
+    const auto tasks  = tasksForChoice(out, choice, folderFailed);
     if (folderFailed)
     {
         report = "Could not create the stems folder beside " + out.getFullPathName();
@@ -964,21 +1178,17 @@ bool MainComponent::renderHeadless(const juce::File& project, const juce::File& 
     std::optional<double> mixGainDb;
     for (const auto& task : tasks)
     {
-        auto buffer = engine_.renderOffline(task.render);
-        if (task.render.soloTrack < 0)
-            mixGainDb.reset();
-        if (const auto loudness = applyExportLoudness(task.render.soloTrack >= 0, task.write, buffer, mixGainDb);
-            loudness.measured)
-            report << task.label << ": " << juce::String(loudness.integratedLufs, 1) << " LUFS, "
-                   << juce::String(loudness.truePeakDb, 1) << " dBTP\n";
-        if (buffer.getNumSamples() == 0)
+        const auto outcome = renderAndWrite(task, mixGainDb);
+        if (outcome.loudness.measured)
+            report << task.label << ": " << juce::String(outcome.loudness.integratedLufs, 1) << " LUFS, "
+                   << juce::String(outcome.loudness.truePeakDb, 1) << " dBTP\n";
+        if (! outcome.rendered)
         {
             report << "Nothing rendered for " << task.label << "\n";
             ok = false;
         }
-        else if (engine::writeAudioFile(task.file, buffer, task.write))
-            report << "Wrote " << task.file.getFullPathName() << "  ("
-                   << juce::String(buffer.getNumSamples() / options.sampleRate, 2) << " s)\n";
+        else if (outcome.written)
+            report << "Wrote " << task.file.getFullPathName() << "\n";
         else
         {
             report << "Could not write " << task.file.getFullPathName() << "\n";

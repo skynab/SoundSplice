@@ -50,6 +50,7 @@
 #include "ScriptPane.h"
 #include "ExportAudioDialog.h"
 #include "ProjectInfoDialog.h"
+#include "RenderQueueDialog.h"
 #include "PreferencesDialog.h"
 #include "Theme.h"
 #include "Screensets.h"
@@ -121,6 +122,8 @@ public:
         @p report says what was written, or why not. */
     bool renderHeadless(const juce::File& project, const juce::File& out,
                         const engine::ExportOptions& options, juce::String& report);
+    bool renderHeadless(const juce::File& project, const juce::File& out,
+                        const app::ExportChoice& choice, juce::String& report);
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -210,13 +213,17 @@ private:
     void                   discardAutosave();
     void                   offerAutosaveRecovery();
     static bool            isSilentAudioFile(const juce::File& file);
-    void                   exportAudioDialog();
+    void                   exportAudioDialog(std::optional<app::ExportChoice> initial = std::nullopt);
     struct ExportTask;
-    void                   exportProject(const engine::ExportOptions& options,
-                                         app::ExportRange range = app::ExportRange::Project,
-                                         juce::String namePattern = {},
-                                         app::ExportTagging tagging = app::ExportTagging::InfoAndChapters,
-                                         bool writeReport = false);
+    void                   exportProject(const app::ExportChoice& choice);
+    std::vector<ExportTask> tasksForChoice(const juce::File& chosenFile, const app::ExportChoice& choice, bool& folderFailed);
+    void                   addReportDetails(std::vector<ExportTask>& tasks) const;
+    struct TaskOutcome;
+    TaskOutcome            renderAndWrite(const ExportTask& task, std::optional<double>& mixGainDb);
+    void                   queueExport(app::ExportChoice choice);
+    void                   promptSaveRenderPreset(const app::ExportChoice& choice);
+    void                   saveRenderQueue();
+    void                   showRenderQueue();
     engine::ExportTags     exportTagsFor(double startBeats, double lengthBeats, app::ExportTagging tagging) const;
     void                   showProjectInfo();
     void                   exportCdImage();
@@ -228,7 +235,9 @@ private:
     std::vector<ExportTask> buildRangeExportTasks(const juce::File& chosenFile,
                                                   const engine::ExportOptions& options,
                                                   app::ExportRange range, const juce::String& namePattern,
-                                                  bool& folderFailed);
+                                                  bool& folderFailed,
+                                                  double selectionStartBeats = 0.0,
+                                                  double selectionLengthBeats = 0.0);
     void                   startExport(const std::vector<ExportTask>& tasks,
                                        const juce::File& masterFile);
     void                   showAudioSettings();
@@ -738,6 +747,9 @@ private:
     bool                           runningMacro_ = false;
     bool                           headless_     = false;
     std::vector<screensets::Screenset> screensets_; // View > Layout, kept in the app's settings
+    std::vector<app::exportchoices::Preset> renderPresets_; // Export Audio's Preset box
+    std::vector<app::exportchoices::Job>    renderQueue_;   // File > Render Queue
+    juce::Component::SafePointer<RenderQueueDialog> renderQueueDialog_;
     CommandSpy                     commandSpy_;
     void                   setTrackEditGroup(int trackIndex, int group);
     void                   addBusTrack();

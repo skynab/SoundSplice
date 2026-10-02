@@ -1,56 +1,16 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
+#include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "engine/AudioExport.h"
+#include "ExportChoice.h"
 
 namespace soundsplice::app
 {
-/** What an export covers. */
-enum class ExportRange
-{
-    Project,       // everything arranged, with a tail for reverbs to ring out
-    TimeSelection, // exactly the time selection
-    MarkerRanges,  // one file per marker range, named from a pattern
-};
-
-/** Whether the files carry the project's info as tags, and its markers as
-    chapters. */
-enum class ExportTagging
-{
-    InfoAndChapters,
-    InfoOnly,
-    None,
-};
-
-/** Everything the dialog asks. */
-struct ExportChoice
-{
-    engine::ExportOptions options;
-    ExportRange           range       = ExportRange::Project;
-    juce::String          namePattern = "$project - $region";
-    ExportTagging         tagging     = ExportTagging::InfoAndChapters;
-    bool                  report      = false; // an HTML render report beside each file
-};
-
-/** The loudness targets offered, and what each is for. */
-struct ExportLoudnessTarget
-{
-    double      lufs; // 0: leave it
-    const char* name;
-};
-
-inline constexpr ExportLoudnessTarget kExportLoudnessTargets[] {
-    { 0.0, "Leave it" },
-    { -14.0, "-14 LUFS (streaming music)" },
-    { -16.0, "-16 LUFS (podcasts)" },
-    { -18.0, "-18 LUFS (audiobooks, quieter podcasts)" },
-    { -23.0, "-23 LUFS (EBU R128 broadcast)" },
-    { -24.0, "-24 LUFS (ATSC A/85 broadcast)" },
-};
-
 /**
     The "what kind of file?" step of an audio export.
 
@@ -77,25 +37,80 @@ public:
                       double defaultSampleRate,
                       bool hasTimeSelection,
                       int markerRangeCount,
-                      std::function<void (ExportChoice)> onAccepted)
+                      std::vector<NamedExportChoice> presets,
+                      const ExportChoice* initial,
+                      std::function<void (ExportChoice, ExportAction)> onAccepted)
     {
         auto* window = new juce::AlertWindow ("Export Audio", {},
                                               juce::MessageBoxIconType::NoIcon, parent);
 
-        buildControls (*window, defaultSampleRate, hasTimeSelection, markerRangeCount);
+        // Presets first: choosing one fills in everything below.
+        juce::StringArray presetNames { "-" };
+        for (const auto& preset : presets)
+            presetNames.add (preset.name);
+        window->addComboBox ("preset", presetNames, "Preset:");
+        window->getComboBoxComponent ("preset")->setSelectedItemIndex (0, juce::dontSendNotification);
+        window->getComboBoxComponent ("preset")->setEnabled (! presets.empty());
 
-        window->addButton ("Export", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        buildControls (*window, defaultSampleRate, hasTimeSelection, markerRangeCount);
+        if (initial != nullptr)
+            applyChoice (*window, *initial, defaultSampleRate);
+
+        window->getComboBoxComponent ("preset")->onChange = [window, presets, defaultSampleRate]
+        {
+            const int index = window->getComboBoxComponent ("preset")->getSelectedItemIndex() - 1;
+            if (index >= 0 && index < (int) presets.size())
+                applyChoice (*window, presets[(size_t) index].choice, defaultSampleRate);
+        };
+
+        window->addButton ("Export", (int) ExportAction::Export, juce::KeyPress (juce::KeyPress::returnKey));
+        window->addButton ("Add to Render Queue", (int) ExportAction::Queue);
+        window->addButton ("Save Preset...", (int) ExportAction::SavePreset);
         window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
         window->enterModalState (true, juce::ModalCallbackFunction::create (
             [window, onAccepted = std::move (onAccepted)] (int result)
             {
                 std::unique_ptr<juce::AlertWindow> owned (window);
-                if (result != 1 || ! onAccepted)
+                if (result == 0 || ! onAccepted)
                     return;
 
-                onAccepted (readChoice (*window));
+                onAccepted (readChoice (*window), (ExportAction) result);
             }));
+    }
+
+    /** Sets every box to @p choice, where the box can show it. */
+    static void applyChoice (juce::AlertWindow& window, const ExportChoice& choice, double defaultSampleRate)
+    {
+        const auto& o = choice.options;
+        const auto& formats = engine::allExportFormats();
+        const auto  at = std::find (formats.begin(), formats.end(), o.format);
+        window.getComboBoxComponent ("format")->setSelectedItemIndex ((int) (at != formats.end() ? at - formats.begin() : 0),
+                                                                   juce::dontSendNotification);
+        refreshDependentBoxes (window, defaultSampleRate);
+
+        if (const auto rates = engine::possibleSampleRates (o.format); rates.contains ((int) o.sampleRate))
+            window.getComboBoxComponent ("rate")->setSelectedItemIndex (rates.indexOf ((int) o.sampleRate), juce::dontSendNotification);
+        if (const auto depths = engine::possibleBitDepths (o.format); depths.contains (o.bitsPerSample))
+            window.getComboBoxComponent ("bits")->setSelectedItemIndex (depths.indexOf (o.bitsPerSample), juce::dontSendNotification);
+        if (const auto qualities = engine::qualityOptionsFor (o.format); o.qualityIndex >= 0 && o.qualityIndex < qualities.size())
+            window.getComboBoxComponent ("quality")->setSelectedItemIndex (o.qualityIndex, juce::dontSendNotification);
+        window.getComboBoxComponent ("dither")->setSelectedItemIndex (! o.dither ? 2 : o.noiseShaping ? 1 : 0, juce::dontSendNotification);
+        refreshDitherEnablement (window);
+        window.getComboBoxComponent ("contents")->setSelectedItemIndex ((int) o.contents, juce::dontSendNotification);
+
+        for (int i = 0; i < (int) std::size (kExportLoudnessTargets); ++i)
+            if (kExportLoudnessTargets[i].lufs == o.loudnessLufs)
+                window.getComboBoxComponent ("loudness")->setSelectedItemIndex (i, juce::dontSendNotification);
+
+        // The range only if this project has it to offer.
+        auto* range = window.getComboBoxComponent ("range");
+        if (range->indexOfItemId (1 + (int) choice.range) >= 0)
+            range->setSelectedId (1 + (int) choice.range, juce::dontSendNotification);
+        window.getTextEditor ("names")->setText (choice.namePattern, false);
+        refreshNamesEnablement (window);
+        window.getComboBoxComponent ("tags")->setSelectedItemIndex ((int) choice.tagging, juce::dontSendNotification);
+        window.getComboBoxComponent ("report")->setSelectedItemIndex (choice.report ? 1 : 0, juce::dontSendNotification);
     }
 
     /**
