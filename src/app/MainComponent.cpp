@@ -334,10 +334,26 @@ MainComponent::MainComponent(bool headless)
     };
     autoClearButton.onClick = [this]
     {
-        auto& song = history_.mutableCurrent();
-        song.masterGainDb.clear();
-        if (selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) song.tracks.size())
-            song.tracks[(size_t) selectedTrackIndex_].automation.clear(); // every parameter, not just gain
+        const auto& current  = history_.current();
+        const int   track    = selectedTrackIndex_;
+        const bool  hasTrack = track >= 0 && track < (int) current.tracks.size();
+
+        // Nothing to clear isn't worth an undo step.
+        if (current.masterGainDb.empty() && (! hasTrack || current.tracks[(size_t) track].automation.empty()))
+            return;
+
+        // An undo step, since this throws away everything that was drawn or
+        // recorded - a misclick has to be recoverable.
+        history_.edit("Clear automation", [track, hasTrack](model::Song& s)
+        {
+            s.masterGainDb.clear();
+            if (hasTrack)
+                s.tracks[(size_t) track].automation.clear(); // every parameter, not just gain
+        });
+
+        syncEngineTracks();
+        arrangementView_.setSong(history_.current());
+        refreshAutomationPaneForSelected();
     };
     masterPanel_.addAndMakeVisible(autoModeBox);
     masterPanel_.addAndMakeVisible(autoClearButton);
