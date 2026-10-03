@@ -87,7 +87,7 @@ all three.
 - ✅ **Snap options**: grid, markers and the playhead, clip edges (View menu; magnets win over the
   grid within a few pixels, and a moved clip snaps by whichever end is nearer; `src/app/SnapTargets.h`),
   and zero crossings (Edit > Find Zero Crossings, Z, moves the time selection's edges onto them)
-- 🟡 Edits on the arrangement itself, not just in the editor pane: split at the playhead ✅ (Ctrl+I),
+- ✅ Edits on the arrangement itself, not just in the editor pane: split at the playhead ✅ (Ctrl+I),
   **join clips** ✅ (Ctrl+J; clips that carry straight on from each other, so a split can be undone
   on its own), ripple delete ✅ (Delete on a time selection), **duplicate selection** ✅
   (`src/model/ArrangementEdits.h`), **detach at silences** ✅ (Edit menu; threshold and minimum
@@ -104,7 +104,7 @@ all three.
   and seeks while playing), **play-at-speed** (transport varispeed) ✅ (Transport > Play Faster / Slower,
   0.25x to 4x with the pitch, as on tape; `src/engine/Varispeed.h`), and **loop the selection** ✅
   (Loop plays the time selection when there is one)
-- 🟡 Zoom: to selection ✅ (Ctrl+E), fit project ✅ (Ctrl+F; View menu, `src/app/TimelineZoom.h`),
+- ✅ Zoom: to selection ✅ (Ctrl+E), fit project ✅ (Ctrl+F; View menu, `src/app/TimelineZoom.h`),
   fit vertically ✅ (Ctrl+Shift+F), sample-level zoom ✅ (zoomed in past the
   peaks, the audio editor draws the samples themselves, joined and marked; `src/app/SampleDetail.h`), a vertical dB/linear scale ✅
   (View > Waveform dB Scale; `src/app/WaveformScale.h`), and waveform vs. **RMS overlay**
@@ -119,10 +119,11 @@ all three.
 - ✅ **Multiple open files** in the editor, as a list (Audition's Files panel): every audio clip shown in the
   Audio editor joins the Open Files pane; click one to edit it, close one or all, and step through them with
   Ctrl+PageUp/PageDown and Ctrl+W (View menu; `src/app/OpenFiles.h`, `src/app/OpenFilesPane.h`)
-- 🟡 Import: **Opus** ✅ and **WavPack** ✅ (BSD-licensed opusfile and libwavpack; `cmake/codecs.cmake`,
+- ✅ Import: **Opus** ✅ and **WavPack** ✅ (BSD-licensed opusfile and libwavpack; `cmake/codecs.cmake`,
   `src/engine/AudioFormats.cpp`), **CAF** ✅ (PCM, U-law and A-law; AAC and ALAC inside CAF read on macOS only),
-  **RF64/BW64 and W64** ✅ (`src/engine/PcmContainers.h`), **M4A/AAC** ⬜ (no BSD-licensed decoder: needs a licensing decision), **raw PCM** ✅ (File > Import Raw Data: 8/16/24/32-bit,
-  float, U-law and A-law, either byte order, a header to skip; `src/engine/RawPcm.h`), and audio pulled from video ⬜
+  **RF64/BW64 and W64** ✅ (`src/engine/PcmContainers.h`), **M4A/AAC** ✅ (through the system's own decoders, so nothing is bundled or licensed: Media Foundation on
+  Windows, streamed and seeking to the sample, `src/engine/AudioFormats.cpp`; Core Audio on macOS; not on Linux), **raw PCM** ✅ (File > Import Raw Data: 8/16/24/32-bit,
+  float, U-law and A-law, either byte order, a header to skip; `src/engine/RawPcm.h`), and audio pulled from video ✅ (MP4, MOV, M4V and WMV import as their first audio stream, the same way)
   (optional FFmpeg module, as Audacity does)
 
 ### Phase 2 — Effects, generators and analyzers parity
@@ -181,7 +182,7 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
   `src/engine/Spectrogram.h`, `src/app/SpectrogramImage.h`); linear and mel scales ✅ (View > Spectrogram Scale), a configurable window ✅ (View > Spectrogram Settings: 256–16384 points; Hann, Hamming, Blackman-Harris or rectangular; display gain and range), a
   split waveform/spectrogram view ✅ (View > Waveform and Spectrogram: each half keeps its own gestures), spectrograms in the arrangement's lanes ✅ (View > Spectrograms in Tracks; analysed in the background, `src/app/SpectrogramCache.h`)
 - ✅ **Spectral selection**: a time × frequency box ✅ (drag diagonally on the spectrogram); lasso ✅ (Ctrl+Shift-drag) and a harmonic brush ✅ (Ctrl+Alt-drag: paints a note and its overtones) as in Audition; Spectral Delete, Gain and Repair work on any of them
-- 🟡 Spectral delete ✅ · spectral gain ✅ (Edit menu, on the box; `src/engine/SpectralEdit.h`) · spectral parametric EQ ✅ · spectral shelves ✅ (Audacity; Edit > Spectral EQ / Spectral Shelf)
+- ✅ Spectral delete ✅ · spectral gain ✅ (Edit menu, on the box; `src/engine/SpectralEdit.h`) · spectral parametric EQ ✅ · spectral shelves ✅ (Audacity; Edit > Spectral EQ / Spectral Shelf)
 - ✅ **Spot healing brush**: paint over a cough, click or phone ring and have it inpainted from the
   surrounding time and frequency content (Audition). A box version ✅ (Edit > Spectral Repair: each bin's
   level drawn across the box from its average either side, the phase kept); a freehand brush ✅ (Ctrl-drag on the spectrogram, Cmd on a Mac, then Spectral Repair heals only what was painted)

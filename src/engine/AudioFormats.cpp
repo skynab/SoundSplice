@@ -14,6 +14,17 @@
 
 #include "engine/PcmContainers.h"
 
+#if JUCE_WINDOWS
+ #include <mfapi.h>
+ #include <mferror.h>
+ #include <mfidl.h>
+ #include <mfreadwrite.h>
+ #pragma comment(lib, "mfplat.lib")
+ #pragma comment(lib, "mfreadwrite.lib")
+ #pragma comment(lib, "mfuuid.lib")
+ #pragma comment(lib, "ole32.lib")
+#endif
+
 namespace soundsplice::engine
 {
 namespace
@@ -427,6 +438,244 @@ namespace
     };
 }
 
+#if JUCE_WINDOWS
+namespace
+{
+    /**
+        M4A, AAC and the audio of a video file (MP4, MOV, WMV), read through
+        Windows' own Media Foundation decoders: nothing bundled, nothing
+        licensed, and whatever codecs the system has. (On a Mac, JUCE's
+        CoreAudioFormat does the same through Core Audio.)
+
+        Streamed, as the other readers are: decoded forward a sample buffer
+        at a time, and a read elsewhere seeks - Media Foundation lands on a
+        keyframe at or before the time asked, and the decoded samples before
+        the one wanted are dropped by their timestamps, so a seek is sample
+        exact. The first audio stream only; any video is never decoded.
+
+        Media Foundation wants COM on the thread that calls it, and a reader
+        is read from whichever thread plays or renders, so each call makes
+        sure of it for its thread.
+    */
+    class MediaFoundationReader final : public juce::AudioFormatReader
+    {
+    public:
+        static constexpr const char* kName = "Media Foundation file";
+
+        static bool ensureCom()
+        {
+            thread_local bool done = false;
+            if (! done)
+            {
+                const auto hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+                done = SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE; // already in an apartment: fine
+            }
+            static const bool started = SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_LITE));
+            return done && started;
+        }
+
+        MediaFoundationReader(juce::InputStream* stream, const juce::File& file)
+            : juce::AudioFormatReader(stream, kName)
+        {
+            if (! ensureCom())
+                return;
+            IMFSourceReader* reader = nullptr;
+            if (FAILED(MFCreateSourceReaderFromURL(file.getFullPathName().toWideCharPointer(), nullptr, &reader)))
+                return;
+            reader_ = reader;
+
+            // The first audio stream, as 32-bit float.
+            reader_->SetStreamSelection((DWORD) MF_SOURCE_READER_ALL_STREAMS, FALSE);
+            reader_->SetStreamSelection((DWORD) MF_SOURCE_READER_FIRST_AUDIO_STREAM, TRUE);
+            IMFMediaType* wanted = nullptr;
+            if (FAILED(MFCreateMediaType(&wanted)))
+                return;
+            wanted->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+            wanted->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_Float);
+            const auto set = reader_->SetCurrentMediaType((DWORD) MF_SOURCE_READER_FIRST_AUDIO_STREAM, nullptr, wanted);
+            wanted->Release();
+            if (FAILED(set))
+                return;
+
+            IMFMediaType* actual = nullptr;
+            if (FAILED(reader_->GetCurrentMediaType((DWORD) MF_SOURCE_READER_FIRST_AUDIO_STREAM, &actual)))
+                return;
+            UINT32 channels = 0, rate = 0;
+            actual->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &channels);
+            actual->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &rate);
+            actual->Release();
+            if (channels == 0 || rate == 0)
+                return;
+
+            PROPVARIANT duration;
+            PropVariantInit(&duration);
+            if (FAILED(reader_->GetPresentationAttribute((DWORD) MF_SOURCE_READER_MEDIASOURCE, MF_PD_DURATION, &duration)))
+                return;
+            const auto hundredNs = (juce::int64) duration.uhVal.QuadPart;
+            PropVariantClear(&duration);
+
+            sampleRate            = rate;
+            numChannels           = channels;
+            bitsPerSample         = 32;
+            usesFloatingPointData = true;
+            lengthInSamples       = (juce::int64) ((double) hundredNs * rate / 1.0e7);
+            ok_                   = lengthInSamples > 0;
+        }
+
+        ~MediaFoundationReader() override
+        {
+            if (reader_ != nullptr)
+                reader_->Release();
+        }
+
+        bool isOk() const noexcept { return ok_; }
+
+        bool readSamples(int* const* destChannels, int numDestChannels, int startOffsetInDestBuffer,
+                         juce::int64 startSampleInFile, int numSamples) override
+        {
+            ensureCom();
+            int written = 0;
+            if (startSampleInFile != position_)
+                seek(startSampleInFile);
+
+            while (written < numSamples)
+            {
+                if (pendingAt_ >= pending_.size() / numChannels)
+                    if (! decodeMore())
+                        break;
+                const auto available = (int) (pending_.size() / numChannels - pendingAt_);
+                const int  n         = juce::jmin(available, numSamples - written);
+                for (int ch = 0; ch < numDestChannels; ++ch)
+                    if (destChannels[ch] != nullptr)
+                    {
+                        auto*        out = reinterpret_cast<float*>(destChannels[ch]) + startOffsetInDestBuffer + written;
+                        const size_t source = (size_t) juce::jmin(ch, (int) numChannels - 1);
+                        for (int i = 0; i < n; ++i)
+                            out[i] = pending_[(pendingAt_ + (size_t) i) * numChannels + source];
+                    }
+                pendingAt_ += (size_t) n;
+                written += n;
+                position_ += n;
+            }
+
+            // Past the end, or a decoder that stopped short: silence.
+            for (int ch = 0; ch < numDestChannels; ++ch)
+                if (destChannels[ch] != nullptr && written < numSamples)
+                    std::fill_n(reinterpret_cast<float*>(destChannels[ch]) + startOffsetInDestBuffer + written,
+                                numSamples - written, 0.0f);
+            return true;
+        }
+
+    private:
+        void seek(juce::int64 sample)
+        {
+            pending_.clear();
+            pendingAt_ = 0;
+            PROPVARIANT where;
+            PropVariantInit(&where);
+            // A little early: the decoder may land just after the time asked,
+            // and what comes before the sample wanted is dropped anyway.
+            const double seconds = juce::jmax(0.0, (double) sample / sampleRate - 0.2);
+            where.vt             = VT_I8;
+            where.hVal.QuadPart  = (LONGLONG) (seconds * 1.0e7);
+            reader_->SetCurrentPosition(GUID_NULL, where);
+            PropVariantClear(&where);
+            position_ = sample;
+        }
+
+        /** The next buffer of samples, into pending_. False at the end. */
+        bool decodeMore()
+        {
+            pending_.clear();
+            pendingAt_ = 0;
+            while (reader_ != nullptr)
+            {
+                DWORD     flags = 0;
+                LONGLONG  time  = 0;
+                IMFSample* sample = nullptr;
+                if (FAILED(reader_->ReadSample((DWORD) MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, nullptr, &flags, &time, &sample)))
+                    return false;
+                if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0 && sample == nullptr)
+                    return false;
+                if (sample == nullptr)
+                    continue;
+
+                IMFMediaBuffer* buffer = nullptr;
+                if (SUCCEEDED(sample->ConvertToContiguousBuffer(&buffer)))
+                {
+                    BYTE* data = nullptr;
+                    DWORD bytes = 0;
+                    if (SUCCEEDED(buffer->Lock(&data, nullptr, &bytes)))
+                    {
+                        const auto* floats = reinterpret_cast<const float*>(data);
+                        const auto  count  = (size_t) bytes / sizeof(float);
+                        // Placed by its own timestamp, whether reading on or
+                        // just after a seek, so the two agree to the sample:
+                        // what's before the next frame wanted is dropped, and
+                        // a gap before it is silence.
+                        const auto first = (juce::int64) std::llround((double) time / 1.0e7 * sampleRate);
+                        if (first > position_)
+                            pending_.assign((size_t) (first - position_) * numChannels, 0.0f);
+                        const auto skip = position_ > first ? (size_t) (position_ - first) * numChannels : 0;
+                        if (skip < count)
+                            pending_.insert(pending_.end(), floats + skip, floats + count);
+                        buffer->Unlock();
+                    }
+                    buffer->Release();
+                }
+                sample->Release();
+                if (! pending_.empty())
+                    return true;
+            }
+            return false;
+        }
+
+        IMFSourceReader*   reader_ = nullptr;
+        bool               ok_     = false;
+        std::vector<float> pending_;   // interleaved
+        size_t             pendingAt_ = 0; // frames already handed out
+        juce::int64        position_  = 0; // the next frame readSamples will hand out
+    };
+
+    class MediaFoundationFormat final : public juce::AudioFormat
+    {
+    public:
+        MediaFoundationFormat()
+            : juce::AudioFormat(MediaFoundationReader::kName, juce::StringArray { ".m4a", ".aac", ".mp4", ".m4v", ".mov", ".wma", ".wmv" })
+        {
+        }
+
+        juce::Array<int> getPossibleSampleRates() override { return {}; }
+        juce::Array<int> getPossibleBitDepths() override { return {}; }
+        bool             canDoStereo() override { return true; }
+        bool             canDoMono() override { return true; }
+
+        juce::AudioFormatReader* createReaderFor(juce::InputStream* stream, bool deleteStreamIfOpeningFails) override
+        {
+            // Media Foundation opens files by name: only a file stream will do.
+            if (auto* fileStream = dynamic_cast<juce::FileInputStream*>(stream))
+            {
+                auto reader = std::make_unique<MediaFoundationReader>(stream, fileStream->getFile());
+                if (reader->isOk())
+                    return reader.release();
+                reader->input = nullptr; // not ours to delete when opening fails
+            }
+            if (deleteStreamIfOpeningFails)
+                delete stream;
+            return nullptr;
+        }
+
+        std::unique_ptr<juce::AudioFormatWriter> createWriterFor(std::unique_ptr<juce::OutputStream>&,
+                                                                 const juce::AudioFormatWriterOptions&) override
+        {
+            return nullptr;
+        }
+
+        using juce::AudioFormat::createWriterFor;
+    };
+}
+#endif
+
 void audioformats::registerAll(juce::AudioFormatManager& formats)
 {
     formats.registerBasicFormats();
@@ -435,6 +684,11 @@ void audioformats::registerAll(juce::AudioFormatManager& formats)
     formats.registerFormat(new PcmContainerFormat("Wave64 file", { ".w64" }, pcmcontainer::parseWave64), false);
     formats.registerFormat(new PcmContainerFormat("RF64 file", { ".rf64", ".bw64" }, pcmcontainer::parseRf64), false);
     formats.registerFormat(new PcmContainerFormat("CAF file", { ".caf" }, pcmcontainer::parseCaf), false);
+   #if JUCE_WINDOWS
+    // Last, so the formats above keep their own files: Media Foundation can
+    // read MP3 and WMA too, but JUCE's readers do those already.
+    formats.registerFormat(new MediaFoundationFormat(), false);
+   #endif
 }
 
 namespace audioformats

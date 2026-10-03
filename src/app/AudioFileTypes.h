@@ -19,7 +19,15 @@ namespace soundsplice
 namespace audiofiles
 {
     /** For juce::FileChooser, which wants a semicolon-separated wildcard list. */
-    inline const char* wildcards() { return "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf"; }
+    inline const char* wildcards()
+    {
+       #if JUCE_WINDOWS || JUCE_MAC
+        // The system's decoders: M4A and AAC, and the audio of a video.
+        return "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.m4a;*.aac;*.mp4;*.m4v;*.mov";
+       #else
+        return "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf";
+       #endif
+    }
 
     /** True if @p file looks like something importAudioFileAtBeat could open.
         Extension-based on purpose: a drag target has to answer during the
@@ -27,7 +35,11 @@ namespace audiofiles
         stall the UI on a slow or absent volume. */
     inline bool isImportableAudioFile(const juce::File& file)
     {
+       #if JUCE_WINDOWS || JUCE_MAC
+        return file.hasFileExtension("wav;aiff;aif;flac;ogg;mp3;opus;wv;w64;rf64;bw64;caf;m4a;aac;mp4;m4v;mov");
+       #else
         return file.hasFileExtension("wav;aiff;aif;flac;ogg;mp3;opus;wv;w64;rf64;bw64;caf");
+       #endif
     }
 
     /** As above, for the path strings juce::FileDragAndDropTarget hands over
