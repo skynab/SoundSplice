@@ -4,6 +4,7 @@
 #include "engine/Transcriber.h"
 #include "model/TextEdit.h"
 #include "ExportNaming.h"
+#include "ExportPlan.h"
 #include "RenderReport.h"
 #include "MainComponentInternal.h"
 
@@ -474,33 +475,22 @@ std::vector<MainComponent::ExportTask> MainComponent::tasksForChoice(const juce:
     track for a stem. Gathered on the message thread, where the document is. */
 void MainComponent::addReportDetails(std::vector<ExportTask>& tasks) const
 {
-    const auto& song  = history_.current();
-    const auto  clock = model::clockFor(song);
-    const auto  name  = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("Untitled");
+    const auto name = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("Untitled");
     for (auto& task : tasks)
     {
         task.writeReport = true;
         task.project     = name;
-        const double from = task.render.startBeats, to = from + task.render.lengthBeats;
-        for (int t = 0; t < (int) song.tracks.size(); ++t)
+        const double from = task.render.startBeats;
+        for (const auto& clip : app::exportplan::reportClips(history_.current(), task.render.soloTrack, from,
+                                                             from + task.render.lengthBeats))
         {
-            if (task.render.soloTrack >= 0 && t != task.render.soloTrack)
-                continue;
-            for (const auto& clip : song.tracks[(size_t) t].clips)
-            {
-                if (clip.startBeats + clip.lengthBeats <= from || clip.startBeats >= to)
-                    continue;
-                app::renderreport::ClipLine line;
-                line.track         = juce::String(song.tracks[(size_t) t].name);
-                line.file          = clip.type == model::ClipType::Audio ? juce::File(clip.audioFile).getFileName()
-                                                                         : juce::String("(notes)");
-                line.startSeconds  = clock.secondsBetween(from, clip.startBeats);
-                line.lengthSeconds = clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);
-                task.clips.push_back(line);
-            }
+            app::renderreport::ClipLine line;
+            line.track         = juce::String(clip.track);
+            line.file          = clip.audioFile.empty() ? juce::String("(notes)") : juce::File(clip.audioFile).getFileName();
+            line.startSeconds  = clip.startSeconds;
+            line.lengthSeconds = clip.lengthSeconds;
+            task.clips.push_back(line);
         }
-        std::stable_sort(task.clips.begin(), task.clips.end(),
-                         [](const auto& a, const auto& b) { return a.startSeconds < b.startSeconds; });
     }
 }
 
@@ -843,34 +833,9 @@ MainComponent::buildRangeExportTasks(const juce::File& chosenFile, const engine:
     if (range != app::ExportRange::MarkerRanges && range != app::ExportRange::BetweenMarkers)
         return buildExportTasks(chosenFile, options, folderFailed);
 
-    std::vector<model::Marker> regions;
-    if (range == app::ExportRange::MarkerRanges)
-    {
-        for (const auto& marker : history_.current().markers)
-            if (marker.lengthBeats > 0.0)
-                regions.push_back(marker);
-        std::stable_sort(regions.begin(), regions.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
-    }
-    else
-    {
-        // Split at every marker (Audacity's Export Multiple by labels): a
-        // stretch from each to the next, the first from the start, the last
-        // with the usual tail. Each named for the marker it starts at.
-        auto markers = history_.current().markers;
-        std::stable_sort(markers.begin(), markers.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
-        const double end = songEndBeats() + kBounceTailBeats;
-        double from = 0.0;
-        juce::String name = "Start";
-        for (const auto& marker : markers)
-        {
-            if (marker.startBeats > from + 1.0e-6)
-                regions.push_back({ 0, from, marker.startBeats - from, name.toStdString() });
-            from = marker.startBeats;
-            name = juce::String(marker.name);
-        }
-        if (end > from + 1.0e-6)
-            regions.push_back({ 0, from, end - from, name.toStdString() });
-    }
+    // Split at markers, the last running on with the usual tail.
+    const auto regions = app::exportplan::regions(history_.current().markers, range == app::ExportRange::BetweenMarkers,
+                                                  songEndBeats() + kBounceTailBeats);
 
     const auto project = projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension()
                                                       : chosenFile.getFileNameWithoutExtension();
@@ -1249,24 +1214,14 @@ engine::ExportTags MainComponent::exportTagsFor(double startBeats, double length
 
     if (lengthBeats < 0.0)
         lengthBeats = songEndBeats() + kBounceTailBeats;
-    const double endBeats = startBeats + lengthBeats;
-    const auto   clock    = model::clockFor(song);
-
-    auto markers = song.markers;
-    std::stable_sort(markers.begin(), markers.end(), [](const auto& a, const auto& b) { return a.startBeats < b.startBeats; });
-    for (const auto& marker : markers)
+    for (const auto& chapter : app::exportplan::chapters(song, startBeats, startBeats + lengthBeats))
     {
-        if (marker.startBeats < startBeats - 1.0e-9 || marker.startBeats >= endBeats)
-            continue;
-        engine::ExportChapter chapter;
-        chapter.startSeconds = clock.secondsBetween(startBeats, marker.startBeats);
-        chapter.title        = text(marker.name);
-        if (! tags.chapters.empty())
-            tags.chapters.back().endSeconds = chapter.startSeconds;
-        tags.chapters.push_back(chapter);
+        engine::ExportChapter written;
+        written.startSeconds = chapter.startSeconds;
+        written.endSeconds   = chapter.endSeconds;
+        written.title        = text(chapter.title);
+        tags.chapters.push_back(written);
     }
-    if (! tags.chapters.empty())
-        tags.chapters.back().endSeconds = clock.secondsBetween(startBeats, endBeats);
     return tags;
 }
 
