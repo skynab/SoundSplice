@@ -51,7 +51,7 @@ MainComponent::MainComponent(bool headless)
         if (engine_.isPlaying())
         {
             post(Cmd::SetPlaying, 0.0);
-            if (awaitingRecordedTake_)
+            if (audioTake_.running)
                 engine_.stopRecording(); // the transport stopping would also end
                                          // the take, but this makes it explicit
         }
@@ -486,7 +486,7 @@ MainComponent::MainComponent(bool headless)
     // again when it's let go; while playing, it just moves the playhead.
     arrangementView_.onScrubStarted = [this]
     {
-        if (engine_.isPlaying() || awaitingRecordedTake_)
+        if (engine_.isPlaying() || audioTake_.running)
             return;
         scrubStartedPlayback_ = true;
         post(Cmd::SetPlaying, 1.0);

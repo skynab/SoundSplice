@@ -1106,7 +1106,7 @@ std::vector<prefs::Page> MainComponent::preferencePages()
     // The recording format: what Recording Format... sets, without its dialog.
     const auto setRecordFormat = [this](const char* key, int value)
     {
-        if (awaitingRecordedTake_)
+        if (audioTake_.running)
         {
             showError("Stop recording first");
             return;

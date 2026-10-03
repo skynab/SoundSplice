@@ -144,13 +144,13 @@ void MainComponent::toggleRecording()
 {
     // Stopping always goes back to whichever take is actually running — the
     // sources are re-examined only when starting one.
-    if (awaitingMidiTake_)
+    if (midiTake_.running)
     {
         toggleMidiRecording();
         return;
     }
 
-    if (! awaitingRecordedTake_)
+    if (! audioTake_.running)
     {
         // Devices are re-scanned here rather than trusted from startup: a
         // controller plugged in after launch is extremely common, and before
@@ -199,27 +199,19 @@ void MainComponent::toggleRecording()
             showStatus(explanation); // audio, but not from the armed track
     }
 
-    if (! awaitingRecordedTake_)
+    if (! audioTake_.running)
     {
         // With Loop on and a time selection to loop, the take goes round it
-        // and each pass becomes a take of one clip. Started from inside the
-        // loop - from its start if the playhead is elsewhere - so there is a
-        // loop to go round. Before arming, which reads where the playhead is.
-        loopRecording_       = loopButton.getToggleState() && ! timeSelection_.isEmpty();
-        loopRecordFromBeats_ = timeSelection_.startBeats;
-        loopRecordToBeats_   = timeSelection_.endBeats;
-
-        // Punching: the take replaces only the time selection. The transport
-        // still rolls from the playhead, so there's a lead-up to play along
-        // to; what's recorded before the selection is dropped when it's done.
-        punchRecording_ = ! loopRecording_ && ! timeSelection_.isEmpty()
-                       && settings_.getBoolValue("punchRecording", false);
-        if (loopRecording_)
-        {
-            const double at = playheadBeat();
-            if (at < loopRecordFromBeats_ || at >= loopRecordToBeats_)
-                seekToBeat(loopRecordFromBeats_);
-        }
+        // and each pass becomes a take of one clip; with Punch Recording on,
+        // it replaces only the selection. The transport still rolls from the
+        // playhead, so there's a lead-up to play along to - except round a
+        // loop, which starts inside it so there is a loop to go round. Before
+        // arming, which reads where the playhead is.
+        audioTake_       = {};
+        audioTake_.range = app::recording::takeRange(timeSelection_, loopButton.getToggleState(),
+                                                     settings_.getBoolValue("punchRecording", false));
+        if (const auto seek = app::recording::loopTakeSeek(audioTake_.range, playheadBeat()))
+            seekToBeat(*seek);
 
         // At this device's rate, which the silence to stop on is counted in.
         applySoundTrigger();
@@ -231,13 +223,12 @@ void MainComponent::toggleRecording()
 
         // The extra tracks first: they're armed alongside the main take, which
         // is what starts the transport.
-        extraTakes_.clear();
         for (size_t i = 1; i < targets.size() && (int) i <= engine::AudioEngine::kExtraTakes; ++i)
         {
             const int  slot  = (int) i - 1;
             const auto extra = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
             if (engine_.beginExtraRecording(slot, extra, recordFormatFor(targets[i])))
-                extraTakes_.push_back({ targets[i], slot });
+                audioTake_.extras.push_back({ targets[i], slot });
         }
 
         // Into the saved project's audio folder, or the scratch folder until
@@ -259,14 +250,14 @@ void MainComponent::toggleRecording()
                 showError("Could not start recording (no audio input device, "
                           "or the file could not be created)");
             engine_.stopRecording(); // the extras armed above
-            extraTakes_.clear();
+            audioTake_ = {};
             return;
         }
 
         recordingFile_        = file;
-        recordingTargetTrack_ = targets.front();
+        audioTake_.mainTrack = targets.front();
 
-        awaitingRecordedTake_ = true;
+        audioTake_.running = true;
         recordButton.setToggleState(true, juce::dontSendNotification); // swaps to the stop square
         recordButton.setTooltip(withShortcut("Stop recording", keys::record));
 
@@ -276,9 +267,9 @@ void MainComponent::toggleRecording()
         // isn't there yet. The button's own state is left alone and restored
         // when the take ends, so the user's setting survives. A loop
         // recording is the exception: going round is the point.
-        post(Cmd::SetLooping, loopRecording_ ? 1.0 : 0.0);
+        post(Cmd::SetLooping, audioTake_.range.loop ? 1.0 : 0.0);
         post(Cmd::SetPlaying, 1.0);
-        if (loopRecording_)
+        if (audioTake_.range.loop)
             showStatus("Loop recording - every pass round the selection becomes a take");
         else if (settings_.getBoolValue("soundActivated", false))
             showStatus("Waiting for sound - the take starts when the input passes the threshold");
@@ -295,9 +286,9 @@ void MainComponent::toggleRecording()
 
 void MainComponent::finishRecordingIfReady()
 {
-    if (! awaitingRecordedTake_ || ! engine_.isRecordingFinished())
+    if (! audioTake_.running || ! engine_.isRecordingFinished())
         return;
-    awaitingRecordedTake_ = false;
+    audioTake_.running = false;
 
     // However it ended. A take that stopped itself on silence also stops the
     // transport, as the Stop button would have.
@@ -333,10 +324,10 @@ void MainComponent::finishRecordingIfReady()
         const double startBeats = takeStart >= 0 ? juce::jmax(0.0, uiTempoMap_.ppqFromSamples(takeStart)) : 0.0;
         importAudioFileAtBeat(take, startBeats, trackIndex);
 
-        const int takePasses = loopRecording_ ? makeLoopTakesFromRecording(take, takeStart, latency) : 0;
+        const int takePasses = audioTake_.range.loop ? makeLoopTakesFromRecording(take, takeStart, latency) : 0;
         if (takePasses == 0)
             compensateRecordingLatency(take, latency);
-        const bool takePunched = punchRecording_ && punchRecordedClip(take);
+        const bool takePunched = audioTake_.range.punch && punchRecordedClip(take);
 
         passes = juce::jmax(passes, takePasses);
         punched |= takePunched;
@@ -344,10 +335,10 @@ void MainComponent::finishRecordingIfReady()
     };
 
     if (file != juce::File{})
-        place(file, startedAt, recordingTargetTrack_);
+        place(file, startedAt, audioTake_.mainTrack);
 
     // Every other armed track's take, the same way onto its own track.
-    for (const auto& extra : extraTakes_)
+    for (const auto& extra : audioTake_.extras)
     {
         dropped += engine_.extraTakeDroppedSamples(extra.slot);
         const auto extraStart = engine_.extraTakeStartSample(extra.slot);
@@ -355,12 +346,9 @@ void MainComponent::finishRecordingIfReady()
         if (extraFile != juce::File{})
             place(extraFile, extraStart, extra.trackIndex);
     }
-    extraTakes_.clear();
 
-    recordingFile_        = juce::File{};
-    recordingTargetTrack_ = -1;
-    loopRecording_        = false;
-    punchRecording_       = false;
+    audioTake_     = {};
+    recordingFile_ = juce::File{};
 
     if (placed == 0)
     {
@@ -442,7 +430,7 @@ void MainComponent::setTrackArmed(int trackIndex, bool armed)
         armedTrackIds_.erase(track.id);
     updateMixerStrips();
 
-    if (awaitingRecordedTake_)
+    if (audioTake_.running)
         joinOrLeaveTake(trackIndex, armed);
 }
 
@@ -454,12 +442,12 @@ void MainComponent::joinOrLeaveTake(int trackIndex, bool armed)
     if (! armed)
     {
         bool left = false;
-        if (trackIndex == recordingTargetTrack_ && engine_.isMainTakeArmed())
+        if (trackIndex == audioTake_.mainTrack && engine_.isMainTakeArmed())
         {
             engine_.stopMainTake();
             left = true;
         }
-        for (const auto& extra : extraTakes_)
+        for (const auto& extra : audioTake_.extras)
             if (extra.trackIndex == trackIndex && engine_.isExtraTakeArmed(extra.slot))
             {
                 engine_.stopExtraTake(extra.slot);
@@ -471,17 +459,12 @@ void MainComponent::joinOrLeaveTake(int trackIndex, bool armed)
     }
 
     // A recorder not already in this take.
-    for (int slot = 0; slot < engine::AudioEngine::kExtraTakes; ++slot)
+    if (const auto slot = app::recording::freeRecorderSlot(audioTake_.extras, engine::AudioEngine::kExtraTakes))
     {
-        const bool used = std::any_of(extraTakes_.begin(), extraTakes_.end(),
-                                      [slot](const ExtraTake& extra) { return extra.slot == slot; });
-        if (used)
-            continue;
-
         const auto file = audioDirectoryFor(recordingsDirectory()).getNonexistentChildFile("Recording", ".wav");
-        if (engine_.beginExtraRecording(slot, file, recordFormatFor(trackIndex), true))
+        if (engine_.beginExtraRecording(*slot, file, recordFormatFor(trackIndex), true))
         {
-            extraTakes_.push_back({ trackIndex, slot });
+            audioTake_.extras.push_back({ trackIndex, *slot });
             showStatus("That track has joined the take");
         }
         else
@@ -550,8 +533,8 @@ int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t st
     if (rate <= 0.0 || startedAt < 0)
         return 0;
 
-    const double loopStart = (double) uiTempoMap_.samplesFromPpq(loopRecordFromBeats_) / rate;
-    const double loopEnd   = (double) uiTempoMap_.samplesFromPpq(loopRecordToBeats_) / rate;
+    const double loopStart = (double) uiTempoMap_.samplesFromPpq(audioTake_.range.fromBeats) / rate;
+    const double loopEnd   = (double) uiTempoMap_.samplesFromPpq(audioTake_.range.toBeats) / rate;
     // The file starts the round trip before capture began, in what was
     // playing: that's where its passes are counted from.
     const auto   offsets   = model::takeedit::loopPassOffsets((double) (startedAt - latencySamples) / rate, loopStart,
@@ -568,7 +551,7 @@ int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t st
         return 0;
 
     model::takeedit::makeLoopTakes(clips[(size_t) selectedClipIndex_], file.getFullPathName().toStdString(), offsets,
-                                   loopRecordFromBeats_, loopRecordToBeats_ - loopRecordFromBeats_);
+                                   audioTake_.range.fromBeats, audioTake_.range.toBeats - audioTake_.range.fromBeats);
     refreshAfterArrangementEdit();
     return (int) offsets.size();
 }
@@ -582,13 +565,13 @@ int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t st
     error. */
 void MainComponent::toggleMidiRecording()
 {
-    if (! awaitingMidiTake_)
+    if (! midiTake_.running)
     {
-        midiTakeEvents_.clear();
-        midiRecordingTargetTrack_ = selectedTrackIndex_;
+        midiTake_.events.clear();
+        midiTake_.targetTrack = selectedTrackIndex_;
 
         engine_.beginMidiRecording();
-        awaitingMidiTake_ = true;
+        midiTake_.running = true;
 
         recordButton.setToggleState(true, juce::dontSendNotification);
         recordButton.setTooltip(withShortcut("Stop recording", keys::record));
@@ -612,17 +595,17 @@ void MainComponent::toggleMidiRecording()
 
 void MainComponent::finishMidiRecordingIfReady()
 {
-    if (! awaitingMidiTake_)
+    if (! midiTake_.running)
         return;
 
     // Drained every tick, take finished or not: this is what keeps the
     // engine's ring from having to hold a whole take (see engine::MidiRecorder
     // for why that matters — a fixed ring sized for a take is a silent cap).
-    engine_.drainMidiTake(midiTakeEvents_);
+    engine_.drainMidiTake(midiTake_.events);
 
     if (! engine_.isMidiRecordingFinished())
         return;
-    awaitingMidiTake_ = false;
+    midiTake_.running = false;
 
     // Every ending passes through here, so this is where looping is put back
     // — restoring it only in the stop handler would leave it silently off
@@ -632,19 +615,19 @@ void MainComponent::finishMidiRecordingIfReady()
     const int64_t dropped   = engine_.midiRecordedDroppedEvents();
     const int64_t startedAt = engine_.midiTakeStartSample();
     const int64_t endedAt   = engine_.midiTakeEndSample();
-    const int     target    = midiRecordingTargetTrack_;
+    const int     target    = midiTake_.targetTrack;
 
-    midiRecordingTargetTrack_ = -1;
+    midiTake_.targetTrack = -1;
 
-    if (midiTakeEvents_.empty() || startedAt < 0)
+    if (midiTake_.events.empty() || startedAt < 0)
     {
-        midiTakeEvents_.clear();
+        midiTake_.events.clear();
         showError("Recording was empty (no MIDI input captured)");
         return;
     }
 
     commitMidiTake(target, startedAt, endedAt);
-    midiTakeEvents_.clear();
+    midiTake_.events.clear();
 
     // Reported after the commit, so the take is on the timeline either way —
     // a take missing a note is still worth keeping, it just must not be
@@ -660,7 +643,7 @@ void MainComponent::commitMidiTake(int targetTrack, int64_t startSample, int64_t
         return;
 
     // Through the tempo map the UI already reads (see clipFromMidiTake).
-    auto take = app::recording::clipFromMidiTake(midiTakeEvents_, startSample, endSample, uiTempoMap_);
+    auto take = app::recording::clipFromMidiTake(midiTake_.events, startSample, endSample, uiTempoMap_);
     if (! take)
     {
         showError("Recording was empty (no MIDI input captured)");
@@ -728,7 +711,7 @@ bool MainComponent::punchRecordedClip(const juce::File& file)
     const int  trackId  = track.id;
     track.clips.erase(track.clips.begin() + selectedClipIndex_);
 
-    const int id = model::takeedit::punchIn(song, trackId, recorded, loopRecordFromBeats_, loopRecordToBeats_, 0.01);
+    const int id = model::takeedit::punchIn(song, trackId, recorded, audioTake_.range.fromBeats, audioTake_.range.toBeats, 0.01);
     auto&     clips = song.tracks[(size_t) selectedTrackIndex_].clips;
     if (id == 0)
     {
@@ -811,7 +794,7 @@ void MainComponent::showTimerRecordDialog()
 void MainComponent::tickTimerRecord()
 {
     using Action = app::recording::TimerRecord::Action;
-    if (timerRecord_.tick(juce::Time::currentTimeMillis(), awaitingRecordedTake_ || awaitingMidiTake_) != Action::None)
+    if (timerRecord_.tick(juce::Time::currentTimeMillis(), audioTake_.running || midiTake_.running) != Action::None)
         toggleRecording(); // starts or stops, whichever is due
 }
 
@@ -820,7 +803,7 @@ void MainComponent::tickTimerRecord()
     the song ends, for a track with nothing on it yet. */
 void MainComponent::recordAtEndOfTrack()
 {
-    if (awaitingRecordedTake_ || awaitingMidiTake_)
+    if (audioTake_.running || midiTake_.running)
         return;
 
     const auto& song = history_.current();
@@ -892,7 +875,7 @@ engine::AudioRecorder::Format MainComponent::savedRecordFormat()
     takes are recorded from. Applies from the next take. */
 void MainComponent::showRecordingFormatDialog()
 {
-    if (awaitingRecordedTake_)
+    if (audioTake_.running)
     {
         showError("Stop recording first");
         return;

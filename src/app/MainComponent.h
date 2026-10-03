@@ -884,14 +884,16 @@ private:
 
     app::AutomationRecorder automation_ { history_ }; // after history_, which it edits
 
-    bool                        awaitingRecordedTake_ = false;
+    // The audio take in progress: its tracks, chosen when it is armed rather
+    // than when it ends (the destination has to exist before a note is played
+    // now that recording streams to it, and the target track is whatever was
+    // selected then rather than by the time the user hits stop), and whether
+    // it goes round or punches into the selection. See MainComponent_Recording.cpp.
+    app::recording::AudioTake audioTake_;
+    juce::File                recordingFile_; // the main take's, kept from the audio clean-up while it records
 
-    // A take recorded round the loop (Loop on, and a time selection to loop):
-    // its passes become the takes of one clip. See MainComponent_Recording.cpp.
-    bool   loopRecording_       = false;
-    bool   punchRecording_      = false; // over loopRecordFrom/ToBeats_, when not looping
-    double loopRecordFromBeats_ = 0.0;
-    double loopRecordToBeats_   = 0.0;
+    // A MIDI take in progress.
+    app::recording::MidiTakeInProgress midiTake_;
 
     app::recording::TimerRecord timerRecord_;
 
@@ -899,17 +901,7 @@ private:
     // With any armed, a take records each from its own input; the first is
     // the main take, the rest extras (AudioEngine::beginExtraRecording).
     std::set<int> armedTrackIds_;
-    struct ExtraTake
-    {
-        int trackIndex = -1;
-        int slot       = -1;
-    };
-    std::vector<ExtraTake> extraTakes_;
 
-    // Chosen when the take is armed, not when it ends: the destination has to
-    // exist before a note is played now that recording streams to it, and the
-    // target track is whatever was selected then rather than whatever happens
-    // to be selected by the time the user hits stop.
     // Non-null while an export is rendering. Owned here rather than
     // self-deleting so that quitting mid-export can stop the thread before the
     // engine it is rendering through is destroyed.
@@ -918,24 +910,9 @@ private:
     // Set while that job owns the engine — see timerCallback.
     bool                        offlineRenderInProgress_ = false;
 
-    juce::File                  recordingFile_;
-    int                         recordingTargetTrack_ = -1; // -1 = a new track
-
-    // A MIDI take in progress. Separate flags from the audio take's rather
-    // than one shared "recording" flag: the two takes finish through different
-    // engine calls, and a single flag would make "which recorder do I ask" a
-    // question with two possible answers at the moment it matters most.
-    bool                        awaitingMidiTake_       = false;
-    int                         midiRecordingTargetTrack_ = -1;
-
     // Timer ticks since MIDI inputs were last re-enumerated — see
     // timerCallback for why this is throttled rather than done every tick.
     int                         midiRescanTicks_ = 0;
-
-    // Drained from the engine's ring on every timer tick, not only at the end
-    // of the take — which is what keeps the ring small and the take unbounded
-    // (see engine::MidiRecorder).
-    std::vector<engine::RecordedMidiEvent> midiTakeEvents_;
 
     // App-level preferences (not project data): which panel lives in which
     // dock region, and the file browser's user bookmarks. Saved on the

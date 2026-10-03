@@ -10,6 +10,7 @@
 #include "engine/MidiCapture.h"
 #include "engine/TempoMap.h"
 #include "model/Song.h"
+#include "model/TimeSelection.h"
 
 namespace soundsplice::app::recording
 {
@@ -37,6 +38,80 @@ inline std::vector<int> takeTargets(const model::Song& song, const std::set<int>
     }
     return targets;
 }
+
+/** What a take does with the time selection: goes round it, each pass a
+    take of one clip (Loop on); replaces only it, keeping the lead-up out
+    (Punch Recording on); or neither. */
+struct TakeRange
+{
+    bool   loop      = false;
+    bool   punch     = false;
+    double fromBeats = 0.0;
+    double toBeats   = 0.0;
+};
+
+inline TakeRange takeRange(const model::TimeSelection& selection, bool loopOn, bool punchOn)
+{
+    TakeRange range;
+    range.loop      = loopOn && ! selection.isEmpty();
+    range.punch     = ! range.loop && ! selection.isEmpty() && punchOn;
+    range.fromBeats = selection.startBeats;
+    range.toBeats   = selection.endBeats;
+    return range;
+}
+
+/** Where a loop recording has to start from, the playhead being at
+    @p playheadBeat: the loop's start if it's outside the loop, so there is a
+    loop to go round; nothing if it's inside, or this isn't a loop take. */
+inline std::optional<double> loopTakeSeek(const TakeRange& range, double playheadBeat)
+{
+    if (! range.loop || (playheadBeat >= range.fromBeats && playheadBeat < range.toBeats))
+        return std::nullopt;
+    return range.fromBeats;
+}
+
+/** A track recording alongside the main take, on one of the engine's extra
+    recorders. */
+struct ExtraTake
+{
+    int trackIndex = -1;
+    int slot       = -1;
+};
+
+/** An audio take in progress. Session state, not part of the song: reset in
+    one go when the take ends. */
+struct AudioTake
+{
+    bool                   running   = false;
+    int                    mainTrack = -1; // -1 = a new track
+    TakeRange              range;
+    std::vector<ExtraTake> extras;
+};
+
+/** The first of @p slotCount extra recorders that @p extras isn't using, for
+    a track armed mid-take; nothing if all of them are. */
+inline std::optional<int> freeRecorderSlot(const std::vector<ExtraTake>& extras, int slotCount)
+{
+    for (int slot = 0; slot < slotCount; ++slot)
+        if (std::none_of(extras.begin(), extras.end(), [slot](const ExtraTake& extra) { return extra.slot == slot; }))
+            return slot;
+    return std::nullopt;
+}
+
+/** A MIDI take in progress. Separate from the audio take rather than one
+    shared "recording" flag: the two finish through different engine calls,
+    and a single flag would make "which recorder do I ask" a question with
+    two possible answers at the moment it matters most. */
+struct MidiTakeInProgress
+{
+    bool running     = false;
+    int  targetTrack = -1;
+
+    // Drained from the engine's ring on every timer tick, not only at the
+    // end of the take - which is what keeps the ring small and the take
+    // unbounded (see engine::MidiRecorder).
+    std::vector<engine::RecordedMidiEvent> events;
+};
 
 /** The Recording Latency settings. */
 struct Latency

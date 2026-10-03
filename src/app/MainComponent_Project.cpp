@@ -210,7 +210,7 @@ void MainComponent::cleanUpProjectAudio()
 
     // A take being recorded right now isn't in the document until it stops,
     // but it is very much in use.
-    if (awaitingRecordedTake_ && recordingFile_ != juce::File{})
+    if (audioTake_.running && recordingFile_ != juce::File{})
         referenced.add(recordingFile_);
 
     history_.forEachState([&referenced](const model::Song& song)

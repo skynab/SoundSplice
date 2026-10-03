@@ -221,7 +221,7 @@ void MainComponent::stepByBars(int bars)
     it costs the audio thread nothing. */
 void MainComponent::stopAtEndOfArrangement()
 {
-    if (! engine_.isPlaying() || loopButton.getToggleState() || awaitingRecordedTake_)
+    if (! engine_.isPlaying() || loopButton.getToggleState() || audioTake_.running)
         return;
 
     const double end = songEndBeats();

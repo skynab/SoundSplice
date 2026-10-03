@@ -123,3 +123,51 @@ TEST_CASE("A MIDI take becomes a clip of whole bars where it was played", "[app]
     // Nothing played: no clip.
     REQUIRE_FALSE(clipFromMidiTake({ { 96000, 64, 0.0f, false } }, 96000, 144000, tempo));
 }
+
+TEST_CASE("A take goes round the selection with Loop on, or punches into it", "[app][recording]")
+{
+    model::TimeSelection selection;
+    selection.startBeats = 4.0;
+    selection.endBeats   = 8.0;
+    selection.trackIds   = { 1 };
+
+    const auto loop = takeRange(selection, true, true);
+    REQUIRE(loop.loop);
+    REQUIRE_FALSE(loop.punch); // looping wins over punching
+    REQUIRE(loop.fromBeats == 4.0);
+    REQUIRE(loop.toBeats == 8.0);
+
+    const auto punch = takeRange(selection, false, true);
+    REQUIRE_FALSE(punch.loop);
+    REQUIRE(punch.punch);
+
+    REQUIRE_FALSE(takeRange(selection, false, false).punch);
+
+    // With no selection, neither: a plain take.
+    const auto plain = takeRange(model::TimeSelection {}, true, true);
+    REQUIRE_FALSE(plain.loop);
+    REQUIRE_FALSE(plain.punch);
+}
+
+TEST_CASE("A loop take starts inside the loop", "[app][recording]")
+{
+    TakeRange range;
+    range.loop      = true;
+    range.fromBeats = 4.0;
+    range.toBeats   = 8.0;
+
+    REQUIRE_FALSE(loopTakeSeek(range, 5.0).has_value()); // already inside
+    REQUIRE_FALSE(loopTakeSeek(range, 4.0).has_value()); // the start is inside
+    REQUIRE(loopTakeSeek(range, 1.0) == 4.0);
+    REQUIRE(loopTakeSeek(range, 8.0) == 4.0); // the end is outside
+
+    range.loop = false;
+    REQUIRE_FALSE(loopTakeSeek(range, 1.0).has_value()); // not a loop take: from where it is
+}
+
+TEST_CASE("A track joining mid-take gets the first recorder not in use", "[app][recording]")
+{
+    REQUIRE(freeRecorderSlot({}, 3) == 0);
+    REQUIRE(freeRecorderSlot({ { 2, 0 }, { 5, 2 } }, 3) == 1);
+    REQUIRE_FALSE(freeRecorderSlot({ { 2, 0 }, { 3, 1 }, { 5, 2 } }, 3).has_value());
+}

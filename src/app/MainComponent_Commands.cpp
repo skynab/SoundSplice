@@ -82,15 +82,15 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
 
         case commands::saveRecentInput:
-            info.setActive(engine_.retroactiveSeconds() > 0.0 && ! awaitingRecordedTake_);
+            info.setActive(engine_.retroactiveSeconds() > 0.0 && ! audioTake_.running);
             break;
 
         case commands::appendRecord:
-            info.setActive(! awaitingRecordedTake_ && ! awaitingMidiTake_);
+            info.setActive(! audioTake_.running && ! midiTake_.running);
             break;
 
         case commands::measureLatency:
-            info.setActive(! awaitingRecordedTake_ && ! awaitingMidiTake_ && ! engine_.isMeasuringLatency());
+            info.setActive(! audioTake_.running && ! midiTake_.running && ! engine_.isMeasuringLatency());
             break;
 
         case commands::soundActivatedRecording:
