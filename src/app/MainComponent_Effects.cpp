@@ -509,24 +509,16 @@ void MainComponent::promptToSaveEffectPreset(const model::EffectSlot& slot)
         return;
 
     const juce::String effectName(descriptor->name);
-    auto* window = new juce::AlertWindow("Save Preset",
-                                         "Save these " + effectName + " settings as a preset you can use on any track.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", "My " + effectName, "Name:");
-    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, slot](int result)
+    dialog("Save Preset", "Save these " + effectName + " settings as a preset you can use on any track.")
+        .text("name", "Name:", "My " + effectName)
+        .unsaved()
+        .show("Save", [this, slot](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const auto name = window->getTextEditorContents("name").trim();
+            const auto name = v.text("name");
             if (name.isEmpty())
             {
-                self->showError("A preset needs a name");
+                showError("A preset needs a name");
                 return;
             }
 
@@ -534,11 +526,11 @@ void MainComponent::promptToSaveEffectPreset(const model::EffectSlot& slot)
             if (effect == nullptr)
                 return;
 
-            self->userEffectPresets_ = model::withUserPreset(self->userEffectPresets_, effect->id,
-                                                             model::capturePreset(slot, *effect, name.toStdString()));
-            self->storeUserEffectPresets();
-            self->showStatus("Saved preset \"" + name + "\"");
-        }));
+            userEffectPresets_ = model::withUserPreset(userEffectPresets_, effect->id,
+                                                       model::capturePreset(slot, *effect, name.toStdString()));
+            storeUserEffectPresets();
+            showStatus("Saved preset \"" + name + "\"");
+        });
 }
 
 void MainComponent::deleteUserEffectPreset(const std::string& effectId, const std::string& name)

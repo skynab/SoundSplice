@@ -1165,42 +1165,17 @@ void MainComponent::showPaulstretchDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Paulstretch",
-                                         "Stretches the whole clip many times over into a smooth pad. "
-                                         "For small changes use Change Tempo instead - this deliberately "
-                                         "throws away the sound's timing.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("stretch", juce::String(settings_.getDoubleValue("paulstretch.factor", 8.0)),
-                          "Stretch by (times):");
-    window->addTextEditor("window", juce::String(settings_.getDoubleValue("paulstretch.window", 0.25)),
-                          "Window (seconds: longer is smoother):");
-    // What Apply does, and what Preview runs without committing.
-    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
-    {
-        if (self == nullptr)
-            return;
 
-        const double stretch = juce::jlimit(1.0, 100.0, window->getTextEditorContents("stretch").getDoubleValue());
-        const double seconds = juce::jlimit(0.02, 2.0, window->getTextEditorContents("window").getDoubleValue());
-        self->settings_.setValue("paulstretch.factor", stretch);
-        self->settings_.setValue("paulstretch.window", seconds);
-        self->paulstretchSelectedClip(stretch, seconds);
-    };
-    addPreviewStrip(window, run);
-
-    window->addButton("Stretch", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
+    previewedDialog("Paulstretch",
+                    "Stretches the whole clip many times over into a smooth pad. "
+                    "For small changes use Change Tempo instead - this deliberately "
+                    "throws away the sound's timing.")
+        .number("paulstretch.factor", "Stretch by (times):", 8.0, 1.0, 100.0)
+        .number("paulstretch.window", "Window (seconds: longer is smoother):", 0.25, 0.02, 2.0)
+        .show("Stretch", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr)
-                return;
-            self->endPreview();
-            if (result == 1)
-                run();
-        }));
+            paulstretchSelectedClip(v.number("paulstretch.factor"), v.number("paulstretch.window"));
+        });
 }
 
 void MainComponent::paulstretchSelectedClip(double stretch, double windowSeconds)
@@ -1228,36 +1203,10 @@ void MainComponent::showChangeTempoDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Change Tempo",
-                                         "Makes the whole clip faster or slower without changing its pitch.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("percent", juce::String(settings_.getDoubleValue("changeTempo.percent", 10.0)),
-                          "Change (%: 50 is half as fast again, -25 a quarter slower):");
-    // What Apply does, and what Preview runs without committing.
-    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
-    {
-        if (self == nullptr)
-            return;
 
-        const double percent = juce::jlimit(-90.0, 400.0, window->getTextEditorContents("percent").getDoubleValue());
-        self->settings_.setValue("changeTempo.percent", percent);
-        self->changeTempoOfSelectedClip(percent);
-    };
-    addPreviewStrip(window, run);
-
-    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
-        {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr)
-                return;
-            self->endPreview();
-            if (result == 1)
-                run();
-        }));
+    previewedDialog("Change Tempo", "Makes the whole clip faster or slower without changing its pitch.")
+        .number("changeTempo.percent", "Change (%: 50 is half as fast again, -25 a quarter slower):", 10.0, -90.0, 400.0)
+        .show("Apply", [this](const FormDialog::Values& v) { changeTempoOfSelectedClip(v.number("changeTempo.percent")); });
 }
 
 /** Change Tempo, as Audacity's: the whole clip played @p percent faster (or
@@ -1300,56 +1249,23 @@ void MainComponent::showSlidingStretchDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Sliding Stretch",
-                                         "Tempo and pitch that change steadily from the start of the clip to its end.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    const auto value = [this](const char* key, double fallback)
-    { return juce::String(settings_.getDoubleValue(juce::String("slidingStretch.") + key, fallback)); };
-    window->addTextEditor("startTempo", value("startTempo", 0.0), "Tempo change at the start (%):");
-    window->addTextEditor("endTempo", value("endTempo", 0.0), "Tempo change at the end (%):");
-    window->addTextEditor("startPitch", value("startPitch", 0.0), "Pitch at the start (semitones):");
-    window->addTextEditor("endPitch", value("endPitch", 0.0), "Pitch at the end (semitones):");
-    window->addComboBox("formants", { "Moves with the pitch", "Stays put (for voices)" }, "Voice character:");
-    window->getComboBoxComponent("formants")->setSelectedItemIndex(settings_.getIntValue("speedPitch.keepFormants", 1));
-    // What Apply does, and what Preview runs without committing.
-    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
-    {
-        if (self == nullptr)
-            return;
 
-        const auto number = [window](const char* name, double lo, double hi)
-        { return juce::jlimit(lo, hi, window->getTextEditorContents(name).getDoubleValue()); };
-
-        engine::hqstretch::Slide slide;
-        slide.startTempoPercent = number("startTempo", -90.0, 400.0);
-        slide.endTempoPercent   = number("endTempo", -90.0, 400.0);
-        slide.startSemitones    = number("startPitch", -24.0, 24.0);
-        slide.endSemitones      = number("endPitch", -24.0, 24.0);
-        slide.keepFormants      = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
-
-        auto& stored = self->settings_;
-        stored.setValue("slidingStretch.startTempo", slide.startTempoPercent);
-        stored.setValue("slidingStretch.endTempo", slide.endTempoPercent);
-        stored.setValue("slidingStretch.startPitch", slide.startSemitones);
-        stored.setValue("slidingStretch.endPitch", slide.endSemitones);
-        stored.setValue("speedPitch.keepFormants", slide.keepFormants ? 1 : 0);
-        self->applySlidingStretch(slide);
-    };
-    addPreviewStrip(window, run);
-
-    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
+    previewedDialog("Sliding Stretch", "Tempo and pitch that change steadily from the start of the clip to its end.")
+        .number("slidingStretch.startTempo", "Tempo change at the start (%):", 0.0, -90.0, 400.0)
+        .number("slidingStretch.endTempo", "Tempo change at the end (%):", 0.0, -90.0, 400.0)
+        .number("slidingStretch.startPitch", "Pitch at the start (semitones):", 0.0, -24.0, 24.0)
+        .number("slidingStretch.endPitch", "Pitch at the end (semitones):", 0.0, -24.0, 24.0)
+        .choice("speedPitch.keepFormants", "Voice character:", { "Moves with the pitch", "Stays put (for voices)" }, 1)
+        .show("Apply", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr)
-                return;
-            self->endPreview();
-            if (result == 1)
-                run();
-        }));
+            engine::hqstretch::Slide slide;
+            slide.startTempoPercent = v.number("slidingStretch.startTempo");
+            slide.endTempoPercent   = v.number("slidingStretch.endTempo");
+            slide.startSemitones    = v.number("slidingStretch.startPitch");
+            slide.endSemitones      = v.number("slidingStretch.endPitch");
+            slide.keepFormants      = v.choice("speedPitch.keepFormants") == 1;
+            applySlidingStretch(slide);
+        });
 }
 
 void MainComponent::applySlidingStretch(const engine::hqstretch::Slide& slide)
@@ -1391,44 +1307,17 @@ void MainComponent::showNormalizeDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Normalize",
-                                         "Brings the selection, or the whole clip, up (or down) so its loudest moment "
-                                         "reaches a level.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("peak", juce::String(settings_.getDoubleValue("normalize.peakDb", -1.0)), "Peak (dB):");
-    window->addComboBox("dc", { "Leave it", "Remove it" }, "DC offset:");
-    window->getComboBoxComponent("dc")->setSelectedItemIndex(settings_.getIntValue("normalize.removeDc", 1));
-    window->addComboBox("channels", { "Together (keeps their balance)", "Each on its own" }, "Channels:");
-    window->getComboBoxComponent("channels")->setSelectedItemIndex(settings_.getIntValue("normalize.independently", 0));
-    // What Apply does, and what Preview runs without committing.
-    const auto run = [self = juce::Component::SafePointer<MainComponent>(this), window]
-    {
-        if (self == nullptr)
-            return;
 
-        const double peakDb        = juce::jlimit(-60.0, 0.0, window->getTextEditorContents("peak").getDoubleValue());
-        const bool   removeDc      = window->getComboBoxComponent("dc")->getSelectedItemIndex() == 1;
-        const bool   independently = window->getComboBoxComponent("channels")->getSelectedItemIndex() == 1;
-        self->settings_.setValue("normalize.peakDb", peakDb);
-        self->settings_.setValue("normalize.removeDc", removeDc ? 1 : 0);
-        self->settings_.setValue("normalize.independently", independently ? 1 : 0);
-        self->normalizeWithOptions(juce::Decibels::decibelsToGain((float) peakDb), removeDc, independently);
-    };
-    addPreviewStrip(window, run);
-
-    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, run](int result)
+    previewedDialog("Normalize",
+                    "Brings the selection, or the whole clip, up (or down) so its loudest moment reaches a level.")
+        .number("normalize.peakDb", "Peak (dB):", -1.0, -60.0, 0.0)
+        .choice("normalize.removeDc", "DC offset:", { "Leave it", "Remove it" }, 1)
+        .choice("normalize.independently", "Channels:", { "Together (keeps their balance)", "Each on its own" }, 0)
+        .show("Apply", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr)
-                return;
-            self->endPreview();
-            if (result == 1)
-                run();
-        }));
+            normalizeWithOptions(juce::Decibels::decibelsToGain((float) v.number("normalize.peakDb")),
+                                 v.choice("normalize.removeDc") == 1, v.choice("normalize.independently") == 1);
+        });
 }
 
 void MainComponent::normalizeWithOptions(float targetPeak, bool removeDc, bool independently)
@@ -1470,40 +1359,23 @@ void MainComponent::showSpeedPitchDialog()
     if (selectedAudioClip() == nullptr)
         return;
 
-    auto* window = new juce::AlertWindow("Speed and Pitch", {}, juce::MessageBoxIconType::NoIcon, this);
-
-    window->addComboBox("speed", { "0.5x (half)", "0.75x", "1x (unchanged)", "1.5x", "2x (double)" },
-                        "Speed (moves pitch with it):");
-    window->getComboBoxComponent("speed")->setSelectedItemIndex(2);
 
     juce::StringArray semitones;
     for (int i = -12; i <= 12; ++i)
         semitones.add(i == 0 ? juce::String("0 (unchanged)") : juce::String(i > 0 ? "+" : "") + juce::String(i));
-    window->addComboBox("pitch", semitones, "Pitch, keeping the length:");
-    window->getComboBoxComponent("pitch")->setSelectedItemIndex(12); // 0
 
-    window->addComboBox("formants", { "Moves with the pitch", "Stays put (for voices)" }, "Voice character:");
-    window->getComboBoxComponent("formants")->setSelectedItemIndex(settings_.getIntValue("speedPitch.keepFormants", 1));
-
-    window->addButton("Apply", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Speed and Pitch")
+        .choice("speed", "Speed (moves pitch with it):", { "0.5x (half)", "0.75x", "1x (unchanged)", "1.5x", "2x (double)" }, 2)
+        .unsaved()
+        .choice("pitch", "Pitch, keeping the length:", semitones, 12) // 0
+        .unsaved()
+        .choice("speedPitch.keepFormants", "Voice character:", { "Moves with the pitch", "Stays put (for voices)" }, 1)
+        .show("Apply", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
             static const double kSpeeds[] = { 0.5, 0.75, 1.0, 1.5, 2.0 };
-            const int  speedIndex   = window->getComboBoxComponent("speed")->getSelectedItemIndex();
-            const int  pitchIndex   = window->getComboBoxComponent("pitch")->getSelectedItemIndex();
-            const bool keepFormants = window->getComboBoxComponent("formants")->getSelectedItemIndex() == 1;
-            self->settings_.setValue("speedPitch.keepFormants", keepFormants ? 1 : 0);
-
-            self->applySpeedAndPitch(kSpeeds[(size_t) juce::jlimit(0, 4, speedIndex)],
-                                     (double) (juce::jlimit(0, 24, pitchIndex) - 12), keepFormants);
-        }));
+            applySpeedAndPitch(kSpeeds[(size_t) v.choice("speed")], (double) (v.choice("pitch") - 12),
+                               v.choice("speedPitch.keepFormants") == 1);
+        });
 }
 
 /** Applies a speed change and a pitch shift to the whole clip.
@@ -1944,9 +1816,6 @@ void MainComponent::loadSpectrogramSettings()
     how its levels are coloured. */
 void MainComponent::showSpectrogramSettingsDialog()
 {
-    auto* window = new juce::AlertWindow("Spectrogram Settings",
-                                         "A longer window separates nearby pitches; a shorter one shows quick sounds sharply.",
-                                         juce::MessageBoxIconType::NoIcon, this);
 
     juce::StringArray sizes;
     int               sizeIndex = 0;
@@ -1956,37 +1825,31 @@ void MainComponent::showSpectrogramSettingsDialog()
         if (kSpectrogramSizes[i] == spectrogramSettings_.fftSize)
             sizeIndex = i;
     }
-    window->addComboBox("size", sizes, "Window size (samples):");
-    window->getComboBoxComponent("size")->setSelectedItemIndex(sizeIndex);
-
-    window->addComboBox("window", { "Hann (default)", "Hamming", "Blackman-Harris", "Rectangular" }, "Window type:");
-    window->getComboBoxComponent("window")->setSelectedItemIndex((int) spectrogramSettings_.window);
-
     const auto display = audioEditor_.spectrogramDisplay();
-    window->addTextEditor("gain", juce::String(display.gainDb, 1), "Gain (dB):");
-    window->addTextEditor("range", juce::String(display.rangeDb, 1), "Range (dB):");
 
-    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    // Shown as the settings stand, which loadSpectrogramSettings keeps; saved
+    // below as the values they stand for.
+    dialog("Spectrogram Settings", "A longer window separates nearby pitches; a shorter one shows quick sounds sharply.")
+        .choice("size", "Window size (samples):", sizes, sizeIndex)
+        .unsaved()
+        .choice("window", "Window type:", { "Hann (default)", "Hamming", "Blackman-Harris", "Rectangular" },
+                (int) spectrogramSettings_.window)
+        .unsaved()
+        .text("gain", "Gain (dB):", juce::String(display.gainDb, 1))
+        .unsaved()
+        .text("range", "Range (dB):", juce::String(display.rangeDb, 1))
+        .unsaved()
+        .show("OK", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
+            settings_.setValue("spectrogram.fftSize", kSpectrogramSizes[v.choice("size")]);
+            settings_.setValue("spectrogram.window", v.choice("window"));
+            settings_.setValue("spectrogram.gainDb", v.text("gain").getDoubleValue());
+            settings_.setValue("spectrogram.rangeDb", v.text("range").getDoubleValue());
+            settings_.saveIfNeeded();
 
-            const int size = kSpectrogramSizes[juce::jlimit(0, (int) std::size(kSpectrogramSizes) - 1,
-                                                            window->getComboBoxComponent("size")->getSelectedItemIndex())];
-            self->settings_.setValue("spectrogram.fftSize", size);
-            self->settings_.setValue("spectrogram.window", juce::jlimit(0, 3, window->getComboBoxComponent("window")->getSelectedItemIndex()));
-            self->settings_.setValue("spectrogram.gainDb", window->getTextEditorContents("gain").getDoubleValue());
-            self->settings_.setValue("spectrogram.rangeDb", window->getTextEditorContents("range").getDoubleValue());
-            self->settings_.saveIfNeeded();
-
-            self->loadSpectrogramSettings();
-            self->refreshAudioEditorForSelected(); // measured again if the window changed
-        }));
+            loadSpectrogramSettings();
+            refreshAudioEditorForSelected(); // measured again if the window changed
+        });
 }
 
 } // namespace soundsplice

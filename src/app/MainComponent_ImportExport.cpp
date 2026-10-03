@@ -589,30 +589,27 @@ MainComponent::TaskOutcome MainComponent::renderAndWrite(const ExportTask& task,
 
 void MainComponent::promptSaveRenderPreset(const app::ExportChoice& choice)
 {
-    auto* window = new juce::AlertWindow("Save Render Preset", "Export Audio's Preset box puts these choices back.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", engine::displayNameFor(choice.options.format).upToFirstOccurrenceOf(" ", false, false)
-                                      + (choice.options.loudnessLufs < 0.0 ? " " + juce::String((int) choice.options.loudnessLufs) + " LUFS"
-                                                                           : juce::String()),
-                          "Name:");
-    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, choice](int result)
+
+    // Either way, back to the export as it was.
+    dialog("Save Render Preset", "Export Audio's Preset box puts these choices back.")
+        .text("name", "Name:",
+              engine::displayNameFor(choice.options.format).upToFirstOccurrenceOf(" ", false, false)
+                  + (choice.options.loudnessLufs < 0.0 ? " " + juce::String((int) choice.options.loudnessLufs) + " LUFS"
+                                                       : juce::String()))
+        .unsaved()
+        .cancelButton("Cancel", [this, choice] { exportAudioDialog(choice); })
+        .show("Save", [this, choice](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr)
-                return;
-            const auto name = window->getTextEditorContents("name").trim();
-            if (result == 1 && name.isNotEmpty())
+            const auto name = v.text("name");
+            if (name.isNotEmpty())
             {
-                self->renderPresets_ = app::exportchoices::withPreset(self->renderPresets_, { name, choice });
-                self->settings_.setValue("renderPresets", app::exportchoices::serializePresets(self->renderPresets_));
-                self->settings_.saveIfNeeded();
-                self->showStatus("Saved render preset \"" + name + "\"");
+                renderPresets_ = app::exportchoices::withPreset(renderPresets_, { name, choice });
+                settings_.setValue("renderPresets", app::exportchoices::serializePresets(renderPresets_));
+                settings_.saveIfNeeded();
+                showStatus("Saved render preset \"" + name + "\"");
             }
-            self->exportAudioDialog(choice); // back to the export, as it was
-        }));
+            exportAudioDialog(choice);
+        });
 }
 
 /** Add to Render Queue: a snapshot of the project as it is now, rendered

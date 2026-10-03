@@ -29,6 +29,32 @@ namespace
 
     constexpr double kTruePeakCeiling = -1.0;
 
+    /** The two loudness dialogs' fields: the target, starting at the one used
+        last, and whether to hold the true peak under the ceiling. */
+    void askLoudnessTarget(FormDialog& form, const juce::PropertiesFile& settings, const juce::String& limitLabel)
+    {
+        juce::StringArray names;
+        for (const auto& target : kLoudnessTargets)
+            names.add(target.name);
+
+        const double remembered = settings.getDoubleValue("loudnessTarget", -16.0);
+        int          selected   = 1;
+        for (int i = 0; i < (int) std::size(kLoudnessTargets); ++i)
+            if (std::abs(kLoudnessTargets[i].lufs - remembered) < 0.01)
+                selected = i;
+
+        form.choice("target", "Target:", names, selected).unsaved();
+        form.toggle("loudnessLimitPeak", limitLabel, true);
+    }
+
+    /** The target askLoudnessTarget's box was set to, remembered for next time. */
+    double chosenLoudnessTarget(const FormDialog::Values& values, juce::PropertiesFile& settings)
+    {
+        const double lufs = kLoudnessTargets[values.choice("target")].lufs;
+        settings.setValue("loudnessTarget", lufs);
+        return lufs;
+    }
+
     juce::String formatLevel(double value, const char* unit)
     {
         return std::isfinite(value) ? juce::String(value, 1) + " " + unit : juce::String("-inf ") + unit;
@@ -102,46 +128,16 @@ void MainComponent::showNormalizeLoudnessDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Normalize Loudness",
-                                         "Sets the clip's gain so its integrated loudness (EBU R128) reaches the target. "
-                                         "The audio itself isn't changed.",
-                                         juce::MessageBoxIconType::NoIcon, this);
 
-    juce::StringArray names;
-    for (const auto& target : kLoudnessTargets)
-        names.add(target.name);
-    window->addComboBox("target", names, "Target:");
-
-    const double remembered = settings_.getDoubleValue("loudnessTarget", -16.0);
-    int          selected   = 1;
-    for (int i = 0; i < (int) std::size(kLoudnessTargets); ++i)
-        if (std::abs(kLoudnessTargets[i].lufs - remembered) < 0.01)
-            selected = i;
-    window->getComboBoxComponent("target")->setSelectedItemIndex(selected);
-
-    auto limit = std::make_shared<juce::ToggleButton>("Keep true peak at or under -1 dBTP");
-    limit->setToggleState(settings_.getBoolValue("loudnessLimitPeak", true), juce::dontSendNotification);
-    limit->setSize(320, 24);
-    window->addCustomComponent(limit.get());
-
-    window->addButton("Normalize", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, limit](int result)
-        {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const int  index    = juce::jlimit(0, (int) std::size(kLoudnessTargets) - 1,
-                                               window->getComboBoxComponent("target")->getSelectedItemIndex());
-            const bool limiting = limit->getToggleState();
-
-            self->settings_.setValue("loudnessTarget", kLoudnessTargets[index].lufs);
-            self->settings_.setValue("loudnessLimitPeak", limiting);
-            self->normalizeSelectedClipLoudness(kLoudnessTargets[index].lufs, limiting);
-        }));
+    auto form = dialog("Normalize Loudness",
+                       "Sets the clip's gain so its integrated loudness (EBU R128) reaches the target. "
+                       "The audio itself isn't changed.");
+    askLoudnessTarget(form, settings_, "Keep true peak at or under -1 dBTP");
+    form.show("Normalize", [this](const FormDialog::Values& v)
+    {
+        const double lufs = chosenLoudnessTarget(v, settings_);
+        normalizeSelectedClipLoudness(lufs, v.toggle("loudnessLimitPeak"));
+    });
 }
 
 /** Match Loudness: asks for the target, as Normalize Loudness does, for
@@ -155,47 +151,18 @@ void MainComponent::showMatchLoudnessDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Match Loudness",
-                                         "Sets each of the " + juce::String((int) clips.size())
-                                             + " clips' gain so its integrated loudness (EBU R128) reaches the target. "
-                                               "The audio itself isn't changed.",
-                                         juce::MessageBoxIconType::NoIcon, this);
 
-    juce::StringArray names;
-    for (const auto& target : kLoudnessTargets)
-        names.add(target.name);
-    window->addComboBox("target", names, "Target:");
-
-    const double remembered = settings_.getDoubleValue("loudnessTarget", -16.0);
-    int          selected   = 1;
-    for (int i = 0; i < (int) std::size(kLoudnessTargets); ++i)
-        if (std::abs(kLoudnessTargets[i].lufs - remembered) < 0.01)
-            selected = i;
-    window->getComboBoxComponent("target")->setSelectedItemIndex(selected);
-
-    auto limit = std::make_shared<juce::ToggleButton>("Keep true peaks at or under -1 dBTP");
-    limit->setToggleState(settings_.getBoolValue("loudnessLimitPeak", true), juce::dontSendNotification);
-    limit->setSize(320, 24);
-    window->addCustomComponent(limit.get());
-
-    window->addButton("Match", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, limit](int result)
-        {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const int  index    = juce::jlimit(0, (int) std::size(kLoudnessTargets) - 1,
-                                               window->getComboBoxComponent("target")->getSelectedItemIndex());
-            const bool limiting = limit->getToggleState();
-            self->settings_.setValue("loudnessTarget", kLoudnessTargets[index].lufs);
-            self->settings_.setValue("loudnessLimitPeak", limiting);
-            self->matchLoudness(app::clipsToMatch(self->history_.current(), self->timeSelection_, self->selectedTrackIndex_),
-                                kLoudnessTargets[index].lufs, limiting);
-        }));
+    auto form = dialog("Match Loudness",
+                       "Sets each of the " + juce::String((int) clips.size())
+                           + " clips' gain so its integrated loudness (EBU R128) reaches the target. "
+                             "The audio itself isn't changed.");
+    askLoudnessTarget(form, settings_, "Keep true peaks at or under -1 dBTP");
+    form.show("Match", [this](const FormDialog::Values& v)
+    {
+        const double lufs = chosenLoudnessTarget(v, settings_);
+        matchLoudness(app::clipsToMatch(history_.current(), timeSelection_, selectedTrackIndex_), lufs,
+                      v.toggle("loudnessLimitPeak"));
+    });
 }
 
 /** Measures every clip to match, each as it plays without its gain, on a

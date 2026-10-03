@@ -72,25 +72,19 @@ void MainComponent::renameMarkerPrompt(int markerId)
     if (marker == nullptr)
         return;
 
-    auto* window = new juce::AlertWindow("Rename Marker", {}, juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", juce::String::fromUTF8(marker->name.c_str()), "Name:");
-    window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, markerId](int result)
+    dialog("Rename Marker")
+        .text("name", "Name:", juce::String::fromUTF8(marker->name.c_str()))
+        .unsaved()
+        .show("Rename", [this, markerId](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const auto name = window->getTextEditorContents("name").trim().toStdString();
-            self->history_.edit("Rename marker", [markerId, name](model::Song& s)
+            const auto name = v.text("name").toStdString();
+            history_.edit("Rename marker", [markerId, name](model::Song& s)
             {
                 model::renameMarker(s, markerId, name);
             });
-            self->arrangementView_.setSong(self->history_.current());
-        }));
+            arrangementView_.setSong(history_.current());
+        });
 }
 
 void MainComponent::deleteMarker(int markerId)

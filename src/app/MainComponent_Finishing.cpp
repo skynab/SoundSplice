@@ -230,44 +230,31 @@ void MainComponent::chooseBatchOptions(std::vector<juce::File> inputs, std::vect
                                          { engine::ExportFormat::Wav, 32, "WAV, 32-bit float" },
                                          { engine::ExportFormat::Flac, 24, "FLAC, 24-bit" } };
 
-    auto* window = new juce::AlertWindow("Batch Process: Output",
-                                         juce::String((int) inputs.size()) + " files, "
-                                             + juce::String((int) chain.size()) + (chain.size() == 1 ? " effect" : " effects")
-                                             + ". New files are written; the originals aren't touched.",
-                                         juce::MessageBoxIconType::NoIcon, this);
+
     juce::StringArray loudnessNames, formatNames;
     for (const auto& l : kLoudness) loudnessNames.add(l.name);
     for (const auto& f : kFormats)  formatNames.add(f.name);
-    window->addComboBox("loudness", loudnessNames, "Loudness:");
-    window->getComboBoxComponent("loudness")->setSelectedItemIndex(settings_.getIntValue("batch.loudness", 0));
-    window->addComboBox("format", formatNames, "Format:");
-    window->getComboBoxComponent("format")->setSelectedItemIndex(settings_.getIntValue("batch.format", 0));
-    window->addButton("Choose Output Folder...", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, inputs, chain](int result)
+    dialog("Batch Process: Output",
+           juce::String((int) inputs.size()) + " files, " + juce::String((int) chain.size())
+               + (chain.size() == 1 ? " effect" : " effects") + ". New files are written; the originals aren't touched.")
+        .choice("batch.loudness", "Loudness:", loudnessNames, 0)
+        .choice("batch.format", "Format:", formatNames, 0)
+        .show("Choose Output Folder...", [this, inputs, chain](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const int loudness = juce::jlimit(0, (int) std::size(kLoudness) - 1, window->getComboBoxComponent("loudness")->getSelectedItemIndex());
-            const int format   = juce::jlimit(0, (int) std::size(kFormats) - 1, window->getComboBoxComponent("format")->getSelectedItemIndex());
-            self->settings_.setValue("batch.loudness", loudness);
-            self->settings_.setValue("batch.format", format);
+            const auto& format = kFormats[v.choice("batch.format")];
 
             batch::Settings settings;
             settings.chain                = chain;
-            settings.loudnessLufs         = kLoudness[loudness].lufs;
-            settings.output.format        = kFormats[format].format;
-            settings.output.bitsPerSample = kFormats[format].bits;
-            settings.bpm                  = self->history_.current().bpm;
+            settings.loudnessLufs         = kLoudness[v.choice("batch.loudness")].lufs;
+            settings.output.format        = format.format;
+            settings.output.bitsPerSample = format.bits;
+            settings.bpm                  = history_.current().bpm;
 
-            self->chooser_ = std::make_unique<juce::FileChooser>("Batch Process: where to write the new files",
-                                                                 juce::File(self->settings_.getValue("batch.outputFolder")));
-            self->chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-                [self, inputs, settings](const juce::FileChooser& fc) mutable
+            chooser_ = std::make_unique<juce::FileChooser>("Batch Process: where to write the new files",
+                                                           juce::File(settings_.getValue("batch.outputFolder")));
+            chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                [self = juce::Component::SafePointer<MainComponent>(this), inputs, settings](const juce::FileChooser& fc) mutable
                 {
                     if (self == nullptr || fc.getResult() == juce::File {})
                         return;
@@ -275,7 +262,7 @@ void MainComponent::chooseBatchOptions(std::vector<juce::File> inputs, std::vect
                     self->settings_.setValue("batch.outputFolder", settings.folder.getFullPathName());
                     self->runBatch(inputs, settings);
                 });
-        }));
+        });
 }
 
 /** Runs the batch: on a background job with built-in effects, on this
@@ -396,28 +383,23 @@ void MainComponent::promptSaveFavorite(std::vector<model::EffectSlot> chain)
         return;
     }
 
-    auto* window = new juce::AlertWindow("Save as Favorite", "The Favorites menu applies it to the selection in one click.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", {}, "Name:");
-    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, chain](int result)
+
+    dialog("Save as Favorite", "The Favorites menu applies it to the selection in one click.")
+        .text("name", "Name:", {})
+        .unsaved()
+        .show("Save", [this, chain](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-            const auto name = window->getTextEditorContents("name").trim();
+            const auto name = v.text("name");
             if (name.isEmpty())
             {
-                self->showError("A favorite needs a name");
+                showError("A favorite needs a name");
                 return;
             }
-            self->favorites_ = model::withFavorite(self->favorites_, { name.toStdString(), chain });
-            self->settings_.setValue("favorites", juce::String(model::serializeFavorites(self->favorites_)));
-            self->settings_.saveIfNeeded();
-            self->showStatus("Saved \"" + name + "\" in the Favorites menu");
-        }));
+            favorites_ = model::withFavorite(favorites_, { name.toStdString(), chain });
+            settings_.setValue("favorites", juce::String(model::serializeFavorites(favorites_)));
+            settings_.saveIfNeeded();
+            showStatus("Saved \"" + name + "\" in the Favorites menu");
+        });
 }
 
 void MainComponent::removeFavorite(int index)
@@ -613,25 +595,21 @@ void MainComponent::toggleMacroRecording()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Save Macro", juce::String((int) recorded.steps.size()) + " steps recorded.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", "Macro " + juce::String((int) macros_.size() + 1), "Name:");
-    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Discard", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, recorded](int result) mutable
+
+    dialog("Save Macro", juce::String((int) recorded.steps.size()) + " steps recorded.")
+        .text("name", "Name:", "Macro " + juce::String((int) macros_.size() + 1))
+        .unsaved()
+        .cancelButton("Discard")
+        .show("Save", [this, recorded](const FormDialog::Values& v) mutable
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-            const auto name = window->getTextEditorContents("name").trim();
+            const auto name = v.text("name");
             if (name.isEmpty())
                 return;
-            recorded.name  = name.toStdString();
-            self->macros_ = macros::with(self->macros_, std::move(recorded));
-            self->saveMacros();
-            self->showStatus("Saved macro \"" + name + "\" in the Tools menu");
-        }));
+            recorded.name = name.toStdString();
+            macros_       = macros::with(macros_, std::move(recorded));
+            saveMacros();
+            showStatus("Saved macro \"" + name + "\" in the Tools menu");
+        });
 }
 
 /** A command was run: kept, if a macro is being recorded and it can be a step. */
@@ -1013,34 +991,29 @@ std::vector<juce::File> MainComponent::userTemplates() const
     templates folder File > New from Template lists. */
 void MainComponent::saveAsTemplate()
 {
-    auto* window = new juce::AlertWindow("Save as Template",
-                                         "Keeps the tracks, their routing and effects, and the tempo - not the audio, notes or markers.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("My Template"),
-                          "Name:");
-    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+
+    dialog("Save as Template",
+           "Keeps the tracks, their routing and effects, and the tempo - not the audio, notes or markers.")
+        .text("name", "Name:",
+              projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("My Template"))
+        .unsaved()
+        .show("Save", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-            const auto name = juce::File::createLegalFileName(window->getTextEditorContents("name").trim());
+            const auto name = juce::File::createLegalFileName(v.text("name"));
             if (name.isEmpty())
                 return;
 
-            const auto folder = self->templatesFolder();
+            const auto folder = templatesFolder();
             folder.createDirectory();
             const auto file = folder.getChildFile(name + ".soundsplice");
-            const auto text = model::serialize(model::templates::asTemplate(self->history_.current()));
+            const auto text = model::serialize(model::templates::asTemplate(history_.current()));
             if (! file.replaceWithText(juce::String::fromUTF8(text.c_str())))
             {
-                self->showError("Could not write " + file.getFullPathName());
+                showError("Could not write " + file.getFullPathName());
                 return;
             }
-            self->showStatus("Saved template \"" + name + "\": File > New from Template");
-        }));
+            showStatus("Saved template \"" + name + "\": File > New from Template");
+        });
 }
 
 // ---- Preferences ------------------------------------------------------------
@@ -1386,25 +1359,20 @@ void MainComponent::applyScreenset(int index)
 
 void MainComponent::promptSaveScreenset()
 {
-    auto* window = new juce::AlertWindow("Save Current Layout", "View > Layout puts it back.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", "My Layout " + juce::String((int) screensets_.size() + 1), "Name:");
-    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+
+    dialog("Save Current Layout", "View > Layout puts it back.")
+        .text("name", "Name:", "My Layout " + juce::String((int) screensets_.size() + 1))
+        .unsaved()
+        .show("Save", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-            const auto name = window->getTextEditorContents("name").trim();
+            const auto name = v.text("name");
             if (name.isEmpty())
                 return;
-            self->screensets_ = screensets::with(self->screensets_, { name, self->workspace_.saveLayout() });
-            self->settings_.setValue("screensets", screensets::serialize(self->screensets_));
-            self->settings_.saveIfNeeded();
-            self->showStatus("Saved layout \"" + name + "\" in View > Layout");
-        }));
+            screensets_ = screensets::with(screensets_, { name, workspace_.saveLayout() });
+            settings_.setValue("screensets", screensets::serialize(screensets_));
+            settings_.saveIfNeeded();
+            showStatus("Saved layout \"" + name + "\" in View > Layout");
+        });
 }
 
 void MainComponent::removeScreenset(int index)

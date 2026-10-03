@@ -95,8 +95,10 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
                                : model::clockFor(history_.current()).secondsBetween(timeSelection_.startBeats,
                                                                                    timeSelection_.endBeats);
 
-    auto* window = new juce::AlertWindow(juce::String("Generate ") + generatorName(kind), {},
-                                         juce::MessageBoxIconType::NoIcon, this);
+    // Its fields depend on the kind, and are only saved once they're checked,
+    // so they're added and saved here rather than as FormDialog fields.
+    auto  form   = dialog(juce::String("Generate ") + generatorName(kind));
+    auto* window = &form.window();
 
     switch (kind)
     {
@@ -158,101 +160,86 @@ void MainComponent::showGenerateDialog(engine::GeneratorKind kind)
 
     const double defaultSeconds = kind == engine::GeneratorKind::Dtmf ? 1.0
                                 : kind == engine::GeneratorKind::Pluck ? 2.0 : 30.0;
-    if (kind == engine::GeneratorKind::Rhythm)
-    {
-        // A rhythm track's length is its bars, so it has no duration of its own.
-        window->addButton("Generate", 1, juce::KeyPress(juce::KeyPress::returnKey));
-        window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    }
-    else
-    window->addTextEditor("seconds",
-                          juce::String(selection > 0.0 ? selection : settings_.getDoubleValue(prefix + "seconds", defaultSeconds), 3),
-                          "Duration (seconds):");
-
+    // A rhythm track's length is its bars, so it has no duration of its own.
     if (kind != engine::GeneratorKind::Rhythm)
+        window->addTextEditor("seconds",
+                              juce::String(selection > 0.0 ? selection : settings_.getDoubleValue(prefix + "seconds", defaultSeconds), 3),
+                              "Duration (seconds):");
+
+    form.show("Generate", [this, kind, prefix](const FormDialog::Values& v)
     {
-        window->addButton("Generate", 1, juce::KeyPress(juce::KeyPress::returnKey));
-        window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    }
+        auto* window = &v.window();
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, kind, prefix](int result)
+        const auto number = [window](const char* name, double fallback)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
+            const auto* editor = window->getTextEditor(name);
+            return editor == nullptr ? fallback : editor->getText().trim().getDoubleValue();
+        };
+        const auto choice = [window](const char* name)
+        {
+            const auto* box = window->getComboBoxComponent(name);
+            return box == nullptr ? 0 : juce::jmax(0, box->getSelectedItemIndex());
+        };
 
-            const auto number = [window](const char* name, double fallback)
-            {
-                const auto* editor = window->getTextEditor(name);
-                return editor == nullptr ? fallback : editor->getText().trim().getDoubleValue();
-            };
-            const auto choice = [window](const char* name)
-            {
-                const auto* box = window->getComboBoxComponent(name);
-                return box == nullptr ? 0 : juce::jmax(0, box->getSelectedItemIndex());
-            };
+        engine::GeneratorSpec spec;
+        spec.kind           = kind;
+        spec.waveform       = waveformAt(choice("waveform"));
+        spec.startHz        = number("startHz", spec.startHz);
+        spec.endHz          = number("endHz", spec.endHz);
+        spec.startAmplitude = juce::jlimit(0.0, 1.0, number("startAmplitude", spec.startAmplitude));
+        spec.endAmplitude   = juce::jlimit(0.0, 1.0, number("endAmplitude", spec.endAmplitude));
+        spec.logarithmic    = choice("sweep") == 1;
+        spec.noise          = (engine::NoiseColour) juce::jlimit(0, 2, choice("colour"));
+        spec.dtmfDuty       = juce::jlimit(1.0, 100.0, number("dtmfDuty", 55.0)) / 100.0;
+        spec.seconds        = number("seconds", 0.0);
+        spec.rhythmBpm      = juce::jlimit(20.0, 400.0, number("rhythmBpm", 120.0));
+        spec.beatsPerBar    = juce::jlimit(1, 32, (int) std::lround(number("beatsPerBar", 4.0)));
+        spec.pluckDecay     = juce::jlimit(0.0, 1.0, number("pluckDecay", 0.5));
+        spec.roomTone       = roomTone_;
 
-            engine::GeneratorSpec spec;
-            spec.kind           = kind;
-            spec.waveform       = waveformAt(choice("waveform"));
-            spec.startHz        = number("startHz", spec.startHz);
-            spec.endHz          = number("endHz", spec.endHz);
-            spec.startAmplitude = juce::jlimit(0.0, 1.0, number("startAmplitude", spec.startAmplitude));
-            spec.endAmplitude   = juce::jlimit(0.0, 1.0, number("endAmplitude", spec.endAmplitude));
-            spec.logarithmic    = choice("sweep") == 1;
-            spec.noise          = (engine::NoiseColour) juce::jlimit(0, 2, choice("colour"));
-            spec.dtmfDuty       = juce::jlimit(1.0, 100.0, number("dtmfDuty", 55.0)) / 100.0;
-            spec.seconds        = number("seconds", 0.0);
-            spec.rhythmBpm      = juce::jlimit(20.0, 400.0, number("rhythmBpm", 120.0));
-            spec.beatsPerBar    = juce::jlimit(1, 32, (int) std::lround(number("beatsPerBar", 4.0)));
-            spec.pluckDecay     = juce::jlimit(0.0, 1.0, number("pluckDecay", 0.5));
-            spec.roomTone       = self->roomTone_;
+        if (kind == engine::GeneratorKind::Rhythm)
+        {
+            const int bars = juce::jlimit(1, 999, (int) std::lround(number("bars", 8.0)));
+            settings_.setValue(prefix + "beatsPerBar", spec.beatsPerBar);
+            settings_.setValue(prefix + "bars", bars);
+            settings_.setValue(prefix + "rhythmBpm", spec.rhythmBpm);
+            spec.seconds = bars * spec.beatsPerBar * 60.0 / spec.rhythmBpm;
+        }
+        if (auto* keys = window->getTextEditor("dtmf"))
+            spec.dtmf = keys->getText().toStdString();
 
-            if (kind == engine::GeneratorKind::Rhythm)
-            {
-                const int bars = juce::jlimit(1, 999, (int) std::lround(number("bars", 8.0)));
-                self->settings_.setValue(prefix + "beatsPerBar", spec.beatsPerBar);
-                self->settings_.setValue(prefix + "bars", bars);
-                self->settings_.setValue(prefix + "rhythmBpm", spec.rhythmBpm);
-                spec.seconds = bars * spec.beatsPerBar * 60.0 / spec.rhythmBpm;
-            }
-            if (auto* keys = window->getTextEditor("dtmf"))
-                spec.dtmf = keys->getText().toStdString();
+        if (! (spec.seconds > 0.0) || spec.seconds > 24.0 * 3600.0)
+        {
+            showError("The duration needs to be more than 0 seconds");
+            return;
+        }
+        if ((kind == engine::GeneratorKind::Tone || kind == engine::GeneratorKind::Chirp
+             || kind == engine::GeneratorKind::Pluck)
+            && (spec.startHz <= 0.0 || (kind == engine::GeneratorKind::Chirp && spec.endHz <= 0.0)))
+        {
+            showError("Frequencies need to be above 0 Hz");
+            return;
+        }
+        if (kind == engine::GeneratorKind::Dtmf && engine::Generator::dtmfKeys(spec.dtmf).empty())
+        {
+            showError("Type at least one key: 0-9, *, #, or A-D");
+            return;
+        }
 
-            if (! (spec.seconds > 0.0) || spec.seconds > 24.0 * 3600.0)
-            {
-                self->showError("The duration needs to be more than 0 seconds");
-                return;
-            }
-            if ((kind == engine::GeneratorKind::Tone || kind == engine::GeneratorKind::Chirp
-                 || kind == engine::GeneratorKind::Pluck)
-                && (spec.startHz <= 0.0 || (kind == engine::GeneratorKind::Chirp && spec.endHz <= 0.0)))
-            {
-                self->showError("Frequencies need to be above 0 Hz");
-                return;
-            }
-            if (kind == engine::GeneratorKind::Dtmf && engine::Generator::dtmfKeys(spec.dtmf).empty())
-            {
-                self->showError("Type at least one key: 0-9, *, #, or A-D");
-                return;
-            }
+        settings_.setValue(prefix + "waveform", choice("waveform"));
+        settings_.setValue(prefix + "sweep", choice("sweep"));
+        settings_.setValue(prefix + "colour", choice("colour"));
+        settings_.setValue(prefix + "startHz", spec.startHz);
+        settings_.setValue(prefix + "endHz", spec.endHz);
+        settings_.setValue(prefix + "startAmplitude", spec.startAmplitude);
+        settings_.setValue(prefix + "endAmplitude", spec.endAmplitude);
+        settings_.setValue(prefix + "dtmf", juce::String(spec.dtmf));
+        settings_.setValue(prefix + "dtmfDuty", spec.dtmfDuty * 100.0);
+        settings_.setValue(prefix + "seconds", spec.seconds);
+        settings_.setValue(prefix + "pluckDecay", spec.pluckDecay);
 
-            auto& settings = self->settings_;
-            settings.setValue(prefix + "waveform", choice("waveform"));
-            settings.setValue(prefix + "sweep", choice("sweep"));
-            settings.setValue(prefix + "colour", choice("colour"));
-            settings.setValue(prefix + "startHz", spec.startHz);
-            settings.setValue(prefix + "endHz", spec.endHz);
-            settings.setValue(prefix + "startAmplitude", spec.startAmplitude);
-            settings.setValue(prefix + "endAmplitude", spec.endAmplitude);
-            settings.setValue(prefix + "dtmf", juce::String(spec.dtmf));
-            settings.setValue(prefix + "dtmfDuty", spec.dtmfDuty * 100.0);
-            settings.setValue(prefix + "seconds", spec.seconds);
-            settings.setValue(prefix + "pluckDecay", spec.pluckDecay);
-
-            self->generateAudio(spec);
-        }));
+        generateAudio(spec);
+    });
 }
 
 /** Renders @p spec to a mono 32-bit float WAV beside the project's other

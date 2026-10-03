@@ -49,6 +49,7 @@
 #include "MacrosDialog.h"
 #include "ScriptPane.h"
 #include "ExportAudioDialog.h"
+#include "FormDialog.h"
 #include "ProjectInfoDialog.h"
 #include "RenderQueueDialog.h"
 #include "DeliveryPane.h"
@@ -240,6 +241,10 @@ private:
     void                   transcribeSelectedTrack();
     void                   deleteTranscriptRanges(const std::vector<std::pair<double, double>>& ranges);
     void                   chooseTranscriptionModel();
+    /** A dialog remembering its fields in settings_ (see FormDialog.h);
+        previewedDialog's has a Preview strip as well. */
+    FormDialog             dialog(const juce::String& title, const juce::String& message = {});
+    FormDialog             previewedDialog(const juce::String& title, const juce::String& message = {});
     void                   addPreviewStrip(juce::AlertWindow* window, std::function<void()> run);
     void                   previewEffect(const std::function<void()>& run, preview::Mode mode);
     void                   playPreview(preview::Mode mode);

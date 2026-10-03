@@ -729,10 +729,6 @@ void MainComponent::showResampleTrackDialog()
 
     static const int kRates[] = { 8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
 
-    auto* window = new juce::AlertWindow("Resample Track",
-                                         "Converts the track's audio to a new sample rate. "
-                                         "Clips keep their timing, fades and volume curves.",
-                                         juce::MessageBoxIconType::NoIcon, this);
 
     juce::StringArray names;
     int               selected = 6; // 48 kHz, unless the device runs at one of the others
@@ -742,23 +738,12 @@ void MainComponent::showResampleTrackDialog()
         if (std::abs(engine_.sampleRate() - kRates[i]) < 0.5)
             selected = i;
     }
-    window->addComboBox("rate", names, "New sample rate:");
-    window->getComboBoxComponent("rate")->setSelectedItemIndex(selected);
 
-    window->addButton("Resample", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
-        {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const int index = juce::jlimit(0, (int) std::size(kRates) - 1,
-                                           window->getComboBoxComponent("rate")->getSelectedItemIndex());
-            self->resampleSelectedTrack((double) kRates[index]);
-        }));
+    dialog("Resample Track",
+           "Converts the track's audio to a new sample rate. Clips keep their timing, fades and volume curves.")
+        .choice("rate", "New sample rate:", names, selected)
+        .unsaved()
+        .show("Resample", [this](const FormDialog::Values& v) { resampleSelectedTrack((double) kRates[v.choice("rate")]); });
 }
 
 /** Resample, as in Audacity: the track's audio converted to another rate.
@@ -1454,26 +1439,21 @@ void MainComponent::askClipTempo(int trackIndex, int clipId)
     if (clip == nullptr)
         return;
 
-    auto* window = new juce::AlertWindow("Set Clip Tempo", "The tempo this clip was played at",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("bpm", clip->sourceBpm > 0.0 ? juce::String(clip->sourceBpm, 2) : juce::String(), "Tempo (BPM):");
-    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, trackId, clipId](int result)
+
+    dialog("Set Clip Tempo", "The tempo this clip was played at")
+        .text("bpm", "Tempo (BPM):", clip->sourceBpm > 0.0 ? juce::String(clip->sourceBpm, 2) : juce::String())
+        .unsaved()
+        .show("OK", [this, trackId, clipId](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-            const double bpm = window->getTextEditorContents("bpm").getDoubleValue();
+            const double bpm = v.text("bpm").getDoubleValue();
             if (bpm < 10.0 || bpm > 999.0)
             {
-                self->showError("A tempo between 10 and 999 BPM, please");
+                showError("A tempo between 10 and 999 BPM, please");
                 return;
             }
-            self->history_.edit("Set clip tempo", [trackId, clipId, bpm](model::Song& s) { model::warpedit::setSourceTempo(s, trackId, clipId, bpm); });
-            self->refreshAfterArrangementEdit();
-        }));
+            history_.edit("Set clip tempo", [trackId, clipId, bpm](model::Song& s) { model::warpedit::setSourceTempo(s, trackId, clipId, bpm); });
+            refreshAfterArrangementEdit();
+        });
 }
 
 /** Sets the song's tempo at the clip to the clip's own, so it plays in time
@@ -1608,34 +1588,27 @@ void MainComponent::renameTrackAt(int trackIndex)
     const auto& track   = song.tracks[(size_t) trackIndex];
     const int   trackId = track.id;
 
-    auto* window = new juce::AlertWindow("Rename Track", {}, juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", juce::String(track.name), "Name:");
-    window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true,
-        juce::ModalCallbackFunction::create(
-            [self = juce::Component::SafePointer<MainComponent>(this), window, trackId](int result)
+    dialog("Rename Track")
+        .text("name", "Name:", juce::String(track.name))
+        .unsaved()
+        .show("Rename", [this, trackId](const FormDialog::Values& v)
+        {
+            const auto name = v.text("name");
+            if (name.isEmpty())
+                return; // an unnamed track is worse than the generated name
+
+            history_.edit("Rename track", [trackId, name](model::Song& s)
             {
-                if (self == nullptr || result != 1)
-                    return;
+                model::renameTrack(s, trackId, name.toStdString());
+            });
 
-                const auto name = window->getTextEditorContents("name").trim();
-                if (name.isEmpty())
-                    return; // an unnamed track is worse than the generated name
-
-                self->history_.edit("Rename track", [trackId, name](model::Song& s)
-                {
-                    model::renameTrack(s, trackId, name.toStdString());
-                });
-
-                self->syncEngineTracks();
-                self->updateMixerStrips();
-                self->refreshSessionView();
-                self->arrangementView_.setSong(self->history_.current());
-                self->updateEditingLabel();
-            }),
-        true);
+            syncEngineTracks();
+            updateMixerStrips();
+            refreshSessionView();
+            arrangementView_.setSong(history_.current());
+            updateEditingLabel();
+        });
 }
 
 void MainComponent::duplicateClip()

@@ -227,35 +227,17 @@ void MainComponent::showLabelSoundsDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Label Sounds",
-                                         "Adds a marker range over each sound in the selection or clip: "
-                                         "whatever lies between the silences.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("threshold", juce::String(settings_.getDoubleValue("labelSounds.threshold", -40.0)),
-                          "Silent below (dB):");
-    window->addTextEditor("silence", juce::String(settings_.getDoubleValue("labelSounds.silence", 0.5)),
-                          "Silences last at least (seconds):");
-    window->addTextEditor("sound", juce::String(settings_.getDoubleValue("labelSounds.sound", 0.1)),
-                          "Sounds last at least (seconds):");
-    window->addButton("Label", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Label Sounds",
+           "Adds a marker range over each sound in the selection or clip: whatever lies between the silences.")
+        .number("labelSounds.threshold", "Silent below (dB):", -40.0, -120.0, 0.0)
+        .number("labelSounds.silence", "Silences last at least (seconds):", 0.5, 0.01, 60.0)
+        .number("labelSounds.sound", "Sounds last at least (seconds):", 0.1, 0.0, 3600.0)
+        .show("Label", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double threshold = juce::jlimit(-120.0, 0.0, window->getTextEditorContents("threshold").getDoubleValue());
-            const double silence   = juce::jlimit(0.01, 60.0, window->getTextEditorContents("silence").getDoubleValue());
-            const double sound     = juce::jlimit(0.0, 3600.0, window->getTextEditorContents("sound").getDoubleValue());
-
-            self->settings_.setValue("labelSounds.threshold", threshold);
-            self->settings_.setValue("labelSounds.silence", silence);
-            self->settings_.setValue("labelSounds.sound", sound);
-            self->labelSounds((float) threshold, silence, sound);
-        }));
+            labelSounds((float) v.number("labelSounds.threshold"), v.number("labelSounds.silence"),
+                        v.number("labelSounds.sound"));
+        });
 }
 
 /** Marks each sound between silences, as Audacity's Label Sounds does: the
@@ -332,30 +314,14 @@ void MainComponent::showBeatFinderDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Beat Finder",
-                                         "Adds a marker at each beat or hit in the selection or clip, "
-                                         "and estimates the tempo.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("sensitivity", juce::String(settings_.getDoubleValue("beatFinder.sensitivity", 50.0)),
-                          "Sensitivity (0 to 100):");
-    window->addTextEditor("gap", juce::String(settings_.getDoubleValue("beatFinder.gapMs", 100.0)),
-                          "Beats at least this far apart (ms):");
-    window->addButton("Find Beats", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Beat Finder", "Adds a marker at each beat or hit in the selection or clip, and estimates the tempo.")
+        .number("beatFinder.sensitivity", "Sensitivity (0 to 100):", 50.0, 0.0, 100.0)
+        .number("beatFinder.gapMs", "Beats at least this far apart (ms):", 100.0, 10.0, 5000.0)
+        .show("Find Beats", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double sensitivity = juce::jlimit(0.0, 100.0, window->getTextEditorContents("sensitivity").getDoubleValue());
-            const double gapMs       = juce::jlimit(10.0, 5000.0, window->getTextEditorContents("gap").getDoubleValue());
-            self->settings_.setValue("beatFinder.sensitivity", sensitivity);
-            self->settings_.setValue("beatFinder.gapMs", gapMs);
-            self->findBeats(sensitivity / 100.0, gapMs / 1000.0);
-        }));
+            findBeats(v.number("beatFinder.sensitivity") / 100.0, v.number("beatFinder.gapMs") / 1000.0);
+        });
 }
 
 /** Marks each onset, as Audacity's Beat Finder labels them: a point marker

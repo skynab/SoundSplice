@@ -110,29 +110,22 @@ void MainComponent::editTempoChangeAt(double beat)
     const double current = existing >= 0 ? song.tempoChanges[(size_t) existing].bpm
                                          : model::tempoedit::tempoAt(song, beat);
 
-    auto* window = new juce::AlertWindow(existing >= 0 ? "Edit Tempo Change" : "Add Tempo Change",
-                                         "Bar " + juce::String((int) std::round(beat / beatsPerBar()) + 1),
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("bpm", juce::String(current, 2), "Tempo (BPM):");
-    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, beat](int result)
+    dialog(existing >= 0 ? "Edit Tempo Change" : "Add Tempo Change",
+           "Bar " + juce::String((int) std::round(beat / beatsPerBar()) + 1))
+        .text("bpm", "Tempo (BPM):", juce::String(current, 2))
+        .unsaved()
+        .show("OK", [this, beat](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double bpm = window->getTextEditorContents("bpm").getDoubleValue();
+            const double bpm = v.text("bpm").getDoubleValue();
             if (bpm < 10.0 || bpm > 999.0)
             {
-                self->showError("A tempo between 10 and 999 BPM, please");
+                showError("A tempo between 10 and 999 BPM, please");
                 return;
             }
-            self->history_.edit("Tempo change", [beat, bpm](model::Song& s) { model::tempoedit::setTempo(s, beat, bpm); });
-            self->afterTempoEdit();
-        }));
+            history_.edit("Tempo change", [beat, bpm](model::Song& s) { model::tempoedit::setTempo(s, beat, bpm); });
+            afterTempoEdit();
+        });
 }
 
 void MainComponent::removeTempoChangeAt(double beat)

@@ -593,39 +593,18 @@ void MainComponent::showAutoDuckDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Auto Duck",
-                                         "Dips the selected tracks wherever the lowest selected track is sounding, "
-                                         "as a volume curve on each clip.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("duck", juce::String(settings_.getDoubleValue("autoDuck.duckDb", 12.0)),
-                          "Duck by (dB):");
-    window->addTextEditor("threshold", juce::String(settings_.getDoubleValue("autoDuck.threshold", -30.0)),
-                          "Sounding above (dB):");
-    window->addTextEditor("fade", juce::String(settings_.getDoubleValue("autoDuck.fade", 0.5)),
-                          "Fade down and up over (seconds):");
-    window->addTextEditor("pause", juce::String(settings_.getDoubleValue("autoDuck.pause", 0.4)),
-                          "Come back up after a pause of (seconds):");
-    window->addButton("Duck", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Auto Duck",
+           "Dips the selected tracks wherever the lowest selected track is sounding, as a volume curve on each clip.")
+        .number("autoDuck.duckDb", "Duck by (dB):", 12.0, 0.0, 60.0)
+        .number("autoDuck.threshold", "Sounding above (dB):", -30.0, -120.0, 0.0)
+        .number("autoDuck.fade", "Fade down and up over (seconds):", 0.5, 0.0, 10.0)
+        .number("autoDuck.pause", "Come back up after a pause of (seconds):", 0.4, 0.05, 30.0)
+        .show("Duck", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double duck      = juce::jlimit(0.0, 60.0, window->getTextEditorContents("duck").getDoubleValue());
-            const double threshold = juce::jlimit(-120.0, 0.0, window->getTextEditorContents("threshold").getDoubleValue());
-            const double fade      = juce::jlimit(0.0, 10.0, window->getTextEditorContents("fade").getDoubleValue());
-            const double pause     = juce::jlimit(0.05, 30.0, window->getTextEditorContents("pause").getDoubleValue());
-
-            self->settings_.setValue("autoDuck.duckDb", duck);
-            self->settings_.setValue("autoDuck.threshold", threshold);
-            self->settings_.setValue("autoDuck.fade", fade);
-            self->settings_.setValue("autoDuck.pause", pause);
-            self->autoDuck((float) threshold, duck, fade, pause);
-        }));
+            autoDuck((float) v.number("autoDuck.threshold"), v.number("autoDuck.duckDb"), v.number("autoDuck.fade"),
+                     v.number("autoDuck.pause"));
+        });
 }
 
 void MainComponent::showTruncateSilenceDialog()
@@ -636,34 +615,19 @@ void MainComponent::showTruncateSilenceDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Truncate Silence",
-                                         "Shortens every pause in the time selection that is silent on all its tracks, "
-                                         "closing up the time. The audio itself isn't rewritten.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("threshold", juce::String(settings_.getDoubleValue("truncateSilence.threshold", -40.0)),
-                          "Silent below (dB):");
-    window->addTextEditor("minimum", juce::String(settings_.getDoubleValue("truncateSilence.minimum", 0.5)),
-                          "Pauses of at least (seconds):");
-    window->addTextEditor("keep", juce::String(settings_.getDoubleValue("truncateSilence.keep", 0.3)),
-                          "Shorten each to (seconds):");
-    window->addButton("Truncate", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Truncate Silence",
+           "Shortens every pause in the time selection that is silent on all its tracks, "
+           "closing up the time. The audio itself isn't rewritten.")
+        .number("truncateSilence.threshold", "Silent below (dB):", -40.0, -120.0, 0.0)
+        .number("truncateSilence.minimum", "Pauses of at least (seconds):", 0.5, 0.01, 600.0)
+        .number("truncateSilence.keep", "Shorten each to (seconds):", 0.3, 0.0, 600.0)
+        .show("Truncate", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double threshold = juce::jlimit(-120.0, 0.0, window->getTextEditorContents("threshold").getDoubleValue());
-            const double minimum   = juce::jlimit(0.01, 600.0, window->getTextEditorContents("minimum").getDoubleValue());
-            const double keep      = juce::jlimit(0.0, 600.0, window->getTextEditorContents("keep").getDoubleValue());
-            self->settings_.setValue("truncateSilence.threshold", threshold);
-            self->settings_.setValue("truncateSilence.minimum", minimum);
-            self->settings_.setValue("truncateSilence.keep", keep);
-            self->truncateSilence((float) threshold, juce::jmax(minimum, keep), keep);
-        }));
+            const double keep = v.number("truncateSilence.keep");
+            truncateSilence((float) v.number("truncateSilence.threshold"),
+                            juce::jmax(v.number("truncateSilence.minimum"), keep), keep);
+        });
 }
 
 void MainComponent::showRepeatDialog()
@@ -674,23 +638,10 @@ void MainComponent::showRepeatDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Repeat", "Puts copies of the time selection straight after it.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("times", juce::String(settings_.getIntValue("repeat.times", 1)), "Number of repeats:");
-    window->addButton("Repeat", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
-        {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const int times = juce::jlimit(1, 1000, window->getTextEditorContents("times").getIntValue());
-            self->settings_.setValue("repeat.times", times);
-            self->repeatTimeSelection(times);
-        }));
+    dialog("Repeat", "Puts copies of the time selection straight after it.")
+        .integer("repeat.times", "Number of repeats:", 1, 1, 1000)
+        .show("Repeat", [this](const FormDialog::Values& v) { repeatTimeSelection(v.integer("repeat.times")); });
 }
 
 void MainComponent::repeatTimeSelection(int times)
@@ -1032,26 +983,18 @@ void MainComponent::showDetachAtSilencesDialog()
     if (arrangementEditTracks().empty())
         return;
 
-    auto* window = new juce::AlertWindow("Detach at Silences",
-                                         "Splits the audio clips on the selected tracks where they fall silent, "
-                                         "leaving the silent parts out. Only within the time selection, if there is one.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("threshold", "-40", "Silent below (dB):");
-    window->addTextEditor("minimum", "0.5", "For at least (seconds):");
-    window->addButton("Detach", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Detach at Silences",
+           "Splits the audio clips on the selected tracks where they fall silent, "
+           "leaving the silent parts out. Only within the time selection, if there is one.")
+        .number("threshold", "Silent below (dB):", -40.0, -120.0, 0.0)
+        .unsaved()
+        .number("minimum", "For at least (seconds):", 0.5, 0.01, 60.0)
+        .unsaved()
+        .show("Detach", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const float  threshold = juce::jlimit(-120.0f, 0.0f, window->getTextEditorContents("threshold").getFloatValue());
-            const double minimum   = juce::jlimit(0.01, 60.0, window->getTextEditorContents("minimum").getDoubleValue());
-            self->detachAtSilences(threshold, minimum);
-        }));
+            detachAtSilences((float) v.number("threshold"), v.number("minimum"));
+        });
 }
 
 /** Scans each audio clip on the edit's tracks (within the time selection, if
@@ -1156,45 +1099,35 @@ void MainComponent::showCrossfadeTracksDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Crossfade Tracks",
-                                         "The upper track fades out across the selection as the lower fades in.",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addComboBox("curve", { "Equal power (different material)", "Equal gain (the same material)" }, "Curve:");
-    window->getComboBoxComponent("curve")->setSelectedItemIndex(settings_.getIntValue("crossfadeTracks.curve", 0));
-    window->addButton("Crossfade", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
     const int    outId = audioTracks[0], inId = audioTracks[1];
     const double from = timeSelection_.startBeats, to = timeSelection_.endBeats;
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window, outId, inId, from, to](int result)
-        {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
 
-            const bool equalPower = window->getComboBoxComponent("curve")->getSelectedItemIndex() == 0;
-            self->settings_.setValue("crossfadeTracks.curve", equalPower ? 0 : 1);
+    dialog("Crossfade Tracks", "The upper track fades out across the selection as the lower fades in.")
+        .choice("crossfadeTracks.curve", "Curve:", { "Equal power (different material)", "Equal gain (the same material)" }, 0)
+        .show("Crossfade", [this, outId, inId, from, to](const FormDialog::Values& v)
+        {
+            const bool equalPower = v.choice("crossfadeTracks.curve") == 0;
 
             // Tried on a copy first, so a crossfade that finds nothing to shape
             // doesn't leave an empty step in the history.
-            auto      trial  = self->history_.current();
+            auto      trial  = history_.current();
             const int shaped = model::arrangeedit::crossfadeTracks(trial, outId, inId, from, to, equalPower);
             if (shaped == 0)
             {
-                self->showError("Neither track has audio in the selection to crossfade");
+                showError("Neither track has audio in the selection to crossfade");
                 return;
             }
-            self->history_.edit("Crossfade tracks", [&](model::Song& s)
+            history_.edit("Crossfade tracks", [&](model::Song& s)
             {
                 model::arrangeedit::crossfadeTracks(s, outId, inId, from, to, equalPower);
             });
 
-            self->syncEngineTracks();
-            self->arrangementView_.setSong(self->history_.current());
-            self->showStatus("Crossfaded the tracks across the selection (" + juce::String(shaped)
-                             + (shaped == 1 ? " clip)" : " clips)"));
-        }));
+            syncEngineTracks();
+            arrangementView_.setSong(history_.current());
+            showStatus("Crossfaded the tracks across the selection (" + juce::String(shaped)
+                       + (shaped == 1 ? " clip)" : " clips)"));
+        });
 }
 
 } // namespace soundsplice

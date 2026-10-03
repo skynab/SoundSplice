@@ -807,38 +807,24 @@ void MainComponent::applySoundTrigger()
     has to be, and how long a silence ends it. */
 void MainComponent::showSoundActivatedDialog()
 {
-    auto* window = new juce::AlertWindow("Sound-Activated Recording",
-        "With this on, Record waits for the input to pass the threshold before the take starts, and can "
-        "stop it by itself after a silence. Set the threshold a little above the room's noise on the "
-        "input meter.",
-        juce::MessageBoxIconType::NoIcon, this);
-    window->addComboBox("on", { "On", "Off" }, "Sound-activated:");
-    window->getComboBoxComponent("on")->setSelectedItemIndex(settings_.getBoolValue("soundActivated", false) ? 0 : 1);
-    window->addTextEditor("threshold", juce::String(settings_.getDoubleValue("soundThresholdDb", -40.0), 1),
-                          "Threshold (dB):");
-    window->addTextEditor("stop", juce::String(settings_.getDoubleValue("soundStopSeconds", 0.0), 1),
-                          "Stop after this many seconds of silence (0: never):");
-    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Sound-Activated Recording",
+           "With this on, Record waits for the input to pass the threshold before the take starts, and can "
+           "stop it by itself after a silence. Set the threshold a little above the room's noise on the "
+           "input meter.")
+        .choice("on", "Sound-activated:", { "On", "Off" }, settings_.getBoolValue("soundActivated", false) ? 0 : 1)
+        .unsaved()
+        .number("soundThresholdDb", "Threshold (dB):", -40.0, -90.0, 0.0)
+        .number("soundStopSeconds", "Stop after this many seconds of silence (0: never):", 0.0, 0.0, 3600.0)
+        .show("OK", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const bool   on        = window->getComboBoxComponent("on")->getSelectedItemIndex() == 0;
-            const double threshold = juce::jlimit(-90.0, 0.0, window->getTextEditorContents("threshold").getDoubleValue());
-            const double stop      = juce::jlimit(0.0, 3600.0, window->getTextEditorContents("stop").getDoubleValue());
-            self->settings_.setValue("soundActivated", on);
-            self->settings_.setValue("soundThresholdDb", threshold);
-            self->settings_.setValue("soundStopSeconds", stop);
-            self->settings_.saveIfNeeded();
-            self->applySoundTrigger();
-            self->showStatus(on ? "Takes start when the input passes " + juce::String(threshold, 1) + " dB"
-                                : juce::String("Takes start when Record is pressed"));
-        }), false);
+            const bool on = v.choice("on") == 0;
+            settings_.setValue("soundActivated", on);
+            settings_.saveIfNeeded();
+            applySoundTrigger();
+            showStatus(on ? "Takes start when the input passes " + juce::String(v.number("soundThresholdDb"), 1) + " dB"
+                          : juce::String("Takes start when Record is pressed"));
+        });
 }
 
 /** Timer Record: a take that starts at a set time and, if given a length,
@@ -853,34 +839,26 @@ void MainComponent::showTimerRecordDialog()
         return;
     }
 
-    auto* window = new juce::AlertWindow("Timer Record",
-        "Start a take a while from now, and stop it after a set length. The app has to stay open, with "
-        "the track to record onto selected.",
-        juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("in", "5", "Start in (minutes):");
-    window->addTextEditor("for", "0", "Record for (minutes, 0: until stopped):");
-    window->addButton("Start Timer", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Timer Record",
+           "Start a take a while from now, and stop it after a set length. The app has to stay open, with "
+           "the track to record onto selected.")
+        .number("in", "Start in (minutes):", 5.0, 0.0, 1.0e6)
+        .unsaved()
+        .number("for", "Record for (minutes, 0: until stopped):", 0.0, 0.0, 1.0e6)
+        .unsaved()
+        .show("Start Timer", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double in      = juce::jmax(0.0, window->getTextEditorContents("in").getDoubleValue());
-            const double minutes = juce::jmax(0.0, window->getTextEditorContents("for").getDoubleValue());
+            const double minutes = v.number("for");
             const auto   now     = juce::Time::getCurrentTime();
 
-            self->timerRecordPending_ = true;
-            self->timerRecordStart_   = now + juce::RelativeTime::minutes(in);
-            self->timerRecordStop_    = minutes > 0.0 ? self->timerRecordStart_ + juce::RelativeTime::minutes(minutes)
-                                                      : juce::Time();
-            self->showStatus("Recording starts at " + self->timerRecordStart_.toString(false, true, false)
-                             + (minutes > 0.0 ? " and stops at " + self->timerRecordStop_.toString(false, true, false)
-                                              : juce::String()));
-        }), false);
+            timerRecordPending_ = true;
+            timerRecordStart_   = now + juce::RelativeTime::minutes(v.number("in"));
+            timerRecordStop_    = minutes > 0.0 ? timerRecordStart_ + juce::RelativeTime::minutes(minutes) : juce::Time();
+            showStatus("Recording starts at " + timerRecordStart_.toString(false, true, false)
+                       + (minutes > 0.0 ? " and stops at " + timerRecordStop_.toString(false, true, false)
+                                        : juce::String()));
+        });
 }
 
 /** From the UI timer: starts a timed take when its time comes, and stops it
@@ -991,48 +969,40 @@ void MainComponent::showRecordingFormatDialog()
     const auto format = savedRecordFormat();
     const auto inputs = engine_.inputChannelNames();
 
-    auto* window = new juce::AlertWindow("Recording Format",
-        "What takes are recorded as, from the next one on. 24-bit is plenty for most things; 32-bit float "
-        "can't clip in the file, which helps when levels are unknown. Inputs come from the device chosen "
-        "in Audio Settings.",
-        juce::MessageBoxIconType::NoIcon, this);
-
-    window->addComboBox("bits", { "16-bit", "24-bit", "32-bit float" }, "Bit depth:");
-    window->getComboBoxComponent("bits")->setSelectedItemIndex(format.bitsPerSample <= 16 ? 0 : format.bitsPerSample >= 32 ? 2 : 1);
-
-    window->addComboBox("channels", { "Mono", "Stereo" }, "Channels:");
-    window->getComboBoxComponent("channels")->setSelectedItemIndex(format.channels == 1 ? 0 : 1);
 
     // Each input by name; for stereo, the take is it and the next one.
     juce::StringArray inputChoices;
     for (int i = 0; i < juce::jmax(1, inputs.size()); ++i)
         inputChoices.add(inputs.isEmpty() ? juce::String("Input 1") : inputs[i]);
-    window->addComboBox("input", inputChoices, "From input (stereo: it and the next):");
-    window->getComboBoxComponent("input")->setSelectedItemIndex(juce::jmin(format.firstInput, inputChoices.size() - 1));
 
-    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    // Shown as savedRecordFormat reads them; saved below as what they stand for.
+    dialog("Recording Format",
+           "What takes are recorded as, from the next one on. 24-bit is plenty for most things; 32-bit float "
+           "can't clip in the file, which helps when levels are unknown. Inputs come from the device chosen "
+           "in Audio Settings.")
+        .choice("bits", "Bit depth:", { "16-bit", "24-bit", "32-bit float" },
+                format.bitsPerSample <= 16 ? 0 : format.bitsPerSample >= 32 ? 2 : 1)
+        .unsaved()
+        .choice("channels", "Channels:", { "Mono", "Stereo" }, format.channels == 1 ? 0 : 1)
+        .unsaved()
+        .choice("input", "From input (stereo: it and the next):", inputChoices,
+                juce::jmin(format.firstInput, inputChoices.size() - 1))
+        .unsaved()
+        .show("OK", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
             static constexpr int kBits[] { 16, 24, 32 };
-            const int bits     = kBits[juce::jlimit(0, 2, window->getComboBoxComponent("bits")->getSelectedItemIndex())];
-            const int channels = window->getComboBoxComponent("channels")->getSelectedItemIndex() == 0 ? 1 : 2;
-            const int input    = juce::jmax(0, window->getComboBoxComponent("input")->getSelectedItemIndex());
+            const int bits     = kBits[v.choice("bits")];
+            const int channels = v.choice("channels") == 0 ? 1 : 2;
+            const int input    = v.choice("input");
 
-            self->settings_.setValue("recordBits", bits);
-            self->settings_.setValue("recordChannels", channels);
-            self->settings_.setValue("recordFirstInput", input);
-            self->settings_.saveIfNeeded();
-            self->engine_.setRecordFormat(self->savedRecordFormat());
-            self->showStatus("Recording " + juce::String(bits == 32 ? "32-bit float" : juce::String(bits) + "-bit")
-                             + (channels == 1 ? " mono" : " stereo") + " from input " + juce::String(input + 1));
-        }), false);
+            settings_.setValue("recordBits", bits);
+            settings_.setValue("recordChannels", channels);
+            settings_.setValue("recordFirstInput", input);
+            settings_.saveIfNeeded();
+            engine_.setRecordFormat(savedRecordFormat());
+            showStatus("Recording " + juce::String(bits == 32 ? "32-bit float" : juce::String(bits) + "-bit")
+                       + (channels == 1 ? " mono" : " stereo") + " from input " + juce::String(input + 1));
+        });
 }
 
 /** How late a recording is: the device's reported round trip, adjusted by
@@ -1152,37 +1122,25 @@ void MainComponent::showRecordingLatencyDialog()
                                   ? juce::String((double) measured * 1000.0 / rate, 1) + " ms"
                                   : juce::String();
 
-    auto* window = new juce::AlertWindow("Recording Latency",
-        "A recording comes back late by the time sound takes to leave the device and return to it. "
-        "The device reports " + reportedText + (measuredText.isEmpty() ? juce::String() : "; measured, it's " + measuredText)
-        + ". Recordings are moved back by " + (measuredText.isEmpty() ? "the reported figure" : "the measured one")
-        + ", plus any adjustment below.\n\nFile > Measure Recording Latency times it through a cable "
-        "from an output to an input.",
-        juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("adjust", juce::String(settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0), 1),
-                          "Adjustment (ms, + moves recordings earlier):");
-    window->addComboBox("compensate", { "Compensate recordings", "Leave recordings where they land" });
-    if (auto* box = window->getComboBoxComponent("compensate"))
-        box->setSelectedItemIndex(settings_.getBoolValue("compensateRecordingLatency", true) ? 0 : 1);
-    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
 
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [self = juce::Component::SafePointer<MainComponent>(this), window](int result)
+    dialog("Recording Latency",
+           "A recording comes back late by the time sound takes to leave the device and return to it. "
+           "The device reports " + reportedText + (measuredText.isEmpty() ? juce::String() : "; measured, it's " + measuredText)
+           + ". Recordings are moved back by " + (measuredText.isEmpty() ? "the reported figure" : "the measured one")
+           + ", plus any adjustment below.\n\nFile > Measure Recording Latency times it through a cable "
+             "from an output to an input.")
+        .number("recordingLatencyAdjustMs", "Adjustment (ms, + moves recordings earlier):", 0.0, -500.0, 500.0)
+        .choice("compensate", {}, { "Compensate recordings", "Leave recordings where they land" },
+                settings_.getBoolValue("compensateRecordingLatency", true) ? 0 : 1)
+        .unsaved()
+        .show("OK", [this](const FormDialog::Values& v)
         {
-            std::unique_ptr<juce::AlertWindow> owned(window);
-            if (self == nullptr || result != 1)
-                return;
-
-            const double adjust = juce::jlimit(-500.0, 500.0, window->getTextEditorContents("adjust").getDoubleValue());
-            const bool   on     = window->getComboBoxComponent("compensate")->getSelectedItemIndex() == 0;
-            self->settings_.setValue("recordingLatencyAdjustMs", adjust);
-            self->settings_.setValue("compensateRecordingLatency", on);
-            self->settings_.saveIfNeeded();
-            self->showStatus(on ? "Recordings are moved back by " + juce::String(self->recordingLatencySamples())
-                                      + " samples"
-                                : juce::String("Recordings are left where they land"));
-        }), false);
+            const bool on = v.choice("compensate") == 0;
+            settings_.setValue("compensateRecordingLatency", on);
+            settings_.saveIfNeeded();
+            showStatus(on ? "Recordings are moved back by " + juce::String(recordingLatencySamples()) + " samples"
+                          : juce::String("Recordings are left where they land"));
+        });
 }
 
 juce::File MainComponent::recordingsDirectory() const
