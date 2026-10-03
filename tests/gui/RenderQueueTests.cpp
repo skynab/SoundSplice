@@ -136,3 +136,50 @@ TEST_CASE("The render queue renders in order and keeps what failed", "[gui][rend
     REQUIRE(rendered == std::vector<int> { 0, 2 });
     REQUIRE_FALSE(dialog.running());
 }
+
+TEST_CASE("A job queued during a run shows up at once and waits for the next run", "[gui][renderqueue]")
+{
+    JuceFixture fixture;
+
+    juce::WaitableEvent release;
+    RenderQueueDialog   dialog([&](const app::exportchoices::Job&, juce::String&, std::function<bool()>)
+    {
+        release.wait(5000);
+        return true;
+    });
+
+    const auto file = juce::File::getCurrentWorkingDirectory().getChildFile("x");
+    const std::vector<app::exportchoices::Job> two { { file, file, {}, "one" }, { file, file, {}, "two" } };
+    dialog.setJobs(two);
+
+    std::vector<int> rendered;
+    bool             finished = false;
+    dialog.onRunFinished = [&](const std::vector<int>& r)
+    {
+        rendered = r;
+        finished = true;
+    };
+    for (auto* child : dialog.getChildren())
+        if (auto* b = dynamic_cast<juce::TextButton*>(child); b != nullptr && b->getButtonText() == "Render All")
+            b->triggerClick(); // posted: it starts once the message loop runs
+    for (int i = 0; i < 100 && ! dialog.running(); ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    REQUIRE(dialog.running());
+
+    // Queued while it renders: listed now, not part of this run.
+    auto three = two;
+    three.push_back({ file, file, {}, "new" });
+    dialog.updateJobs(three);
+    REQUIRE(dialog.jobs().size() == 3);
+
+    release.signal();
+    for (int i = 0; i < 200 && ! finished; ++i)
+    {
+        release.signal();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+    REQUIRE(finished);
+    REQUIRE(rendered == std::vector<int> { 0, 1 });
+    REQUIRE(dialog.jobs().size() == 1);
+    REQUIRE(dialog.jobs()[0].label == "new");
+}

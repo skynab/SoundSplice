@@ -21,9 +21,11 @@ namespace soundsplice::engine
     device callback after the mix, so it never reaches an export (which
     only ever calls processBlock), and the mix's own level is untouched.
 
-    The reference's audio is handed to the audio thread through an inbox and
-    retired through another, like every other buffer the engine swaps, so
-    loading one never blocks playback.
+    The reference's audio is handed to the audio thread through a single
+    slot and retired through a queue, so loading one never blocks playback.
+    The slot holds only the latest: loading several while no device runs
+    (nothing takes them) keeps the newest, the ones it replaced deleted
+    here, since the audio thread never saw them.
 */
 struct ReferenceAudio
 {
@@ -46,8 +48,7 @@ public:
     ~ReferenceAB()
     {
         collectRetired();
-        ReferenceAudio* pending = nullptr;
-        while (inbox_.pop(pending))
+        if (auto* pending = pending_.load(); pending != nothing())
             delete pending;
         delete current_;
     }
@@ -58,8 +59,9 @@ public:
     void setAudio(ReferenceAudio* audio)
     {
         collectRetired();
-        if (! inbox_.push(audio))
-            delete audio;
+        // Whatever this replaces was never taken, so it's still ours.
+        if (auto* replaced = pending_.exchange(audio, std::memory_order_acq_rel); replaced != nothing())
+            delete replaced;
     }
 
     void setMode(Mode mode) noexcept { mode_.store(mode, std::memory_order_relaxed); }
@@ -87,8 +89,7 @@ public:
     void process(float* const* output, int channels, int frames, int64_t playheadSamples, double deviceRate,
                  bool playing) noexcept
     {
-        ReferenceAudio* incoming = nullptr;
-        while (inbox_.pop(incoming))
+        if (auto* incoming = pending_.exchange(nothing(), std::memory_order_acq_rel); incoming != nothing())
         {
             // A full reclaim queue leaks the old one until the destructor
             // rather than ever blocking here.
@@ -131,7 +132,11 @@ public:
     }
 
 private:
-    rt::SpscRingBuffer<ReferenceAudio*> inbox_ { 4 };
+    /** "Nothing waiting" in the slot: nullptr is a real hand-off (clear). */
+    ReferenceAudio* nothing() noexcept { return &nothing_; }
+
+    ReferenceAudio                      nothing_;
+    std::atomic<ReferenceAudio*>        pending_ { &nothing_ };
     rt::SpscRingBuffer<ReferenceAudio*> reclaim_ { 8 };
     ReferenceAudio*                     current_ = nullptr; // the audio thread's
     std::atomic<int>                    mode_ { Off };

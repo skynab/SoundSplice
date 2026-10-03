@@ -92,3 +92,25 @@ TEST_CASE("A/B leaves the mix, turns it down, or plays the reference at the play
     REQUIRE_THAT(replaced.left[0], WithinAbs(2.0 * 0.05, 1e-6)); // 150 wraps to 50
     ab.collectRetired();
 }
+
+TEST_CASE("Loading references with no device running keeps the newest", "[engine][reference]")
+{
+    ReferenceAB ab;
+    ab.setGains(1.0f, 1.0f);
+    ab.setMode(ReferenceAB::B);
+    // Nothing takes them meanwhile: no audio callback.
+    for (int length = 1000; length <= 8000; length += 1000)
+        ab.setAudio(ramp(48000.0, length));
+
+    // The last one, 8000 long: sample 7500 is there rather than wrapped.
+    Block block;
+    ab.process(block.channels, 2, 64, 7500, 48000.0, true);
+    REQUIRE_THAT(block.left[0], WithinAbs(7.5, 1e-6));
+
+    // And a clear is never lost either.
+    ab.setAudio(ramp(48000.0, 100));
+    ab.setAudio(nullptr);
+    Block cleared;
+    ab.process(cleared.channels, 2, 64, 50, 48000.0, true);
+    REQUIRE(cleared.left[0] == 0.0f); // B with no reference: silence
+}

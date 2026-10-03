@@ -660,8 +660,8 @@ void MainComponent::saveRenderQueue()
 {
     settings_.setValue("renderQueue", app::exportchoices::serializeQueue(renderQueue_));
     settings_.saveIfNeeded();
-    if (renderQueueDialog_ != nullptr && ! renderQueueDialog_->running())
-        renderQueueDialog_->setJobs(renderQueue_);
+    if (renderQueueDialog_ != nullptr)
+        renderQueueDialog_->updateJobs(renderQueue_);
 }
 
 /** File > Render Queue. Each job runs in a child process: this app, headless

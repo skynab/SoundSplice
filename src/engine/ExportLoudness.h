@@ -34,6 +34,12 @@ struct ExportLoudnessResult
 
 namespace exportloudness
 {
+    /** One channel is measured as dual mono: on both speakers, which is
+        how everything here plays it (a mono reference in A/B is heard on
+        both sides), so the reading is what's heard. BS.1770 would read a
+        lone channel 3 LU quieter, the convention behind "-19 LUFS mono"
+        beside "-16 LUFS stereo" - the same loudness out of two speakers.
+        Exports are always rendered in stereo, so a target never meets this. */
     inline LoudnessReport measure(const juce::AudioBuffer<float>& audio, double sampleRate)
     {
         LoudnessMeter meter;

@@ -65,7 +65,29 @@ public:
         updateButtons();
     }
 
+    /** The queue changed: shown at once. During a run only new jobs can be
+        added (Remove waits for it), so they're added at the end, waiting
+        for the next run, and the ones being rendered keep their states. */
+    void updateJobs(const std::vector<app::exportchoices::Job>& jobs)
+    {
+        if (! running())
+        {
+            setJobs(jobs);
+            return;
+        }
+        for (size_t i = jobs_.size(); i < jobs.size(); ++i)
+        {
+            jobs_.push_back(jobs[i]);
+            states_.push_back({});
+        }
+        list_.updateContent();
+        list_.repaint();
+    }
+
     bool running() const { return worker_ != nullptr && worker_->isThreadRunning(); }
+
+    /** What it lists, in order. */
+    const std::vector<app::exportchoices::Job>& jobs() const noexcept { return jobs_; }
 
     void resized() override
     {
