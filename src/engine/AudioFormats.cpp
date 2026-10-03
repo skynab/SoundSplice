@@ -902,4 +902,87 @@ namespace audioformats
     }
 }
 
+bool audioformats::writeM4a(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bitrateKbps)
+{
+   #if JUCE_WINDOWS
+    const int    channels = juce::jmin(2, audio.getNumChannels());
+    const int    frames   = audio.getNumSamples();
+    const UINT32 rate     = (UINT32) std::lround(sampleRate);
+    if (channels <= 0 || frames <= 0 || (rate != 44100 && rate != 48000) || ! MediaFoundationReader::ensureCom())
+        return false;
+
+    file.deleteFile();
+    IMFSinkWriter* writer = nullptr;
+    if (FAILED(MFCreateSinkWriterFromURL(file.getFullPathName().toWideCharPointer(), nullptr, nullptr, &writer)))
+        return false;
+
+    const auto audioType = [&](bool aac)
+    {
+        IMFMediaType* type = nullptr;
+        MFCreateMediaType(&type);
+        type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+        type->SetGUID(MF_MT_SUBTYPE, aac ? MFAudioFormat_AAC : MFAudioFormat_PCM);
+        type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+        type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, rate);
+        type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, (UINT32) channels);
+        if (aac)
+            type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, (UINT32) juce::jlimit(96, 192, bitrateKbps) * 125);
+        else
+        {
+            type->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, (UINT32) channels * 2);
+            type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, rate * (UINT32) channels * 2);
+        }
+        return type;
+    };
+
+    DWORD stream = 0;
+    auto* out = audioType(true);
+    auto* in  = audioType(false);
+    bool  ok  = SUCCEEDED(writer->AddStream(out, &stream)) && SUCCEEDED(writer->SetInputMediaType(stream, in, nullptr))
+             && SUCCEEDED(writer->BeginWriting());
+    out->Release();
+    in->Release();
+
+    // 16-bit in, dithered, a tenth of a second at a time.
+    TpdfDither    dither[2] { TpdfDither(16, 0x9E3779B9u), TpdfDither(16, 0x2545F491u) };
+    const int     block = (int) rate / 10;
+    for (int at = 0; ok && at < frames; at += block)
+    {
+        const int       n      = juce::jmin(block, frames - at);
+        IMFMediaBuffer* buffer = nullptr;
+        if (FAILED(MFCreateMemoryBuffer((DWORD) (n * channels * 2), &buffer)))
+        {
+            ok = false;
+            break;
+        }
+        BYTE* data = nullptr;
+        buffer->Lock(&data, nullptr, nullptr);
+        auto* pcm = reinterpret_cast<int16_t*>(data);
+        for (int i = 0; i < n; ++i)
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                const float x = dither[ch].processSample(audio.getSample(ch, at + i));
+                pcm[i * channels + ch] = (int16_t) juce::jlimit(-32768L, 32767L, std::lround(x * 32768.0f));
+            }
+        buffer->Unlock();
+        buffer->SetCurrentLength((DWORD) (n * channels * 2));
+
+        IMFSample* sample = nullptr;
+        MFCreateSample(&sample);
+        sample->AddBuffer(buffer);
+        sample->SetSampleTime((LONGLONG) ((double) at * 1.0e7 / rate));
+        sample->SetSampleDuration((LONGLONG) ((double) n * 1.0e7 / rate));
+        ok = SUCCEEDED(writer->WriteSample(stream, sample));
+        sample->Release();
+        buffer->Release();
+    }
+    ok = ok && SUCCEEDED(writer->Finalize());
+    writer->Release();
+    return ok;
+   #else
+    juce::ignoreUnused(file, audio, sampleRate, bitrateKbps);
+    return false;
+   #endif
+}
+
 } // namespace soundsplice::engine

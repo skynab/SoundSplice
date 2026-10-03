@@ -36,6 +36,12 @@ namespace audioformats
         tags as Vorbis comments, the cover as METADATA_BLOCK_PICTURE. */
     bool writeOpus(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bitrateKbps,
                    const ExportTags& tags);
+
+    /** M4A (AAC in MPEG-4) at @p bitrateKbps (96-192), one or two channels,
+        44.1 or 48 kHz, written by the system's own encoder: Media Foundation
+        on Windows. False elsewhere, or if the system can't. No tags: the
+        system's writer has no way to add them. */
+    bool writeM4a(const juce::File& file, const juce::AudioBuffer<float>& audio, double sampleRate, int bitrateKbps);
 }
 
 } // namespace soundsplice::engine

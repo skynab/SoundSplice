@@ -31,15 +31,25 @@ enum class ExportFormat
     Mp3,
     Opus,
     WavPack,
+    M4a, // Windows only: the system's AAC encoder (see writeM4a)
 };
 
+/** How many formats this platform can export: M4A comes last, and only
+    where the system has an AAC encoder to write it with. */
+#if JUCE_WINDOWS
+inline constexpr int kNumExportFormats = 8;
+#else
 inline constexpr int kNumExportFormats = 7;
+#endif
 
 inline const std::array<ExportFormat, kNumExportFormats>& allExportFormats()
 {
     static const std::array<ExportFormat, kNumExportFormats> formats {
         ExportFormat::Wav, ExportFormat::Aiff, ExportFormat::Flac, ExportFormat::WavPack,
-        ExportFormat::OggVorbis, ExportFormat::Opus, ExportFormat::Mp3
+        ExportFormat::OggVorbis, ExportFormat::Opus, ExportFormat::Mp3,
+       #if JUCE_WINDOWS
+        ExportFormat::M4a,
+       #endif
     };
     return formats;
 }
@@ -129,6 +139,7 @@ inline juce::String extensionFor (ExportFormat format)
         case ExportFormat::Mp3:       return "mp3";
         case ExportFormat::Opus:      return "opus";
         case ExportFormat::WavPack:   return "wv";
+        case ExportFormat::M4a:       return "m4a";
     }
     return "wav";
 }
@@ -146,6 +157,7 @@ inline juce::String displayNameFor (ExportFormat format)
         case ExportFormat::Mp3:       return "MP3 (lossy)";
         case ExportFormat::Opus:      return "Opus (lossy, best for speech and streaming)";
         case ExportFormat::WavPack:   return "WavPack (lossless, compressed)";
+        case ExportFormat::M4a:       return "M4A / AAC (lossy, for Apple devices and podcasts)";
     }
     return "WAV";
 }
@@ -162,7 +174,8 @@ namespace detail
             case ExportFormat::OggVorbis: return std::make_unique<juce::OggVorbisAudioFormat>();
             case ExportFormat::Mp3:       return std::make_unique<Mp3AudioFormat>();
             case ExportFormat::Opus:
-            case ExportFormat::WavPack:   break; // written by their own libraries: see writeAudioFile
+            case ExportFormat::WavPack:
+            case ExportFormat::M4a:       break; // written by their own libraries: see writeAudioFile
         }
         return nullptr;
     }
@@ -221,6 +234,8 @@ inline juce::Array<int> possibleSampleRates (ExportFormat format)
         return worthOffering;
     if (format == ExportFormat::Opus)
         return { 48000 }; // what Opus always runs at
+    if (format == ExportFormat::M4a)
+        return { 44100, 48000 }; // what the system's AAC encoder takes
 
     juce::Array<int> rates;
     if (auto codec = detail::audioFormatFor (format))
@@ -239,6 +254,8 @@ inline juce::StringArray qualityOptionsFor (ExportFormat format)
         return { "Fast", "Normal", "High", "Very high" }; // how hard it compresses: the audio is the same
     if (format == ExportFormat::Opus)
         return { "64 kbps", "96 kbps", "128 kbps", "160 kbps", "192 kbps", "256 kbps" };
+    if (format == ExportFormat::M4a)
+        return { "96 kbps", "128 kbps", "160 kbps", "192 kbps" };
     if (usesBitDepth (format))
         return {};
 
@@ -335,6 +352,16 @@ inline bool writeAudioFile (const juce::File& file,
 {
     if (buffer.getNumSamples() <= 0 || buffer.getNumChannels() <= 0)
         return false;
+
+    if (options.format == ExportFormat::M4a)
+    {
+        static constexpr int kM4aKbps[] { 96, 128, 160, 192 };
+        const bool ok = audioformats::writeM4a (file, buffer, options.sampleRate,
+                                                kM4aKbps[juce::jlimit (0, 3, options.qualityIndex)]);
+        if (! ok)
+            file.deleteFile();
+        return ok;
+    }
 
     // The two written by their own libraries.
     if (options.format == ExportFormat::WavPack || options.format == ExportFormat::Opus)

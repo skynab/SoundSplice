@@ -300,8 +300,9 @@ integrated LUFS, true peak, LRA): a selection or clip measured into the Analyser
 
 - ✅ WAV/AIFF/FLAC/Ogg/MP3, mix or stems, dither · ✅ **Opus** (resampled to 48 kHz, 64-256 kbps) and
   **WavPack** (16/24/32-bit float, four compression levels), each written by its own BSD library with tags and
-  cover (`src/engine/AudioFormats.cpp`) · ✅ RF64 (JUCE's WAV writer switches to it past 4 GB) · ⬜ M4A/AAC (no
-  BSD-licensed encoder), BW64, W64
+  cover (`src/engine/AudioFormats.cpp`) · ✅ RF64 (JUCE's WAV writer switches to it past 4 GB) · 🟡 M4A/AAC: on Windows, by
+  the system's own AAC encoder (Media Foundation; 96-192 kbps, no tags - the system's writer can't add them) ✅,
+  not yet on macOS or Linux · ⬜ BW64, W64
 - ✅ **Export multiple**: one file per label, region or track, with **filename wildcards**: Export Audio's Range
   writes one file per marker range, named by a pattern ($project $region $index $date), with stems per range
   when asked; per track is stems (`src/app/ExportNaming.h`). ✅ One file per point label: Range > Split at every
