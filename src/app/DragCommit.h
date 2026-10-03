@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cmath>
+#include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "model/History.h"
 
@@ -59,5 +61,47 @@ bool commitStructDrag(model::History<State>& history, std::string label,
     history.edit(std::move(label), [&write, to](State& state) { write(state, to); });
     return true;
 }
+
+/**
+    The other half of a drag: where it started, kept from the control's
+    drag-start callback to its drag-end one, for commitDrag to rewind to.
+
+    @p Key says which control is being dragged - a track and fader, a slot -
+    so an end that arrives for some other control (the selection moved
+    mid-drag, say) is ignored rather than committing the wrong thing.
+    std::monostate is the key for a drag there's only ever one of.
+*/
+template <typename Key, typename Value>
+class PendingDrag
+{
+public:
+    void begin(Key key, Value from) { drag_.emplace(Drag { std::move(key), std::move(from) }); }
+
+    /** True while any drag is in progress. */
+    bool isActive() const noexcept { return drag_.has_value(); }
+
+    /** Where the drag of @p key started, while it's in progress; nullptr
+        when that control isn't the one being dragged. */
+    const Value* startOf(const Key& key) const { return drag_ && drag_->key == key ? &drag_->from : nullptr; }
+
+    /** Ends the drag of @p key and hands back where it started. Nothing, and
+        the drag left as it was, when @p key isn't the control being dragged. */
+    std::optional<Value> end(const Key& key)
+    {
+        if (startOf(key) == nullptr)
+            return std::nullopt;
+        auto from = std::move(drag_->from);
+        drag_.reset();
+        return from;
+    }
+
+private:
+    struct Drag
+    {
+        Key   key;
+        Value from;
+    };
+    std::optional<Drag> drag_;
+};
 
 } // namespace soundsplice

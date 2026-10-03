@@ -206,7 +206,7 @@ void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotI
     {
         const auto key   = AutomationWriteKey::effect(selectedTrackIndex_, slotIndex, slot.kind, param->id);
         const auto value = (float) model::paramValue(slot, *param);
-        automationControlMoved(key, value, effectSlotDragging_);
+        automationControlMoved(key, value, effectSlotDrag_.isActive());
 
         // A parameter with a lane isn't in the static values above, so one
         // being written is set on its own - otherwise the knob would do
@@ -467,18 +467,16 @@ void MainComponent::setMasteringSettings(const model::MasteringSettings& setting
 
 void MainComponent::beginMasteringDrag()
 {
-    masteringDragging_ = true;
-    masteringDragFrom_ = history_.current().mastering;
+    masteringDrag_.begin({}, history_.current().mastering);
 }
 
 void MainComponent::endMasteringDrag()
 {
-    if (! masteringDragging_)
+    const auto from = masteringDrag_.end({});
+    if (! from)
         return;
 
-    masteringDragging_ = false;
-
-    commitStructDrag(history_, "Set mastering", masteringDragFrom_,
+    commitStructDrag(history_, "Set mastering", *from,
                      history_.current().mastering,
                      [](model::Song& s, const model::MasteringSettings& value)
     {
@@ -619,10 +617,7 @@ void MainComponent::beginEffectSlotParamsDrag(int slotIndex)
     if (chain == nullptr || slotIndex < 0 || slotIndex >= (int) chain->size())
         return;
 
-    effectSlotDragging_  = true;
-    effectSlotDragChain_ = editedChainRef();
-    effectSlotDragIndex_ = slotIndex;
-    effectSlotDragFrom_  = (*chain)[(size_t) slotIndex];
+    effectSlotDrag_.begin({ editedChainRef(), slotIndex }, (*chain)[(size_t) slotIndex]);
 }
 
 /** Commits a whole effect-slot-parameters drag as one undo step, the
@@ -633,10 +628,9 @@ void MainComponent::beginEffectSlotParamsDrag(int slotIndex)
 void MainComponent::endEffectSlotParamsDrag(int slotIndex)
 {
     const auto ref = editedChainRef();
-    if (! effectSlotDragging_ || effectSlotDragChain_ != ref || effectSlotDragIndex_ != slotIndex)
+    const auto from = effectSlotDrag_.end({ ref, slotIndex });
+    if (! from)
         return;
-
-    effectSlotDragging_ = false;
 
     const auto* edited = editedChain();
     if (edited == nullptr || slotIndex < 0 || slotIndex >= (int) edited->size())
@@ -653,7 +647,7 @@ void MainComponent::endEffectSlotParamsDrag(int slotIndex)
 
     const auto landedOn = chain[(size_t) slotIndex];
 
-    commitStructDrag(history_, "Set effect parameters", effectSlotDragFrom_, landedOn,
+    commitStructDrag(history_, "Set effect parameters", *from, landedOn,
                      [ref, slotIndex](model::Song& s, const model::EffectSlot& value)
     {
         auto* c = chainAt(s, ref);

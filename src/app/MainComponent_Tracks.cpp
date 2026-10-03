@@ -1356,24 +1356,21 @@ void MainComponent::beginSendDrag(int trackIndex, int send)
     if (trackIndex < 0 || trackIndex >= (int) tracks.size() || send < 0 || send >= (int) tracks[(size_t) trackIndex].sends.size())
         return;
 
-    sendDragging_  = true;
-    sendDragTrack_ = trackIndex;
-    sendDragIndex_ = send;
-    sendDragFrom_  = tracks[(size_t) trackIndex].sends[(size_t) send].levelDb;
+    sendDrag_.begin({ trackIndex, send }, tracks[(size_t) trackIndex].sends[(size_t) send].levelDb);
 }
 
 void MainComponent::endSendDrag(int trackIndex, int send)
 {
-    if (! sendDragging_ || sendDragTrack_ != trackIndex || sendDragIndex_ != send)
+    const auto from = sendDrag_.end({ trackIndex, send });
+    if (! from)
         return;
-    sendDragging_ = false;
 
     const auto& tracks = history_.current().tracks;
     if (trackIndex >= (int) tracks.size() || send >= (int) tracks[(size_t) trackIndex].sends.size())
         return;
 
     const float landedOn = tracks[(size_t) trackIndex].sends[(size_t) send].levelDb;
-    commitDrag(history_, std::string("Set send level"), sendDragFrom_, landedOn,
+    commitDrag(history_, std::string("Set send level"), *from, landedOn,
                [trackIndex, send](model::Song& s, float v)
                {
                    if (trackIndex < (int) s.tracks.size() && send < (int) s.tracks[(size_t) trackIndex].sends.size())
@@ -2479,20 +2476,18 @@ void MainComponent::setTrackGain(int index, float gainDb)
     group's faders move from; nullptr when that fader isn't being dragged. */
 const model::Song* MainComponent::faderDragBaseFor(int trackIndex, MixerStrip::Fader fader) const
 {
-    return faderDragging_ && faderDragTrack_ == trackIndex && faderDragWhich_ == fader ? &faderDragBase_ : nullptr;
+    const auto* start = faderDrag_.startOf({ trackIndex, fader });
+    return start != nullptr ? &start->song : nullptr;
 }
 
 /** Remembers where a fader was when it was grabbed. */
 void MainComponent::beginFaderDrag(int trackIndex, MixerStrip::Fader fader)
 {
-    faderDragTrack_ = trackIndex;
-    faderDragWhich_ = fader;
-    faderDragFrom_  = readFader(history_.current(), trackIndex, fader);
-    faderDragBase_  = history_.current(); // where its edit group's faders were too
-    faderDragging_  = true;
+    const float value = readFader(history_.current(), trackIndex, fader);
+    faderDrag_.begin({ trackIndex, fader }, { value, history_.current() }); // where its edit group's faders were too
 
     const auto param = fader == MixerStrip::Fader::Gain ? model::TrackParam::Gain : model::TrackParam::Pan;
-    automationControlMoved(AutomationWriteKey::trackParam(trackIndex, param), faderDragFrom_, true);
+    automationControlMoved(AutomationWriteKey::trackParam(trackIndex, param), value, true);
 }
 
 /** Turns a whole fader drag into one undo step.
@@ -2508,18 +2503,17 @@ void MainComponent::beginFaderDrag(int trackIndex, MixerStrip::Fader fader)
     drag. */
 void MainComponent::endFaderDrag(int trackIndex, MixerStrip::Fader fader)
 {
-    if (! faderDragging_ || faderDragTrack_ != trackIndex || faderDragWhich_ != fader)
+    auto start = faderDrag_.end({ trackIndex, fader });
+    if (! start)
         return;
 
-    faderDragging_ = false;
     automationControlReleased(AutomationWriteKey::trackParam(
         trackIndex, fader == MixerStrip::Fader::Gain ? model::TrackParam::Gain : model::TrackParam::Pan));
 
     const float landedOn = readFader(history_.current(), trackIndex, fader);
-    commitDrag(history_, faderName(fader), faderDragFrom_, landedOn,
-               [trackIndex, fader, base = faderDragBase_](model::Song& s, float v)
+    commitDrag(history_, faderName(fader), start->value, landedOn,
+               [trackIndex, fader, base = std::move(start->song)](model::Song& s, float v)
                { writeGroupFader(s, trackIndex, fader, v, &base); });
-    faderDragBase_ = {};
 }
 
 /** Mutes or unmutes a track, as an undoable edit.

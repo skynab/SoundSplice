@@ -1092,10 +1092,7 @@ MainComponent::MainComponent(bool headless)
     essentialSoundPane_.onAmountDragStart = [this](const std::string&)
     {
         if (const auto* clip = selectedAudioClip())
-        {
-            essentialDragFrom_ = clip->essential;
-            essentialDragging_ = true;
-        }
+            essentialDrag_.begin({}, clip->essential);
     };
     essentialSoundPane_.onAmountDragEnd   = [this](const std::string&) { endEssentialDrag(); };
     essentialSoundPane_.onMatchLoudness   = [this](model::SoundRole role, double lufs) { matchLoudnessForRole(role, lufs); };

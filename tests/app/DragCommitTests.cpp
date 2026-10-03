@@ -109,3 +109,36 @@ TEST_CASE("Any change at all commits a struct drag, unlike the tolerance on a nu
     REQUIRE(commitStructDrag(history, "Set params", start, landedOn, writePayload));
     REQUIRE(history.canUndo());
 }
+
+TEST_CASE("A pending drag hands back where it started, once, to the control it began on", "[app][drag]")
+{
+    PendingDrag<std::pair<int, int>, float> drag;
+    REQUIRE_FALSE(drag.isActive());
+    REQUIRE_FALSE(drag.end({ 0, 0 }));
+
+    drag.begin({ 2, 1 }, -6.0f);
+    REQUIRE(drag.isActive());
+    REQUIRE(drag.startOf({ 2, 1 }) != nullptr);
+    REQUIRE(*drag.startOf({ 2, 1 }) == -6.0f);
+    REQUIRE(drag.startOf({ 2, 0 }) == nullptr);
+
+    // Another control's end is ignored, and leaves this drag going.
+    REQUIRE_FALSE(drag.end({ 1, 1 }));
+    REQUIRE(drag.isActive());
+
+    const auto from = drag.end({ 2, 1 });
+    REQUIRE(from);
+    REQUIRE(*from == -6.0f);
+    REQUIRE_FALSE(drag.isActive());
+    REQUIRE_FALSE(drag.end({ 2, 1 })); // a second end has nothing to commit
+}
+
+TEST_CASE("A drag there's only one of is keyed by nothing", "[app][drag]")
+{
+    PendingDrag<std::monostate, Payload> drag;
+    drag.begin({}, Payload { 1, 0.5f });
+    drag.begin({}, Payload { 2, 0.25f }); // a fresh grab starts over
+    const auto from = drag.end({});
+    REQUIRE(from);
+    REQUIRE(*from == Payload { 2, 0.25f });
+}

@@ -804,11 +804,9 @@ private:
     void                   pushTrackRouting(int trackIndex);
     void                   chooseSidechain(int slotIndex);
 
-    // A send level being dragged on a strip, committed as one undo step.
-    bool                   sendDragging_  = false;
-    int                    sendDragTrack_ = -1;
-    int                    sendDragIndex_ = -1;
-    float                  sendDragFrom_  = 0.0f;
+    // A send level being dragged on a strip, by (track, send), committed as
+    // one undo step.
+    PendingDrag<std::pair<int, int>, float> sendDrag_;
     void                   toggleFolder(int trackIndex);
     void                   indentTrack(int trackIndex);
     void                   outdentTrack(int trackIndex);
@@ -1000,11 +998,13 @@ private:
 
     // Where a fader was grabbed, so the whole drag can be committed as one
     // undo step when it is released rather than one step per pixel.
-    bool               faderDragging_  = false;
-    int                faderDragTrack_ = -1;
-    MixerStrip::Fader  faderDragWhich_ = MixerStrip::Fader::Gain;
-    float              faderDragFrom_  = 0.0f;
-    model::Song        faderDragBase_; // the song as the drag began: its edit group's faders move from it
+    // Also the song as the drag began: its edit group's faders move from it.
+    struct FaderDragStart
+    {
+        float       value = 0.0f;
+        model::Song song;
+    };
+    PendingDrag<std::pair<int, MixerStrip::Fader>, FaderDragStart> faderDrag_;
     const model::Song* faderDragBaseFor(int trackIndex, MixerStrip::Fader fader) const;
 
     // Where an effect slot's parameters were before a drag on one of its
@@ -1027,10 +1027,7 @@ private:
     const std::vector<model::EffectSlot>*  editedChain() const;
     void pushEffectSlotToEngine(const EffectChainRef& ref, int slotIndex, const model::EffectSlot& slot);
 
-    bool              effectSlotDragging_ = false;
-    EffectChainRef    effectSlotDragChain_;
-    int               effectSlotDragIndex_ = -1;
-    model::EffectSlot effectSlotDragFrom_;
+    PendingDrag<std::pair<EffectChainRef, int>, model::EffectSlot> effectSlotDrag_; // by (chain, slot)
 
     // Every command, for the menus and the keyboard alike (see CommandTable.h).
     // Declared before the menu bar that watches it, so it outlives it.
@@ -1140,14 +1137,12 @@ private:
     double                             mixLufs_             = 0.0;
     unsigned long long                 mixMeasuredAtState_  = 0;
     bool                               mixMeasured_         = false;
-    model::EssentialSettings           essentialDragFrom_; // the selected clip's, as a task slider was grabbed
-    bool                               essentialDragging_ = false;
+    PendingDrag<std::monostate, model::EssentialSettings> essentialDrag_; // the selected clip's, as a task slider was grabbed
     int                                diagnosedClipId_ = 0; // the clip diagnosticsPane_'s rows are for
     app::OpenFiles                     openFiles_;
     OpenFilesPane                      openFilesPane_;
     AutomationPane                     automationPane_;
-    bool                               masteringDragging_ = false;
-    model::MasteringSettings           masteringDragFrom_;
+    PendingDrag<std::monostate, model::MasteringSettings> masteringDrag_;
     // Follows the system's default output (headphones being plugged in,
     // say) rather than holding whichever device was default at launch.
     // Persisted, and switchable off for anyone deliberately running a fixed
@@ -1156,10 +1151,7 @@ private:
     bool                               followSystemOutput_ = true;
     bool                               switchingDevice_    = false;
 
-    bool                               clipGainDragging_ = false;
-    int                                clipGainDragTrack_ = -1;
-    int                                clipGainDragClip_  = -1;
-    float                              clipGainDragFrom_  = 0.0f;
+    PendingDrag<std::pair<int, int>, float> clipGainDrag_; // by (track, clip)
 
     // The captured noise print, one profile per channel, plus the file it
     // was measured from — a print is only meaningful for the recording it

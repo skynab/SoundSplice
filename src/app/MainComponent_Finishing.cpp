@@ -449,7 +449,7 @@ void MainComponent::setEssentialAmount(const std::string& task, float amount)
     if (selectedAudioClip() == nullptr)
         return;
     auto& clip = history_.mutableCurrent().tracks[(size_t) selectedTrackIndex_].clips[(size_t) selectedClipIndex_];
-    if (! essentialDragging_)
+    if (! essentialDrag_.isActive())
     {
         // A click or a wheel turn: its own undo step.
         const auto before = clip.essential;
@@ -474,13 +474,15 @@ void MainComponent::setEssentialAmount(const std::string& task, float amount)
 
 void MainComponent::endEssentialDrag()
 {
-    if (! essentialDragging_ || selectedAudioClip() == nullptr)
+    if (selectedAudioClip() == nullptr)
         return;
-    essentialDragging_ = false;
+    const auto from = essentialDrag_.end({});
+    if (! from)
+        return;
 
     const int  trackIndex = selectedTrackIndex_, clipIndex = selectedClipIndex_;
     const auto landed     = selectedAudioClip()->essential;
-    commitStructDrag(history_, std::string("Essential Sound"), essentialDragFrom_, landed,
+    commitStructDrag(history_, std::string("Essential Sound"), *from, landed,
                      [trackIndex, clipIndex](model::Song& s, const model::EssentialSettings& settings)
                      {
                          auto& c     = s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];

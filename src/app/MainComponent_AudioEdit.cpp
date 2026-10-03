@@ -1765,30 +1765,24 @@ void MainComponent::beginClipGainDrag()
     if (clip == nullptr)
         return;
 
-    clipGainDragging_   = true;
-    clipGainDragTrack_  = selectedTrackIndex_;
-    clipGainDragClip_   = selectedClipIndex_;
-    clipGainDragFrom_   = clip->gainDb;
+    clipGainDrag_.begin({ selectedTrackIndex_, selectedClipIndex_ }, clip->gainDb);
 }
 
 void MainComponent::endClipGainDrag()
 {
-    if (! clipGainDragging_
-        || clipGainDragTrack_ != selectedTrackIndex_
-        || clipGainDragClip_ != selectedClipIndex_)
+    const int  trackIndex = selectedTrackIndex_;
+    const int  clipIndex  = selectedClipIndex_;
+    const auto from       = clipGainDrag_.end({ trackIndex, clipIndex });
+    if (! from)
         return;
-
-    clipGainDragging_ = false;
 
     const auto* clip = selectedAudioClip();
     if (clip == nullptr)
         return;
 
-    const int   trackIndex = clipGainDragTrack_;
-    const int   clipIndex  = clipGainDragClip_;
-    const float landedOn   = clip->gainDb;
+    const float landedOn = clip->gainDb;
 
-    commitStructDrag(history_, "Set clip gain", clipGainDragFrom_, landedOn,
+    commitStructDrag(history_, "Set clip gain", *from, landedOn,
                      [trackIndex, clipIndex](model::Song& s, const float& value)
     {
         s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex].gainDb = value;
