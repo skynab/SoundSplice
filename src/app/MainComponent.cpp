@@ -305,218 +305,17 @@ MainComponent::MainComponent(bool headless)
     masterPanel_.addAndMakeVisible(masterSlider);
     masterLabel.attachToComponent(&masterSlider, true);
 
-    // ---- master filter (stored in the document) ----
-    filterButton.onClick = [this]
+    // ---- the master's insert effects: edited in the effects panel, in its
+    // Master scope ----
+    masterEffectsButton_.setTooltip("Edit the master bus's effects, which every track plays through");
+    masterEffectsButton_.onClick = [this]
     {
-        const bool on = filterButton.getToggleState();
-        history_.edit(on ? "Enable master filter" : "Disable master filter",
-                      [on](model::Song& s) { s.filter.enabled = on; });
-        engine_.setMasterFilterEnabled(on);
+        effectChain_.setScope(EffectChainPanel::Scope::Master);
+        workspace_.openPanel("Track FX");
+        workspace_.revealPanel("Track FX");
+        refreshEffectChainForSelected();
     };
-    masterPanel_.addAndMakeVisible(filterButton);
-
-    filterModeBox_.addItem("Low-pass", 1);
-    filterModeBox_.addItem("High-pass", 2);
-    filterModeBox_.addItem("Band-pass", 3);
-    filterModeBox_.setSelectedId(1, juce::dontSendNotification);
-    filterModeBox_.onChange = [this]
-    {
-        const int mode = juce::jmax(0, filterModeBox_.getSelectedId() - 1);
-        history_.edit("Set master filter mode", [mode](model::Song& s) { s.filter.mode = mode; });
-        engine_.setMasterFilterMode(mode);
-    };
-    masterPanel_.addAndMakeVisible(filterModeBox_);
-
-    filterCutoffSlider.setRange(20.0, 18000.0, 1.0);
-    filterCutoffSlider.setSkewFactorFromMidPoint(1000.0);
-    filterCutoffSlider.setValue(1000.0, juce::dontSendNotification);
-    filterCutoffSlider.setTextValueSuffix(" Hz");
-    filterCutoffSlider.onValueChange = [this]
-    {
-        const float hz = (float) filterCutoffSlider.getValue();
-        history_.mutableCurrent().filter.cutoff = hz;
-        engine_.setMasterFilterCutoff(hz);
-    };
-    wireUndoableSlider(filterCutoffSlider, "Set master filter cutoff",
-                       [](const model::Song& s) { return s.filter.cutoff; },
-                       [](model::Song& s, float v) { s.filter.cutoff = v; });
-    masterPanel_.addAndMakeVisible(filterCutoffSlider);
-
-    filterResoSlider.setRange(0.1, 5.0, 0.01);
-    filterResoSlider.setValue(0.707, juce::dontSendNotification);
-    filterResoSlider.setTextValueSuffix(" Q");
-    filterResoSlider.onValueChange = [this]
-    {
-        const float q = (float) filterResoSlider.getValue();
-        history_.mutableCurrent().filter.resonance = q;
-        engine_.setMasterFilterResonance(q);
-    };
-    wireUndoableSlider(filterResoSlider, "Set master filter resonance",
-                       [](const model::Song& s) { return s.filter.resonance; },
-                       [](model::Song& s, float v) { s.filter.resonance = v; });
-    masterPanel_.addAndMakeVisible(filterResoSlider);
-
-    // ---- master delay (stored in the document, so it saves + restores) ----
-    delayButton.onClick = [this]
-    {
-        const bool on = delayButton.getToggleState();
-        history_.edit(on ? "Enable master delay" : "Disable master delay",
-                      [on](model::Song& s) { s.delay.enabled = on; });
-        engine_.setMasterDelayEnabled(on);
-    };
-    masterPanel_.addAndMakeVisible(delayButton);
-
-    delayTimeSlider.setRange(20.0, 1000.0, 1.0);
-    delayTimeSlider.setValue(300.0, juce::dontSendNotification);
-    delayTimeSlider.setTextValueSuffix(" ms");
-    delayTimeSlider.onValueChange = [this]
-    {
-        const float ms = (float) delayTimeSlider.getValue();
-        history_.mutableCurrent().delay.timeMs = ms;
-        engine_.setMasterDelayTimeMs(ms);
-    };
-    wireUndoableSlider(delayTimeSlider, "Set master delay time",
-                       [](const model::Song& s) { return s.delay.timeMs; },
-                       [](model::Song& s, float v) { s.delay.timeMs = v; });
-    masterPanel_.addAndMakeVisible(delayTimeSlider);
-
-    delayFbSlider.setRange(0.0, 95.0, 1.0);
-    delayFbSlider.setValue(35.0, juce::dontSendNotification);
-    delayFbSlider.setTextValueSuffix(" %");
-    delayFbSlider.onValueChange = [this]
-    {
-        const float fb = (float) (delayFbSlider.getValue() / 100.0);
-        history_.mutableCurrent().delay.feedback = fb;
-        engine_.setMasterDelayFeedback(fb);
-    };
-    wireUndoableSlider(delayFbSlider, "Set master delay feedback",
-                       [](const model::Song& s) { return s.delay.feedback; },
-                       [](model::Song& s, float v) { s.delay.feedback = v; });
-    masterPanel_.addAndMakeVisible(delayFbSlider);
-
-    delayMixSlider.setRange(0.0, 100.0, 1.0);
-    delayMixSlider.setValue(30.0, juce::dontSendNotification);
-    delayMixSlider.setTextValueSuffix(" %");
-    delayMixSlider.onValueChange = [this]
-    {
-        const float mix = (float) (delayMixSlider.getValue() / 100.0);
-        history_.mutableCurrent().delay.mix = mix;
-        engine_.setMasterDelayMix(mix);
-    };
-    wireUndoableSlider(delayMixSlider, "Set master delay mix",
-                       [](const model::Song& s) { return s.delay.mix; },
-                       [](model::Song& s, float v) { s.delay.mix = v; });
-    masterPanel_.addAndMakeVisible(delayMixSlider);
-
-    // ---- master reverb (stored in the document) ----
-    reverbButton.onClick = [this]
-    {
-        const bool on = reverbButton.getToggleState();
-        history_.edit(on ? "Enable master reverb" : "Disable master reverb",
-                      [on](model::Song& s) { s.reverb.enabled = on; });
-        engine_.setMasterReverbEnabled(on);
-    };
-    masterPanel_.addAndMakeVisible(reverbButton);
-
-    reverbRoomSlider.setRange(0.0, 100.0, 1.0);
-    reverbRoomSlider.setValue(50.0, juce::dontSendNotification);
-    reverbRoomSlider.setTextValueSuffix(" room");
-    reverbRoomSlider.onValueChange = [this]
-    {
-        const float v = (float) (reverbRoomSlider.getValue() / 100.0);
-        history_.mutableCurrent().reverb.roomSize = v;
-        engine_.setMasterReverbRoomSize(v);
-    };
-    wireUndoableSlider(reverbRoomSlider, "Set master reverb room size",
-                       [](const model::Song& s) { return s.reverb.roomSize; },
-                       [](model::Song& s, float v) { s.reverb.roomSize = v; });
-    masterPanel_.addAndMakeVisible(reverbRoomSlider);
-
-    reverbDampSlider.setRange(0.0, 100.0, 1.0);
-    reverbDampSlider.setValue(50.0, juce::dontSendNotification);
-    reverbDampSlider.setTextValueSuffix(" damp");
-    reverbDampSlider.onValueChange = [this]
-    {
-        const float v = (float) (reverbDampSlider.getValue() / 100.0);
-        history_.mutableCurrent().reverb.damping = v;
-        engine_.setMasterReverbDamping(v);
-    };
-    wireUndoableSlider(reverbDampSlider, "Set master reverb damping",
-                       [](const model::Song& s) { return s.reverb.damping; },
-                       [](model::Song& s, float v) { s.reverb.damping = v; });
-    masterPanel_.addAndMakeVisible(reverbDampSlider);
-
-    reverbMixSlider.setRange(0.0, 100.0, 1.0);
-    reverbMixSlider.setValue(30.0, juce::dontSendNotification);
-    reverbMixSlider.setTextValueSuffix(" %");
-    reverbMixSlider.onValueChange = [this]
-    {
-        const float v = (float) (reverbMixSlider.getValue() / 100.0);
-        history_.mutableCurrent().reverb.mix = v;
-        engine_.setMasterReverbMix(v);
-    };
-    wireUndoableSlider(reverbMixSlider, "Set master reverb mix",
-                       [](const model::Song& s) { return s.reverb.mix; },
-                       [](model::Song& s, float v) { s.reverb.mix = v; });
-    masterPanel_.addAndMakeVisible(reverbMixSlider);
-
-    // ---- master EQ: fixed-band bass/mid/treble, the whole song's tone shape
-    // (stored in the document) ----
-    eqButton.onClick = [this]
-    {
-        const bool on = eqButton.getToggleState();
-        history_.edit(on ? "Enable master EQ" : "Disable master EQ",
-                      [on](model::Song& s) { s.eq.enabled = on; });
-        engine_.setMasterEqEnabled(on);
-        eqCurveView_.setSettings(history_.current().eq);
-    };
-    masterPanel_.addAndMakeVisible(eqButton);
-
-    eqBassSlider.setRange(-18.0, 18.0, 0.1);
-    eqBassSlider.setValue(0.0, juce::dontSendNotification);
-    eqBassSlider.setTextValueSuffix(" dB bass");
-    eqBassSlider.onValueChange = [this]
-    {
-        const float v = (float) eqBassSlider.getValue();
-        history_.mutableCurrent().eq.bassDb = v;
-        engine_.setMasterEqBassDb(v);
-        eqCurveView_.setSettings(history_.current().eq);
-    };
-    wireUndoableSlider(eqBassSlider, "Set master EQ bass",
-                       [](const model::Song& s) { return s.eq.bassDb; },
-                       [](model::Song& s, float v) { s.eq.bassDb = v; });
-    masterPanel_.addAndMakeVisible(eqBassSlider);
-
-    eqMidSlider.setRange(-18.0, 18.0, 0.1);
-    eqMidSlider.setValue(0.0, juce::dontSendNotification);
-    eqMidSlider.setTextValueSuffix(" dB mid");
-    eqMidSlider.onValueChange = [this]
-    {
-        const float v = (float) eqMidSlider.getValue();
-        history_.mutableCurrent().eq.midDb = v;
-        engine_.setMasterEqMidDb(v);
-        eqCurveView_.setSettings(history_.current().eq);
-    };
-    wireUndoableSlider(eqMidSlider, "Set master EQ mid",
-                       [](const model::Song& s) { return s.eq.midDb; },
-                       [](model::Song& s, float v) { s.eq.midDb = v; });
-    masterPanel_.addAndMakeVisible(eqMidSlider);
-
-    eqTrebleSlider.setRange(-18.0, 18.0, 0.1);
-    eqTrebleSlider.setValue(0.0, juce::dontSendNotification);
-    eqTrebleSlider.setTextValueSuffix(" dB treble");
-    eqTrebleSlider.onValueChange = [this]
-    {
-        const float v = (float) eqTrebleSlider.getValue();
-        history_.mutableCurrent().eq.trebleDb = v;
-        engine_.setMasterEqTrebleDb(v);
-        eqCurveView_.setSettings(history_.current().eq);
-    };
-    wireUndoableSlider(eqTrebleSlider, "Set master EQ treble",
-                       [](const model::Song& s) { return s.eq.trebleDb; },
-                       [](model::Song& s, float v) { s.eq.trebleDb = v; });
-    masterPanel_.addAndMakeVisible(eqTrebleSlider);
-    masterPanel_.addAndMakeVisible(eqCurveView_);
+    masterPanel_.addAndMakeVisible(masterEffectsButton_);
 
     // ---- automation: the mode moving a control records in (Read, Touch,
     // Latch, Write - see model::AutomationMode), and Clr Auto, which clears
@@ -876,7 +675,7 @@ MainComponent::MainComponent(bool headless)
         ref.name       = entry.name;
         addEffectSlot(model::EffectKind::Plugin, ref);
     };
-    effectChain_.onScopeChanged         = [this](bool) { refreshEffectChainForSelected(); };
+    effectChain_.onScopeChanged         = [this](EffectChainPanel::Scope) { refreshEffectChainForSelected(); };
     effectChain_.onSidechainMenuRequested = [this](int slot) { chooseSidechain(slot); };
     effectChain_.sidechainName = [this](int trackId)
     {
@@ -1119,10 +918,6 @@ MainComponent::MainComponent(bool headless)
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
     updateMixerStrips();
-    updateDelayControls();
-    updateFilterControls();
-    updateReverbControls();
-    updateEqControls();
     updateMasteringControls();
     updateEditingLabel();
 
@@ -1266,10 +1061,6 @@ void MainComponent::refreshFromModel()
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
     updateMixerStrips();
-    updateDelayControls();
-    updateFilterControls();
-    updateReverbControls();
-    updateEqControls();
     updateMasteringControls();
     fileBrowser_.setProjectRootFolder(history_.current().projectRootFolder.empty()
                                           ? juce::File{}

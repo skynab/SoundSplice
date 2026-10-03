@@ -77,10 +77,10 @@ struct Song
     std::vector<Track> tracks;
     std::vector<Scene> scenes; // session-grid rows; every track's sessionSlots matches this length
     int                nextId = 1; // monotonic id source for tracks and clips
-    FilterSettings     filter;
-    DelaySettings      delay;
-    ReverbSettings     reverb;
-    EqSettings         eq;
+    // The master bus's insert effects, in order: after every track, before
+    // the mastering rack. A chain like a track's (EffectSlot), without
+    // automation or sidechains.
+    std::vector<EffectSlot> masterEffects;
     MasteringSettings  mastering;
     AutomationLane     masterGainDb; // master gain automation (dB over beats)
     std::vector<Marker> markers;     // in timeline order; see model/Markers.h

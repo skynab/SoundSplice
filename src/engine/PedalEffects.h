@@ -331,7 +331,7 @@ private:
     The three-band EQ pedal as a chain node.
 
     Exists because the mid axis was unreachable on a track by construction.
-    `EqEffect` is master-bus only, and no chain slot could boost or cut a
+    The master bus's EQ was the master's only, and no chain slot could boost or cut a
     band's gain at all - `FilterEffect` picks a cutoff, which is a different
     thing. A scooped or pushed midrange is *the* EQ decision in a rock or
     metal guitar tone, and there was no way to make it per track.

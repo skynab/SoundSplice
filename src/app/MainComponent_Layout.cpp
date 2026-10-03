@@ -468,50 +468,7 @@ void MainComponent::layoutMasterPanel()
     masterSlider.setBounds(masterRow.withTrimmedLeft(64));
     masterArea.removeFromTop(6);
 
-    auto filterRow = masterArea.removeFromTop(26);
-    filterButton.setBounds(filterRow.removeFromLeft(64));
-    filterRow.removeFromLeft(6);
-    filterModeBox_.setBounds(filterRow.removeFromLeft(104));
-    filterRow.removeFromLeft(8);
-    const int fw = juce::jmax(60, (filterRow.getWidth() - 8) / 2);
-    filterCutoffSlider.setBounds(filterRow.removeFromLeft(fw));
-    filterRow.removeFromLeft(8);
-    filterResoSlider.setBounds(filterRow);
-    masterArea.removeFromTop(6);
-
-    auto delayRow = masterArea.removeFromTop(26);
-    delayButton.setBounds(delayRow.removeFromLeft(70));
-    delayRow.removeFromLeft(8);
-    const int dw = juce::jmax(50, (delayRow.getWidth() - 16) / 3);
-    delayTimeSlider.setBounds(delayRow.removeFromLeft(dw));
-    delayRow.removeFromLeft(8);
-    delayFbSlider.setBounds(delayRow.removeFromLeft(dw));
-    delayRow.removeFromLeft(8);
-    delayMixSlider.setBounds(delayRow);
-    masterArea.removeFromTop(6);
-
-    auto reverbRow = masterArea.removeFromTop(26);
-    reverbButton.setBounds(reverbRow.removeFromLeft(70));
-    reverbRow.removeFromLeft(8);
-    const int rw = juce::jmax(50, (reverbRow.getWidth() - 16) / 3);
-    reverbRoomSlider.setBounds(reverbRow.removeFromLeft(rw));
-    reverbRow.removeFromLeft(8);
-    reverbDampSlider.setBounds(reverbRow.removeFromLeft(rw));
-    reverbRow.removeFromLeft(8);
-    reverbMixSlider.setBounds(reverbRow);
-    masterArea.removeFromTop(6);
-
-    auto eqRow = masterArea.removeFromTop(26);
-    eqButton.setBounds(eqRow.removeFromLeft(70));
-    eqRow.removeFromLeft(8);
-    const int ew = juce::jmax(50, (eqRow.getWidth() - 16) / 3);
-    eqBassSlider.setBounds(eqRow.removeFromLeft(ew));
-    eqRow.removeFromLeft(8);
-    eqMidSlider.setBounds(eqRow.removeFromLeft(ew));
-    eqRow.removeFromLeft(8);
-    eqTrebleSlider.setBounds(eqRow);
-    masterArea.removeFromTop(4);
-    eqCurveView_.setBounds(masterArea.removeFromTop(48));
+    masterEffectsButton_.setBounds(masterArea.removeFromTop(26).removeFromLeft(140));
     masterArea.removeFromTop(6);
 
     masterArea.removeFromTop(8);

@@ -107,6 +107,10 @@ namespace tempoedit
                     entry.second.mapBeats(move);
         }
 
+        for (auto& slot : song.masterEffects)
+            for (auto& entry : slot.automation)
+                entry.second.mapBeats(move);
+
         for (auto& marker : song.markers)
         {
             const double end   = move(marker.startBeats + marker.lengthBeats);

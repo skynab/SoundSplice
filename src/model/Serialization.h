@@ -37,9 +37,14 @@ namespace soundsplice::model
     parameter needs nothing here. Version 1 files held them positionally on
     the FXSLOT line, and are still read (detail::kPositionalEffectParams).
 
+    Version 3 replaced the master bus's four fixed effects (FILTER, DELAY,
+    REVERB and EQ records) with a chain of slots (MASTERFX). An earlier file's
+    are read into the chain: each one that was on becomes a slot, which plays
+    exactly as it did (detail::legacyMasterEffects).
+
     Looper-Audio's ".looper" files are not read.
 */
-inline constexpr int kFormatVersion = 2;
+inline constexpr int kFormatVersion = 3;
 
 namespace detail
 {
@@ -363,6 +368,49 @@ namespace detail
     }
 }
 
+namespace detail
+{
+    /** The chain a version 1 or 2 file's master effects become: each that
+        was on, in the order they ran. The EQ becomes an EQ pedal on the
+        master EQ's fixed bands, which is the same three filters - the
+        same sound. */
+    inline std::vector<EffectSlot> legacyMasterEffects(const FilterSettings& filter, const DelaySettings& delay,
+                                                       const ReverbSettings& reverb, const EqSettings& eq)
+    {
+        std::vector<EffectSlot> chain;
+        if (filter.enabled)
+        {
+            chain.push_back(makeEffectSlot(EffectKind::Filter));
+            chain.back().filter         = filter;
+            chain.back().filter.enabled = false; // the slot's own flag says; this one isn't kept
+        }
+        if (delay.enabled)
+        {
+            chain.push_back(makeEffectSlot(EffectKind::Delay));
+            chain.back().delay         = delay;
+            chain.back().delay.enabled = false;
+        }
+        if (reverb.enabled)
+        {
+            chain.push_back(makeEffectSlot(EffectKind::Reverb));
+            chain.back().reverb         = reverb;
+            chain.back().reverb.enabled = false;
+        }
+        if (eq.enabled)
+        {
+            auto& pedal       = chain.emplace_back(makeEffectSlot(EffectKind::Eq)).eqPedal;
+            pedal.lowShelfHz  = EqSettings::bassHz;
+            pedal.lowShelfDb  = eq.bassDb;
+            pedal.midHz       = EqSettings::midHz();
+            pedal.midDb       = eq.midDb;
+            pedal.midQ        = 0.7f;
+            pedal.highShelfHz = EqSettings::trebleHz;
+            pedal.highShelfDb = eq.trebleDb;
+        }
+        return chain;
+    }
+}
+
 inline std::string serialize(const Song& song)
 {
     std::ostringstream out;
@@ -371,21 +419,9 @@ inline std::string serialize(const Song& song)
     out << "TSNUM " << song.timeSigNumerator << "\n";
     out << "TSDEN " << song.timeSigDenominator << "\n";
     out << "NEXTID " << song.nextId << "\n";
-    out << "FILTER " << (song.filter.enabled ? 1 : 0) << " " << song.filter.mode << " "
-        << detail::num((double) song.filter.cutoff) << " "
-        << detail::num((double) song.filter.resonance) << "\n";
-    out << "DELAY " << (song.delay.enabled ? 1 : 0) << " "
-        << detail::num((double) song.delay.timeMs) << " "
-        << detail::num((double) song.delay.feedback) << " "
-        << detail::num((double) song.delay.mix) << "\n";
-    out << "REVERB " << (song.reverb.enabled ? 1 : 0) << " "
-        << detail::num((double) song.reverb.roomSize) << " "
-        << detail::num((double) song.reverb.damping) << " "
-        << detail::num((double) song.reverb.mix) << "\n";
-    out << "EQ " << (song.eq.enabled ? 1 : 0) << " "
-        << detail::num((double) song.eq.bassDb) << " "
-        << detail::num((double) song.eq.midDb) << " "
-        << detail::num((double) song.eq.trebleDb) << "\n";
+    out << "MASTERFX " << song.masterEffects.size() << "\n";
+    for (const auto& slot : song.masterEffects)
+        detail::writeEffectSlot(out, slot);
     {
         const auto& m = song.mastering;
         out << "MASTERING " << (m.enabled ? 1 : 0) << " "
@@ -874,52 +910,74 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         return fail("missing id counter");
     song.nextId = std::atoi(rest.c_str());
 
-    if (readTagged("FILTER", rest))
+    // The master effects: a chain since version 3, four fixed ones before.
     {
-        std::istringstream fs(rest);
-        int    enabled = 0, mode = 0;
-        double cutoff = 0.0, resonance = 0.0;
-        fs >> enabled >> mode >> cutoff >> resonance;
-        song.filter.enabled   = enabled != 0;
-        song.filter.mode      = mode;
-        song.filter.cutoff    = (float) cutoff;
-        song.filter.resonance = (float) resonance;
+        FilterSettings filter;
+        DelaySettings  delay;
+        ReverbSettings reverb;
+        EqSettings     eq;
+
+        if (readTagged("FILTER", rest))
+        {
+            std::istringstream fs(rest);
+            int    enabled = 0, mode = 0;
+            double cutoff = 0.0, resonance = 0.0;
+            fs >> enabled >> mode >> cutoff >> resonance;
+            filter.enabled   = enabled != 0;
+            filter.mode      = mode;
+            filter.cutoff    = (float) cutoff;
+            filter.resonance = (float) resonance;
+        }
+
+        if (readTagged("DELAY", rest))
+        {
+            std::istringstream ds(rest);
+            int    enabled = 0;
+            double timeMs = 0.0, feedback = 0.0, mix = 0.0;
+            ds >> enabled >> timeMs >> feedback >> mix;
+            delay.enabled  = enabled != 0;
+            delay.timeMs   = (float) timeMs;
+            delay.feedback = (float) feedback;
+            delay.mix      = (float) mix;
+        }
+
+        if (readTagged("REVERB", rest))
+        {
+            std::istringstream rs(rest);
+            int    enabled = 0;
+            double roomSize = 0.0, damping = 0.0, mix = 0.0;
+            rs >> enabled >> roomSize >> damping >> mix;
+            reverb.enabled  = enabled != 0;
+            reverb.roomSize = (float) roomSize;
+            reverb.damping  = (float) damping;
+            reverb.mix      = (float) mix;
+        }
+
+        if (readTagged("EQ", rest))
+        {
+            std::istringstream es(rest);
+            int    enabled = 0;
+            double bassDb = 0.0, midDb = 0.0, trebleDb = 0.0;
+            es >> enabled >> bassDb >> midDb >> trebleDb;
+            eq.enabled  = enabled != 0;
+            eq.bassDb   = (float) bassDb;
+            eq.midDb    = (float) midDb;
+            eq.trebleDb = (float) trebleDb;
+        }
+
+        song.masterEffects = detail::legacyMasterEffects(filter, delay, reverb, eq);
     }
 
-    if (readTagged("DELAY", rest))
+    if (readTagged("MASTERFX", rest))
     {
-        std::istringstream ds(rest);
-        int    enabled = 0;
-        double timeMs = 0.0, feedback = 0.0, mix = 0.0;
-        ds >> enabled >> timeMs >> feedback >> mix;
-        song.delay.enabled  = enabled != 0;
-        song.delay.timeMs   = (float) timeMs;
-        song.delay.feedback = (float) feedback;
-        song.delay.mix      = (float) mix;
-    }
-
-    if (readTagged("REVERB", rest))
-    {
-        std::istringstream rs(rest);
-        int    enabled = 0;
-        double roomSize = 0.0, damping = 0.0, mix = 0.0;
-        rs >> enabled >> roomSize >> damping >> mix;
-        song.reverb.enabled  = enabled != 0;
-        song.reverb.roomSize = (float) roomSize;
-        song.reverb.damping  = (float) damping;
-        song.reverb.mix      = (float) mix;
-    }
-
-    if (readTagged("EQ", rest))
-    {
-        std::istringstream eq(rest);
-        int    enabled = 0;
-        double bassDb = 0.0, midDb = 0.0, trebleDb = 0.0;
-        eq >> enabled >> bassDb >> midDb >> trebleDb;
-        song.eq.enabled  = enabled != 0;
-        song.eq.bassDb   = (float) bassDb;
-        song.eq.midDb    = (float) midDb;
-        song.eq.trebleDb = (float) trebleDb;
+        const int slotCount = std::atoi(rest.c_str());
+        for (int s = 0; s < slotCount; ++s)
+        {
+            EffectSlot slot;
+            if (const char* error = readEffectSlot(slot))
+                return fail(error);
+            song.masterEffects.push_back(std::move(slot));
+        }
     }
 
     if (readTagged("MASTERING", rest))

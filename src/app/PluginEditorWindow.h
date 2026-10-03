@@ -23,8 +23,9 @@ namespace soundsplice
       view rather than an empty window, which is the difference between "this
       plugin has no UI" and "this app failed to open it".
 */
-/** Where a plugin sits in the document: a track by id, the clip whose own
-    chain it's in by id (0 for the track's chain), and its position there. */
+/** Where a plugin sits in the document: a track by id (0 for the master
+    chain - no track has that id), the clip whose own chain it's in by id (0
+    for the track's chain), and its position there. */
 struct PluginSlotAddress
 {
     int trackId = 0;

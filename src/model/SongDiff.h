@@ -99,8 +99,7 @@ inline std::vector<std::string> differences(const Song& from, const Song& to, si
         else
             say("Markers moved or renamed");
     }
-    if (! (from.mastering == to.mastering) || ! (from.eq == to.eq) || ! (from.filter == to.filter) || ! (from.delay == to.delay)
-        || ! (from.reverb == to.reverb) || from.masterGainDb != to.masterGainDb)
+    if (! (from.mastering == to.mastering) || from.masterEffects != to.masterEffects || from.masterGainDb != to.masterGainDb)
         say("Master bus changed");
     if (! (from.info == to.info))
         say("Project info changed");

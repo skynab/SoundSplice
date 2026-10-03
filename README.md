@@ -21,8 +21,8 @@ edit and process audio on a multi-track timeline, then export the result.
   (capture a noise print, then reduce), and applying an effect chain to a selection. Edits write a
   new file, so they are undoable.
 - **Effects** — a per-track insert chain of built-in effects (filter, EQ, delay, reverb, drive,
-  compressor, gate, tremolo, chorus, wobble) and hosted VST3/AudioUnit plugins, plus master
-  filter, delay, reverb and EQ.
+  compressor, gate, tremolo, chorus, wobble) and hosted VST3/AudioUnit plugins, and the same
+  chain on the master bus.
 - **Mixing** — a mixer strip per track (gain, pan, mute, solo, meter), gain and pan automation
   lanes you can draw or record, and master gain automation.
 - **Mastering and analysis** — a master-bus mastering rack (EQ, exciter, widener, reverb,

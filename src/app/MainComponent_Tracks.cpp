@@ -2225,6 +2225,15 @@ void MainComponent::syncEngineTracks()
     }
     engine_.setActiveTrackCount(n);
 
+    // The master's chain, the same way.
+    std::vector<engine::EffectSlotSpec> masterSpecs;
+    for (const auto& slot : song.masterEffects)
+        masterSpecs.push_back(effectSlotSpecFor(slot));
+    if (engine_.setMasterEffectChain(masterSpecs))
+        closePluginEditors();
+    for (size_t s = 0; s < song.masterEffects.size(); ++s)
+        engine_.setMasterEffectSlotParams((int) s, model::effectParamValues(song.masterEffects[s]));
+
     // The arrangement just changed, so the loop it runs over has too. This is
     // the one place every clip edit passes through, which is why it lives
     // here rather than in each of them.

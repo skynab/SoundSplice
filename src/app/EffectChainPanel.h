@@ -70,8 +70,17 @@ public:
     /** Fired when one of the user's presets is picked from Delete Preset. */
     std::function<void(const std::string& effectId, const std::string& name)> onUserPresetDeleted;
 
-    /** The Track/Clip switch changed: the owner hands over the other chain. */
-    std::function<void(bool clipScope)> onScopeChanged;
+    /** Which chain the panel edits: the selected track's, the selected audio
+        clip's own, or the master bus's. */
+    enum class Scope
+    {
+        Track,
+        Clip,
+        Master
+    };
+
+    /** The scope switch changed: the owner hands over the other chain. */
+    std::function<void(Scope)> onScopeChanged;
 
     /** A compressor's or gate's Key button (model::canBeKeyed): choose the
         track it listens to. @c sidechainName names a track by id for the
@@ -81,15 +90,16 @@ public:
 
     EffectChainPanel()
     {
-        // Which chain this edits: the track's, or the selected clip's alone.
-        scopeButton_.setTooltip("Which effects this edits: the selected track's, "
-                                "or the selected audio clip's own, which run on that clip alone");
+        // Which chain this edits: the track's, the selected clip's alone, or
+        // the master's. Each click moves on to the next.
+        scopeButton_.setTooltip("Which effects this edits: the selected track's, the selected audio clip's "
+                                "own, which run on that clip alone, or the master bus's, which every track "
+                                "plays through");
         scopeButton_.onClick = [this]
         {
-            clipScope_ = ! clipScope_;
-            updateScopeButton();
+            setScope(scope_ == Scope::Track ? Scope::Clip : scope_ == Scope::Clip ? Scope::Master : Scope::Track);
             if (onScopeChanged)
-                onScopeChanged(clipScope_);
+                onScopeChanged(scope_);
         };
         updateScopeButton();
         addChildComponent(scopeButton_);
@@ -213,10 +223,11 @@ public:
         setContentVisible(true);
     }
 
+    /** No track to edit, but the switch stays: the master needs none. */
     void setNoTrackSelected()
     {
         placeholder_.setText("Select a track to edit its effects", juce::dontSendNotification);
-        scopeButton_.setVisible(false);
+        scopeButton_.setVisible(true);
         setContentVisible(false);
     }
 
@@ -229,7 +240,16 @@ public:
         setContentVisible(false);
     }
 
-    bool clipScope() const noexcept { return clipScope_; }
+    Scope scope() const noexcept { return scope_; }
+    bool  clipScope() const noexcept { return scope_ == Scope::Clip; }
+    bool  masterScope() const noexcept { return scope_ == Scope::Master; }
+
+    /** Switches scope without telling the owner, who asked for it. */
+    void setScope(Scope scope)
+    {
+        scope_ = scope;
+        updateScopeButton();
+    }
 
     /** Selects a slot, so a test can walk every effect kind's controls. The
         app selects by clicking the list, which a headless test can't do. */
@@ -765,7 +785,7 @@ private:
         paramsViewport_.setVisible(true);
 
         const auto& slot = chain_[(size_t) selected_];
-        if (model::canBeKeyed(slot.kind) && ! clipScope_)
+        if (model::canBeKeyed(slot.kind) && scope_ == Scope::Track) // a key is another track
         {
             keyButton_.setButtonText(slot.sidechainTrackId == 0 || ! sidechainName
                                          ? juce::String("Key: Own Input")
@@ -851,7 +871,10 @@ private:
         onSlotParamsChanged(slot, selected_);
     }
 
-    void updateScopeButton() { scopeButton_.setButtonText(clipScope_ ? "Clip FX" : "Track FX"); }
+    void updateScopeButton()
+    {
+        scopeButton_.setButtonText(scope_ == Scope::Clip ? "Clip FX" : scope_ == Scope::Master ? "Master FX" : "Track FX");
+    }
 
     void setContentVisible(bool visible)
     {
@@ -875,7 +898,7 @@ private:
     std::vector<engine::PluginEntry> plugins_;
     int                              selected_       = 0;
     bool                             contentVisible_ = false;
-    bool                             clipScope_      = false;
+    Scope                            scope_          = Scope::Track;
     juce::TextButton                 scopeButton_;
     bool                             updating_       = false;
 

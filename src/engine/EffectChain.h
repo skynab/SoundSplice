@@ -25,6 +25,7 @@
 #include "engine/ChannelMixer.h"
 #include "engine/ToneEffects.h"
 #include "engine/UtilityEffects.h"
+#include "rt/SpscRingBuffer.h"
 
 namespace soundsplice::engine
 {
@@ -683,6 +684,58 @@ public:
 
 private:
     std::vector<std::unique_ptr<EffectProcessor>> nodes_;
+};
+
+/**
+    One chain the audio thread owns and the message thread replaces whole:
+    submit() hands a rebuilt chain over, adopt() takes it up at the start of
+    a block, and collectRetired() frees the ones let go. The master chain's;
+    a track keeps the same three pieces in InstrumentTrack.
+*/
+class ChainHandoff
+{
+public:
+    ~ChainHandoff()
+    {
+        collectRetired();
+        delete live_;
+        EffectChain* straggler = nullptr;
+        while (inbox_.pop(straggler))
+            delete straggler;
+    }
+
+    /** Message thread: hands @p chain over, owned from here. */
+    void submit(EffectChain* chain)
+    {
+        if (! inbox_.push(chain))
+            delete chain;
+    }
+
+    /** Message thread: frees what the audio thread has let go. */
+    void collectRetired()
+    {
+        EffectChain* retired = nullptr;
+        while (reclaim_.pop(retired))
+            delete retired;
+    }
+
+    /** Audio thread: the newest chain handed over, or nullptr for none. */
+    EffectChain* adopt() noexcept
+    {
+        EffectChain* incoming = nullptr;
+        while (inbox_.pop(incoming))
+        {
+            if (live_ != nullptr)
+                reclaim_.push(live_);
+            live_ = incoming;
+        }
+        return live_;
+    }
+
+private:
+    EffectChain*                     live_ = nullptr;
+    rt::SpscRingBuffer<EffectChain*> inbox_   { 8 };
+    rt::SpscRingBuffer<EffectChain*> reclaim_ { 16 };
 };
 
 } // namespace soundsplice::engine

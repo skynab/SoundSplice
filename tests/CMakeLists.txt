@@ -63,7 +63,6 @@ add_executable(soundsplice_tests
   engine/OversamplerTests.cpp
   engine/StateVariableFilterTests.cpp
   engine/ShelfPeakFilterTests.cpp
-  engine/EqCurveTests.cpp
   engine/ReverbTests.cpp
   engine/MixRoutingTests.cpp
   engine/DiagnosticsTests.cpp

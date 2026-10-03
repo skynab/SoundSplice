@@ -43,11 +43,10 @@ struct ReverbSettings
     bool operator==(const ReverbSettings&) const = default;
 };
 
-/** Master 3-band EQ: fixed-frequency treble/mid/bass shelving+peak, the
-    "regular mastering controls" a whole-song bus gets rather than the
-    sweepable single-band FilterSettings above. Crossovers are fixed
-    (bassHz/trebleHz below) rather than user-adjustable — three knobs, not a
-    parametric EQ. */
+/** The master bus's fixed three-band EQ, from before the master had an
+    effect chain: bass and treble shelves at fixed crossovers and a peak
+    between them. Only read now, from a version 1 or 2 project, which
+    becomes an EQ pedal on these bands (model::detail::legacyMasterEffects). */
 struct EqSettings
 {
     bool  enabled = false;
@@ -60,8 +59,7 @@ struct EqSettings
 
     /** The mid band's centre: geometric (not arithmetic) mean of the two
         crossovers, since frequency perception — and the octave-wide EQ bands
-        either side of it — is logarithmic. Shared by EqEffect and EqCurve so
-        a drawn curve can't drift from what the audio actually does. */
+        either side of it — is logarithmic. */
     static float midHz() { return std::sqrt(bassHz * trebleHz); }
 
     bool operator==(const EqSettings&) const = default;
@@ -228,7 +226,7 @@ struct DriveSettings
 
     The mid is sweepable because "the mids" is 400Hz on one guitar and 1.2kHz
     on another. Before this there was no way to boost or cut a band's gain on
-    a track at all — EqSettings is master-bus only, and a filter slot picks a
+    a track at all — the master EQ was the master's only, and a filter slot picks a
     cutoff, which is a different thing — so the mid scoop/push that decides a
     rock or metal tone was unreachable by construction.
 

@@ -19,7 +19,7 @@ namespace soundsplice
     pane like this can be present when editing audio and absent when
     composing.
 
-    Log frequency across, dB down — the same conventions EqCurveView uses, so
+    Log frequency across, dB down — the same conventions the Mastering pane's EQ curve uses, so
     a resonance found here lines up visually with the mastering EQ band you'd
     reach for to remove it.
 

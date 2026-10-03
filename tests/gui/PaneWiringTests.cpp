@@ -347,25 +347,33 @@ TEST_CASE("The effect panel's Track/Clip switch is wired and survives an empty c
     REQUIRE(paneaudit::effectivelyVisible(panel, scope));
 
     int  changes = 0;
-    bool toClip  = false;
-    panel.onScopeChanged = [&](bool clip) { ++changes; toClip = clip; };
+    auto told    = EffectChainPanel::Scope::Track;
+    panel.onScopeChanged = [&](EffectChainPanel::Scope s) { ++changes; told = s; };
 
     scope->triggerClick();
     pump();
     REQUIRE(changes == 1);
-    REQUIRE(toClip);
+    REQUIRE(told == EffectChainPanel::Scope::Clip);
     REQUIRE(panel.clipScope());
     REQUIRE(scope->getButtonText() == "Clip FX");
 
-    // No audio clip to edit: the list goes, the way back to Track doesn't.
+    // No audio clip to edit: the list goes, the way on doesn't.
     panel.setNoClipSelected();
     REQUIRE(scope->isVisible());
     scope->triggerClick();
     pump();
-    REQUIRE_FALSE(panel.clipScope());
+    REQUIRE(panel.masterScope());
+    REQUIRE(scope->getButtonText() == "Master FX");
 
+    // And round to Track again.
+    scope->triggerClick();
+    pump();
+    REQUIRE(panel.scope() == EffectChainPanel::Scope::Track);
+    REQUIRE(changes == 3);
+
+    // With no track, the master is still there to edit.
     panel.setNoTrackSelected();
-    REQUIRE_FALSE(scope->isVisible());
+    REQUIRE(scope->isVisible());
 }
 
 TEST_CASE("The input meter's clip light stays lit until it's clicked", "[gui][wiring]")

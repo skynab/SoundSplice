@@ -16,22 +16,15 @@ static Song makeSampleSong()
     s.bpm                = 128.0;
     s.timeSigNumerator   = 3;
     s.timeSigDenominator = 4;
-    s.delay.enabled      = true;
-    s.delay.timeMs       = 250.0f;
-    s.delay.feedback     = 0.4f;
-    s.delay.mix          = 0.5f;
-    s.filter.enabled     = true;
-    s.filter.mode        = 1;
-    s.filter.cutoff      = 800.0f;
-    s.filter.resonance   = 1.2f;
-    s.reverb.enabled     = true;
-    s.reverb.roomSize    = 0.7f;
-    s.reverb.damping     = 0.4f;
-    s.reverb.mix         = 0.25f;
-    s.eq.enabled   = true;
-    s.eq.bassDb    = 4.5f;
-    s.eq.midDb     = -2.0f;
-    s.eq.trebleDb  = 3.0f;
+    {
+        auto delay           = makeEffectSlot(EffectKind::Delay);
+        delay.delay.timeMs   = 250.0f;
+        delay.delay.feedback = 0.4f;
+        delay.delay.mix      = 0.5f;
+        auto limiter         = makeEffectSlot(EffectKind::Limiter);
+        limiter.enabled      = false; // bypassed, which has to survive too
+        s.masterEffects      = { delay, limiter };
+    }
     s.projectRootFolder     = "/Users/test/My SoundSplice Projects"; // with a space, deliberately
     s.masterGainDb.addPoint(0.0, -40.0f);
     s.masterGainDb.addPoint(4.0, 0.0f);
@@ -359,6 +352,88 @@ TEST_CASE("A Looper-Audio project is not read", "[model][io]")
     std::string error;
     REQUIRE_FALSE(deserialize(looper, out, &error));
     REQUIRE(error.find("SoundSplice") != std::string::npos);
+}
+
+TEST_CASE("The master chain round-trips", "[model][io]")
+{
+    const Song original = makeSampleSong();
+    Song       restored;
+    REQUIRE(deserialize(serialize(original), restored));
+    REQUIRE(restored.masterEffects == original.masterEffects);
+    REQUIRE(restored.masterEffects.size() == 2);
+    REQUIRE_FALSE(restored.masterEffects[1].enabled);
+}
+
+TEST_CASE("A version 2 file's master effects become the master chain", "[model][io]")
+{
+    const std::string text =
+        "SOUNDSPLICE 2\n"
+        "BPM 120\n"
+        "TSNUM 4\n"
+        "TSDEN 4\n"
+        "NEXTID 1\n"
+        "FILTER 1 1 800 1.2\n"
+        "DELAY 0 250 0.4 0.5\n" // off: not carried over
+        "REVERB 1 0.7 0.4 0.25\n"
+        "EQ 1 4.5 -2 3\n"
+        "TRACKS 0\n";
+
+    Song out;
+    REQUIRE(deserialize(text, out));
+    REQUIRE(out.masterEffects.size() == 3);
+
+    // In the order they ran: filter, (delay,) reverb, EQ.
+    const auto& filter = out.masterEffects[0];
+    REQUIRE(filter.kind == EffectKind::Filter);
+    REQUIRE(filter.enabled);
+    REQUIRE(filter.filter.mode == 1);
+    REQUIRE(filter.filter.cutoff == 800.0f);
+    REQUIRE(filter.filter.resonance == 1.2f);
+
+    const auto& reverb = out.masterEffects[1];
+    REQUIRE(reverb.kind == EffectKind::Reverb);
+    REQUIRE(reverb.reverb.roomSize == 0.7f);
+    REQUIRE(reverb.reverb.damping == 0.4f);
+    REQUIRE(reverb.reverb.mix == 0.25f);
+
+    // The master EQ's fixed bands, as an EQ pedal: the same three filters.
+    const auto& eq = out.masterEffects[2];
+    REQUIRE(eq.kind == EffectKind::Eq);
+    REQUIRE(eq.enabled);
+    REQUIRE(eq.eqPedal.lowShelfHz == EqSettings::bassHz);
+    REQUIRE(eq.eqPedal.lowShelfDb == 4.5f);
+    REQUIRE(eq.eqPedal.midHz == EqSettings::midHz());
+    REQUIRE(eq.eqPedal.midDb == -2.0f);
+    REQUIRE(eq.eqPedal.midQ == 0.7f);
+    REQUIRE(eq.eqPedal.highShelfHz == EqSettings::trebleHz);
+    REQUIRE(eq.eqPedal.highShelfDb == 3.0f);
+
+    // Saved again, it's a version 3 file with the chain, and reads back the same.
+    const auto saved = serialize(out);
+    REQUIRE(saved.find("MASTERFX 3") != std::string::npos);
+    REQUIRE(saved.find("\nFILTER ") == std::string::npos);
+    Song again;
+    REQUIRE(deserialize(saved, again));
+    REQUIRE(again.masterEffects == out.masterEffects);
+}
+
+TEST_CASE("A version 2 file with its master effects off has an empty master chain", "[model][io]")
+{
+    const std::string text =
+        "SOUNDSPLICE 2\n"
+        "BPM 120\n"
+        "TSNUM 4\n"
+        "TSDEN 4\n"
+        "NEXTID 1\n"
+        "FILTER 0 0 1000 0.707\n"
+        "DELAY 0 300 0.35 0.3\n"
+        "REVERB 0 0.5 0.5 0.3\n"
+        "EQ 0 0 0 0\n"
+        "TRACKS 0\n";
+
+    Song out;
+    REQUIRE(deserialize(text, out));
+    REQUIRE(out.masterEffects.empty());
 }
 
 TEST_CASE("A track of an unknown type is refused, not guessed at", "[model][io]")

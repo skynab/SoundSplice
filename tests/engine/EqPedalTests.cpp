@@ -2,6 +2,7 @@
 
 #include <engine/PedalDsp.h>
 
+#include <algorithm>
 #include <cmath>
 
 using soundsplice::engine::ThreeBandEq;
@@ -157,4 +158,46 @@ TEST_CASE("The EQ pedal clamps settings into usable ranges", "[engine][eq]")
         const float y = eq.processSample((float) std::sin(0.05 * n));
         REQUIRE(std::isfinite(y));
     }
+}
+
+TEST_CASE("The pedal on the master EQ's bands is the master EQ, sample for sample", "[engine][eqpedal]")
+{
+    // What engine::EqEffect - the master bus's fixed three-band EQ, before
+    // the master had an effect chain - ran, which an old project's master EQ
+    // now becomes (model::detail::legacyMasterEffects).
+    using soundsplice::engine::ShelfPeakFilter;
+    constexpr float kBassHz = 250.0f, kTrebleHz = 4000.0f;
+    const float     midHz   = std::sqrt(kBassHz * kTrebleHz);
+
+    ShelfPeakFilter bass, mid, treble;
+    bass.setShape(ShelfPeakFilter::Shape::LowShelf);
+    bass.setFrequency(kBassHz);
+    bass.prepare(48000.0);
+    mid.setShape(ShelfPeakFilter::Shape::Peaking);
+    mid.setFrequency(midHz);
+    mid.setQ(0.7f);
+    mid.prepare(48000.0);
+    treble.setShape(ShelfPeakFilter::Shape::HighShelf);
+    treble.setFrequency(kTrebleHz);
+    treble.prepare(48000.0);
+    bass.setGainDb(4.5f);
+    mid.setGainDb(-2.0f);
+    treble.setGainDb(3.0f);
+
+    ThreeBandEq pedal;
+    pedal.prepare(48000.0);
+    pedal.setSettings({ kBassHz, 4.5f, midHz, -2.0f, 0.7f, kTrebleHz, 3.0f });
+
+    // A sweep through the bands and some broadband grit.
+    unsigned noise = 1;
+    float    worst = 0.0f;
+    for (int n = 0; n < 48000; ++n)
+    {
+        noise          = noise * 1664525u + 1013904223u;
+        const float in = 0.4f * (float) std::sin(2.0 * kPi * (50.0 + n * 0.2) * n / 48000.0)
+                       + 0.1f * ((float) (noise >> 8) / 8388608.0f - 1.0f);
+        const float master = treble.processSample(mid.processSample(bass.processSample(in)));
+        worst = std::max(worst, std::abs(pedal.processSample(in) - master));
+    }
+    REQUIRE(worst == 0.0f);
 }

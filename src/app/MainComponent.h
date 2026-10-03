@@ -39,7 +39,6 @@
 #include "ArrangementView.h"
 #include "DockWorkspace.h"
 #include "EffectChainPanel.h"
-#include "EqCurveView.h"
 #include "AnalyserPane.h"
 #include "BatchProcess.h"
 #include "model/Favorites.h"
@@ -687,10 +686,6 @@ private:
     void                   deleteSessionScene(int sceneIndex);
     void                   captureClipIntoSession(int trackIndex, int sceneIndex);
     void                   previewNote(int noteNumber);
-    void                   updateDelayControls();
-    void                   updateFilterControls();
-    void                   updateReverbControls();
-    void                   updateEqControls();
     void                   updateMixerStrips();
     void                   beginFaderDrag(int trackIndex, MixerStrip::Fader fader);
     void                   endFaderDrag(int trackIndex, MixerStrip::Fader fader);
@@ -994,15 +989,18 @@ private:
     // controls started, so the whole gesture can commit as one undo step —
     // same reasoning as the fader-drag members above, but for a whole
     // model::EffectSlot rather than one float (see commitStructDrag).
-    /** Which effect chain the effects panel edits: a track's own (clip -1)
-        or one of its clips'. By index, so it can be found again in whichever
-        copy of the song an undoable edit is working on. */
+    /** Which effect chain the effects panel edits: the master's, a track's
+        own (clip -1) or one of its clips'. By index, so it can be found again
+        in whichever copy of the song an undoable edit is working on. */
     struct EffectChainRef
     {
-        int  track = -1;
-        int  clip  = -1;
+        int  track  = -1;
+        int  clip   = -1;
+        bool master = false;
         bool isClip() const noexcept { return clip >= 0; }
+        bool isValid() const noexcept { return master || track >= 0; }
         bool operator==(const EffectChainRef&) const = default;
+        static EffectChainRef masterChain() { return { -1, -1, true }; }
     };
 
     EffectChainRef                         editedChainRef() const;
@@ -1059,16 +1057,7 @@ private:
     juce::Label        timeSigLabel_;
 
     juce::Slider       tempoSlider, masterSlider;
-    juce::ToggleButton filterButton { "Filter" };
-    juce::ComboBox     filterModeBox_;
-    juce::Slider       filterCutoffSlider, filterResoSlider;
-    juce::ToggleButton delayButton { "Delay" };
-    juce::Slider       delayTimeSlider, delayFbSlider, delayMixSlider;
-    juce::ToggleButton reverbButton { "Reverb" };
-    juce::Slider       reverbRoomSlider, reverbDampSlider, reverbMixSlider;
-    juce::ToggleButton eqButton { "EQ" };
-    juce::Slider       eqBassSlider, eqMidSlider, eqTrebleSlider;
-    EqCurveView        eqCurveView_;
+    juce::TextButton   masterEffectsButton_ { "Master Effects" };
     juce::ComboBox     autoModeBox;
     juce::TextButton   autoClearButton { "Clr Auto" };
     juce::Label        tempoLabel  { {}, "Tempo" };

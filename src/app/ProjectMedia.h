@@ -79,6 +79,10 @@ void forEachAudioPath(SongType& song, Fn&& fn)
             if (! effect.convolution.irFile.empty())
                 fn(effect.convolution.irFile);
     }
+
+    for (auto& effect : song.masterEffects)
+        if (! effect.convolution.irFile.empty())
+            fn(effect.convolution.irFile);
 }
 
 /** How @p audio is written into a project file saved at @p projectFile:

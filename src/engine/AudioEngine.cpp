@@ -1047,6 +1047,75 @@ PluginNode* AudioEngine::trackPluginNode(int index, int slotIndex)
     return chain != nullptr ? dynamic_cast<PluginNode*>(chain->nodeAt((size_t) slotIndex)) : nullptr;
 }
 
+void AudioEngine::rebuildMasterEffectChain(double rate)
+{
+    auto chain = std::make_unique<EffectChain>();
+    for (const auto& spec : masterChainStructure_)
+        if (auto node = makeSlotNode(spec))
+            chain->add(std::move(node));
+    for (size_t i = 0; i < masterChainParams_.size(); ++i)
+        chain->applyParams(i, masterChainParams_[i]);
+
+    if (rate <= 0.0)
+        rate = sampleRate_.load(std::memory_order_relaxed);
+    if (rate > 0.0)
+        chain->prepare(rate, currentBlockSize_);
+
+    masterChain_.collectRetired();
+    submittedMasterChain_ = chain.get();
+    masterChain_.submit(chain.release());
+}
+
+bool AudioEngine::setMasterEffectChain(const std::vector<EffectSlotSpec>& slots)
+{
+    // Only a new shape rebuilds, as for a track (see setTrackEffectChain).
+    bool sameShape = masterChainStructure_.size() == slots.size() && submittedMasterChain_ != nullptr;
+    for (size_t i = 0; sameShape && i < slots.size(); ++i)
+        sameShape = masterChainStructure_[i].sameShapeAs(slots[i]);
+
+    if (sameShape)
+    {
+        for (size_t i = 0; i < slots.size(); ++i)
+            if (slots[i].kind == EffectKind::Plugin && slots[i].pluginState != masterChainStructure_[i].pluginState)
+            {
+                if (auto* node = masterPluginNode((int) i))
+                    node->restoreState(slots[i].pluginState);
+                masterChainStructure_[i].pluginState = slots[i].pluginState;
+            }
+        return false;
+    }
+
+    masterChainStructure_ = slots;
+    masterChainParams_.clear();
+    rebuildMasterEffectChain();
+    return true;
+}
+
+void AudioEngine::setMasterEffectSlotParams(int slotIndex, const EffectParamValues& values)
+{
+    if (slotIndex < 0)
+        return;
+    if ((size_t) slotIndex >= masterChainParams_.size())
+        masterChainParams_.resize((size_t) slotIndex + 1);
+    masterChainParams_[(size_t) slotIndex] = values;
+
+    if (submittedMasterChain_ != nullptr)
+        submittedMasterChain_->applyParams((size_t) slotIndex, values);
+}
+
+void AudioEngine::noteMasterPluginState(int slotIndex, const std::string& state)
+{
+    if (slotIndex >= 0 && slotIndex < (int) masterChainStructure_.size())
+        masterChainStructure_[(size_t) slotIndex].pluginState = state;
+}
+
+PluginNode* AudioEngine::masterPluginNode(int slotIndex)
+{
+    if (submittedMasterChain_ == nullptr || slotIndex < 0)
+        return nullptr;
+    return dynamic_cast<PluginNode*>(submittedMasterChain_->nodeAt((size_t) slotIndex));
+}
+
 void AudioEngine::setArmedTrack(int index)
 {
     armedTrack_.store(juce::jlimit(0, kMaxTracks - 1, index), std::memory_order_relaxed);
@@ -1066,6 +1135,7 @@ void AudioEngine::pump() noexcept
     filePlayer_.collectRetiredClips();
     audition_.collectRetired();
     reference_.collectRetired();
+    masterChain_.collectRetired();
 
     TempoMap* retiredTempo = nullptr;
     while (tempoReclaim_.pop(retiredTempo))
@@ -1472,13 +1542,15 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
     {
         // The file player and master ignore the MIDI buffer.
         filePlayer_.process(output, midi, context);
-        masterFilter_.process(output);
-        masterDelay_.process(output);
-        masterReverb_.process(output);
-        masterEq_.process(output);
-        // The mastering rack sits between the master EQ and the output node, so
-        // its limiter is the last thing to touch level before the meter reads it
-        // — a ceiling that something after it could exceed wouldn't be one.
+        if (auto* chain = masterChain_.adopt(); chain != nullptr && ! chain->empty())
+        {
+            chain->setBpm(context.transport.bpm);
+            chain->process(output);
+        }
+        // The mastering rack sits between the master chain and the output
+        // node, so its limiter is the last thing to touch level before the
+        // meter reads it — a ceiling that something after it could exceed
+        // wouldn't be one.
         mastering_.process(output);
         master_.process(output, midi, context);
     }
@@ -1666,10 +1738,7 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
     silentKey_.setSize(2, juce::jmax(1, blockSize));
     silentKey_.clear();
     audition_.prepare(sampleRate);
-    masterFilter_.prepare(sampleRate, blockSize);
-    masterDelay_.prepare(sampleRate, blockSize);
-    masterReverb_.prepare(sampleRate, blockSize);
-    masterEq_.prepare(sampleRate, blockSize);
+    rebuildMasterEffectChain(sampleRate);
     mastering_.prepare(sampleRate, blockSize);
     master_.prepare(sampleRate, blockSize);
 

@@ -22,7 +22,6 @@
 #include "engine/MidiRecorder.h"
 #include "engine/ClipSlot.h"
 #include "engine/DelayEffect.h"
-#include "engine/EqEffect.h"
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
 #include "engine/EngineCommand.h"
@@ -567,26 +566,13 @@ public:
         thread. */
     PluginNode* trackPluginNode(int index, int slotIndex);
 
-    // Master effects (thread-safe atomics; safe to call from the message thread).
-    void setMasterFilterEnabled(bool enabled)  { masterFilter_.setEnabled(enabled); }
-    void setMasterFilterMode(int mode)         { masterFilter_.setMode(mode); }
-    void setMasterFilterCutoff(float hz)       { masterFilter_.setCutoff(hz); }
-    void setMasterFilterResonance(float q)     { masterFilter_.setResonance(q); }
-
-    void setMasterDelayEnabled(bool enabled)   { masterDelay_.setEnabled(enabled); }
-    void setMasterDelayTimeMs(float ms)        { masterDelay_.setTimeMs(ms); }
-    void setMasterDelayFeedback(float amount)  { masterDelay_.setFeedback(amount); }
-    void setMasterDelayMix(float amount)       { masterDelay_.setMix(amount); }
-
-    void setMasterReverbEnabled(bool enabled)  { masterReverb_.setEnabled(enabled); }
-    void setMasterReverbRoomSize(float v)      { masterReverb_.setRoomSize(v); }
-    void setMasterReverbDamping(float v)       { masterReverb_.setDamping(v); }
-    void setMasterReverbMix(float v)           { masterReverb_.setMix(v); }
-
-    void setMasterEqEnabled(bool enabled)      { masterEq_.setEnabled(enabled); }
-    void setMasterEqBassDb(float db)           { masterEq_.setBassDb(db); }
-    void setMasterEqMidDb(float db)            { masterEq_.setMidDb(db); }
-    void setMasterEqTrebleDb(float db)         { masterEq_.setTrebleDb(db); }
+    // The master bus's insert chain, after every track and before the
+    // mastering rack: built, handed over and set as a track's chain is (see
+    // setTrackEffectChain and the setters after it). Message thread.
+    bool        setMasterEffectChain(const std::vector<EffectSlotSpec>& slots);
+    void        setMasterEffectSlotParams(int slotIndex, const EffectParamValues& values);
+    void        noteMasterPluginState(int slotIndex, const std::string& state);
+    PluginNode* masterPluginNode(int slotIndex);
 
     /** Housekeeping to run periodically on the message thread (frees retired clips/patterns). */
     void pump() noexcept;
@@ -801,10 +787,7 @@ private:
     AudioFilePlayerNode filePlayer_;
     ReferenceAB         reference_;
     AuditionPlayer      audition_;
-    FilterEffect        masterFilter_;
-    DelayEffect         masterDelay_;
-    ReverbEffect        masterReverb_;
-    EqEffect            masterEq_;
+    ChainHandoff        masterChain_; // see setMasterEffectChain
     MasteringProcessor  mastering_;
     MasterBusNode       master_;
     Transport           transport_;
@@ -878,6 +861,12 @@ private:
     // their defaults rather than as set, until the next edit happened to
     // resend them, which an export never waits for.
     std::array<std::vector<EffectParamValues>, kMaxTracks> chainParams_;
+
+    // The same for the master chain.
+    std::vector<EffectSlotSpec>    masterChainStructure_;
+    std::vector<EffectParamValues> masterChainParams_;
+    EffectChain*                   submittedMasterChain_ = nullptr;
+    void                           rebuildMasterEffectChain(double rate = 0.0);
 
     /** Each clip's effect chain, by clip id: kept across clip-list
         resubmissions, so an unrelated edit doesn't rebuild a clip's effects

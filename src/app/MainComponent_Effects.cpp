@@ -11,6 +11,9 @@ namespace soundsplice
     the track's; track -1 when there's nothing to edit. */
 MainComponent::EffectChainRef MainComponent::editedChainRef() const
 {
+    if (effectChain_.masterScope())
+        return EffectChainRef::masterChain();
+
     const auto& song = history_.current();
     if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
         return {};
@@ -26,6 +29,8 @@ MainComponent::EffectChainRef MainComponent::editedChainRef() const
 
 std::vector<model::EffectSlot>* MainComponent::chainAt(model::Song& song, const EffectChainRef& ref)
 {
+    if (ref.master)
+        return &song.masterEffects;
     if (ref.track < 0 || ref.track >= (int) song.tracks.size())
         return nullptr;
     auto& track = song.tracks[(size_t) ref.track];
@@ -44,6 +49,11 @@ const std::vector<model::EffectSlot>* MainComponent::editedChain() const
     automated parameters are left to their lanes. */
 void MainComponent::pushEffectSlotToEngine(const EffectChainRef& ref, int slotIndex, const model::EffectSlot& slot)
 {
+    if (ref.master)
+    {
+        engine_.setMasterEffectSlotParams(slotIndex, model::effectParamValues(slot));
+        return;
+    }
     if (ref.isClip())
     {
         const auto& clips = history_.current().tracks[(size_t) ref.track].clips;
@@ -54,11 +64,16 @@ void MainComponent::pushEffectSlotToEngine(const EffectChainRef& ref, int slotIn
     engine_.setTrackEffectSlotParams(ref.track, slotIndex, model::effectParamValues(slot, true));
 }
 
-/** Shows the selected track's insert effects, or its selected clip's own.
-    Applies to *every* track type — an audio track wants a filter as much as
-    an instrument one does. */
+/** Shows the selected track's insert effects, its selected clip's own, or
+    the master's. Applies to *every* track type — an audio track wants a
+    filter as much as an instrument one does. */
 void MainComponent::refreshEffectChainForSelected()
 {
+    if (effectChain_.masterScope())
+    {
+        effectChain_.setChain(history_.current().masterEffects);
+        return;
+    }
     if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
     {
         effectChain_.setNoTrackSelected();
@@ -83,10 +98,10 @@ void MainComponent::refreshEffectChainForSelected()
 void MainComponent::addEffectSlot(model::EffectKind kind, const model::PluginRef& plugin)
 {
     const auto ref = editedChainRef();
-    if (ref.track < 0)
+    if (! ref.isValid())
         return;
 
-    history_.edit(ref.isClip() ? "Add clip effect" : "Add effect", [ref, kind, &plugin](model::Song& s)
+    history_.edit(ref.master ? "Add master effect" : ref.isClip() ? "Add clip effect" : "Add effect", [ref, kind, &plugin](model::Song& s)
     {
         auto slot   = model::makeEffectSlot(kind);
         slot.plugin = plugin;
@@ -105,7 +120,7 @@ void MainComponent::addEffectSlot(model::EffectKind kind, const model::PluginRef
 void MainComponent::removeEffectSlot(int slotIndex)
 {
     const auto ref = editedChainRef();
-    if (ref.track < 0)
+    if (! ref.isValid())
         return;
 
     history_.edit("Remove effect", [ref, slotIndex](model::Song& s)
@@ -127,7 +142,7 @@ void MainComponent::removeEffectSlot(int slotIndex)
 void MainComponent::moveEffectSlot(int slotIndex, int delta)
 {
     const auto ref = editedChainRef();
-    if (ref.track < 0)
+    if (! ref.isValid())
         return;
 
     history_.edit("Reorder effects", [ref, slotIndex, delta](model::Song& s)
@@ -179,9 +194,10 @@ void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotI
         return;
 
     auto& chain = *live;
-    if (ref.isClip())
+    if (ref.isClip() || ref.master)
     {
-        // A clip's effects aren't automated: the settings are all there is.
+        // A clip's or the master's effects aren't automated: the settings
+        // are all there is.
         chain[(size_t) slotIndex] = slot;
         pushEffectSlotToEngine(ref, slotIndex, slot);
         return;
@@ -309,7 +325,9 @@ void MainComponent::openPluginEditor(int slotIndex)
     // the selected clip's own.
     const auto       ref  = editedChainRef();
     engine::PluginNode* node = nullptr;
-    if (ref.isClip())
+    if (ref.master)
+        node = engine_.masterPluginNode(slotIndex);
+    else if (ref.isClip())
         node = engine_.clipPluginNode(history_.current().tracks[(size_t) ref.track].clips[(size_t) ref.clip].id,
                                       slotIndex);
     else if (ref.track >= 0)
@@ -330,8 +348,10 @@ void MainComponent::openPluginEditor(int slotIndex)
 
     auto* window = pluginWindows_.add(new PluginEditorWindow(node->instance()->getName(), *node->instance()));
     const auto& song = history_.current();
-    window->address  = { song.tracks[(size_t) ref.track].id,
-                         ref.isClip() ? song.tracks[(size_t) ref.track].clips[(size_t) ref.clip].id : 0, slotIndex };
+    window->address  = ref.master ? PluginSlotAddress { 0, 0, slotIndex }
+                                  : PluginSlotAddress { song.tracks[(size_t) ref.track].id,
+                                                        ref.isClip() ? song.tracks[(size_t) ref.track].clips[(size_t) ref.clip].id : 0,
+                                                        slotIndex };
     window->stateAtOpen = node->saveState();
     window->onCloseRequested = [this](PluginEditorWindow* w) { closePluginEditor(w); };
 }
@@ -339,12 +359,12 @@ void MainComponent::openPluginEditor(int slotIndex)
 /** The document slot at @p at, or nullptr if it's gone. */
 model::EffectSlot* MainComponent::pluginSlotFor(model::Song& song, const PluginSlotAddress& at)
 {
-    auto* track = model::findTrack(song, at.trackId);
-    if (track == nullptr)
+    auto* track = at.trackId != 0 ? model::findTrack(song, at.trackId) : nullptr;
+    if (track == nullptr && at.trackId != 0)
         return nullptr;
 
-    auto* chain = &track->effectChain;
-    if (at.clipId != 0)
+    auto* chain = track != nullptr ? &track->effectChain : &song.masterEffects;
+    if (track != nullptr && at.clipId != 0)
     {
         const auto clip = std::find_if(track->clips.begin(), track->clips.end(),
                                        [&](const model::Clip& c) { return c.id == at.clipId; });
@@ -361,6 +381,12 @@ model::EffectSlot* MainComponent::pluginSlotFor(model::Song& song, const PluginS
 /** The running plugin @p window shows, or nullptr if its node has gone. */
 engine::PluginNode* MainComponent::pluginNodeFor(const PluginEditorWindow& window)
 {
+    if (window.address.trackId == 0)
+    {
+        auto* node = engine_.masterPluginNode(window.address.slot);
+        return node != nullptr && node->instance() == window.plugin() ? node : nullptr;
+    }
+
     const auto& tracks = history_.current().tracks;
     const auto  track  = std::find_if(tracks.begin(), tracks.end(),
                                       [&](const model::Track& t) { return t.id == window.address.trackId; });
@@ -399,6 +425,11 @@ void MainComponent::syncOpenPluginStates()
 
 void MainComponent::notePluginStateToEngine(const PluginSlotAddress& at, const std::string& state)
 {
+    if (at.trackId == 0)
+    {
+        engine_.noteMasterPluginState(at.slot, state);
+        return;
+    }
     if (at.clipId != 0)
     {
         engine_.noteClipPluginState(at.clipId, at.slot, state);
@@ -549,64 +580,6 @@ void MainComponent::storeUserEffectPresets()
     effectChain_.setUserPresets(userEffectPresets_);
     if (applyEffectsDialog_ != nullptr)
         applyEffectsDialog_->setUserPresets(userEffectPresets_);
-}
-
-void MainComponent::updateDelayControls()
-{
-    const auto& d = history_.current().delay;
-    delayButton.setToggleState(d.enabled, juce::dontSendNotification);
-    delayTimeSlider.setValue(d.timeMs, juce::dontSendNotification);
-    delayFbSlider.setValue(d.feedback * 100.0, juce::dontSendNotification);
-    delayMixSlider.setValue(d.mix * 100.0, juce::dontSendNotification);
-
-    engine_.setMasterDelayEnabled(d.enabled);
-    engine_.setMasterDelayTimeMs(d.timeMs);
-    engine_.setMasterDelayFeedback(d.feedback);
-    engine_.setMasterDelayMix(d.mix);
-}
-
-void MainComponent::updateFilterControls()
-{
-    const auto& f = history_.current().filter;
-    filterButton.setToggleState(f.enabled, juce::dontSendNotification);
-    filterModeBox_.setSelectedId(f.mode + 1, juce::dontSendNotification);
-    filterCutoffSlider.setValue(f.cutoff, juce::dontSendNotification);
-    filterResoSlider.setValue(f.resonance, juce::dontSendNotification);
-
-    engine_.setMasterFilterEnabled(f.enabled);
-    engine_.setMasterFilterMode(f.mode);
-    engine_.setMasterFilterCutoff(f.cutoff);
-    engine_.setMasterFilterResonance(f.resonance);
-}
-
-void MainComponent::updateReverbControls()
-{
-    const auto& rv = history_.current().reverb;
-    reverbButton.setToggleState(rv.enabled, juce::dontSendNotification);
-    reverbRoomSlider.setValue(rv.roomSize * 100.0, juce::dontSendNotification);
-    reverbDampSlider.setValue(rv.damping * 100.0, juce::dontSendNotification);
-    reverbMixSlider.setValue(rv.mix * 100.0, juce::dontSendNotification);
-
-    engine_.setMasterReverbEnabled(rv.enabled);
-    engine_.setMasterReverbRoomSize(rv.roomSize);
-    engine_.setMasterReverbDamping(rv.damping);
-    engine_.setMasterReverbMix(rv.mix);
-}
-
-void MainComponent::updateEqControls()
-{
-    const auto& eq = history_.current().eq;
-    eqButton.setToggleState(eq.enabled, juce::dontSendNotification);
-    eqBassSlider.setValue(eq.bassDb, juce::dontSendNotification);
-    eqMidSlider.setValue(eq.midDb, juce::dontSendNotification);
-    eqTrebleSlider.setValue(eq.trebleDb, juce::dontSendNotification);
-
-    engine_.setMasterEqEnabled(eq.enabled);
-    engine_.setMasterEqBassDb(eq.bassDb);
-    engine_.setMasterEqMidDb(eq.midDb);
-    engine_.setMasterEqTrebleDb(eq.trebleDb);
-
-    eqCurveView_.setSettings(eq);
 }
 
 /** Remembers an effect slot's parameters before a drag on one of its controls
