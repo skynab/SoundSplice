@@ -62,6 +62,7 @@
 #include "Theme.h"
 #include "Screensets.h"
 #include "LoudnessMatch.h"
+#include "AutomationLanes.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
 #include "AudioEditorPane.h"
@@ -873,38 +874,20 @@ private:
     int                         selectedClipIndex_  = 0;
 
     // ---- recording automation (MainComponent_AutomationWrite.cpp) ----
-    /** Which lane a control writes: the master's (track -1), a track's volume
-        or pan (slot -1, param "gain" or "pan"), or an effect parameter. */
-    struct AutomationWriteKey
-    {
-        int               track = -1;
-        int               slot  = -1;
-        model::EffectKind kind  = model::EffectKind::Filter;
-        std::string       param;
-
-        bool operator==(const AutomationWriteKey& other) const;
-        static AutomationWriteKey master() { return {}; }
-        static AutomationWriteKey trackParam(int track, model::TrackParam param);
-        static AutomationWriteKey effect(int track, int slot, model::EffectKind kind, std::string param)
-        {
-            return { track, slot, kind, std::move(param) };
-        }
-    };
-
+    /** A control being written into its lane (see app/AutomationLanes.h). */
     struct AutomationWrite
     {
-        AutomationWriteKey key;
-        model::LaneWriter  writer;
-        float              value    = 0.0f;
-        bool               touching = false;
+        LaneKey           key;
+        model::LaneWriter writer;
+        float             value    = 0.0f;
+        bool              touching = false;
     };
 
-    model::AutomationLane*  automationLaneFor(model::Song& song, const AutomationWriteKey& key);
-    bool                    isWritingAutomation(const AutomationWriteKey& key) const;
+    bool                    isWritingAutomation(const LaneKey& key) const;
     engine::TrackAutomation engineAutomationFor(int trackIndex, const model::Track& track) const;
     void                    openAutomationPass();
-    void                    automationControlMoved(const AutomationWriteKey& key, float value, bool touching);
-    void                    automationControlReleased(const AutomationWriteKey& key);
+    void                    automationControlMoved(const LaneKey& key, float value, bool touching);
+    void                    automationControlReleased(const LaneKey& key);
     void                    tickAutomationWrites();
     void                    closeAutomationPass();
     void                    setAutomationMode(model::AutomationMode mode);

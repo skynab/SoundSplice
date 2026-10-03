@@ -115,6 +115,7 @@ add_executable(soundsplice_tests
   app/RecordSourceChoiceTests.cpp
   app/RecordingPlanTests.cpp
   app/AutomationGeometryTests.cpp
+  app/AutomationLanesTests.cpp
   app/DragCommitTests.cpp
   app/ClipWindowTests.cpp
   app/ClipTimeMappingTests.cpp

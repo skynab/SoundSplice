@@ -2334,28 +2334,8 @@ void MainComponent::applyEditedAutomationLane(const AutomationTarget& target,
         if (index < 0 || index >= (int) s.tracks.size())
             return;
 
-        auto& track = s.tracks[(size_t) index];
-
-        // An emptied lane is erased rather than stored empty, so a track with
-        // no automation carries no lanes at all — the state every serialization
-        // and playback path already treats as "use the static value".
-        if (target.isEffect())
-        {
-            // The slot has to still be the effect the lane was drawn for.
-            if (target.slot >= (int) track.effectChain.size()
-                || track.effectChain[(size_t) target.slot].kind != target.kind)
-                return;
-
-            auto& lanes = track.effectChain[(size_t) target.slot].automation;
-            if (lane.empty())
-                lanes.erase(target.paramId);
-            else
-                lanes[target.paramId] = lane;
-        }
-        else if (lane.empty())
-            track.automation.erase((int) target.trackParam);
-        else
-            track.laneFor(target.trackParam) = lane;
+        // Not if the slot no longer holds the effect it was drawn for.
+        automationlanes::storeLane(s.tracks[(size_t) index], target, lane);
     });
 
     syncEngineTracks();
@@ -2469,7 +2449,7 @@ void MainComponent::setTrackGain(int index, float gainDb)
 
     // Written into the lane if the automation mode says so (see
     // MainComponent_AutomationWrite.cpp); the drag hooks say when it's held.
-    automationControlMoved(AutomationWriteKey::trackParam(index, model::TrackParam::Gain), gainDb, false);
+    automationControlMoved(LaneKey::trackParam(index, model::TrackParam::Gain), gainDb, false);
 }
 
 /** The song as the drag of @p fader on @p trackIndex began, which its edit
@@ -2487,7 +2467,7 @@ void MainComponent::beginFaderDrag(int trackIndex, MixerStrip::Fader fader)
     faderDrag_.begin({ trackIndex, fader }, { value, history_.current() }); // where its edit group's faders were too
 
     const auto param = fader == MixerStrip::Fader::Gain ? model::TrackParam::Gain : model::TrackParam::Pan;
-    automationControlMoved(AutomationWriteKey::trackParam(trackIndex, param), value, true);
+    automationControlMoved(LaneKey::trackParam(trackIndex, param), value, true);
 }
 
 /** Turns a whole fader drag into one undo step.
@@ -2507,7 +2487,7 @@ void MainComponent::endFaderDrag(int trackIndex, MixerStrip::Fader fader)
     if (! start)
         return;
 
-    automationControlReleased(AutomationWriteKey::trackParam(
+    automationControlReleased(LaneKey::trackParam(
         trackIndex, fader == MixerStrip::Fader::Gain ? model::TrackParam::Gain : model::TrackParam::Pan));
 
     const float landedOn = readFader(history_.current(), trackIndex, fader);
@@ -2591,7 +2571,7 @@ void MainComponent::setTrackPan(int index, float pan)
         if (member != index && member < trackStrips_.size())
             trackStrips_[member]->setPan(song.tracks[(size_t) member].pan);
     }
-    automationControlMoved(AutomationWriteKey::trackParam(index, model::TrackParam::Pan), pan, false);
+    automationControlMoved(LaneKey::trackParam(index, model::TrackParam::Pan), pan, false);
 }
 
 void MainComponent::selectTrack(int index)

@@ -295,13 +295,13 @@ MainComponent::MainComponent(bool headless)
     {
         const float db = (float) masterSlider.getValue();
         post(Cmd::SetMasterGainDb, db);
-        automationControlMoved(AutomationWriteKey::master(), db, masterSlider.isMouseButtonDown());
+        automationControlMoved(LaneKey::master(), db, masterSlider.isMouseButtonDown());
     };
     masterSlider.onDragStart = [this]
     {
-        automationControlMoved(AutomationWriteKey::master(), (float) masterSlider.getValue(), true);
+        automationControlMoved(LaneKey::master(), (float) masterSlider.getValue(), true);
     };
-    masterSlider.onDragEnd = [this] { automationControlReleased(AutomationWriteKey::master()); };
+    masterSlider.onDragEnd = [this] { automationControlReleased(LaneKey::master()); };
     masterPanel_.addAndMakeVisible(masterSlider);
     masterLabel.attachToComponent(&masterSlider, true);
 
@@ -1512,7 +1512,7 @@ void MainComponent::timerCallback()
         const double beat = uiTempoMap_.ppqFromSamples(playhead);
         const auto&  song = history_.current();
 
-        if (! song.masterGainDb.empty() && ! isWritingAutomation(AutomationWriteKey::master()))
+        if (! song.masterGainDb.empty() && ! isWritingAutomation(LaneKey::master()))
         {
             const float db = song.masterGainDb.valueAt(beat, (float) masterSlider.getValue());
             post(Cmd::SetMasterGainDb, db);
@@ -1530,9 +1530,9 @@ void MainComponent::timerCallback()
 
             const auto* gain = track.lane(model::TrackParam::Gain);
             const auto* pan  = track.lane(model::TrackParam::Pan);
-            if (gain != nullptr && ! isWritingAutomation(AutomationWriteKey::trackParam(i, model::TrackParam::Gain)))
+            if (gain != nullptr && ! isWritingAutomation(LaneKey::trackParam(i, model::TrackParam::Gain)))
                 trackStrips_[i]->setGainDb(gain->valueAt(beat, track.gainDb));
-            if (pan != nullptr && ! isWritingAutomation(AutomationWriteKey::trackParam(i, model::TrackParam::Pan)))
+            if (pan != nullptr && ! isWritingAutomation(LaneKey::trackParam(i, model::TrackParam::Pan)))
                 trackStrips_[i]->setPan(pan->valueAt(beat, track.pan));
         }
     }

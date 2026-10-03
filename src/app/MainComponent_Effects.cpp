@@ -204,7 +204,7 @@ void MainComponent::setEffectSlotParams(const model::EffectSlot& slot, int slotI
 
     for (const auto* param : moved)
     {
-        const auto key   = AutomationWriteKey::effect(selectedTrackIndex_, slotIndex, slot.kind, param->id);
+        const auto key   = LaneKey::effect(selectedTrackIndex_, slotIndex, slot.kind, param->id);
         const auto value = (float) model::paramValue(slot, *param);
         automationControlMoved(key, value, effectSlotDrag_.isActive());
 
@@ -638,9 +638,9 @@ void MainComponent::endEffectSlotParamsDrag(int slotIndex)
     const auto& chain = *edited;
 
     // Every parameter of this slot being written was held by this drag.
-    std::vector<AutomationWriteKey> held;
+    std::vector<LaneKey> held;
     for (const auto& write : automationWrites_)
-        if (write.key.track == selectedTrackIndex_ && write.key.slot == slotIndex && write.touching)
+        if (write.key.track == selectedTrackIndex_ && write.key.target.slot == slotIndex && write.touching)
             held.push_back(write.key);
     for (const auto& key : held)
         automationControlReleased(key);

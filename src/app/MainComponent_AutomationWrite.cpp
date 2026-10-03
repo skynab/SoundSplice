@@ -15,55 +15,7 @@
 
 namespace soundsplice
 {
-namespace
-{
-    /** Every lane in @p from - master, tracks', effects' - put into @p to,
-        where the same track and the same effect still are. */
-    void copyLanes(const model::Song& from, model::Song& to)
-    {
-        to.masterGainDb = from.masterGainDb;
-        for (size_t t = 0; t < std::min(from.tracks.size(), to.tracks.size()); ++t)
-        {
-            const auto& source = from.tracks[t];
-            auto&       target = to.tracks[t];
-            if (source.id != target.id)
-                continue;
-
-            target.automation = source.automation;
-            for (size_t s = 0; s < std::min(source.effectChain.size(), target.effectChain.size()); ++s)
-                if (source.effectChain[s].kind == target.effectChain[s].kind)
-                    target.effectChain[s].automation = source.effectChain[s].automation;
-        }
-    }
-}
-
-bool MainComponent::AutomationWriteKey::operator==(const AutomationWriteKey& other) const
-{
-    return track == other.track && slot == other.slot && kind == other.kind && param == other.param;
-}
-
-MainComponent::AutomationWriteKey MainComponent::AutomationWriteKey::trackParam(int track, model::TrackParam param)
-{
-    return { track, -1, {}, param == model::TrackParam::Gain ? "gain" : "pan" };
-}
-
-/** The lane @p key writes into, created if it's new, or nullptr if what it
-    names is no longer there. */
-model::AutomationLane* MainComponent::automationLaneFor(model::Song& song, const AutomationWriteKey& key)
-{
-    if (key.track < 0)
-        return &song.masterGainDb;
-    if (key.track >= (int) song.tracks.size())
-        return nullptr;
-
-    auto& track = song.tracks[(size_t) key.track];
-    if (key.slot < 0)
-        return &track.laneFor(key.param == "gain" ? model::TrackParam::Gain : model::TrackParam::Pan);
-
-    if (key.slot >= (int) track.effectChain.size() || track.effectChain[(size_t) key.slot].kind != key.kind)
-        return nullptr;
-    return &track.effectChain[(size_t) key.slot].automation[key.param];
-}
+using automationlanes::laneFor;
 
 /** The mode @p trackIndex's controls record in: its own, or the mix's.
     The master lane (-1) always uses the mix's. */
@@ -84,7 +36,7 @@ bool MainComponent::anyTrackInWriteMode() const
     return false;
 }
 
-bool MainComponent::isWritingAutomation(const AutomationWriteKey& key) const
+bool MainComponent::isWritingAutomation(const LaneKey& key) const
 {
     for (const auto& write : automationWrites_)
         if (write.key == key && write.writer.active())
@@ -102,14 +54,14 @@ engine::TrackAutomation MainComponent::engineAutomationFor(int trackIndex, const
         if (write.key.track != trackIndex || ! write.writer.active())
             continue;
 
-        if (write.key.slot < 0)
-            (write.key.param == "gain" ? curves.gain : curves.pan) = {};
+        const auto& target = write.key.target;
+        if (! target.isEffect())
+            (target.trackParam == model::TrackParam::Gain ? curves.gain : curves.pan) = {};
         else
             curves.effects.erase(std::remove_if(curves.effects.begin(), curves.effects.end(),
                                                 [&](const engine::EffectParamCurve& curve)
                                                 {
-                                                    return curve.slot == write.key.slot
-                                                        && curve.paramId == write.key.param;
+                                                    return curve.slot == target.slot && curve.paramId == target.paramId;
                                                 }),
                                  curves.effects.end());
     }
@@ -131,9 +83,9 @@ void MainComponent::openAutomationPass()
     {
         if (automationModeFor(t) == model::AutomationMode::Write)
         {
-            automationControlMoved(AutomationWriteKey::trackParam(t, model::TrackParam::Gain),
+            automationControlMoved(LaneKey::trackParam(t, model::TrackParam::Gain),
                                    song.tracks[(size_t) t].gainDb, false);
-            automationControlMoved(AutomationWriteKey::trackParam(t, model::TrackParam::Pan),
+            automationControlMoved(LaneKey::trackParam(t, model::TrackParam::Pan),
                                    song.tracks[(size_t) t].pan, false);
         }
     }
@@ -141,7 +93,7 @@ void MainComponent::openAutomationPass()
 
 /** A control named by @p key moved to @p value, or was grabbed there
     (@p touching). Starts writing it if the mode and the transport say so. */
-void MainComponent::automationControlMoved(const AutomationWriteKey& key, float value, bool touching)
+void MainComponent::automationControlMoved(const LaneKey& key, float value, bool touching)
 {
     const auto mode = automationModeFor(key.track);
     if (mode == model::AutomationMode::Read || ! engine_.isPlaying())
@@ -155,7 +107,7 @@ void MainComponent::automationControlMoved(const AutomationWriteKey& key, float 
     openAutomationPass();
 
     auto& song = history_.mutableCurrent();
-    auto* lane = automationLaneFor(song, key);
+    auto* lane = laneFor(song, key);
     if (lane == nullptr)
         return;
 
@@ -179,7 +131,7 @@ void MainComponent::automationControlMoved(const AutomationWriteKey& key, float 
 
 /** The control named by @p key was let go. In Touch mode that ends its
     writing; Latch and Write carry on with the last value. */
-void MainComponent::automationControlReleased(const AutomationWriteKey& key)
+void MainComponent::automationControlReleased(const LaneKey& key)
 {
     for (auto it = automationWrites_.begin(); it != automationWrites_.end(); ++it)
     {
@@ -191,7 +143,7 @@ void MainComponent::automationControlReleased(const AutomationWriteKey& key)
             return;
 
         auto& song = history_.mutableCurrent();
-        if (auto* lane = automationLaneFor(song, key))
+        if (auto* lane = laneFor(song, key))
             it->writer.end(*lane, uiTempoMap_.ppqFromSamples(engine_.playheadSamples()));
         automationWrites_.erase(it);
 
@@ -219,7 +171,7 @@ void MainComponent::tickAutomationWrites()
     const double beat = uiTempoMap_.ppqFromSamples(engine_.playheadSamples());
     auto&        song = history_.mutableCurrent();
     for (auto& write : automationWrites_)
-        if (auto* lane = automationLaneFor(song, write.key); lane != nullptr && write.writer.active())
+        if (auto* lane = laneFor(song, write.key); lane != nullptr && write.writer.active())
             write.writer.advance(*lane, beat, write.value);
 
     automationPassBeat_ = beat;
@@ -237,19 +189,17 @@ void MainComponent::closeAutomationPass()
 
     auto& song = history_.mutableCurrent();
     for (auto& write : automationWrites_)
-        if (auto* lane = automationLaneFor(song, write.key))
+        if (auto* lane = laneFor(song, write.key))
             write.writer.end(*lane, automationPassBeat_);
     automationWrites_.clear();
 
     const model::Song recorded = history_.current();
-    copyLanes(automationPassBefore_, history_.mutableCurrent());
+    automationlanes::copyLanes(automationPassBefore_, history_.mutableCurrent());
     automationPassBefore_ = {};
 
     // A pass that ended up writing nothing new isn't worth an undo step.
-    auto probe = history_.current();
-    copyLanes(recorded, probe);
-    if (! (probe == history_.current()))
-        history_.edit("Record automation", [&recorded](model::Song& s) { copyLanes(recorded, s); });
+    if (automationlanes::lanesDiffer(recorded, history_.current()))
+        history_.edit("Record automation", [&recorded](model::Song& s) { automationlanes::copyLanes(recorded, s); });
 
     syncEngineTracks();
     arrangementView_.setSong(history_.current());
