@@ -13,6 +13,7 @@
 #include "engine/MasteringPreset.h"
 #include "engine/MidiCapture.h"
 #include "app/RecordSourceChoice.h"
+#include "app/RecordingPlan.h"
 #include "app/MicrophonePermission.h"
 #include "engine/AudioEdits.h"
 #include "engine/SampleSequence.h"
@@ -289,6 +290,7 @@ private:
     void                   finishRecordingIfReady();
     int                    makeLoopTakesFromRecording(const juce::File& file, int64_t startedAt, int latencySamples);
     int                    recordingLatencySamples();
+    app::recording::Latency latencySetting() const;
     void                   compensateRecordingLatency(const juce::File& file, int latencySamples);
     void                   showRecordingLatencyDialog();
     void                   measureRecordingLatency();
@@ -921,9 +923,10 @@ private:
     // its passes become the takes of one clip. See MainComponent_Recording.cpp.
     bool   loopRecording_       = false;
     bool   punchRecording_      = false; // over loopRecordFrom/ToBeats_, when not looping
+    double loopRecordFromBeats_ = 0.0;
+    double loopRecordToBeats_   = 0.0;
 
-    // Timer record: when the take starts, and, if it has one, when it stops.
-    bool       timerRecordPending_ = false;
+    app::recording::TimerRecord timerRecord_;
 
     // Tracks armed to record, by id - session state, not part of the song.
     // With any armed, a take records each from its own input; the first is
@@ -935,9 +938,6 @@ private:
         int slot       = -1;
     };
     std::vector<ExtraTake> extraTakes_;
-    juce::Time timerRecordStart_, timerRecordStop_;
-    double loopRecordFromBeats_ = 0.0;
-    double loopRecordToBeats_   = 0.0;
 
     // Chosen when the take is armed, not when it ends: the destination has to
     // exist before a note is played now that recording streams to it, and the

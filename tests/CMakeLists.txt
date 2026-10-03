@@ -113,6 +113,7 @@ add_executable(soundsplice_tests
   app/ScrollFollowTests.cpp
   app/TrackSelectionTests.cpp
   app/RecordSourceChoiceTests.cpp
+  app/RecordingPlanTests.cpp
   app/AutomationGeometryTests.cpp
   app/DragCommitTests.cpp
   app/ClipWindowTests.cpp

@@ -98,7 +98,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
 
         case commands::timerRecord:
-            info.setTicked(timerRecordPending_);
+            info.setTicked(timerRecord_.isPending());
             break;
 
         // "Undo Delete track" rather than a bare "Undo": every edit already

@@ -227,18 +227,7 @@ void MainComponent::toggleRecording()
         // Which tracks the take goes onto: every armed audio track, each from
         // its own input, or - with none armed - the selected track if it can
         // hold audio, otherwise a new one.
-        const auto& song = history_.current();
-        std::vector<int> targets;
-        for (int t = 0; t < (int) song.tracks.size(); ++t)
-            if (song.tracks[(size_t) t].type == model::TrackType::Audio
-                && armedTrackIds_.count(song.tracks[(size_t) t].id) > 0)
-                targets.push_back(t);
-        if (targets.empty())
-        {
-            const bool canHoldAudio = selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) song.tracks.size()
-                                   && song.tracks[(size_t) selectedTrackIndex_].type == model::TrackType::Audio;
-            targets.push_back(canHoldAudio ? selectedTrackIndex_ : -1);
-        }
+        const auto targets = app::recording::takeTargets(history_.current(), armedTrackIds_, selectedTrackIndex_);
 
         // The extra tracks first: they're armed alongside the main take, which
         // is what starts the transport.
@@ -670,51 +659,15 @@ void MainComponent::commitMidiTake(int targetTrack, int64_t startSample, int64_t
     if (targetTrack < 0 || targetTrack >= trackCount())
         return;
 
-    // Samples to beats happens here, on the message thread, through the same
-    // tempo map the UI already reads — which is why engine::MidiCapture takes
-    // beats and knows nothing about tempo: with a tempo map, a take spanning a
-    // tempo change cannot be converted by one scalar, and this is the only
-    // place that has the map.
-    const double takeStartBeats = juce::jmax(0.0, uiTempoMap_.ppqFromSamples(startSample));
-    const double takeEndBeats   = endSample > startSample
-                                    ? juce::jmax(takeStartBeats, uiTempoMap_.ppqFromSamples(endSample))
-                                    : takeStartBeats;
-
-    std::vector<engine::TimedMidiEvent> timed;
-    timed.reserve(midiTakeEvents_.size());
-    for (const auto& event : midiTakeEvents_)
+    // Through the tempo map the UI already reads (see clipFromMidiTake).
+    auto take = app::recording::clipFromMidiTake(midiTakeEvents_, startSample, endSample, uiTempoMap_);
+    if (! take)
     {
-        engine::TimedMidiEvent converted;
-        // Relative to the take's own start: a clip's notes are positioned from
-        // the clip start, and the clip is placed at takeStartBeats below.
-        converted.beats      = uiTempoMap_.ppqFromSamples(event.timeSamples) - takeStartBeats;
-        converted.noteNumber = event.noteNumber;
-        converted.velocity   = event.velocity;
-        converted.noteOn     = event.noteOn;
-        timed.push_back(converted);
-    }
-
-    auto notes = engine::MidiCapture::notesFromEvents(std::move(timed),
-                                                      takeEndBeats - takeStartBeats);
-    if (notes.empty())
-    {
-        // Every captured event was an unmatched note-off — keys that were
-        // already down when capture began. Nothing was actually played.
         showError("Recording was empty (no MIDI input captured)");
         return;
     }
 
-    // The clip is as long as the take, rounded up to a whole bar: a take is a
-    // musical phrase, and ending the clip on the last note's release would
-    // make a loop of it jarringly short.
-    double contentEnd = takeEndBeats - takeStartBeats;
-    for (const auto& note : notes)
-        contentEnd = juce::jmax(contentEnd, note.startBeats + note.lengthBeats);
-
-    const double lengthBeats = engine::MidiCapture::clipLengthForTake(
-        contentEnd, juce::jmax(1.0, uiTempoMap_.quartersPerBar()));
-
-    const int noteCount = (int) notes.size();
+    const int noteCount = (int) take->notes.size();
     int       newClipIndex = -1;
 
     history_.edit("Record MIDI", [&](model::Song& s)
@@ -726,10 +679,10 @@ void MainComponent::commitMidiTake(int targetTrack, int64_t startSample, int64_t
         model::Clip clip;
         clip.id                  = model::allocateId(s);
         clip.type                = model::ClipType::Instrument;
-        clip.startBeats          = takeStartBeats;
-        clip.lengthBeats         = lengthBeats;
-        clip.pattern.lengthBeats = lengthBeats;
-        clip.pattern.notes       = std::move(notes);
+        clip.startBeats          = take->startBeats;
+        clip.lengthBeats         = take->lengthBeats;
+        clip.pattern.lengthBeats = take->lengthBeats;
+        clip.pattern.notes       = std::move(take->notes);
 
         track.clips.push_back(clip);
         newClipIndex = (int) track.clips.size() - 1;
@@ -796,18 +749,17 @@ bool MainComponent::punchRecordedClip(const juce::File& file)
     take: a threshold to wait for, and a silence to stop on. */
 void MainComponent::applySoundTrigger()
 {
-    const bool   on       = settings_.getBoolValue("soundActivated", false);
-    const double rate     = engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0;
-    const float  gain     = juce::Decibels::decibelsToGain((float) settings_.getDoubleValue("soundThresholdDb", -40.0));
-    const double stopSecs = settings_.getDoubleValue("soundStopSeconds", 0.0);
-    engine_.setSoundTrigger(on ? gain : 0.0f, on && stopSecs > 0.0 ? (int64_t) (stopSecs * rate) : 0);
+    const auto trigger = app::recording::soundTrigger(settings_.getBoolValue("soundActivated", false),
+                                                      settings_.getDoubleValue("soundThresholdDb", -40.0),
+                                                      settings_.getDoubleValue("soundStopSeconds", 0.0),
+                                                      engine_.sampleRate());
+    engine_.setSoundTrigger(trigger.thresholdGain, trigger.stopAfterSamples);
 }
 
 /** Sound-Activated Recording: whether a take waits for sound, how loud it
     has to be, and how long a silence ends it. */
 void MainComponent::showSoundActivatedDialog()
 {
-
     dialog("Sound-Activated Recording",
            "With this on, Record waits for the input to pass the threshold before the take starts, and can "
            "stop it by itself after a silence. Set the threshold a little above the room's noise on the "
@@ -831,14 +783,12 @@ void MainComponent::showSoundActivatedDialog()
     stops by itself. Asked again while one is waiting, it offers to cancel. */
 void MainComponent::showTimerRecordDialog()
 {
-    if (timerRecordPending_)
+    if (timerRecord_.isPending())
     {
-        timerRecordPending_ = false;
-        timerRecordStop_    = {};
+        timerRecord_.cancel();
         showStatus("Timer record cancelled");
         return;
     }
-
 
     dialog("Timer Record",
            "Start a take a while from now, and stop it after a set length. The app has to stay open, with "
@@ -849,15 +799,10 @@ void MainComponent::showTimerRecordDialog()
         .unsaved()
         .show("Start Timer", [this](const FormDialog::Values& v)
         {
-            const double minutes = v.number("for");
-            const auto   now     = juce::Time::getCurrentTime();
-
-            timerRecordPending_ = true;
-            timerRecordStart_   = now + juce::RelativeTime::minutes(v.number("in"));
-            timerRecordStop_    = minutes > 0.0 ? timerRecordStart_ + juce::RelativeTime::minutes(minutes) : juce::Time();
-            showStatus("Recording starts at " + timerRecordStart_.toString(false, true, false)
-                       + (minutes > 0.0 ? " and stops at " + timerRecordStop_.toString(false, true, false)
-                                        : juce::String()));
+            timerRecord_.schedule(juce::Time::currentTimeMillis(), v.number("in"), v.number("for"));
+            const auto stop = timerRecord_.stopMs();
+            showStatus("Recording starts at " + juce::Time(timerRecord_.startMs()).toString(false, true, false)
+                       + (stop ? " and stops at " + juce::Time(*stop).toString(false, true, false) : juce::String()));
         });
 }
 
@@ -865,22 +810,9 @@ void MainComponent::showTimerRecordDialog()
     when its length is up. */
 void MainComponent::tickTimerRecord()
 {
-    const auto now = juce::Time::getCurrentTime();
-
-    if (timerRecordPending_ && now >= timerRecordStart_)
-    {
-        timerRecordPending_ = false;
-        if (! awaitingRecordedTake_ && ! awaitingMidiTake_)
-            toggleRecording();
-        return;
-    }
-
-    if (timerRecordStop_ != juce::Time() && now >= timerRecordStop_)
-    {
-        timerRecordStop_ = {};
-        if (awaitingRecordedTake_ || awaitingMidiTake_)
-            toggleRecording();
-    }
+    using Action = app::recording::TimerRecord::Action;
+    if (timerRecord_.tick(juce::Time::currentTimeMillis(), awaitingRecordedTake_ || awaitingMidiTake_) != Action::None)
+        toggleRecording(); // starts or stops, whichever is due
 }
 
 /** Append recording (Audacity's Shift+R): the take starts where the
@@ -969,7 +901,6 @@ void MainComponent::showRecordingFormatDialog()
     const auto format = savedRecordFormat();
     const auto inputs = engine_.inputChannelNames();
 
-
     // Each input by name; for stereo, the take is it and the next one.
     juce::StringArray inputChoices;
     for (int i = 0; i < juce::jmax(1, inputs.size()); ++i)
@@ -1010,18 +941,17 @@ void MainComponent::showRecordingFormatDialog()
     or nothing with compensation turned off. */
 int MainComponent::recordingLatencySamples()
 {
-    if (! settings_.getBoolValue("compensateRecordingLatency", true))
-        return 0;
+    return app::recording::latencySamples(latencySetting(), engine_.sampleRate(), engine_.reportedRoundTripSamples());
+}
 
-    // A measured round trip, when there is one for this rate, rather than
-    // what the driver reports, which is often a little off.
-    const double rate     = engine_.sampleRate();
-    const int    measured = settings_.getIntValue("measuredLatencySamples", -1);
-    const bool   useIt    = measured >= 0 && std::abs(settings_.getDoubleValue("measuredLatencyRate", 0.0) - rate) < 0.5;
-
-    const double adjustMs = settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0);
-    const int    adjust   = (int) std::lround(adjustMs * 0.001 * rate);
-    return juce::jmax(0, (useIt ? measured : engine_.reportedRoundTripSamples()) + adjust);
+app::recording::Latency MainComponent::latencySetting() const
+{
+    app::recording::Latency latency;
+    latency.compensate      = settings_.getBoolValue("compensateRecordingLatency", true);
+    latency.measuredSamples = settings_.getIntValue("measuredLatencySamples", -1);
+    latency.measuredRate    = settings_.getDoubleValue("measuredLatencyRate", 0.0);
+    latency.adjustMs        = settings_.getDoubleValue("recordingLatencyAdjustMs", 0.0);
+    return latency;
 }
 
 /** Moves the clip a recording was just imported as (the selected one) that
@@ -1116,12 +1046,10 @@ void MainComponent::showRecordingLatencyDialog()
                                   ? juce::String((double) reported * 1000.0 / rate, 1) + " ms ("
                                         + juce::String(reported) + " samples)"
                                   : juce::String("no device open");
-    const int    measured     = settings_.getIntValue("measuredLatencySamples", -1);
-    const auto   measuredText = measured >= 0 && rate > 0.0
-                                    && std::abs(settings_.getDoubleValue("measuredLatencyRate", 0.0) - rate) < 0.5
-                                  ? juce::String((double) measured * 1000.0 / rate, 1) + " ms"
+    const auto   latency      = latencySetting();
+    const auto   measuredText = rate > 0.0 && app::recording::usesMeasured(latency, rate)
+                                  ? juce::String((double) latency.measuredSamples * 1000.0 / rate, 1) + " ms"
                                   : juce::String();
-
 
     dialog("Recording Latency",
            "A recording comes back late by the time sound takes to leave the device and return to it. "
