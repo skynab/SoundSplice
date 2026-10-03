@@ -196,6 +196,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/TranscriptPaneTests.cpp
     gui/PreviewStripTests.cpp
     gui/FormDialogTests.cpp
+    gui/RenderChecksTests.cpp
     gui/MediaFoundationTests.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioFormats.cpp
     ${PROJECT_SOURCE_DIR}/src/engine/AudioEngine.cpp

@@ -8,7 +8,7 @@ target_sources(soundsplice_bounce PRIVATE
   ${PROJECT_SOURCE_DIR}/src/engine/Mp3Encoder.cpp)
 
 # Plugin hosting is enabled here too so the smoke tool can verify it against a
-# real plugin rather than a mock — see the pluginHost* checks in main.cpp. It
+# real plugin rather than a mock — see pluginHostingWorks in main.cpp. It
 # links the *headless* hosting module: the GUI one carries plugin-editor
 # support, which on macOS needs CoreAudioKit, and a console tool has no use for
 # a window.

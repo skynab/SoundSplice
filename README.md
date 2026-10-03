@@ -106,7 +106,9 @@ ctest --test-dir build -C Release --output-on-failure
 
 That runs `soundsplice_tests` (headless: real-time primitives, engine DSP, model, layout
 geometry), `soundsplice_gui_tests` (constructs real JUCE components and checks they are parented,
-laid out and wired) and `soundsplice_bounce` (renders audio offline and checks the result).
+laid out and wired, and renders audio end to end through the engine and measures it) and
+`soundsplice_bounce` (renders a demo offline, fails if it's silent, and hosts a real plugin if
+there is one).
 
 For a fast test-only loop that doesn't pull JUCE:
 
