@@ -62,6 +62,7 @@
 #include "Screensets.h"
 #include "LoudnessMatch.h"
 #include "AutomationLanes.h"
+#include "AutomationRecorder.h"
 #include "AutomationPane.h"
 #include "ApplyEffectsDialog.h"
 #include "AudioEditorPane.h"
@@ -869,32 +870,20 @@ private:
     int                         selectedClipIndex_  = 0;
 
     // ---- recording automation (MainComponent_AutomationWrite.cpp) ----
-    /** A control being written into its lane (see app/AutomationLanes.h). */
-    struct AutomationWrite
-    {
-        LaneKey           key;
-        model::LaneWriter writer;
-        float             value    = 0.0f;
-        bool              touching = false;
-    };
-
+    void                    initAutomationRecorder();
     bool                    isWritingAutomation(const LaneKey& key) const;
     engine::TrackAutomation engineAutomationFor(int trackIndex, const model::Track& track) const;
-    void                    openAutomationPass();
     void                    automationControlMoved(const LaneKey& key, float value, bool touching);
     void                    automationControlReleased(const LaneKey& key);
     void                    tickAutomationWrites();
     void                    closeAutomationPass();
+    void                    refreshAfterAutomationPass();
     void                    setAutomationMode(model::AutomationMode mode);
     void                    chooseTrackAutomationMode(int trackIndex);
     model::AutomationMode   automationModeFor(int trackIndex) const;
-    bool                    anyTrackInWriteMode() const;
 
-    model::AutomationMode        automationMode_     = model::AutomationMode::Read;
-    std::vector<AutomationWrite> automationWrites_;
-    bool                         automationPassOpen_ = false;
-    model::Song                  automationPassBefore_;
-    double                       automationPassBeat_ = 0.0;
+    app::AutomationRecorder automation_ { history_ }; // after history_, which it edits
+
     bool                        awaitingRecordedTake_ = false;
 
     // A take recorded round the loop (Loop on, and a time selection to loop):

@@ -611,11 +611,7 @@ void MainComponent::endEffectSlotParamsDrag(int slotIndex)
     const auto& chain = *edited;
 
     // Every parameter of this slot being written was held by this drag.
-    std::vector<LaneKey> held;
-    for (const auto& write : automationWrites_)
-        if (write.key.track == selectedTrackIndex_ && write.key.target.slot == slotIndex && write.touching)
-            held.push_back(write.key);
-    for (const auto& key : held)
+    for (const auto& key : automation_.heldOnSlot(selectedTrackIndex_, slotIndex))
         automationControlReleased(key);
 
     const auto landedOn = chain[(size_t) slotIndex];

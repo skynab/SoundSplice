@@ -13,6 +13,7 @@ MainComponent::MainComponent(bool headless)
     : engine_(! headless), settings_(makeSettingsOptions())
 {
     headless_ = headless;
+    initAutomationRecorder();
     menuBar_.setModel(this);
     addAndMakeVisible(menuBar_);
 
