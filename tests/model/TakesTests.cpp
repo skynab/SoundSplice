@@ -214,3 +214,18 @@ TEST_CASE("Punching in replaces the range and nothing either side of it", "[mode
     short_.lengthBeats = 2.0;
     REQUIRE(takeedit::punchIn(song, trackId, short_, 8.0, 12.0, 0.01) == 0);
 }
+
+TEST_CASE("Switching to another recording lets the old one's words go", "[model][takes]")
+{
+    int  trackId = 0;
+    auto song    = twoPasses(trackId);
+    const int id = takeedit::combineIntoTakes(song, trackId, { song.tracks[0].clips[0].id, song.tracks[0].clips[1].id });
+    REQUIRE(id != 0);
+    auto clip       = song.tracks[0].clips[0];
+    clip.transcript = { { "hello", 2.0, 2.5 } }; // b.wav's words
+
+    REQUIRE(takeedit::setActiveTake(clip, 1)); // already b.wav: kept
+    REQUIRE(clip.transcript.size() == 1);
+    REQUIRE(takeedit::setActiveTake(clip, 0)); // a.wav: not its words
+    REQUIRE(clip.transcript.empty());
+}

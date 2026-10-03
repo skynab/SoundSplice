@@ -112,6 +112,14 @@ TEST_CASE("A script's mistakes come back as errors with their line", "[scripting
     REQUIRE_FALSE(result.ok);
     REQUIRE(result.error.find("no track with that number") != std::string::npos);
 
+    // Not a number the mix can take: NaN would pass every range check.
+    const double before = fake.tracks[0].volumeDb;
+    result = engine.run("soundsplice.setTrackVolume(1, 0/0)");
+    REQUIRE_FALSE(result.ok);
+    REQUIRE(result.error.find("finite") != std::string::npos);
+    REQUIRE(fake.tracks[0].volumeDb == before);
+    REQUIRE_FALSE(engine.run("soundsplice.setPlayhead(math.huge)").ok);
+
     result = engine.run("soundsplice.setSelection(5, 2)");
     REQUIRE_FALSE(result.ok);
     REQUIRE_FALSE(fake.selection.has_value());

@@ -3,6 +3,7 @@
 
 #include "engine/Paulstretch.h"
 #include "engine/Spectrogram.h"
+#include "model/TextEdit.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
 // The audio editor: clip gain, selection edits, noise reduction, speed and pitch,
@@ -1856,11 +1857,17 @@ bool MainComponent::replaceClipAudio(const juce::String& label, const ClipAudio&
     const double newLengthBeats = model::clockFor(history_.current())
                                       .beatsAfter(selectedAudioClip() != nullptr ? selectedAudioClip()->startBeats : 0.0, newSeconds);
 
-    history_.edit(label.toStdString(), [trackIndex, clipIndex, newPath, newLengthBeats](model::Song& s)
+    // Its words follow the audio: those after the edit move with it.
+    const double editFrom = (double) (audio.window.start + from) / sampleRate;
+    const double editTo   = (double) (audio.window.start + to) / sampleRate;
+    const double editNew  = (double) newFrames / sampleRate;
+
+    history_.edit(label.toStdString(), [trackIndex, clipIndex, newPath, newLengthBeats, editFrom, editTo, editNew](model::Song& s)
     {
         auto& target       = s.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
         target.audioFile   = newPath;
         target.lengthBeats = juce::jmax(0.25, newLengthBeats);
+        model::textedit::remapAfterReplace(target.transcript, editFrom, editTo, editNew);
     });
 
     // A noise print described the old file, and the peaks cache is keyed by

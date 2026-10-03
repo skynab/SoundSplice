@@ -1744,14 +1744,25 @@ void MainComponent::deleteTranscriptRanges(const std::vector<std::pair<double, d
         return engine_.probeDurationSeconds(juce::File(juce::String::fromUTF8(file.c_str())));
     };
 
-    double removed = 0.0;
-    for (const auto& r : ranges)
-        removed += r.second - r.first;
-    int cuts = 0;
-    history_.edit(ranges.size() == 1 ? "Delete words" : "Delete words and pauses", [&](model::Song& s)
+    // On a copy, so a delete that cuts nothing leaves no empty undo step.
+    auto       edited = song;
+    const int  cuts   = model::textedit::cutRanges(edited, trackId, ranges, 0.01, fileSeconds);
+    if (cuts == 0)
+        return;
+    double removed = 0.0; // overlapping ranges counted once: the track's own loss
     {
-        cuts = model::textedit::cutRanges(s, trackId, ranges, 0.01, fileSeconds);
-    });
+        auto sorted = ranges;
+        std::sort(sorted.begin(), sorted.end());
+        double reached = -1.0e300;
+        for (const auto& r : sorted)
+        {
+            const double from = juce::jmax(r.first, reached);
+            if (r.second > from)
+                removed += r.second - from;
+            reached = juce::jmax(reached, r.second);
+        }
+    }
+    history_.apply(std::move(edited), ranges.size() == 1 ? "Delete words" : "Delete words and pauses");
     refreshAfterArrangementEdit();
     refreshTranscriptPane(true);
     showStatus("Cut " + juce::String(cuts) + (cuts == 1 ? " stretch, " : " stretches, ") + juce::String(removed, 1)

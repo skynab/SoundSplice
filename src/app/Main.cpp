@@ -130,6 +130,14 @@ public:
 
     void shutdown() override
     {
+        // The dialogs first: theirs are callbacks into the main window (a
+        // render queue's thread among them), and the look and feel they draw
+        // with goes below.
+        auto& desktop = juce::Desktop::getInstance();
+        for (int i = desktop.getNumComponents(); --i >= 0;)
+            if (auto* dialog = dynamic_cast<juce::DialogWindow*>(desktop.getComponent(i)))
+                delete dialog;
+
         mainWindow = nullptr;
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         juce::Logger::writeToLog("SoundSplice shutting down");

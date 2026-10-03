@@ -39,6 +39,8 @@ namespace takeedit
             return false;
 
         const auto& take           = clip.takes[(size_t) index];
+        if (take.audioFile != clip.audioFile)
+            clip.transcript.clear(); // another recording: the words were the old one's
         clip.sourceOffsetSeconds    = takeOffsetSeconds(clip, take);
         clip.audioFile              = take.audioFile;
         clip.activeTake             = index;

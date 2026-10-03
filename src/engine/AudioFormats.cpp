@@ -588,17 +588,29 @@ namespace
         {
             pending_.clear();
             pendingAt_ = 0;
-            while (reader_ != nullptr)
+            // A null sample is a stream tick or a format change, but a broken
+            // file can return nothing but those: give up after a while.
+            for (int empty = 0; reader_ != nullptr && empty < 64;)
             {
                 DWORD     flags = 0;
                 LONGLONG  time  = 0;
                 IMFSample* sample = nullptr;
                 if (FAILED(reader_->ReadSample((DWORD) MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, nullptr, &flags, &time, &sample)))
                     return false;
+                if ((flags & MF_SOURCE_READERF_ERROR) != 0)
+                {
+                    if (sample != nullptr)
+                        sample->Release();
+                    return false;
+                }
                 if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0 && sample == nullptr)
                     return false;
                 if (sample == nullptr)
+                {
+                    ++empty;
                     continue;
+                }
+                empty = 0;
 
                 IMFMediaBuffer* buffer = nullptr;
                 if (SUCCEEDED(sample->ConvertToContiguousBuffer(&buffer)))

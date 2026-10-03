@@ -115,3 +115,23 @@ TEST_CASE("A cut's join is crossfaded from the audio beyond its edges", "[model]
     REQUIRE(first.fades.outSeconds > 0.0);
     REQUIRE(second.fades.inSeconds > 0.0);
 }
+
+TEST_CASE("Words follow the audio when part of the file is replaced", "[model][textedit]")
+{
+    std::vector<TranscriptWord> words { { "before", 0.5, 0.9 }, { "inside", 1.2, 1.6 }, { "after", 3.0, 3.4 } };
+
+    // An effect over [1, 2): the same length, every word stays put.
+    auto same = words;
+    textedit::remapAfterReplace(same, 1.0, 2.0, 1.0);
+    REQUIRE(same == words);
+
+    // Stretched to 3 s: the word inside no longer says what's there, the
+    // one after moves 2 s later, the one before is untouched.
+    auto stretched = words;
+    textedit::remapAfterReplace(stretched, 1.0, 2.0, 3.0);
+    REQUIRE(stretched.size() == 2);
+    REQUIRE(stretched[0] == words[0]);
+    REQUIRE(stretched[1].text == "after");
+    REQUIRE_THAT(stretched[1].start, WithinAbs(5.0, 1e-9));
+    REQUIRE_THAT(stretched[1].end, WithinAbs(5.4, 1e-9));
+}

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <functional>
 #include <set>
 #include <string>
@@ -68,6 +69,32 @@ inline std::vector<TrackWord> wordsOn(const Song& song, int trackIndex)
     }
     std::stable_sort(words.begin(), words.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
     return words;
+}
+
+/** Keeps @p words on their audio after the file's [@p from, @p to) (seconds)
+    is replaced by @p newSeconds of other audio: those before it stay, those
+    after move by the change in length, and those in it stay only if the
+    length didn't change (an effect, not a stretch) - otherwise they no
+    longer say what's there. */
+inline void remapAfterReplace(std::vector<TranscriptWord>& words, double from, double to, double newSeconds)
+{
+    const double shift = newSeconds - (to - from);
+    const bool   same  = std::abs(shift) < 1.0e-6;
+    std::vector<TranscriptWord> kept;
+    for (auto word : words)
+    {
+        if (word.end <= from + 1.0e-9)
+            kept.push_back(std::move(word));
+        else if (word.start >= to - 1.0e-9)
+        {
+            word.start += shift;
+            word.end += shift;
+            kept.push_back(std::move(word));
+        }
+        else if (same)
+            kept.push_back(std::move(word));
+    }
+    words = std::move(kept);
 }
 
 /** "Um", "uh," and the rest: the hesitations a filler pass takes out. */

@@ -37,7 +37,11 @@ public:
         it adds no undo step. */
     State& mutableCurrent() noexcept
     {
-        presentId_ = ++lastId_;
+        const auto was = presentId_;
+        presentId_     = ++lastId_;
+        for (auto& branch : branches_) // still leaving from here, nudged or not
+            if (branch.fromId == was)
+                branch.fromId = presentId_;
         return present_;
     }
 

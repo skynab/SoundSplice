@@ -64,6 +64,7 @@ public:
             status_.setText("No video: Load Video to work to one", juce::dontSendNotification);
             return;
         }
+        playSpeed_        = 1.0; // a newly opened video plays at its own speed
         const auto result = video_.load(file);
         if (result.failed())
         {
@@ -74,11 +75,18 @@ public:
         status_.setText(file.getFileName() + ", " + juce::String(video_.getVideoDuration(), 1) + " s", juce::dontSendNotification);
     }
 
-    /** Called often: the song's playhead, in seconds, and whether it's playing. */
-    void sync(double songSeconds, bool playing)
+    /** Called often: the song's playhead, in seconds, whether it's playing,
+        and how fast (play-at-speed), so the picture keeps pace rather than
+        being jumped back into step over and over. */
+    void sync(double songSeconds, bool playing, double speed = 1.0)
     {
         if (! video_.isVideoOpen())
             return;
+        if (speed > 0.0 && std::abs(speed - playSpeed_) > 1.0e-6)
+        {
+            playSpeed_ = speed;
+            video_.setPlaySpeed(speed);
+        }
         const double target = songSeconds - offsetSeconds_;
         const bool   inside = target >= 0.0 && target < video_.getVideoDuration();
         if (! inside)
@@ -144,6 +152,7 @@ private:
     juce::TextEditor     offset_;
     juce::File           loaded_;
     double               offsetSeconds_ = 0.0;
+    double               playSpeed_     = 1.0; // what the video was last told to play at
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VideoPane)
 };

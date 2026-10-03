@@ -308,3 +308,20 @@ TEST_CASE("Only so many branches are kept", "[model][history]")
     }
     REQUIRE((int) h.branches().size() == History<int>::kMaxBranches);
 }
+
+TEST_CASE("A fader nudge doesn't strand the branches leaving from the present state", "[model][history]")
+{
+    History<int> h(0);
+    h.apply(1);
+    h.apply(2);
+    h.undo();
+    h.apply(3); // branch [2] off state 1
+    h.undo();   // back at 1, where the branch leaves from
+    h.mutableCurrent() = 1; // a live tweak: a new id, no undo step
+    const auto branches = h.branches();
+    REQUIRE(branches.size() == 1);
+    REQUIRE(branches[0].fromIndex == 1);
+    REQUIRE(h.switchToBranch(0));
+    h.redo();
+    REQUIRE(h.current() == 2);
+}

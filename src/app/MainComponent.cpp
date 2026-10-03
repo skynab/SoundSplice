@@ -1344,7 +1344,7 @@ void MainComponent::timerCallback()
     refreshHistoryPane();
     refreshTranscriptPane();
     videoPane_.show(juce::File(juce::String::fromUTF8(history_.current().videoFile.c_str())), history_.current().videoOffsetSeconds);
-    videoPane_.sync(model::clockFor(history_.current()).secondsAt(playheadBeat()), engine_.isPlaying());
+    videoPane_.sync(model::clockFor(history_.current()).secondsAt(playheadBeat()), engine_.isPlaying(), engine_.playSpeed());
     if (engine_.isPlaying())
         transcriptPane_.setPlayhead(model::clockFor(history_.current()).secondsAt(playheadBeat()));
     finishMidiRecordingIfReady();

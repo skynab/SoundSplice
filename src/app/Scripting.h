@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <functional>
 #include <optional>
 #include <string>
@@ -227,6 +228,15 @@ private:
         return fn;
     }
 
+    /** A number argument that is a real number: 0/0 or math.huge would
+        otherwise pass every range check and reach the mix as NaN. */
+    static double checkFinite(lua_State* L, int arg)
+    {
+        const double value = luaL_checknumber(L, arg);
+        luaL_argcheck(L, std::isfinite(value), arg, "has to be a finite number");
+        return value;
+    }
+
     static int trackIndex(lua_State* L, int arg)
     {
         const auto index = luaL_checkinteger(L, arg);
@@ -303,7 +313,7 @@ private:
     static int setTrackVolume(lua_State* L)
     {
         const int    index = trackIndex(L, 1);
-        const double db    = luaL_checknumber(L, 2);
+        const double db    = checkFinite(L, 2);
         lua_pushboolean(L, need(L, self(L).host_.setTrackVolume, "setTrackVolume")(index, db));
         return 1;
     }
@@ -311,7 +321,7 @@ private:
     static int setTrackPan(lua_State* L)
     {
         const int    index = trackIndex(L, 1);
-        const double pan   = luaL_checknumber(L, 2);
+        const double pan   = checkFinite(L, 2);
         lua_pushboolean(L, need(L, self(L).host_.setTrackPan, "setTrackPan")(index, pan));
         return 1;
     }
@@ -353,7 +363,7 @@ private:
 
     static int setPlayhead(lua_State* L)
     {
-        const double seconds = luaL_checknumber(L, 1);
+        const double seconds = checkFinite(L, 1);
         luaL_argcheck(L, seconds >= 0.0, 1, "can't be before the start");
         need(L, self(L).host_.setPlayhead, "setPlayhead")(seconds);
         return 0;
@@ -374,8 +384,8 @@ private:
 
     static int setSelection(lua_State* L)
     {
-        const double start = luaL_checknumber(L, 1);
-        const double end   = luaL_checknumber(L, 2);
+        const double start = checkFinite(L, 1);
+        const double end   = checkFinite(L, 2);
         luaL_argcheck(L, start >= 0.0, 1, "can't be before the start");
         luaL_argcheck(L, end > start, 2, "has to be after the start");
         lua_pushboolean(L, need(L, self(L).host_.setSelection, "setSelection")(start, end));
