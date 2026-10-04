@@ -501,7 +501,7 @@ public:
             // While an alt-drag is live, mark the track it would copy.
             if (i == duplicateDragTrack_ && duplicateDragMoved_)
             {
-                g.setColour(juce::Colours::cyan.withAlpha(0.18f));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.18f));
                 g.fillRect(0.0f, y, geometry_.gutterWidth, geometry_.laneHeight);
             }
 
@@ -579,7 +579,7 @@ public:
                                    kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
                 }
 
-                g.setColour(isEditSelected ? juce::Colours::cyan.withAlpha(0.9f) : juce::Colours::black.withAlpha(0.3f));
+                g.setColour(isEditSelected ? theme::colour(*this, theme::accentId).withAlpha(0.9f) : juce::Colours::black.withAlpha(0.3f));
                 g.drawRoundedRectangle(r, 3.0f, isEditSelected ? 2.0f : 1.0f);
             }
 
@@ -647,7 +647,7 @@ public:
                                kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
                 }
 
-                g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.9f));
                 g.drawRoundedRectangle(r, 3.0f, 2.0f);
             }
         }
@@ -660,7 +660,7 @@ public:
         const float px = geometry_.xForBeat(playheadBeats_);
         if (px >= timelineX && px <= width)
         {
-            g.setColour(juce::Colours::orange.withAlpha(0.9f));
+            g.setColour(theme::colour(*this, theme::signalInkId).withAlpha(0.9f));
             g.fillRect(px, 0.0f, 2.0f, height);
         }
 
@@ -668,7 +668,7 @@ public:
         if (fileDragActive_)
         {
             const float dx = geometry_.xForBeat(dropPreviewBeat_);
-            g.setColour(juce::Colours::cyan.withAlpha(0.5f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.5f));
             g.fillRect(dx, 0.0f, 2.0f, height);
         }
     }
@@ -1143,9 +1143,9 @@ private:
             if (x1 > x0)
             {
                 const auto band = juce::Rectangle<float>(x0, lanes.rowTop(swipeTake_), x1 - x0, lanes.rowHeight);
-                g.setColour(juce::Colours::cyan.withAlpha(0.3f));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.3f));
                 g.fillRect(band);
-                g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.9f));
                 g.drawRect(band, 1.0f);
             }
         }

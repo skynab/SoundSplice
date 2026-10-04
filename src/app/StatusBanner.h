@@ -75,7 +75,7 @@ public:
         g.setColour(theme::surface(*this, theme::popupId).withAlpha(0.94f * opacity_));
         g.fillRoundedRectangle(area, 5.0f);
 
-        g.setColour((isError_ ? juce::Colour(0xffe05c4a) : juce::Colours::white).withAlpha(0.45f * opacity_));
+        g.setColour((isError_ ? theme::colour(*this, theme::dangerTextId) : juce::Colours::white).withAlpha(0.45f * opacity_));
         g.drawRoundedRectangle(area.reduced(0.5f), 5.0f, 1.0f);
 
         g.setColour(juce::Colours::white.withAlpha((isError_ ? 0.98f : 0.85f) * opacity_));

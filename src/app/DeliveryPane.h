@@ -125,7 +125,7 @@ private:
             summary_.setText(failed == 0 ? "Passes " + juce::String(spec.name)
                                          : juce::String(failed) + (failed == 1 ? " thing fails " : " things fail ") + spec.name,
                              juce::dontSendNotification);
-            summary_.setColour(juce::Label::textColourId, failed == 0 ? juce::Colour(0xff6fd08c) : juce::Colour(0xffff6a5a));
+            summary_.setColour(juce::Label::textColourId, failed == 0 ? juce::Colour(0xff6fd08c) : theme::colour(*this, theme::dangerTextId));
         }
         checkButton_.setEnabled(! busy_);
     }
@@ -150,7 +150,7 @@ private:
         switch (column)
         {
             case 1:
-                g.setColour(r.pass ? juce::Colour(0xff6fd08c) : juce::Colour(0xffff6a5a));
+                g.setColour(r.pass ? juce::Colour(0xff6fd08c) : theme::colour(*this, theme::dangerTextId));
                 g.drawText(r.pass ? juce::String::fromUTF8("\xe2\x9c\x93") : juce::String::fromUTF8("\xe2\x9c\x97"), 0, 0, width,
                            height, juce::Justification::centred);
                 return;

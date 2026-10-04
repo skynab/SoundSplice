@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include "engine/Loudness.h"
 
 namespace soundsplice
@@ -79,7 +81,7 @@ public:
                        juce::Justification::centredLeft, false);
 
             g.setFont(juce::Font(juce::FontOptions(12.0f)));
-            g.setColour(cell.warn ? juce::Colour(0xffff5a4a) : juce::Colours::white.withAlpha(0.9f));
+            g.setColour(cell.warn ? theme::colour(*this, theme::dangerTextId) : juce::Colours::white.withAlpha(0.9f));
             g.drawText(cell.value, box, juce::Justification::centredLeft, true);
         }
     }

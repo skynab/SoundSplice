@@ -8,6 +8,7 @@
 
 #include "LayoutHelpers.h"
 #include "LevelMeter.h"
+#include "Theme.h"
 
 namespace soundsplice
 {
@@ -65,21 +66,19 @@ public:
         nameLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
         nameLabel_.setInterceptsMouseClicks(false, false); // clicks pass through to select the strip
         addAndMakeVisible(nameLabel_);
+        applyThemeColours();
 
         muteButton_.setClickingTogglesState(true);
-        muteButton_.setColour(juce::TextButton::buttonOnColourId, juce::Colours::orangered);
         muteButton_.onClick = [this] { if (onMuteChange) onMuteChange(muteButton_.getToggleState()); };
         muteButton_.setTooltip("Mute this track");
         addAndMakeVisible(muteButton_);
 
         soloButton_.setClickingTogglesState(true);
-        soloButton_.setColour(juce::TextButton::buttonOnColourId, juce::Colours::yellow);
         soloButton_.onClick = [this] { if (onSoloChange) onSoloChange(soloButton_.getToggleState()); };
         soloButton_.setTooltip("Solo this track - silences every other track");
         addAndMakeVisible(soloButton_);
 
         armButton_.setClickingTogglesState(true);
-        armButton_.setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
         armButton_.onClick = [this]
         {
             if (juce::ModifierKeys::currentModifiers.isPopupMenu())
@@ -231,6 +230,12 @@ public:
             onSelect();
     }
 
+    // The lit buttons take the theme's colours, which reach the strip only
+    // once it is in the window: mute and arm are danger, solo is warn, with
+    // dark text on solo's light amber.
+    void lookAndFeelChanged() override { applyThemeColours(); }
+    void parentHierarchyChanged() override { applyThemeColours(); }
+
     void resized() override
     {
         auto area = getLocalBounds().reduced(4);
@@ -267,6 +272,14 @@ public:
     }
 
 private:
+    void applyThemeColours()
+    {
+        muteButton_.setColour(juce::TextButton::buttonOnColourId, theme::colour(*this, theme::dangerId));
+        armButton_.setColour(juce::TextButton::buttonOnColourId, theme::colour(*this, theme::dangerId));
+        soloButton_.setColour(juce::TextButton::buttonOnColourId, theme::colour(*this, theme::warnId));
+        soloButton_.setColour(juce::TextButton::textColourOnId, juce::Colour(0xff141520));
+    }
+
     /** Reports a fader's grab and release. Both are needed: the start says
         what to undo back to, and without the end a drag would never commit. */
     void wireDrag(juce::Slider& slider, Fader fader)

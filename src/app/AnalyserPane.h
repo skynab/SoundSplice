@@ -123,7 +123,7 @@ public:
                 path.lineTo(x, y);
         }
 
-        g.setColour(juce::Colours::aquamarine.withAlpha(0.9f));
+        g.setColour(theme::colour(*this, theme::signalId).withAlpha(0.9f));
         g.strokePath(path, juce::PathStrokeType(1.5f));
     }
 

@@ -169,9 +169,9 @@ public:
 
         // Only shown mid-drag: a permanent "drop files here" banner would be
         // clutter on a pane whose actual job is the controls.
-        g.setColour(juce::Colours::cyan.withAlpha(0.12f));
+        g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.12f));
         g.fillAll();
-        g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+        g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.9f));
         g.drawRect(getLocalBounds(), 2);
         g.setFont(juce::FontOptions(15.0f));
         g.drawText("Drop audio to add it to the project",
@@ -260,7 +260,7 @@ public:
                 path.lineTo(x, y);
         }
 
-        g.setColour(settings_.enabled ? juce::Colours::cyan.withAlpha(0.9f)
+        g.setColour(settings_.enabled ? theme::colour(*this, theme::signalId).withAlpha(0.9f)
                                       : juce::Colours::white.withAlpha(0.25f));
         g.strokePath(path, juce::PathStrokeType(1.5f));
 
@@ -277,7 +277,7 @@ public:
             const float amount = juce::jlimit(0.0f, 1.0f, -reductionDb_ / kMeterRangeDb);
             if (amount > 0.0f)
             {
-                g.setColour(juce::Colours::orange.withAlpha(0.85f));
+                g.setColour(theme::colour(*this, theme::warnId).withAlpha(0.85f));
                 g.fillRoundedRectangle(meter.withWidth(meter.getWidth() * amount), 2.0f);
             }
 

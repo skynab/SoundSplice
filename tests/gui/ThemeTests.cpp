@@ -63,6 +63,37 @@ TEST_CASE("Panes take their surfaces from the theme", "[gui][theme]")
     pane.setLookAndFeel(nullptr);
 }
 
+TEST_CASE("Panes take their signal, warn and danger colours from the theme", "[gui][theme]")
+{
+    JuceFixture fixture;
+
+    juce::Component pane;
+    REQUIRE(theme::colour(pane, theme::signalId) == theme::all().front().signal);
+    REQUIRE(theme::colour(pane, theme::dangerId) == theme::all().front().danger);
+
+    AppLookAndFeel look;
+    pane.setLookAndFeel(&look);
+    for (const auto& t : theme::all())
+    {
+        INFO(t.name);
+        look.apply(t, {}, false);
+        REQUIRE(theme::colour(pane, theme::signalId) == t.signal);
+        REQUIRE(theme::colour(pane, theme::signalInkId) == t.signalInk);
+        REQUIRE(theme::colour(pane, theme::warnId) == t.warn);
+        REQUIRE(theme::colour(pane, theme::dangerId) == t.danger);
+        REQUIRE(theme::colour(pane, theme::dangerTextId) == t.dangerText);
+        REQUIRE(theme::colour(pane, theme::accentId) == t.accent);
+
+        // Drawn on the panes, so they have to stand off them.
+        for (const auto c : { t.signal, t.signalInk, t.warn, t.dangerText })
+            REQUIRE(c.getPerceivedBrightness() > t.pane.getPerceivedBrightness() + 0.3f);
+    }
+
+    look.apply(theme::all().front(), juce::Colour(0xffff8c42), false);
+    REQUIRE(theme::colour(pane, theme::accentId) == juce::Colour(0xffff8c42));
+    pane.setLookAndFeel(nullptr);
+}
+
 TEST_CASE("The accent is the theme's own until one is chosen", "[gui][theme]")
 {
     JuceFixture fixture;

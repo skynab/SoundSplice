@@ -33,6 +33,14 @@ namespace theme
         tabInactiveId = 0x5e510005,
         popupId       = 0x5e510006, // the palette, the status banner
         focusRingId   = 0x5e510007,
+
+        // What the panes draw, rather than what they're drawn on.
+        accentId      = 0x5e510008, // a selection, a drop target: the chosen accent
+        signalId      = 0x5e510009, // the audio itself: waveforms, spectra, curves, meter fills
+        signalInkId   = 0x5e51000a, // the playhead, and marks drawn over the signal
+        warnId        = 0x5e51000b, // solo, gain reduction, a meter running hot
+        dangerId      = 0x5e51000c, // clipping, mute, record-arm: fills and marks
+        dangerTextId  = 0x5e51000d, // the same, as text: errors, failures, overs
     };
 
     struct Theme
@@ -42,6 +50,17 @@ namespace theme
         juce::Colour                           pane, inset, workspace, tabActive, tabInactive, popup;
         juce::Colour                           accent;     // its own, when the user hasn't picked one
         bool                                   focusRings; // always, rather than when asked for
+
+        // The design system's signal colours, which every theme but High
+        // Contrast shares: the audio is teal against the blurple accent, apart
+        // in lightness as well as hue so the two stay distinct to colour-blind
+        // eyes. Danger is a step darker for fills than for text, which needs
+        // 4.5:1 on the panes.
+        juce::Colour signal     { 0xff71cfd9 }; // color-signal
+        juce::Colour signalInk  { 0xffc3eef3 }; // color-signal-ink
+        juce::Colour warn       { 0xffe4b750 }; // color-warn
+        juce::Colour danger     { 0xffe24947 }; // color-danger
+        juce::Colour dangerText { 0xffff645f }; // color-danger-bright
     };
 
     inline const std::vector<Theme>& all()
@@ -72,7 +91,9 @@ namespace theme
                      0xffffd400, 0xff000000, 0xffffd400, 0xffffffff),
               juce::Colour(0xff000000), juce::Colour(0xff000000), juce::Colour(0xff000000),
               juce::Colour(0xff3d3500), juce::Colour(0xff000000), juce::Colour(0xff000000),
-              juce::Colour(0xffffd400), true },
+              juce::Colour(0xffffd400), true,
+              juce::Colour(0xff00ebff), juce::Colour(0xffffffff), juce::Colour(0xffffd400),
+              juce::Colour(0xffff4040), juce::Colour(0xffff6b6b) },
         };
         return themes;
     }
@@ -108,7 +129,7 @@ namespace theme
 
     /** A pane's colour for @p role, from its look and feel, or Nocturne's when
         the look and feel isn't the app's (in a test, say). */
-    inline juce::Colour surface(const juce::Component& component, int role)
+    inline juce::Colour colour(const juce::Component& component, int role)
     {
         auto& lookAndFeel = component.getLookAndFeel();
         if (lookAndFeel.isColourSpecified(role))
@@ -122,9 +143,18 @@ namespace theme
             case tabInactiveId: return nocturne.tabInactive;
             case popupId:       return nocturne.popup;
             case focusRingId:   return nocturne.accent;
+            case accentId:      return nocturne.accent;
+            case signalId:      return nocturne.signal;
+            case signalInkId:   return nocturne.signalInk;
+            case warnId:        return nocturne.warn;
+            case dangerId:      return nocturne.danger;
+            case dangerTextId:  return nocturne.dangerText;
             default:            return nocturne.pane;
         }
     }
+
+    /** colour(), for the roles a pane is painted on. */
+    inline juce::Colour surface(const juce::Component& component, int role) { return colour(component, role); }
 }
 
 /** The app's look and feel: JUCE's, coloured by a theme, with a ring round
@@ -150,6 +180,12 @@ public:
         setColour(theme::tabInactiveId, theme.tabInactive);
         setColour(theme::popupId, theme.popup);
         setColour(theme::focusRingId, theme.focusRings ? juce::Colour(0xffffd400) : chosen);
+        setColour(theme::accentId, chosen);
+        setColour(theme::signalId, theme.signal);
+        setColour(theme::signalInkId, theme.signalInk);
+        setColour(theme::warnId, theme.warn);
+        setColour(theme::dangerId, theme.danger);
+        setColour(theme::dangerTextId, theme.dangerText);
 
         // The accent where JUCE's own widgets show something on or chosen.
         setColour(juce::TextButton::buttonOnColourId, chosen.withMultipliedSaturation(0.8f).darker(0.2f));

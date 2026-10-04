@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include "engine/DynamicsProcessor.h"
 
 namespace soundsplice
@@ -97,13 +99,13 @@ public:
             else
                 line.lineTo(x, y);
         }
-        g.setColour(juce::Colours::orange);
+        g.setColour(theme::colour(*this, theme::signalId));
         g.strokePath(line, juce::PathStrokeType(1.6f));
 
         for (int i = 0; i < curve_.count; ++i)
         {
             const auto at = pointFor(i);
-            g.setColour(i == dragging_ ? juce::Colours::white : juce::Colours::orange.brighter(0.4f));
+            g.setColour(i == dragging_ ? juce::Colours::white : theme::colour(*this, theme::signalInkId));
             g.fillEllipse(at.x - kPointRadius, at.y - kPointRadius, kPointRadius * 2.0f, kPointRadius * 2.0f);
         }
     }

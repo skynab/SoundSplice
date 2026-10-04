@@ -6,6 +6,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include "engine/ParametricEq.h"
 
 namespace soundsplice
@@ -115,7 +117,7 @@ public:
             else
                 curve.lineTo(x, y);
         }
-        g.setColour(juce::Colours::orange);
+        g.setColour(theme::colour(*this, theme::signalId));
         g.strokePath(curve, juce::PathStrokeType(1.6f));
 
         for (int b = 0; b < engine::ParametricEq::kBands; ++b)
@@ -123,7 +125,7 @@ public:
             if (bands_[(size_t) b].type == engine::ParametricBand::Type::Off)
                 continue;
             const auto at = pointFor(b);
-            g.setColour(b == dragging_ ? juce::Colours::white : juce::Colours::orange.brighter(0.4f));
+            g.setColour(b == dragging_ ? juce::Colours::white : theme::colour(*this, theme::signalInkId));
             g.fillEllipse(at.x - kPointRadius, at.y - kPointRadius, kPointRadius * 2.0f, kPointRadius * 2.0f);
             g.setColour(juce::Colours::black);
             g.drawText(juce::String(b + 1), juce::Rectangle<float>(at.x - kPointRadius, at.y - kPointRadius,

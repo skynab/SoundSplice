@@ -623,7 +623,7 @@ public:
 
             if (isSelected((int) i))
             {
-                g.setColour(juce::Colours::cyan.withAlpha(0.95f));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.95f));
                 g.drawRect(block, 2.0f);
             }
         }
@@ -631,9 +631,9 @@ public:
         if (rubberBanding_)
         {
             const juce::Rectangle<float> band(rubberStart_, rubberCurrent_);
-            g.setColour(juce::Colours::cyan.withAlpha(0.12f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.12f));
             g.fillRect(band);
-            g.setColour(juce::Colours::cyan.withAlpha(0.6f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.6f));
             g.drawRect(band, 1.0f);
         }
 
@@ -676,7 +676,7 @@ private:
         if (! playheadVisible_ || patternLengthBeats() <= 0.0)
             return;
 
-        g.setColour(juce::Colours::orange.withAlpha(0.9f));
+        g.setColour(theme::colour(*this, theme::signalInkId).withAlpha(0.9f));
         g.fillRect(playheadX(w), 0.0f, 2.0f, h);
     }
 

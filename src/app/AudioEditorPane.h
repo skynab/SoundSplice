@@ -558,7 +558,7 @@ public:
                                           geometry_.xForSeconds(selection_.startSeconds));
             const float x2 = juce::jlimit((float) area.getX(), (float) area.getRight(),
                                           geometry_.xForSeconds(selection_.endSeconds));
-            g.setColour(juce::Colours::cyan.withAlpha(0.22f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.22f));
             g.fillRect(juce::Rectangle<float>(x1, (float) area.getY(), x2 - x1, (float) area.getHeight()));
         }
 
@@ -573,7 +573,7 @@ public:
                                           geometry_.xForSeconds(selection_.startSeconds));
             const float x2 = juce::jlimit((float) area.getX(), (float) area.getRight(),
                                           geometry_.xForSeconds(selection_.endSeconds));
-            g.setColour(juce::Colours::cyan.withAlpha(0.1f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.1f));
             g.fillRect(juce::Rectangle<float>(x1, (float) samples.getY(), x2 - x1, (float) samples.getHeight()));
         }
 
@@ -591,7 +591,7 @@ public:
         {
             juce::Graphics::ScopedSaveState state(g);
             g.reduceClipRegion(spectrogram);
-            g.setColour(juce::Colours::cyan.withAlpha(0.28f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.28f));
             const float rx = (float) (brush_.radiusSeconds / juce::jmax(1.0e-12, geometry_.secondsPerPixel));
             const float ry = (float) (brush_.radiusProportion * spectrogram.getHeight());
             const auto yFor = [&](double proportion)
@@ -624,7 +624,7 @@ public:
                 shape.closeSubPath();
                 if (brush_.isLasso())
                     g.fillPath(shape);
-                g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.9f));
                 g.strokePath(shape, juce::PathStrokeType(1.0f));
             }
         }
@@ -665,9 +665,9 @@ public:
             const float y1 = yForHz(band->second, spectrogram);
             const float y2 = yForHz(band->first, spectrogram);
             const auto  box = juce::Rectangle<float>(x1, y1, x2 - x1, y2 - y1).getIntersection(spectrogram.toFloat());
-            g.setColour(juce::Colours::cyan.withAlpha(0.15f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.15f));
             g.fillRect(box);
-            g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.9f));
             g.drawRect(box, 1.0f);
         }
 
@@ -678,14 +678,14 @@ public:
             const float x = geometry_.xForSeconds(playheadSeconds_);
             if (x >= (float) area.getX() && x <= (float) area.getRight())
             {
-                g.setColour(juce::Colours::yellow.withAlpha(playing_ ? 0.9f : 0.55f));
+                g.setColour(theme::colour(*this, theme::signalInkId).withAlpha(playing_ ? 0.9f : 0.55f));
                 g.drawVerticalLine((int) x, (float) area.getY(), (float) area.getBottom());
             }
         }
 
         if (! selection_.isEmpty() && ! frequencyBand())
         {
-            g.setColour(juce::Colours::cyan.withAlpha(0.8f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.8f));
             for (double edge : { selection_.startSeconds, selection_.endSeconds })
             {
                 const float x = geometry_.xForSeconds(edge);
@@ -876,9 +876,9 @@ public:
         if (! fileDragActive_)
             return;
 
-        g.setColour(juce::Colours::cyan.withAlpha(0.12f));
+        g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.12f));
         g.fillAll();
-        g.setColour(juce::Colours::cyan.withAlpha(0.9f));
+        g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.9f));
         g.drawRect(getLocalBounds(), 2);
         g.setFont(juce::FontOptions(15.0f));
         g.drawText("Drop audio to open it here", getLocalBounds(), juce::Justification::centred);
@@ -1314,8 +1314,8 @@ private:
             // edge: a waveform that just touches the top looks the same
             // whether it is at full scale or 6dB past it, and those are very
             // different problems.
-            g.setColour(clips ? juce::Colours::red
-                              : juce::Colours::aquamarine.withAlpha(0.85f));
+            g.setColour(clips ? theme::colour(*this, theme::dangerId)
+                              : theme::colour(*this, theme::signalId).withAlpha(0.85f));
             g.drawVerticalLine(x, centreY - height(top) * halfH, centreY - height(bottom) * halfH);
 
             // The RMS level inside the peaks, lighter, as Audacity draws it:
@@ -1366,8 +1366,8 @@ private:
 
                 const float top    = yFor(bin.maximum);
                 const float bottom = juce::jmax(top + 1.0f, yFor(bin.minimum));
-                g.setColour(bin.magnitude() * gain > 1.0f ? juce::Colours::red
-                                                          : juce::Colours::aquamarine.withAlpha(0.85f));
+                g.setColour(bin.magnitude() * gain > 1.0f ? theme::colour(*this, theme::dangerId)
+                                                          : theme::colour(*this, theme::signalId).withAlpha(0.85f));
                 g.drawVerticalLine(x, top, bottom);
             }
             return;
@@ -1405,12 +1405,12 @@ private:
 
             if (marked)
             {
-                g.setColour(std::abs(sample * gain) > 1.0f ? juce::Colours::red : juce::Colours::aquamarine);
+                g.setColour(std::abs(sample * gain) > 1.0f ? theme::colour(*this, theme::dangerId) : theme::colour(*this, theme::signalId));
                 g.fillEllipse(x - 2.5f, y - 2.5f, 5.0f, 5.0f);
             }
         }
 
-        g.setColour(juce::Colours::aquamarine.withAlpha(0.85f));
+        g.setColour(theme::colour(*this, theme::signalId).withAlpha(0.85f));
         g.strokePath(line, juce::PathStrokeType(1.5f));
     }
 

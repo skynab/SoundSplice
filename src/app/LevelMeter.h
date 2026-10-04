@@ -3,6 +3,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 namespace soundsplice
 {
 /**
@@ -95,7 +97,7 @@ public:
             {
                 const auto light = horizontal_ ? bar.removeFromRight(juce::jmin(8.0f, bar.getWidth() * 0.2f))
                                                : bar.removeFromTop(juce::jmin(6.0f, bar.getHeight() * 0.2f));
-                g.setColour(clipped_[ch] ? juce::Colours::red : juce::Colours::white.withAlpha(0.12f));
+                g.setColour(clipped_[ch] ? theme::colour(*this, theme::dangerId) : juce::Colours::white.withAlpha(0.12f));
                 g.fillRect(light.reduced(horizontal_ ? 1.0f : 0.0f, horizontal_ ? 0.0f : 1.0f));
             }
 
@@ -122,11 +124,11 @@ private:
         return juce::jlimit(0.0f, 1.0f, (db - minDb) / -minDb);
     }
 
-    static juce::Colour colourFor(float norm)
+    juce::Colour colourFor(float norm) const
     {
-        if (norm > 0.9f) return juce::Colours::red;
-        if (norm > 0.7f) return juce::Colours::yellow;
-        return juce::Colours::limegreen;
+        if (norm > 0.9f) return theme::colour(*this, theme::dangerId);
+        if (norm > 0.7f) return theme::colour(*this, theme::warnId);
+        return theme::colour(*this, theme::signalId);
     }
 
     static constexpr int   numChannels = 2;
