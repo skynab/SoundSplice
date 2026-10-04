@@ -132,7 +132,7 @@ private:
     static constexpr int kGlyphSize     = 13;
     static constexpr int kGap           = 6;
 
-    static juce::Font font() { return juce::Font(juce::FontOptions(11.5f)); }
+    static juce::Font font() { return theme::font(11.5f); }
 
     /** The cross's hit area, empty when the tab is too narrow to show one —
         so a cramped region degrades to plain tabs rather than to a tab whose

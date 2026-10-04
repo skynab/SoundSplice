@@ -44,15 +44,33 @@ public:
         steps_.rows = [this] { return (int) stepList_.size(); };
         steps_.paint = [this](int row, juce::Graphics& g, int w, int h, bool selected)
         {
+            // The step the document is at in the accent's tint, as the
+            // mockups mark it; steps undone past it faded and struck through.
             const auto& step = stepList_[(size_t) row];
+            const auto  row_ = juce::Rectangle<float>((float) w, (float) h).reduced(4.0f, 1.0f);
             if (step.now)
-                g.fillAll(juce::Colours::steelblue.withAlpha(0.35f));
-            if (selected)
-                g.fillAll(theme::colour(*this, theme::textId).withAlpha(0.12f));
-            g.setColour(step.future ? theme::colour(*this, theme::textFaintId) : theme::colour(*this, theme::textId));
-            g.setFont(juce::FontOptions(14.0f, step.now ? juce::Font::bold : juce::Font::plain));
-            g.drawText(juce::String(row) + ".  " + step.label + (step.now ? "   (now)" : ""), 8, 0, w - 16, h,
-                       juce::Justification::centredLeft, true);
+            {
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.14f));
+                g.fillRoundedRectangle(row_, 6.0f);
+            }
+            else if (selected)
+            {
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.08f));
+                g.fillRoundedRectangle(row_, 6.0f);
+            }
+            const auto ink = step.now      ? theme::accentStep(*this, 100)
+                           : step.future   ? theme::colour(*this, theme::textId).withAlpha(0.4f)
+                                           : theme::colour(*this, theme::textId);
+            g.setColour(ink);
+            g.setFont(theme::font(11.5f));
+            const auto text = juce::String(row) + ".  " + step.label + (step.now ? "   (now)" : "");
+            g.drawText(text, 14, 0, w - 28, h, juce::Justification::centredLeft, true);
+            if (step.future)
+            {
+                const float width = juce::jmin((float) w - 28.0f,
+                                               juce::GlyphArrangement::getStringWidth(theme::font(11.5f), text));
+                g.fillRect(14.0f, (float) h * 0.5f, width, 1.0f);
+            }
         };
         steps_.name = [this](int row)
         {
@@ -67,9 +85,12 @@ public:
         {
             const auto& branch = branchList_[(size_t) row];
             if (selected)
-                g.fillAll(theme::colour(*this, theme::textId).withAlpha(0.12f));
+            {
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.14f));
+                g.fillRoundedRectangle(juce::Rectangle<float>((float) w, (float) h).reduced(4.0f, 1.0f), 6.0f);
+            }
             g.setColour(branch.from >= 0 ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textFaintId));
-            g.setFont(juce::FontOptions(13.0f));
+            g.setFont(theme::font(11.5f));
             g.drawText(branch.label + "  (" + juce::String(branch.steps) + (branch.steps == 1 ? " step" : " steps")
                            + (branch.from >= 0 ? ", from step " + juce::String(branch.from) : juce::String(", off this line")) + ")",
                        8, 0, w - 16, h, juce::Justification::centredLeft, true);

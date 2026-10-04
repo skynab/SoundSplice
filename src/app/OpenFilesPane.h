@@ -126,7 +126,10 @@ private:
         auto        area  = juce::Rectangle<int>(0, 0, width, height);
 
         if (selected)
-            g.fillAll(juce::Colour(0xff2c3e5a));
+        {
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.14f));
+            g.fillRoundedRectangle(area.toFloat().reduced(4.0f, 1.0f), 5.0f);
+        }
 
         g.setColour(entry.colour);
         g.fillRect(area.removeFromLeft(4).reduced(0, 4));

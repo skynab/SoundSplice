@@ -244,9 +244,19 @@ namespace theme
         return name;
     }
 
+    /** The interface face at @p size, given as the mockups give it: a CSS
+        font size, which is the em - what JUCE calls a point height - rather
+        than JUCE's own height, the whole line, which would set every size
+        about a fifth too small. */
+    inline juce::Font font(float size, bool bold = false)
+    {
+        juce::Font f(juce::FontOptions().withPointHeight(size));
+        return bold ? f.boldened() : f;
+    }
+
     /** The face times, levels and other figures are set in, so their digits
-        line up as they change. */
-    inline juce::Font monoFont(float height)
+        line up as they change, at a CSS-style @p size as font() takes. */
+    inline juce::Font monoFont(float size)
     {
         static const juce::String name = []
         {
@@ -256,7 +266,7 @@ namespace theme
                     return juce::String(wanted);
             return juce::Font::getDefaultMonospacedFontName();
         }();
-        return juce::Font(juce::FontOptions(name, height, juce::Font::plain));
+        return juce::Font(juce::FontOptions(name, size, juce::Font::plain).withPointHeight(size));
     }
 
     /** How a TextButton is drawn, set as its "style" property (see
@@ -395,7 +405,7 @@ public:
 
     juce::Font getTextButtonFont(juce::TextButton&, int buttonHeight) override
     {
-        return juce::Font(juce::FontOptions(juce::jmin(13.0f, (float) buttonHeight * 0.5f)));
+        return theme::font(juce::jmin(12.0f, (float) buttonHeight * 0.44f));
     }
 
     void drawButtonBackground(juce::Graphics& g, juce::Button& button, const juce::Colour& background,
@@ -482,7 +492,7 @@ public:
         if (on && hasOwnOnColour(button))
             ink = button.findColour(juce::TextButton::buttonOnColourId).brighter(0.35f);
         else if (style == theme::buttonStyle::primary || style == theme::buttonStyle::ghost)
-            ink = theme::accentStep(accent, highlighted ? 300 : 400);
+            ink = highlighted ? theme::accentStep(accent, 300) : accent;
         else if (on)
             ink = theme::accentStep(accent, 200);
         else if (style == theme::buttonStyle::chip)
@@ -535,7 +545,7 @@ public:
                     button.isEnabled(), highlighted, down);
 
         g.setColour(button.findColour(juce::ToggleButton::textColourId).withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.45f));
-        g.setFont(juce::Font(juce::FontOptions(juce::jmin(13.0f, (float) button.getHeight() * 0.55f))));
+        g.setFont(theme::font(juce::jmin(12.0f, (float) button.getHeight() * 0.5f)));
         g.drawFittedText(button.getButtonText(),
                          button.getLocalBounds().withTrimmedLeft(juce::roundToInt(box.getRight()) + 7).withTrimmedRight(2),
                          juce::Justification::centredLeft, 1);
@@ -607,7 +617,7 @@ public:
 
     juce::Font getComboBoxFont(juce::ComboBox& box) override
     {
-        return juce::Font(juce::FontOptions(juce::jmin(12.5f, (float) box.getHeight() * 0.52f)));
+        return theme::font(juce::jmin(12.0f, (float) box.getHeight() * 0.46f));
     }
 
     void positionComboBoxText(juce::ComboBox& box, juce::Label& label) override
@@ -654,6 +664,21 @@ public:
     void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height, float position, float minimum,
                           float maximum, juce::Slider::SliderStyle style, juce::Slider& slider) override
     {
+        if (! thickOutlines_ && style == juce::Slider::LinearBar)
+        {
+            // A value box, as the mockups show a figure that can be dragged:
+            // the ground, an outline, and how far along it is as a tint.
+            const auto box = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(0.5f);
+            g.setColour(findColour(juce::ResizableWindow::backgroundColourId));
+            g.fillRoundedRectangle(box, 5.0f);
+            g.setColour(slider.findColour(juce::Slider::trackColourId).withAlpha(0.16f));
+            g.fillRoundedRectangle(box.withRight(juce::jlimit(box.getX(), box.getRight(), position)), 5.0f);
+            g.setColour(slider.isMouseOverOrDragging() ? findColour(theme::textId).withAlpha(0.45f)
+                                                       : findColour(theme::dividerId));
+            g.drawRoundedRectangle(box, 5.0f, 1.0f);
+            return;
+        }
+
         const bool plain = style == juce::Slider::LinearHorizontal || style == juce::Slider::LinearVertical;
         if (thickOutlines_ || ! plain)
         {
@@ -775,7 +800,7 @@ public:
 
     juce::Font getMenuBarFont(juce::MenuBarComponent&, int, const juce::String&) override
     {
-        return juce::Font(juce::FontOptions(12.5f));
+        return theme::font(12.5f);
     }
 
     int getMenuBarItemWidth(juce::MenuBarComponent& bar, int itemIndex, const juce::String& text) override
@@ -783,7 +808,7 @@ public:
         return (int) std::ceil(juce::GlyphArrangement::getStringWidth(getMenuBarFont(bar, itemIndex, text), text)) + 18;
     }
 
-    juce::Font getPopupMenuFont() override { return juce::Font(juce::FontOptions(12.5f)); }
+    juce::Font getPopupMenuFont() override { return theme::font(12.5f); }
 
     void drawPopupMenuBackgroundWithOptions(juce::Graphics& g, int width, int height,
                                             const juce::PopupMenu::Options& options) override
@@ -907,7 +932,7 @@ public:
 
         juce::AttributedString attributed;
         attributed.setJustification(juce::Justification::centredLeft);
-        attributed.append(text, juce::Font(juce::FontOptions(12.0f)), findColour(juce::TooltipWindow::textColourId));
+        attributed.append(text, theme::font(12.0f), findColour(juce::TooltipWindow::textColourId));
         juce::TextLayout layout;
         layout.createLayoutWithBalancedLineLengths(attributed, (float) width - 16.0f);
         layout.draw(g, bounds.reduced(8.0f, 5.0f));
@@ -917,7 +942,7 @@ public:
                                           juce::Rectangle<int> parentArea) override
     {
         juce::AttributedString attributed;
-        attributed.append(text, juce::Font(juce::FontOptions(12.0f)));
+        attributed.append(text, theme::font(12.0f));
         juce::TextLayout layout;
         layout.createLayoutWithBalancedLineLengths(attributed, 360.0f);
         const int w = (int) std::ceil(layout.getWidth()) + 16;
@@ -925,6 +950,49 @@ public:
         return juce::Rectangle<int>(position.x > parentArea.getCentreX() ? position.x - (w + 12) : position.x + 12,
                                     position.y > parentArea.getCentreY() ? position.y - (h + 6) : position.y + 6, w, h)
             .constrainedWithin(parentArea);
+    }
+
+    void drawTableHeaderBackground(juce::Graphics& g, juce::TableHeaderComponent& header) override
+    {
+        if (thickOutlines_)
+        {
+            LookAndFeel_V4::drawTableHeaderBackground(g, header);
+            return;
+        }
+        // No bar of its own: small capitals on the pane, ruled off below.
+        g.setColour(findColour(theme::dividerId));
+        g.fillRect(0, header.getHeight() - 1, header.getWidth(), 1);
+    }
+
+    void drawTableHeaderColumn(juce::Graphics& g, juce::TableHeaderComponent& header, const juce::String& name,
+                               int columnId, int width, int height, bool over, bool down, int flags) override
+    {
+        if (thickOutlines_)
+        {
+            LookAndFeel_V4::drawTableHeaderColumn(g, header, name, columnId, width, height, over, down, flags);
+            return;
+        }
+        if (over || down)
+        {
+            g.setColour(findColour(theme::textId).withAlpha(down ? 0.08f : 0.04f));
+            g.fillRect(0, 0, width, height - 1);
+        }
+        auto area = juce::Rectangle<int>(width, height).reduced(8, 0);
+        const bool sortedUp   = (flags & juce::TableHeaderComponent::sortedForwards) != 0;
+        const bool sortedDown = (flags & juce::TableHeaderComponent::sortedBackwards) != 0;
+        if (sortedUp || sortedDown)
+        {
+            const auto arrow = area.removeFromRight(10).toFloat().withSizeKeepingCentre(8.0f, 5.0f);
+            juce::Path caret;
+            caret.startNewSubPath(arrow.getX(), sortedUp ? arrow.getBottom() : arrow.getY());
+            caret.lineTo(arrow.getCentreX(), sortedUp ? arrow.getY() : arrow.getBottom());
+            caret.lineTo(arrow.getRight(), sortedUp ? arrow.getBottom() : arrow.getY());
+            g.setColour(findColour(theme::textId).withAlpha(0.45f));
+            g.strokePath(caret, juce::PathStrokeType(1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        g.setColour(findColour(theme::textId).withAlpha(0.42f));
+        g.setFont(theme::font(9.5f).withExtraKerningFactor(0.08f));
+        g.drawText(name.toUpperCase(), area, juce::Justification::centredLeft, true);
     }
 
 private:
