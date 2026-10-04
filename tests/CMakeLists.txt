@@ -151,6 +151,7 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/ArrangementViewTests.cpp
     gui/AudioExportTests.cpp
   gui/AudioEditorPaneTests.cpp
+    gui/DesignSnapshots.cpp
   gui/AudioFileTypesTests.cpp
     gui/IconsTests.cpp
     gui/PianoRollTests.cpp
