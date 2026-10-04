@@ -41,6 +41,8 @@ namespace theme
         warnId        = 0x5e51000b, // solo, gain reduction, a meter running hot
         dangerId      = 0x5e51000c, // clipping, mute, record-arm: fills and marks
         dangerTextId  = 0x5e51000d, // the same, as text: errors, failures, overs
+        clipTopId     = 0x5e51000e, // a clip's body on the timeline, shaded down
+        clipBottomId  = 0x5e51000f, // to this
     };
 
     struct Theme
@@ -61,6 +63,8 @@ namespace theme
         juce::Colour warn       { 0xffe4b750 }; // color-warn
         juce::Colour danger     { 0xffe24947 }; // color-danger
         juce::Colour dangerText { 0xffff645f }; // color-danger-bright
+        juce::Colour clipTop    { 0xff033d44 }; // color-clip-top
+        juce::Colour clipBottom { 0xff00282f }; // color-clip-bottom
     };
 
     inline const std::vector<Theme>& all()
@@ -93,7 +97,8 @@ namespace theme
               juce::Colour(0xff3d3500), juce::Colour(0xff000000), juce::Colour(0xff000000),
               juce::Colour(0xffffd400), true,
               juce::Colour(0xff00ebff), juce::Colour(0xffffffff), juce::Colour(0xffffd400),
-              juce::Colour(0xffff4040), juce::Colour(0xffff6b6b) },
+              juce::Colour(0xffff4040), juce::Colour(0xffff6b6b),
+              juce::Colour(0xff002f33), juce::Colour(0xff001a1d) },
         };
         return themes;
     }
@@ -149,6 +154,8 @@ namespace theme
             case warnId:        return nocturne.warn;
             case dangerId:      return nocturne.danger;
             case dangerTextId:  return nocturne.dangerText;
+            case clipTopId:     return nocturne.clipTop;
+            case clipBottomId:  return nocturne.clipBottom;
             default:            return nocturne.pane;
         }
     }
@@ -186,6 +193,8 @@ public:
         setColour(theme::warnId, theme.warn);
         setColour(theme::dangerId, theme.danger);
         setColour(theme::dangerTextId, theme.dangerText);
+        setColour(theme::clipTopId, theme.clipTop);
+        setColour(theme::clipBottomId, theme.clipBottom);
 
         // The accent where JUCE's own widgets show something on or chosen.
         setColour(juce::TextButton::buttonOnColourId, chosen.withMultipliedSaturation(0.8f).darker(0.2f));

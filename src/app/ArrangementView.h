@@ -544,15 +544,9 @@ public:
                 const float cx = geometry_.xForBeat(startBeats);
                 const float cw = juce::jmax(2.0f, (float) lengthBeats * ppb);
                 const juce::Rectangle<float> r(cx, y + 3.0f, cw, geometry_.laneHeight - 6.0f);
-                // The track's own colour, which is most of the point of
-                // having one: parts are told apart by the clips, not by the
-                // gutter you have to look away to read.
-                auto clipColour = trackColour(track.colour);
-                if (track.muted)
-                    clipColour = clipColour.withMultipliedSaturation(0.3f).withMultipliedBrightness(0.7f);
-
-                g.setColour(clipColour);
-                g.fillRoundedRectangle(r, 3.0f);
+                // Every clip is the same teal, so the audio always reads the
+                // same; which track it is shows in the stripe down the gutter.
+                paintClipBody(g, r, track.muted);
 
                 if (const auto lanes = takeLanesFor(clip, r); lanes.shown())
                     paintTakeLanes(g, clip, r, lanes, i);
@@ -622,9 +616,7 @@ public:
                 const float cw     = juce::jmax(2.0f, (float) dragPreviewLength_ * ppb);
                 const juce::Rectangle<float> r(cx, ghostY + 3.0f, cw, geometry_.laneHeight - 6.0f);
 
-                auto ghostColour = trackColour(song_.tracks[(size_t) dragTrackIndex_].colour).brighter(0.3f);
-                g.setColour(ghostColour);
-                g.fillRoundedRectangle(r, 3.0f);
+                paintClipBody(g, r, false, 0.3f);
 
                 if (dragClipIndex_ >= 0 && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
                 {
@@ -703,6 +695,27 @@ private:
 
         A thumbnail still scanning draws nothing rather than a partial
         waveform that would redraw a moment later looking different. */
+    /** A clip's body: the theme's clip shading, top to bottom, ringed in
+        the signal. A muted track's clips are greyed and darkened; a dragged
+        clip's ghost is lifted by @p brighter. */
+    void paintClipBody(juce::Graphics& g, juce::Rectangle<float> r, bool muted, float brighter = 0.0f) const
+    {
+        auto top    = theme::colour(*this, theme::clipTopId).brighter(brighter);
+        auto bottom = theme::colour(*this, theme::clipBottomId).brighter(brighter);
+        auto ring   = theme::colour(*this, theme::signalId).withAlpha(0.35f);
+        if (muted)
+        {
+            top    = top.withMultipliedSaturation(0.3f).withMultipliedBrightness(0.7f);
+            bottom = bottom.withMultipliedSaturation(0.3f).withMultipliedBrightness(0.7f);
+            ring   = ring.withMultipliedSaturation(0.3f);
+        }
+
+        g.setGradientFill(juce::ColourGradient::vertical(top, r.getY(), bottom, r.getBottom()));
+        g.fillRoundedRectangle(r, 3.0f);
+        g.setColour(ring);
+        g.drawRoundedRectangle(r.reduced(0.5f), 3.0f, 1.0f);
+    }
+
     void paintAudioClipContents(juce::Graphics& g, const model::Clip& clip,
                                 juce::Rectangle<float> bounds, float insetY = 3.0f)
     {
@@ -759,7 +772,7 @@ private:
         // the level was visible in the audio editor and invisible here, which
         // is worse than showing it nowhere: two views of the same clip
         // disagreeing reads as one of them being wrong.
-        g.setColour(juce::Colours::white.withAlpha(0.55f));
+        g.setColour(theme::colour(*this, theme::signalId).withAlpha(0.8f));
         thumbnail->drawChannels(g, area.toNearestInt(),
                                 clip.sourceOffsetSeconds / stretch, (clip.sourceOffsetSeconds + seconds) / stretch,
                                 juce::Decibels::decibelsToGain(clip.gainDb));
