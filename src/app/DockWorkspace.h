@@ -33,14 +33,18 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.fillAll(theme::surface(*this, theme::workspaceId));
-        g.setColour(theme::colour(*this, theme::textId).withAlpha(hovered_ ? 0.30f : 0.10f));
 
-        // A short grip mark in the middle, so the bar reads as draggable.
+        // The gap between panes is the divider. Under the mouse it shows a
+        // grip in the accent, so it reads as draggable without a bar
+        // between every pair of panes all the time.
+        if (! hovered_)
+            return;
+        g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.8f));
         auto centre = getLocalBounds().toFloat().getCentre();
         if (horizontal_)
-            g.fillRect(centre.x - 0.5f, centre.y - 12.0f, 1.0f, 24.0f);
+            g.fillRoundedRectangle(centre.x - 1.0f, centre.y - 14.0f, 2.0f, 28.0f, 1.0f);
         else
-            g.fillRect(centre.x - 12.0f, centre.y - 0.5f, 24.0f, 1.0f);
+            g.fillRoundedRectangle(centre.x - 14.0f, centre.y - 1.0f, 28.0f, 2.0f, 1.0f);
     }
 
     void mouseEnter(const juce::MouseEvent&) override { hovered_ = true;  repaint(); }
@@ -343,10 +347,17 @@ public:
         return true;
     }
 
+    void paint(juce::Graphics& g) override
+    {
+        g.fillAll(theme::surface(*this, theme::workspaceId));
+    }
+
     void resized() override
     {
+        // The panes float, so the workspace keeps the same gap round its
+        // edge as between them.
         if (root_ != nullptr)
-            layoutNode(*root_, getLocalBounds());
+            layoutNode(*root_, getLocalBounds().reduced(kDividerThickness));
     }
 
 private:
@@ -366,7 +377,7 @@ private:
         bool isLeaf() const noexcept { return region != nullptr; }
     };
 
-    static constexpr int kDividerThickness = 8;
+    static constexpr int kDividerThickness = 6;
     static constexpr int kMinPaneSize      = 80; // keeps a divider drag from crushing a pane away
 
     /** Deferred structural cleanup after a move — see movePanel. */

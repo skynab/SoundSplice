@@ -2,8 +2,10 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Glyphs.h"
 #include "Theme.h"
 
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -35,29 +37,52 @@ public:
     void setText(const juce::String& text) { text_ = text; repaint(); }
     void setActive(bool active) { active_ = active; repaint(); }
 
+    /** How wide the tab wants to be: its glyph, its name and room for the
+        close cross, as the mockups size tabs to their labels. */
+    int idealWidth() const
+    {
+        return kPadding + kGlyphSize + kGap
+             + (int) std::ceil(juce::GlyphArrangement::getStringWidth(font(), text_)) + kGap + kCloseWidth;
+    }
+
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(theme::surface(*this, active_ ? theme::tabActiveId : theme::tabInactiveId));
-        g.setColour(active_ ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textMutedId));
+        // A tab is its glyph and name on the header, with no box of its own:
+        // the active one is in the text colour and underlined in the accent,
+        // the rest are muted until hovered.
+        const auto ink = active_ || hovered_ ? theme::colour(*this, theme::textId)
+                                             : theme::colour(*this, theme::textMutedId);
 
-        // The label gives up the right-hand strip to the close cross, so a
-        // long name can't run underneath it.
-        g.drawText(text_, getLocalBounds().withTrimmedRight(closeBounds().getWidth()).reduced(8, 0),
-                   juce::Justification::centred);
+        auto area = getLocalBounds().withTrimmedLeft(kPadding);
+        area.removeFromRight(closeBounds().getWidth());
+        glyphs::draw(g, glyphs::forPanel(text_), area.removeFromLeft(kGlyphSize).toFloat(), ink, (float) kGlyphSize);
+        area.removeFromLeft(kGap);
+
+        g.setColour(ink);
+        g.setFont(font());
+        g.drawText(text_, area, juce::Justification::centredLeft, true);
+
+        if (active_)
+        {
+            g.setColour(theme::colour(*this, theme::accentId));
+            g.fillRoundedRectangle(getLocalBounds().toFloat().reduced((float) kPadding - 1.0f, 0.0f)
+                                       .removeFromBottom(2.0f),
+                                   1.0f);
+        }
 
         // Only drawn on the active tab or under the mouse: a cross on every
         // tab all the time reads as clutter, and the gesture is discoverable
         // from either state.
         if (closeVisible())
         {
-            const auto cross = closeBounds().toFloat().reduced(5.0f);
-            g.setColour(theme::colour(*this, theme::textId).withAlpha(closeHovered_ ? 0.95f : 0.45f));
-            g.drawLine(cross.getX(), cross.getY(), cross.getRight(), cross.getBottom(), 1.3f);
-            g.drawLine(cross.getX(), cross.getBottom(), cross.getRight(), cross.getY(), 1.3f);
+            const auto box = closeBounds().toFloat().withSizeKeepingCentre(16.0f, 16.0f);
+            if (closeHovered_)
+            {
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.08f));
+                g.fillRoundedRectangle(box, 4.0f);
+            }
+            glyphs::draw(g, glyphs::Glyph::cross, box, ink.withMultipliedAlpha(closeHovered_ ? 1.0f : 0.7f), 10.0f);
         }
-
-        g.setColour(juce::Colours::black.withAlpha(0.35f));
-        g.drawRect(getLocalBounds());
     }
 
     void mouseMove(const juce::MouseEvent& e) override { updateHover(true, e.position); }
@@ -101,8 +126,13 @@ public:
     }
 
 private:
-    static constexpr int kCloseWidth   = 18;
+    static constexpr int kCloseWidth    = 18;
     static constexpr int kMinCloseWidth = 46; // below this a tab is all cross and no label
+    static constexpr int kPadding       = 8;
+    static constexpr int kGlyphSize     = 13;
+    static constexpr int kGap           = 6;
+
+    static juce::Font font() { return juce::Font(juce::FontOptions(11.5f)); }
 
     /** The cross's hit area, empty when the tab is too narrow to show one —
         so a cramped region degrades to plain tabs rather than to a tab whose
@@ -154,7 +184,8 @@ class DockRegion final : public juce::Component,
                          public juce::DragAndDropTarget
 {
 public:
-    static constexpr int kHeaderHeight = 26;
+    static constexpr int   kHeaderHeight = 30;
+    static constexpr float kRadius       = 8.0f;
 
     // Fired when a panel dragged FROM ELSEWHERE is dropped on this region.
     // `panelName` identifies which panel (matches the name it was added under
@@ -290,30 +321,64 @@ public:
 
     void paint(juce::Graphics& g) override
     {
+        // A pane floats on the workspace: the surface, its header ruled off
+        // below. The rounded corners and the border are drawn over the
+        // content (see paintOverChildren), which paints itself square.
+        g.fillAll(theme::surface(*this, theme::paneId));
+
+        // A region with no tabs left is the one place the workspace shows
+        // nothing at all. Say where the panes went, rather than leaving what
+        // reads as a rendering failure.
+        if (panels_.empty())
+        {
+            const auto body = getLocalBounds().withTrimmedTop(kHeaderHeight).reduced(10).toFloat();
+            const float dashes[] = { 4.0f, 3.0f };
+            juce::Path outline;
+            outline.addRoundedRectangle(body, 8.0f);
+            juce::Path dashed;
+            juce::PathStrokeType(1.0f).createDashedStroke(dashed, outline, dashes, 2);
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.16f));
+            g.fillPath(dashed);
+
+            g.setColour(theme::colour(*this, theme::textMutedId));
+            g.setFont(12.0f);
+            g.drawFittedText("No panes open\nReopen one from the View menu",
+                             body.toNearestInt().reduced(12), juce::Justification::centred, 2);
+        }
+    }
+
+    void paintOverChildren(juce::Graphics& g) override
+    {
+        const auto bounds  = getLocalBounds().toFloat();
+        const auto outline = bounds.reduced(0.5f);
+
+        // The header's rule, then the corners: whatever the content painted
+        // outside the rounded outline goes back to the workspace colour.
+        g.setColour(theme::colour(*this, theme::dividerId));
+        g.fillRect(bounds.getX(), (float) kHeaderHeight - 1.0f, bounds.getWidth(), 1.0f);
+
+        juce::Path corners;
+        corners.addRectangle(bounds);
+        corners.addRoundedRectangle(outline, kRadius);
+        corners.setUsingNonZeroWinding(false);
+        g.setColour(theme::surface(*this, theme::workspaceId));
+        g.fillPath(corners);
+
+        g.setColour(theme::colour(*this, theme::dividerId));
+        g.drawRoundedRectangle(outline, kRadius, 1.0f);
+
         // While a panel is being dragged over us, shade exactly the area it
         // would end up occupying — the whole region for a Centre drop, or the
         // half it would split off for an edge drop. Showing the actual
         // resulting shape is what makes the edge gesture discoverable.
         if (dragActive_)
         {
-            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.10f));
-            g.fillRect(highlightBounds());
-            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.8f));
-            g.drawRect(highlightBounds(), 2);
+            const auto zone = highlightBounds().toFloat().reduced(3.0f);
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.14f));
+            g.fillRoundedRectangle(zone, 6.0f);
+            g.setColour(theme::colour(*this, theme::accentId));
+            g.drawRoundedRectangle(zone, 6.0f, 1.5f);
         }
-        // A region with no tabs left is the one place the workspace shows
-        // nothing at all. Say where the panes went, rather than leaving what
-        // reads as a rendering failure.
-        if (panels_.empty())
-        {
-            g.setColour(theme::colour(*this, theme::textFaintId));
-            g.setFont(13.0f);
-            g.drawFittedText("No panes open\nReopen one from the View menu",
-                             getLocalBounds().reduced(12), juce::Justification::centred, 2);
-        }
-
-        g.setColour(juce::Colours::black.withAlpha(0.4f));
-        g.drawRect(getLocalBounds());
     }
 
     /** Which zone a point in this region's local coordinates falls in. A drop
@@ -352,13 +417,21 @@ public:
     void resized() override
     {
         auto area = getLocalBounds();
-        auto headerRow  = area.removeFromTop(kHeaderHeight);
-        const int headerWidth = panels_.empty()
-                                     ? 0
-                                     : juce::jmin(140, headerRow.getWidth() / (int) panels_.size());
-        for (auto& p : panels_)
-            p.header->setBounds(headerRow.removeFromLeft(headerWidth));
+        auto headerRow = area.removeFromTop(kHeaderHeight).withTrimmedLeft(2).withTrimmedRight(3);
+        headerRow.removeFromBottom(1); // the rule under the tabs
 
+        // Each tab as wide as its name, all shrunk alike when they don't fit.
+        int wanted = 0;
+        for (auto& p : panels_)
+            wanted += p.header->idealWidth();
+        const double fit = wanted > headerRow.getWidth() && wanted > 0
+                               ? (double) headerRow.getWidth() / (double) wanted
+                               : 1.0;
+        for (auto& p : panels_)
+            p.header->setBounds(headerRow.removeFromLeft((int) std::floor(p.header->idealWidth() * fit)));
+
+        // The content stays inside the border, so it can't paint over it.
+        area = area.withTrimmedLeft(1).withTrimmedRight(1).withTrimmedBottom(1);
         for (auto& p : panels_)
             if (p.content->isVisible())
                 p.content->setBounds(area);
