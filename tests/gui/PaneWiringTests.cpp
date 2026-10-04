@@ -11,7 +11,6 @@
 #include <app/EssentialSoundPane.h>
 #include <app/MixerStrip.h>
 #include <app/OpenFilesPane.h>
-#include <app/SessionView.h>
 
 using namespace soundsplice;
 
@@ -41,9 +40,6 @@ TEST_CASE("Every pane's controls have something listening to them", "[gui][wirin
     // "deliberately not reacted to" stays distinguishable from "nobody ever
     // wired this".
     JuceFixture fixture;
-
-    SessionView session;
-    paneaudit::requireWired(session, "SessionView");
 
     MixerStrip strip;
     paneaudit::requireWired(strip, "MixerStrip");

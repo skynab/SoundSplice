@@ -16,7 +16,7 @@ namespace soundsplice::engine
 
     Semantically identical to model::AutomationLane, and deliberately a
     separate type rather than a reuse of it: `model` already depends on
-    `engine` (a Clip owns an engine::Pattern), so the dependency can't run
+    `engine` (a Clip owns engine::ClipFades and the like), so the dependency can't run
     both ways. The owner converts one into the other when handing automation
     to the engine — see AudioEngine::setTrackAutomation.
 
@@ -78,7 +78,7 @@ private:
 
 /**
     Every automated parameter of one track, swapped onto the audio thread as a
-    single unit — the same whole-object hand-off shape as Sequencer::ClipList,
+    single unit — the same whole-object hand-off shape as AudioFilePlayerNode::ClipList,
     for the same reason: one pointer swap can't
     be observed half-applied.
 

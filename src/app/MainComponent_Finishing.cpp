@@ -497,7 +497,7 @@ void MainComponent::matchLoudnessForRole(model::SoundRole role, double lufs)
     std::vector<app::MatchedClip> clips;
     for (const auto& track : history_.current().tracks)
         for (const auto& clip : track.clips)
-            if (clip.type == model::ClipType::Audio && clip.essential.role == role)
+            if (clip.essential.role == role)
                 clips.push_back({ track.id, clip.id });
     if (clips.empty())
         return;
@@ -857,8 +857,7 @@ scripting::Host MainComponent::makeScriptHost()
             const auto& track = song.tracks[(size_t) i];
             scripting::TrackInfo info;
             info.name     = track.name;
-            info.type     = track.type == model::TrackType::Audio ? "audio"
-                          : track.type == model::TrackType::Bus   ? "bus" : "midi";
+            info.type     = track.type == model::TrackType::Bus ? "bus" : "audio";
             info.clips    = (int) track.clips.size();
             info.volumeDb = track.gainDb;
             info.pan      = track.pan;
@@ -895,9 +894,7 @@ scripting::Host MainComponent::makeScriptHost()
         history_.edit("Rename track", [id, name](model::Song& s) { model::renameTrack(s, id, name); });
         syncEngineTracks();
         updateMixerStrips();
-        refreshSessionView();
         arrangementView_.setSong(history_.current());
-        updateEditingLabel();
         return true;
     };
     host.selectTrack = [this](int index) { selectTrackAndRefreshAll(index); return true; };
@@ -995,7 +992,7 @@ void MainComponent::saveAsTemplate()
 {
 
     dialog("Save as Template",
-           "Keeps the tracks, their routing and effects, and the tempo - not the audio, notes or markers.")
+           "Keeps the tracks, their routing and effects, and the tempo - not the audio or markers.")
         .text("name", "Name:",
               projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension() : juce::String("My Template"))
         .unsaved()

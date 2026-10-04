@@ -17,9 +17,7 @@ namespace soundsplice::model
     editor: split at the playhead, join clips, and duplicate a time selection.
 
     Like the time selection's edits (model/TimeSelection.h), every one is
-    non-destructive, working through clip windows and source offsets (or, on
-    an instrument track, pieces of pattern). Joining and detaching at silences
-    are audio only.
+    non-destructive, working through clip windows and source offsets.
 */
 namespace arrangeedit
 {
@@ -74,7 +72,7 @@ namespace arrangeedit
         the same gain, so the two sound exactly like one clip. */
     inline bool continues(const Clip& clip, const Clip& next, const BeatClock& clock)
     {
-        if (clip.type != ClipType::Audio || next.type != ClipType::Audio || ! clock.valid())
+        if (! clock.valid())
             return false;
 
         const double end            = clip.startBeats + clip.lengthBeats;
@@ -176,8 +174,6 @@ namespace arrangeedit
             {
                 auto& first  = track.clips[order[i]];
                 auto& second = track.clips[order[i + 1]];
-                if (first.type != ClipType::Audio || second.type != ClipType::Audio)
-                    continue;
 
                 const double firstEnd = first.startBeats + first.lengthBeats;
                 const double seam     = std::min(firstEnd, second.startBeats);
@@ -247,8 +243,7 @@ namespace arrangeedit
 
         std::vector<size_t> order;
         for (size_t i = 0; i < track.clips.size(); ++i)
-            if (track.clips[i].type == ClipType::Audio)
-                order.push_back(i);
+            order.push_back(i);
         std::stable_sort(order.begin(), order.end(), [&track](size_t a, size_t b)
                          { return track.clips[a].startBeats < track.clips[b].startBeats; });
 
@@ -341,8 +336,6 @@ namespace arrangeedit
 
             for (auto& clip : track.clips)
             {
-                if (clip.type != ClipType::Audio)
-                    continue;
 
                 const double clipEnd = clip.startBeats + clip.lengthBeats;
 
@@ -406,7 +399,7 @@ namespace arrangeedit
             for (auto& clip : track.clips)
             {
                 const double clipEnd = clip.startBeats + clip.lengthBeats;
-                if (clip.type != ClipType::Audio || clipEnd <= fromBeats || clip.startBeats >= toBeats)
+                if (clipEnd <= fromBeats || clip.startBeats >= toBeats)
                     continue;
 
                 const auto fileSecondsAt = [&clip, &clock](double beat)
@@ -526,7 +519,7 @@ namespace arrangeedit
 
         const auto found = std::find_if(track->clips.begin(), track->clips.end(),
                                         [clipId](const Clip& c) { return c.id == clipId; });
-        if (found == track->clips.end() || found->type != ClipType::Audio)
+        if (found == track->clips.end())
             return -1;
 
         const Clip   clip          = *found;

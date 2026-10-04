@@ -14,7 +14,6 @@ namespace
         for (const auto* file : files)
         {
             Clip clip;
-            clip.type                = ClipType::Audio;
             clip.audioFile           = file;
             clip.sourceOffsetSeconds = 1.5;
             track.clips.push_back(clip);
@@ -27,15 +26,10 @@ TEST_CASE("A track's audio files are listed once each", "[model][resample]")
 {
     auto track = trackPlaying({ "a.wav", "b.wav", "a.wav" });
 
-    track.sessionSlots.resize(2);
-    track.sessionSlots[1].hasClip        = true;
-    track.sessionSlots[1].clip.type      = ClipType::Audio;
-    track.sessionSlots[1].clip.audioFile = "c.wav";
+    Clip empty;
+    track.clips.push_back(empty);
 
-    Clip instrument;
-    track.clips.push_back(instrument);
-
-    REQUIRE(audioFilesOf(track) == std::vector<std::string> { "a.wav", "b.wav", "c.wav" });
+    REQUIRE(audioFilesOf(track) == std::vector<std::string> { "a.wav", "b.wav" });
 }
 
 TEST_CASE("Replacing files repoints the clips and changes nothing else", "[model][resample]")

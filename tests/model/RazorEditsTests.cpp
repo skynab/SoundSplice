@@ -18,12 +18,11 @@ namespace
         {
             const int id = addTrack(song, TrackType::Audio, name).id;
             Clip      clip;
-            clip.type        = ClipType::Audio;
             clip.audioFile   = std::string(name) + ".wav";
             clip.lengthBeats = 16.0;
             addClip(song, id, clip);
         }
-        addTrack(song, TrackType::Instrument, "keys");
+        addTrack(song, TrackType::Bus, "bus");
         return song;
     }
 

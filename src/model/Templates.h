@@ -48,7 +48,7 @@ namespace templates
         {
             case Builtin::Podcast:   return "Host and guest voices cleaned up and mixed through a Voices bus, and a music track for the theme.";
             case Builtin::Audiobook: return "One narration track, cleaned and levelled for ACX, and a room tone track to patch gaps.";
-            case Builtin::Music:     return "Drums, bass, guitar, keys and vocals, a synth, and a reverb bus they send to.";
+            case Builtin::Music:     return "Drums, bass, guitar, keys and vocals, and a reverb bus they send to.";
             case Builtin::VoiceOver: return "A voice track, and a music bed that ducks under it by itself.";
         }
         return "";
@@ -139,7 +139,6 @@ namespace templates
                         track.sends.push_back({ reverb, -12.0f, false });
                 }
                 song.tracks.back().effectChain = voiceChain(); // Vocals
-                addTrack(song, TrackType::Instrument, "Synth");
                 break;
             }
 
@@ -162,15 +161,11 @@ namespace templates
     }
 
     /** @p song as a template: its tracks, routing, effects and tempo, without
-        its audio, notes, markers or folder. */
+        its audio, markers or folder. */
     inline Song asTemplate(Song song)
     {
         for (auto& track : song.tracks)
-        {
             track.clips.clear();
-            for (auto& slot : track.sessionSlots)
-                slot = SessionSlot {};
-        }
         song.markers.clear();
         song.projectRootFolder.clear();
         return song;

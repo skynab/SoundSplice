@@ -5,12 +5,12 @@
 namespace soundsplice::engine
 {
 /**
-    Waveform generation for the synth's oscillator.
+    Band-limited waveforms, for Generate > Tone and the vocoder's carrier.
 
     JUCE-free so the anti-aliasing can be measured headlessly (see
     OscillatorTests, which correlates the output against frequencies that
-    *shouldn't* be there) — the same reason SequencerMath, MetronomeMath and
-    NoteOps are separated out. Aliasing is exactly the kind of defect that is
+    *shouldn't* be there) — the same reason SequencerMath and MetronomeMath
+    are separated out. Aliasing is exactly the kind of defect that is
     hard to hear deliberately and easy to ship by accident.
 
     Saw and square use PolyBLEP: a naive ramp or step has a discontinuity once

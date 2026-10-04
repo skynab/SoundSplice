@@ -21,7 +21,6 @@ namespace
             auto& track     = addTrack(song, TrackType::Audio, name);
             track.editGroup = group;
             Clip clip;
-            clip.type        = ClipType::Audio;
             clip.audioFile   = std::string(name) + ".wav";
             clip.lengthBeats = 8.0;
             addClip(song, track.id, clip);

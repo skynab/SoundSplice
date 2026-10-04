@@ -64,7 +64,7 @@ namespace takeedit
 
         std::vector<const Clip*> sources;
         for (const auto& clip : track->clips)
-            if (clip.type == ClipType::Audio && std::find(clipIds.begin(), clipIds.end(), clip.id) != clipIds.end())
+            if (std::find(clipIds.begin(), clipIds.end(), clip.id) != clipIds.end())
                 sources.push_back(&clip);
         if (sources.size() < 2)
             return 0;
@@ -201,7 +201,7 @@ namespace takeedit
         // Ids first: comping splits and joins clips, so indices move.
         std::vector<int> ids;
         for (const auto& clip : track->clips)
-            if (clip.type == ClipType::Audio && takeIndex < (int) clip.takes.size() && clip.startBeats < toBeats
+            if (takeIndex < (int) clip.takes.size() && clip.startBeats < toBeats
                 && clip.startBeats + clip.lengthBeats > fromBeats)
                 ids.push_back(clip.id);
 

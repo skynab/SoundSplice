@@ -16,7 +16,6 @@ namespace
         const int id = addTrack(song, TrackType::Audio, "Interview").id;
 
         Clip clip;
-        clip.type        = ClipType::Audio;
         clip.audioFile   = "interview.wav";
         clip.lengthBeats = 8.0;
         addClip(song, id, clip);
@@ -25,7 +24,7 @@ namespace
         clip.channels   = ClipChannels::Swapped;
         addClip(song, id, clip);
 
-        addTrack(song, TrackType::Instrument, "Synth");
+        addTrack(song, TrackType::Bus, "Bus");
         return song;
     }
 }
@@ -50,7 +49,7 @@ TEST_CASE("Splitting a stereo track makes a left track and a right track", "[mod
     REQUIRE(left.clips[1].channels == ClipChannels::RightOnly);
     REQUIRE(right.clips[1].channels == ClipChannels::LeftOnly);
 
-    REQUIRE(song.tracks[2].name == "Synth");
+    REQUIRE(song.tracks[2].name == "Bus");
     REQUIRE_FALSE(splitStereoToMono(song, 2)); // not an audio track
     REQUIRE_FALSE(splitStereoToMono(song, 9));
 }
@@ -88,7 +87,7 @@ TEST_CASE("Split halves join back into the track they came from", "[model][chann
     auto       song   = songWithAudioTrack();
     const auto before = song;
 
-    REQUIRE_FALSE(areSplitHalves(song, 0)); // the next track is the synth
+    REQUIRE_FALSE(areSplitHalves(song, 0)); // the next track is the bus
     REQUIRE(splitStereoToMono(song, 0));
     REQUIRE(areSplitHalves(song, 0));
     REQUIRE_FALSE(areSplitHalves(song, 1));

@@ -86,11 +86,11 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
 
         case commands::appendRecord:
-            info.setActive(! audioTake_.running && ! midiTake_.running);
+            info.setActive(! audioTake_.running);
             break;
 
         case commands::measureLatency:
-            info.setActive(! audioTake_.running && ! midiTake_.running && ! engine_.isMeasuringLatency());
+            info.setActive(! audioTake_.running && ! engine_.isMeasuringLatency());
             break;
 
         case commands::soundActivatedRecording:
@@ -143,10 +143,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         case commands::fadeOut:
         case commands::reverseAudio:
             info.setActive(hasSelection);
-            break;
-
-        case commands::pasteNotes:
-            info.setActive(! noteClipboard_.empty());
             break;
 
         case commands::pasteClip:
@@ -417,9 +413,7 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::saveProjectAs:    saveProjectAs(); break;
         case commands::previewAudioFile: chooseFile(); break; // preview only - see chooseFile
         case commands::importAudio:      importAudioToNewTrack(); break;
-        case commands::importMidi:       importMidiFileDialog(); break;
         case commands::importRawData:    importRawDataDialog(); break;
-        case commands::exportMidi:       exportMidiFileDialog(); break;
         case commands::exportAudio:      exportAudioDialog(); break;
         case commands::setProjectRoot:   setProjectRootFolderDialog(); break;
         case commands::audioSettings:    showAudioSettings(); break;
@@ -528,14 +522,11 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
             break;
         }
 
-        case commands::clearNotes:      pianoRoll_.clear(); break;
         // A time selection in the arrangement, when there is one, before the
         // audio editor's own selection.
         case commands::cutAudio:        if (! editTimeSelection("Cut", true, true, true)) cutAudioSelection(); break;
         case commands::copyAudio:       if (! editTimeSelection("Copy", true, false, false)) copyAudioSelection(); break;
         case commands::pasteAudio:      if (! pasteAtTimeSelection()) pasteAudioAtSelection(); break;
-        case commands::copyNotes:       copyNotes(); break;
-        case commands::pasteNotes:      pasteNotes(); break;
         case commands::deleteAudio:     if (! editTimeSelection("Delete", false, true, true)) deleteAudioSelection(); break;
         case commands::trimToSelection: trimToAudioSelection(); break;
         case commands::splitAtCursor:   splitClipAtSelection(); break;
@@ -619,10 +610,6 @@ bool MainComponent::perform(const juce::ApplicationCommandTarget::InvocationInfo
         case commands::mixAndRender:    mixAndRenderToNewTrack(); break;
         case commands::renameTrack:     renameSelectedTrack(); break;
         case commands::deleteTrack:     deleteSelectedTrack(); break;
-        case commands::quantize:        quantizeNotes(0.0); break;
-        case commands::swingLight:      quantizeNotes(0.25); break;
-        case commands::swingMedium:     quantizeNotes(0.5); break;
-        case commands::swingHeavy:      quantizeNotes(0.66); break;
 
         // Transport commands press the buttons rather than repeating what
         // they do: the button stays the one definition of the action, and it
@@ -872,10 +859,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addSeparator();
         add(commands::previewAudioFile);
         add(commands::importAudio);
-        add(commands::importMidi);
         add(commands::loadVideo);
         add(commands::importRawData);
-        add(commands::exportMidi);
         add(commands::exportAudio);
         add(commands::exportCdImage);
         add(commands::renderQueue);
@@ -900,13 +885,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         add(commands::undo);
         add(commands::redo);
         menu.addSeparator();
-        add(commands::clearNotes);
-        menu.addSeparator();
-        // Notes, audio, clips and tracks each get their own commands rather
-        // than one set whose meaning depends on which pane has focus.
-        add(commands::copyNotes);
-        add(commands::pasteNotes);
-        menu.addSeparator();
+        // Audio, clips and tracks each get their own commands rather than
+        // one set whose meaning depends on which pane has focus.
         add(commands::cutAudio);
         add(commands::copyAudio);
         add(commands::pasteAudio);
@@ -977,11 +957,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addSeparator();
         add(commands::renameTrack);
         add(commands::deleteTrack);
-        menu.addSeparator();
-        add(commands::quantize);
-        add(commands::swingLight);
-        add(commands::swingMedium);
-        add(commands::swingHeavy);
     }
     else if (topLevelMenuIndex == 2) // View
     {

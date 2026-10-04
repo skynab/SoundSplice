@@ -16,7 +16,6 @@ namespace
     model::Clip audioClip(double startBeats, double lengthBeats, double offsetSeconds = 0.0)
     {
         model::Clip clip;
-        clip.type                = model::ClipType::Audio;
         clip.audioFile           = "take.wav";
         clip.startBeats          = startBeats;
         clip.lengthBeats         = lengthBeats;

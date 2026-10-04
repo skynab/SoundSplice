@@ -11,21 +11,16 @@
 #include "engine/AudioRecorder.h"
 #include "engine/AuditionPlayer.h"
 #include "engine/ClipData.h"
-#include "engine/ClipSlot.h"
 #include "engine/DelayEffect.h"
 #include "engine/EffectChain.h"
 #include "engine/EffectSlotFactory.h"
 #include "engine/FilterEffect.h"
-#include "engine/InstrumentTrack.h"
+#include "engine/MixerTrack.h"
 #include "engine/MasteringPreset.h"
 #include "engine/MasteringProcessor.h"
 #include "engine/Metronome.h"
-#include "engine/MidiCapture.h"
-#include "engine/MidiFileIO.h"
-#include "engine/MidiRecorder.h"
 #include "engine/OfflineRenderer.h"
 #include "engine/ReverbEffect.h"
-#include "engine/SessionPlayer.h"
 #include "model/AutomationLane.h"
 #include "model/MasteringPresets.h"
 #include "model/Song.h"
@@ -82,24 +77,64 @@ namespace
         return worst;
     }
 
-    /** C-E-G-C, one note a beat (the piano roll's demo). */
-    Pattern arpeggio()
+    /** One note of a part, in beats at kBpm. */
+    struct PartNote
     {
-        Pattern arp;
-        arp.lengthBeats = 4.0;
-        for (const int interval : { 0, 4, 7, 12 })
-            arp.notes.push_back({ (double) arp.notes.size(), 0.5, 60 + interval, 0.8f });
-        return arp;
+        double start  = 0.0;
+        double length = 0.0;
+        int    note   = 60; // a semitone number, 69 being A 440
+        float  level  = 0.8f;
+    };
+
+    /** @p notes, repeated every four beats for @p seconds, as a mono clip:
+        sines through an envelope, as a simple synth plays them, so a part has
+        attacks, sustains and the quiet between notes for effects to act on. */
+    ClipData part(const std::vector<PartNote>& notes, double seconds = 8.0)
+    {
+        ClipData clip;
+        const int n = (int) (seconds * kSampleRate);
+        clip.audio.setSize(1, n);
+        clip.audio.clear();
+        clip.sourceSampleRate = kSampleRate;
+        clip.numChannels      = 1;
+        clip.lengthSamples    = n;
+
+        const double samplesPerBeat = kSampleRate * 60.0 / kBpm;
+        for (double bar = 0.0; bar * samplesPerBeat < n; bar += 4.0)
+            for (const auto& note : notes)
+            {
+                juce::ADSR envelope;
+                envelope.setSampleRate(kSampleRate);
+                envelope.setParameters({ 0.005f, 0.12f, 0.7f, 0.25f });
+                envelope.noteOn();
+
+                const int    from = (int) ((bar + note.start) * samplesPerBeat);
+                const int    off  = (int) ((bar + note.start + note.length) * samplesPerBeat);
+                const double hz   = 440.0 * std::pow(2.0, (note.note - 69) / 12.0);
+                for (int i = from; i < n; ++i)
+                {
+                    if (i == off)
+                        envelope.noteOff();
+                    if (i >= off && ! envelope.isActive())
+                        break;
+                    const double t = (double) (i - from) / kSampleRate;
+                    clip.audio.addSample(0, i, note.level * 0.3f * envelope.getNextSample()
+                                                   * (float) std::sin(2.0 * juce::MathConstants<double>::pi * hz * t));
+                }
+            }
+        return clip;
+    }
+
+    /** C-E-G-C, one note a beat. */
+    ClipData arpeggio()
+    {
+        return part({ { 0.0, 0.5, 60, 0.8f }, { 1.0, 0.5, 64, 0.8f }, { 2.0, 0.5, 67, 0.8f }, { 3.0, 0.5, 72, 0.8f } });
     }
 
     /** A root-note bass on beats 1 and 3. */
-    Pattern bassline()
+    ClipData bassline()
     {
-        Pattern bass;
-        bass.lengthBeats = 4.0;
-        bass.notes.push_back({ 0.0, 1.0, 36, 0.9f });
-        bass.notes.push_back({ 2.0, 1.0, 43, 0.9f });
-        return bass;
+        return part({ { 0.0, 1.0, 36, 0.9f }, { 2.0, 1.0, 43, 0.9f } });
     }
 
     /** A mono sine of @p seconds at @p hz. */
@@ -116,16 +151,15 @@ namespace
         return clip;
     }
 
-    /** One InstrumentTrack rendered block by block, as the live callback does. */
+    /** One MixerTrack rendered block by block, as the live callback does. */
     struct TrackRender
     {
-        double         seconds = 1.0;
-        double         bpm     = kBpm;
-        const Pattern* pattern = nullptr; // looped from beat 0; none for no clip
+        double          seconds = 1.0;
+        double          bpm     = kBpm;
+        const ClipData* clip    = nullptr; // from beat 0; none for no clip
 
-        std::function<void(InstrumentTrack&)>      setUp;       // before rendering
-        std::function<void(InstrumentTrack&, int)> beforeBlock; // with the block's start sample
-        double                                     launchQuantumSamples = 0.0;
+        std::function<void(MixerTrack&)>      setUp;       // before rendering
+        std::function<void(MixerTrack&, int)> beforeBlock; // with the block's start sample
     };
 
     juce::AudioBuffer<float> render(const TrackRender& spec)
@@ -134,21 +168,14 @@ namespace
         juce::AudioBuffer<float> mix(2, totalSamples);
         mix.clear();
 
-        InstrumentTrack track;
+        MixerTrack track;
         track.prepare(kSampleRate, kBlock);
         if (spec.setUp)
             spec.setUp(track);
 
-        if (spec.pattern != nullptr)
-        {
-            ClipSlot slot;
-            slot.pattern     = *spec.pattern;
-            slot.startBeats  = 0.0;
-            slot.lengthBeats = 1.0e9;
-            track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
-        }
+        if (spec.clip != nullptr)
+            track.audioPlayer.submitSingleClip(new ClipData(*spec.clip));
 
-        juce::MidiBuffer noLiveMidi;
         for (int pos = 0; pos < totalSamples; pos += kBlock)
         {
             const int n = std::min(kBlock, totalSamples - pos);
@@ -164,13 +191,13 @@ namespace
             context.transport.timeSigDenominator = 4;
 
             juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-            track.render(blockView, noLiveMidi, context, false, false, spec.launchQuantumSamples);
+            track.render(blockView, context, false);
         }
         return mix;
     }
 
     /** Gives @p track a chain of @p nodes, in order. */
-    void setChain(InstrumentTrack& track, std::vector<std::unique_ptr<EffectProcessor>> nodes)
+    void setChain(MixerTrack& track, std::vector<std::unique_ptr<EffectProcessor>> nodes)
     {
         auto chain = std::make_unique<EffectChain>();
         for (auto& node : nodes)
@@ -180,9 +207,9 @@ namespace
     }
 
     template <typename Node, typename Configure>
-    std::function<void(InstrumentTrack&)> withNode(Configure configure)
+    std::function<void(MixerTrack&)> withNode(Configure configure)
     {
-        return [configure](InstrumentTrack& track)
+        return [configure](MixerTrack& track)
         {
             auto node = std::make_unique<Node>();
             node->effect.setEnabled(true);
@@ -234,7 +261,7 @@ TEST_CASE("A track's pan moves it between the channels, and centred changes noth
     const auto arp     = arpeggio();
     const auto panned  = [&](float pan)
     {
-        return render({ 2.0, kBpm, &arp, [pan](InstrumentTrack& track) { track.pan.store(pan); } });
+        return render({ 2.0, kBpm, &arp, [pan](MixerTrack& track) { track.pan.store(pan); } });
     };
     const auto centred = panned(0.0f);
     const auto left    = panned(-1.0f);
@@ -248,34 +275,11 @@ TEST_CASE("A track's pan moves it between the channels, and centred changes noth
 
 // ---- Clips --------------------------------------------------------------------------
 
-TEST_CASE("Instrument clips sound only in their own windows", "[render]")
-{
-    const auto arp = arpeggio();
-
-    // Started two beats (a second) in: silent before, sounding after.
-    const auto delayed = OfflineRenderer::render({ arp }, std::vector<float> { 0.0f }, std::vector<bool> {},
-                                                 std::vector<double> { 2.0 }, kBpm, kSampleRate, 4.0);
-    REQUIRE(rmsBetween(delayed, 0.0, 1.0) < 1.0e-5f);
-    REQUIRE(rmsBetween(delayed, 1.0, 3.0) > 0.01f);
-
-    // Two clips, 0-4 and 6-10 beats. "Silent" is measured late in the gap and
-    // tail, past the synth's 250 ms release.
-    ClipSlot first, second;
-    first.pattern = second.pattern = arp;
-    first.lengthBeats = second.lengthBeats = 4.0;
-    second.startBeats = 6.0;
-    const auto clips = OfflineRenderer::renderClips({ first, second }, kBpm, kSampleRate, 6.0);
-    REQUIRE(rmsBetween(clips, 0.0, 2.0) > 0.01f);
-    REQUIRE(rmsBetween(clips, 2.5, 0.5) < 1.0e-5f);
-    REQUIRE(rmsBetween(clips, 3.0, 2.0) > 0.01f);
-    REQUIRE(rmsBetween(clips, 5.5, 0.5) < 1.0e-5f);
-}
-
 TEST_CASE("Audio clips play through a track's gain, windows, offsets and fades", "[render]")
 {
     const auto sine = tone(2.0, 440.0, 0.5f);
 
-    // Through the same gain as synth content, gated at its start.
+    // Through the track's gain, gated at its start.
     const auto full    = OfflineRenderer::renderAudioClip(sine, 0.0, 0.0f, kBpm, kSampleRate, 4.0);
     const auto quiet   = OfflineRenderer::renderAudioClip(sine, 0.0, -6.0f, kBpm, kSampleRate, 4.0);
     const auto delayed = OfflineRenderer::renderAudioClip(sine, 2.0, 0.0f, kBpm, kSampleRate, 4.0);
@@ -357,56 +361,6 @@ TEST_CASE("The audition player plays without a transport, ends, restarts and sto
     audition.collectRetired();
 }
 
-TEST_CASE("A session clip launches and stops on the next bar line", "[render]")
-{
-    const double barSamples = kSampleRate * 60.0 / kBpm * 4.0;
-
-    Pattern hits; // a note every beat, so "is it sounding" is easy to read
-    hits.lengthBeats = 4.0;
-    for (int i = 0; i < 4; ++i)
-        hits.notes.push_back({ (double) i, 0.5, 60, 0.9f });
-
-    const auto session = [&](bool stopInBarTwo)
-    {
-        auto launched = std::make_shared<bool>(false), stopped = std::make_shared<bool>(false);
-        TrackRender spec;
-        spec.seconds              = barSamples * 3.0 / kSampleRate;
-        spec.launchQuantumSamples = barSamples;
-        spec.setUp = [&](InstrumentTrack& track)
-        {
-            auto* slots = new SessionPlayer::SlotList();
-            slots->push_back({ true, hits });
-            track.session.submitSlots(slots);
-        };
-        // Asked a quarter of the way into a bar, each lands on the next bar line.
-        spec.beforeBlock = [=](InstrumentTrack& track, int pos)
-        {
-            if (! *launched && pos >= (int) (barSamples * 0.25))
-            {
-                track.session.requestLaunch(0);
-                *launched = true;
-            }
-            if (stopInBarTwo && ! *stopped && pos >= (int) (barSamples * 1.25))
-            {
-                track.session.requestStop();
-                *stopped = true;
-            }
-        };
-        return render(spec);
-    };
-
-    const double bar   = barSamples / kSampleRate;
-    const double probe = 0.15;
-
-    const auto launchedMix = session(false);
-    REQUIRE(rmsBetween(launchedMix, bar * 0.5, probe) < 1.0e-6f);
-    REQUIRE(rmsBetween(launchedMix, bar + 1000.0 / kSampleRate, probe) > 0.01f);
-
-    const auto stoppedMix = session(true);
-    REQUIRE(rmsBetween(stoppedMix, bar * 1.5, probe) > 0.01f);
-    REQUIRE(rmsBetween(stoppedMix, bar * 2.5, probe) < 1.0e-6f);
-}
-
 // ---- Automation ----------------------------------------------------------------------
 
 TEST_CASE("Automation fades a track, and leaves its neighbour alone", "[render]")
@@ -440,8 +394,8 @@ TEST_CASE("Automation fades a track, and leaves its neighbour alone", "[render]"
                                                    std::vector<double> {}, kBpm, kSampleRate, 4.0, kBlock, &curves);
     REQUIRE(rmsBetween(arpAlone, 0.0, 2.0) < rmsBetween(arpAlone, 2.0, 2.0));
 
-    // Loosely: two passes of a pattern differ a little (voice state carries
-    // over the loop), but a leaked curve would differ by a multiple.
+    // Loosely: the first pass starts from silence where the second has the
+    // last bar's tail, but a leaked curve would differ by a multiple.
     const float bassFirst = rmsBetween(bassAlone, 0.0, 2.0), bassSecond = rmsBetween(bassAlone, 2.0, 2.0);
     REQUIRE(bassSecond > 0.01f);
     REQUIRE(std::abs(bassSecond - bassFirst) < 0.25f * std::max(bassFirst, bassSecond));
@@ -504,7 +458,7 @@ TEST_CASE("A track's insert filter is in its signal path", "[render]")
     const auto arp      = arpeggio();
     const auto withLowPass = [&](bool enabled)
     {
-        return render({ 2.0, kBpm, &arp, [enabled](InstrumentTrack& track)
+        return render({ 2.0, kBpm, &arp, [enabled](MixerTrack& track)
         {
             auto node = std::make_unique<FilterNode>();
             node->effect.setEnabled(enabled);
@@ -549,7 +503,7 @@ TEST_CASE("An effect chain runs every node, in order", "[render]")
     const auto arp   = arpeggio();
     const auto chain = [&](std::function<std::vector<std::unique_ptr<EffectProcessor>>()> nodes)
     {
-        return render({ 1.0, kBpm, &arp, [nodes](InstrumentTrack& track) { setChain(track, nodes()); } });
+        return render({ 1.0, kBpm, &arp, [nodes](MixerTrack& track) { setChain(track, nodes()); } });
     };
     const auto gainThenClip = chain([] {
         std::vector<std::unique_ptr<EffectProcessor>> n;
@@ -770,7 +724,7 @@ TEST_CASE("A wobble changes the sound, sweeps with depth, and follows the tempo"
     // 0, which plays by samples, so the tempo doesn't also move the notes.
     const auto toneAt = [&](double bpm)
     {
-        return render({ 1.0, bpm, nullptr, [wobble](InstrumentTrack& track)
+        return render({ 1.0, bpm, nullptr, [wobble](MixerTrack& track)
         {
             track.audioPlayer.submitSingleClip(new ClipData(tone(1.0, 100.0, 1.0f)), 0.0);
             wobble(1.0f)(track);
@@ -838,60 +792,6 @@ TEST_CASE("The mastering rack is clean bypassed and every preset holds its ceili
     }
 }
 
-// ---- The synth --------------------------------------------------------------------------
-
-TEST_CASE("The synth's filter envelope, sub-oscillator and unison each change the sound", "[render]")
-{
-    // One sustained saw note with each off, then on. Every default takes the
-    // voice's original fast path.
-    Pattern note;
-    note.lengthBeats = 4.0;
-    note.notes.push_back({ 0.0, 4.0, 45, 0.9f });
-
-    const auto sustained = [&](std::function<void(SynthInstrumentNode&)> configure)
-    {
-        return render({ 1.0, kBpm, &note, [configure](InstrumentTrack& track)
-        {
-            track.synth.setWaveform(1); // saw: harmonics to filter and detune
-            track.synth.setAttackMs(2.0f);
-            track.synth.setDecayMs(50.0f);
-            track.synth.setSustain(1.0f);
-            track.synth.setReleaseMs(50.0f);
-            configure(track.synth);
-        } });
-    };
-
-    const auto lowPass = [](SynthInstrumentNode& synth)
-    {
-        synth.setFilterEnabled(true);
-        synth.setFilterCutoff(300.0f);
-    };
-    const auto filterEnvOff = sustained(lowPass);
-    const auto filterEnvOn  = sustained([&](SynthInstrumentNode& synth)
-    {
-        lowPass(synth);
-        synth.setFilterEnvAmount(4000.0f);
-        synth.setFilterEnvAttackMs(1.0f);
-        synth.setFilterEnvDecayMs(200.0f);
-        synth.setFilterEnvSustain(0.1f);
-        synth.setFilterEnvReleaseMs(50.0f);
-    });
-    REQUIRE(rms(filterEnvOff) > 1.0e-4f);
-    REQUIRE(leftDifference(filterEnvOff, filterEnvOn) > 1.0e-3f);
-
-    const auto plain = sustained([](SynthInstrumentNode&) {});
-    REQUIRE(leftDifference(plain, sustained([](SynthInstrumentNode& synth)
-    {
-        synth.setSubOscEnabled(true);
-        synth.setSubOscLevel(0.5f);
-    })) > 1.0e-3f);
-    REQUIRE(leftDifference(plain, sustained([](SynthInstrumentNode& synth)
-    {
-        synth.setUnisonVoices(5);
-        synth.setUnisonDetuneCents(20.0f);
-    })) > 1.0e-3f);
-}
-
 TEST_CASE("The metronome clicks on the beat and is silent off it, or when off", "[render]")
 {
     const auto clicks = [](bool enabled)
@@ -931,113 +831,6 @@ TEST_CASE("The metronome clicks on the beat and is silent off it, or when off", 
 }
 
 // ---- MIDI -------------------------------------------------------------------------------
-
-TEST_CASE("A MIDI file round trip keeps the tempo and every note", "[render][midi]")
-{
-    using namespace soundsplice::model;
-
-    Song original;
-    original.bpm = 128.0;
-    auto& track  = addTrack(original, TrackType::Instrument, "Test");
-    Clip  clip;
-    clip.id                  = allocateId(original);
-    clip.type                = ClipType::Instrument;
-    clip.lengthBeats         = 4.0;
-    clip.pattern.lengthBeats = 4.0;
-    clip.pattern.notes       = { { 0.0, 0.5, 60, 0.8f }, { 1.0, 1.0, 64, 0.6f }, { 2.5, 0.25, 67, 1.0f } };
-    track.clips.push_back(clip);
-
-    const juce::TemporaryFile file(".mid");
-    REQUIRE(exportMidiFile(file.getFile(), original));
-
-    Song reimported;
-    reimported.bpm      = 90.0; // so the import setting it is seen
-    const auto imported = importMidiFile(file.getFile(), reimported);
-    REQUIRE(imported.ok);
-    REQUIRE(imported.tracksImported == 1);
-    REQUIRE(imported.extraTempoEventsIgnored == 0);
-    REQUIRE(std::abs(reimported.bpm - 128.0) < 0.5);
-    REQUIRE(reimported.tracks.size() == 1);
-    REQUIRE(reimported.tracks[0].clips.size() == 1);
-
-    // Within what a tick-based format rounds to.
-    const auto& notes = reimported.tracks[0].clips[0].pattern.notes;
-    REQUIRE(notes.size() == 3);
-    for (size_t i = 0; i < notes.size(); ++i)
-    {
-        const auto& was = clip.pattern.notes[i];
-        REQUIRE(std::abs(notes[i].startBeats - was.startBeats) < 0.01);
-        REQUIRE(std::abs(notes[i].lengthBeats - was.lengthBeats) < 0.01);
-        REQUIRE(notes[i].noteNumber == was.noteNumber);
-        REQUIRE(std::abs(notes[i].velocity - was.velocity) < 0.01f);
-    }
-}
-
-TEST_CASE("A recorded MIDI performance plays back where it was played", "[render][midi]")
-{
-    // The whole capture chain as the app drives it - blocks into the recorder
-    // after a count-in, drained each tick, converted to beats, paired - and
-    // the result rendered, so it's real music and not just a struct that
-    // passes its own tests.
-    const double samplesPerBeat = 60.0 / kBpm * kSampleRate;
-    const auto   at             = [&](double beat) { return (int64_t) (beat * samplesPerBeat); };
-
-    MidiRecorder  recorder;
-    const int64_t leadIn = at(4.0); // a bar's count-in, as AudioEngine::beginMidiRecording sets it
-    recorder.arm(leadIn);
-
-    struct Played { double beat; int note; bool on; };
-    const std::vector<Played> performance { { 0.0, 60, true }, { 1.0, 60, false }, { 1.0, 67, true }, { 2.0, 67, false } };
-
-    std::vector<RecordedMidiEvent> take;
-    const int64_t                  total = leadIn + at(3.0);
-    for (int64_t playhead = 0; playhead < total; playhead += kBlock)
-    {
-        std::vector<RecordedMidiEvent> inBlock; // at their offsets in the block, as captureMidi hands them over
-        for (const auto& played : performance)
-        {
-            const int64_t when = leadIn + at(played.beat);
-            if (when >= playhead && when < playhead + kBlock)
-                inBlock.push_back({ when - playhead, played.note, played.on ? 0.8f : 0.0f, played.on });
-        }
-        recorder.process(inBlock.data(), (int) inBlock.size(), kBlock, true, playhead);
-        recorder.drain(take);
-    }
-    recorder.disarm();
-    recorder.process(nullptr, 0, kBlock, true, total);
-    recorder.drain(take);
-
-    // Capture starts on the first block after the count-in.
-    const int64_t start = recorder.startPlayheadSamples();
-    REQUIRE(start >= leadIn);
-    REQUIRE(start < leadIn + kBlock);
-    REQUIRE(recorder.droppedEventCount() == 0);
-
-    const double                startBeats = (double) start / samplesPerBeat;
-    std::vector<TimedMidiEvent> timed;
-    for (const auto& event : take)
-        timed.push_back({ (double) event.timeSamples / samplesPerBeat - startBeats, event.noteNumber, event.velocity, event.noteOn });
-    const double endBeats = (double) recorder.endPlayheadSamples() / samplesPerBeat - startBeats;
-
-    Pattern recorded;
-    recorded.notes       = MidiCapture::notesFromEvents(std::move(timed), endBeats);
-    recorded.lengthBeats = MidiCapture::clipLengthForTake(endBeats, 4.0);
-    REQUIRE(recorded.notes.size() == 2);
-    REQUIRE(recorded.notes[0].noteNumber == 60);
-    REQUIRE(recorded.notes[1].noteNumber == 67);
-    REQUIRE(std::abs(recorded.notes[0].startBeats - 0.0) < 0.05);
-    REQUIRE(std::abs(recorded.notes[1].startBeats - 1.0) < 0.05);
-    REQUIRE(std::abs(recorded.notes[0].lengthBeats - 1.0) < 0.05);
-    REQUIRE(std::abs(recorded.notes[1].lengthBeats - 1.0) < 0.05);
-
-    // Both notes sound, and nothing after 1 s: the lengths are real.
-    const auto played = OfflineRenderer::render({ recorded }, std::vector<float> { 0.0f }, kBpm, kSampleRate, 2.0);
-    REQUIRE(rmsBetween(played, 0.0, 0.1) > 0.001f);
-    REQUIRE(rmsBetween(played, 0.5, 0.1) > 0.001f);
-    REQUIRE(rmsBetween(played, 1.4, 0.1) < 0.001f);
-}
-
-// ---- Recording ------------------------------------------------------------------------
 
 TEST_CASE("The audio recorder captures what it's given, to disk, and loses nothing", "[render][record]")
 {

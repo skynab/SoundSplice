@@ -19,14 +19,12 @@
 #include "engine/AudioFilePlayerNode.h"
 #include "engine/AuditionPlayer.h"
 #include "engine/AudioRecorder.h"
-#include "engine/MidiRecorder.h"
-#include "engine/ClipSlot.h"
 #include "engine/DelayEffect.h"
 #include "engine/FilterEffect.h"
 #include "engine/ReverbEffect.h"
 #include "engine/EngineCommand.h"
 #include "engine/TempoDetect.h"
-#include "engine/InstrumentTrack.h"
+#include "engine/MixerTrack.h"
 #include "engine/Varispeed.h"
 #include "engine/MasterBusNode.h"
 #include "engine/MasteringProcessor.h"
@@ -35,7 +33,6 @@
 #include "engine/PluginNode.h"
 #include "engine/RetroRecorder.h"
 #include "engine/LatencyProbe.h"
-#include "engine/Pattern.h"
 #include "engine/Transport.h"
 
 #include "model/Effects.h"
@@ -44,7 +41,7 @@ namespace soundsplice::engine
 {
 /** One audio clip to load onto a track: a file plus its
     [startBeats, startBeats + lengthBeats) window — the AudioEngine-facing
-    equivalent of ClipSlot, taking a file instead of already-decoded data.
+    equivalent of AudioClipSlot, taking a file instead of already-decoded data.
     See AudioEngine::setTrackAudioClips. */
 struct AudioClipSpec
 {
@@ -76,29 +73,27 @@ struct AudioClipSpec
 
 /**
     The headless audio engine. It owns the audio device and is the device
-    callback. Instrument tracks live in a fixed pre-allocated pool, so the UI
+    callback. Tracks live in a fixed pre-allocated pool, so the UI
     changes the "song" by activating slots and submitting clip lists — no
     real-time graph editing. The UI interacts only by posting commands, calling
     the thread-safe control methods (which use lock-free FIFOs / atomics), and
     reading published atomics.
 */
-class AudioEngine final : public juce::AudioIODeviceCallback,
-                          public juce::MidiInputCallback
+class AudioEngine final : public juce::AudioIODeviceCallback
 {
 public:
     // Tracks and buses together. Each costs its delay-compensation line
-    // (InstrumentTrack::kMaxCompensation) and a mixer strip whether used or
+    // (MixerTrack::kMaxCompensation) and a mixer strip whether used or
     // not, and one ClipStream reader slot (see the static_assert).
     static constexpr int kMaxTracks = 32;
 
-    /** @p openDevice false: no audio or MIDI device is opened - for a
+    /** @p openDevice false: no audio device is opened - for a
         headless render (soundsplice-cli), which only ever renders offline
         and must not take over the user's audio interface to do it. */
     explicit AudioEngine(bool openDevice = true);
     ~AudioEngine() override;
 
     juce::AudioDeviceManager& deviceManager() noexcept { return deviceManager_; }
-    juce::MidiKeyboardState&  keyboardState() noexcept { return keyboardState_; }
 
     void postCommand(const EngineCommand& command) noexcept { commandQueue_.push(command); }
 
@@ -128,10 +123,9 @@ public:
         already cached (see decodeOrGetCached — decoded audio is cached by
         path, so calling this again with the same files, even on other
         tracks, never re-decodes them). Each clip plays only within its own
-        [startBeats, startBeats + lengthBeats) window, same rule as
-        setTrackClips (MIDI); give a single-clip track an effectively
-        unbounded lengthBeats for the original "plays once from its start, no
-        other gating" behaviour. Message thread. Returns false if any clip's
+        [startBeats, startBeats + lengthBeats) window; give a single-clip
+        track an effectively unbounded lengthBeats for the original "plays
+        once from its start, no other gating" behaviour. Message thread. Returns false if any clip's
         file couldn't be read (the others still load). */
     bool setTrackAudioClips(int index, const std::vector<AudioClipSpec>& clips);
 
@@ -175,22 +169,6 @@ public:
         happens while the transport is playing, and only after any count-in
         (see setCountInBars) has elapsed. */
     // ---- what is actually connected (message thread) ----
-    /**
-        Re-enumerates MIDI inputs, registering any that have appeared and
-        dropping any that have gone. Returns true if the set changed.
-
-        This used to happen once, in the constructor — so a controller plugged
-        in after launch was never routed anywhere: it could not play, let alone
-        record, and nothing said why. Called on a slow cadence from the UI
-        timer and again whenever a take is armed.
-    */
-    bool refreshMidiInputs();
-
-    /** True if any MIDI input device is currently registered. What makes
-        "record MIDI or record audio?" answerable from what is really plugged
-        in rather than from the armed track's type alone. */
-    bool hasMidiInput() const;
-
     /** True if the open audio device actually has input channels — i.e. there
         is something to record audio *from*. Distinct from inputOpenError(),
         which says why opening one failed. */
@@ -378,41 +356,6 @@ public:
         Valid only after isRecordingFinished() is observed true. */
     juce::File finishRecordedTake() { return recorder_.finishTake(); }
 
-    // ---- MIDI recording (message thread) ----
-    /**
-        Arms a MIDI take: incoming notes are captured instead of only being
-        played through the armed track.
-
-        The audio counterpart of this, beginRecording, can fail (no input
-        device, unopenable file) and so returns bool. This cannot: MIDI capture
-        needs no device to be open and no file to exist — a controller that is
-        absent simply sends nothing, which is an empty take rather than an
-        error. Count-in is shared with the audio path (see setCountInBars).
-    */
-    void beginMidiRecording();
-
-    /** True while a MIDI take's count-in is still running. */
-    bool isMidiCountingIn() const noexcept { return midiRecorder_.leadInRemaining() > 0; }
-    void stopMidiRecording() { midiRecorder_.disarm(); }
-    bool isMidiRecordingFinished() const noexcept { return midiRecorder_.isFinished(); }
-    int64_t midiRecordedEventCount() const noexcept { return midiRecorder_.capturedEventCount(); }
-
-    /** Events lost because the message thread stopped draining. Non-zero means
-        the take is missing notes — see MidiRecorder::droppedEventCount. */
-    int64_t midiRecordedDroppedEvents() const noexcept { return midiRecorder_.droppedEventCount(); }
-
-    /** Where the transport was when MIDI capture began / stopped, in samples,
-        or -1. The start is what positions the clip; the end is what bounds a
-        note still held when the take stopped. */
-    int64_t midiTakeStartSample() const noexcept { return midiRecorder_.startPlayheadSamples(); }
-    int64_t midiTakeEndSample() const noexcept { return midiRecorder_.endPlayheadSamples(); }
-
-    /** Moves everything captured since the last call onto @p destination.
-        Call on a timer during the take and once more after
-        isMidiRecordingFinished(), so the ring never has to hold a whole take
-        (see MidiRecorder). */
-    void drainMidiTake(std::vector<RecordedMidiEvent>& destination) { midiRecorder_.drain(destination); }
-
     /** Dry input monitoring: input summed straight to the output, after the
         master bus. Off by default — monitoring a built-in microphone through
         speakers is a feedback loop. Message thread. */
@@ -423,17 +366,13 @@ public:
     // ---- multi-track control (message thread) ----
     int  maxTracks() const noexcept { return kMaxTracks; }
     void setActiveTrackCount(int count);
-    /** Replaces a track's whole clip list. Each clip plays only within its own
-        [startBeats, startBeats + lengthBeats) window; give a single-clip track
-        an effectively unbounded lengthBeats to keep it looping indefinitely. */
-    void setTrackClips(int index, const std::vector<ClipSlot>& clips);
     void setTrackMuted(int index, bool muted);
     void setTrackSolo(int index, bool solo);
 
     /** Whether track @p index currently produces sound in the mix: active, not
         muted, and either soloed or with nothing else soloed.
 
-        The rule itself lives in InstrumentTrack::render — "solo overrides, mute
+        The rule itself lives in MixerTrack::render — "solo overrides, mute
         always wins" — and this reports the same answer from the same atomics
         rather than restating it. Anything deciding *which* tracks to export as
         stems needs exactly this, and a second copy of the rule would be one
@@ -468,65 +407,11 @@ public:
         file as it is on disk. Message thread; decodes the whole file. */
     TempoEstimate detectFileTempo(const juce::File& file);
 
-    // ---- session view (message thread) ----
-    /** Replaces a track's session column. Slot index is the scene. */
-    void setTrackSessionSlots(int index, const std::vector<SessionSlotData>& slots);
-
-    /** Asks a track to start @p sceneIndex at the next launch boundary. */
-    void launchSessionSlot(int index, int sceneIndex);
-
-    /** Asks a track to stop whatever session clip it's playing, handing it
-        back to the arrangement. */
-    void stopSessionSlot(int index);
-
-    /** Launches a whole scene across every active track — a track with an
-        empty slot in that scene stops rather than carrying on, so a scene is a
-        complete statement of what should be playing. */
-    void launchScene(int sceneIndex);
-
-    /** Stops every track's session clip. */
-    void stopAllSessionSlots();
-
-    /** Which session slot a track is currently playing, or -1. Lock-free
-        readout for the session grid. */
-    int sessionSlotPlaying(int index) const noexcept
-    {
-        return (index >= 0 && index < kMaxTracks)
-                   ? tracks_[(size_t) index].session.playingSlotForUI() : -1;
-    }
-
-    /** How long a launch boundary is, in beats. 0 launches immediately;
-        the default of one bar is what makes launching musical. */
-    void setLaunchQuantumBeats(double beats) { launchQuantumBeats_.store(beats, std::memory_order_relaxed); }
-    double launchQuantumBeats() const noexcept { return launchQuantumBeats_.load(std::memory_order_relaxed); }
-
     /** Replaces a track's automation curves. Sample-accurate: the track
         ramps them across each block itself rather than the UI poking a
         value in every 33ms. Pass nullptr-equivalent (an empty set) to
         clear. Message thread. */
     void setTrackAutomation(int index, const TrackAutomation& curves);
-    void setArmedTrack(int index);
-
-    // Per-track synth timbre (see model::SynthSettings / SynthInstrumentNode).
-    void setTrackSynthWaveform(int index, int waveform);
-    void setTrackSynthAttackMs(int index, float ms);
-    void setTrackSynthDecayMs(int index, float ms);
-    void setTrackSynthSustain(int index, float level);
-    void setTrackSynthReleaseMs(int index, float ms);
-    void setTrackSynthFilterEnabled(int index, bool enabled);
-    void setTrackSynthFilterMode(int index, int mode);
-    void setTrackSynthFilterCutoff(int index, float hz);
-    void setTrackSynthFilterResonance(int index, float q);
-    void setTrackSynthGainDb(int index, float db);
-    void setTrackSynthFilterEnvAmount(int index, float hz);
-    void setTrackSynthFilterEnvAttackMs(int index, float ms);
-    void setTrackSynthFilterEnvDecayMs(int index, float ms);
-    void setTrackSynthFilterEnvSustain(int index, float level);
-    void setTrackSynthFilterEnvReleaseMs(int index, float ms);
-    void setTrackSynthSubOscEnabled(int index, bool enabled);
-    void setTrackSynthSubOscLevel(int index, float level);
-    void setTrackSynthUnisonVoices(int index, int voices);
-    void setTrackSynthUnisonDetuneCents(int index, float cents);
 
     /** Replaces a track's insert chain with nodes of these kinds, in order.
         Structural only: rebuilding allocates (on this thread) and resets every
@@ -574,7 +459,7 @@ public:
     void        noteMasterPluginState(int slotIndex, const std::string& state);
     PluginNode* masterPluginNode(int slotIndex);
 
-    /** Housekeeping to run periodically on the message thread (frees retired clips/patterns). */
+    /** Housekeeping to run periodically on the message thread (frees retired clips and chains). */
     void pump() noexcept;
 
     /** Re-opens the output device the system currently considers default,
@@ -624,7 +509,7 @@ public:
         double lengthBeats = 0.0;
 
         /** Renders at this rate instead of the device's; 0 means the device's.
-            The whole engine is re-prepared for it, so the synths, effects and
+            The whole engine is re-prepared for it, so the effects and
             any hosted plugins all run natively at the export rate rather than
             the mix being resampled afterwards — which is both simpler and
             better, since the only resampler here is the linear one in
@@ -721,9 +606,6 @@ public:
     void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
     void audioDeviceStopped() override;
 
-    // ---- juce::MidiInputCallback ----
-    void handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) override;
-
 private:
     void drainCommandQueue() noexcept;
 
@@ -733,14 +615,12 @@ private:
         renderOffline's comment for why that sharing is the design and not a
         convenience.
 
-        @p midi is the live input for this block (empty when rendering
-        offline). The metronome is deliberately *not* here: it sits outside
-        the master bus so it stays off the meter and out of exports. */
+        The metronome is deliberately *not* here: it sits outside the
+        master bus so it stays off the meter and out of exports. */
     /** @p soloTrack renders only that track (-1 = all), and @p applyMasterBus
         runs the master chain. Both defaulted, so the device callback's call is
         unchanged — this exists for offline stem rendering. */
-    void processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffer& midi,
-                      const ProcessContext& context,
+    void processBlock(juce::AudioBuffer<float>& output, const ProcessContext& context,
                       int soloTrack = -1, bool applyMasterBus = true) noexcept;
 
     /** Prepares every node for @p sampleRate / @p blockSize. Called on device
@@ -770,9 +650,6 @@ private:
 
     juce::AudioDeviceManager          deviceManager_;
     juce::AudioFormatManager          formatManager_;
-    juce::MidiMessageCollector        midiCollector_;
-    juce::MidiKeyboardState           keyboardState_;
-    juce::MidiBuffer                  incomingMidi_;
     rt::SpscRingBuffer<EngineCommand> commandQueue_ { 1024 };
 
     // Loads long clips' audio from disk ahead of where they play. Declared
@@ -781,8 +658,7 @@ private:
     juce::TimeSliceThread streamThread_ { "SoundSpliceClipStreams" };
     ClipStreamer          streamer_ { streamThread_ };
 
-    std::array<InstrumentTrack, kMaxTracks> tracks_;
-    std::atomic<int>                        armedTrack_ { 0 };
+    std::array<MixerTrack, kMaxTracks> tracks_;
 
     AudioFilePlayerNode filePlayer_;
     ReferenceAB         reference_;
@@ -796,22 +672,8 @@ private:
 
     juce::String  inputOpenError_;
 
-    // MIDI input identifiers this engine has registered a callback for.
-    // Tracked rather than re-derived from juce::MidiInput::getAvailableDevices()
-    // because registering the same device twice would deliver every message
-    // twice, and a device that has been unplugged is no longer in that list at
-    // all — so it could never be unregistered. Message thread only.
-    juce::StringArray registeredMidiInputs_;
-
     AudioRecorder recorder_;
     std::array<AudioRecorder, kMaxTracks - 1> extraRecorders_; // see beginExtraRecording
-    MidiRecorder  midiRecorder_;
-
-    // Scratch for translating a block's juce::MidiBuffer into the PODs
-    // MidiRecorder takes. Sized once, on the message thread, so the audio
-    // thread never grows it — and capped, so a stuck controller spraying
-    // events can't make a block's translation unbounded.
-    std::vector<RecordedMidiEvent> midiCaptureScratch_;
 
     // Drains the recorder's FIFO to disk. Started once and left running: it
     // idles when nothing is recording, and starting a thread at the moment the
@@ -823,22 +685,10 @@ private:
     float              monitorGainRamp_  = 0.0f; // audio thread only; see the callback
     Metronome     metronome_;
     int           countInBars_ = 0; // message thread only; read when arming
-    std::atomic<double> launchQuantumBeats_ { 4.0 }; // one bar of 4/4
-
-    /** Most note events one block will hand to the MIDI recorder. Well past
-        anything a human can play in a buffer; a stuck controller past it is
-        counted as dropped like any other overflow rather than allowed to grow
-        the scratch buffer on the audio thread. */
-    static constexpr std::size_t kMaxCapturedEventsPerBlock = 256;
 
     /** The count-in for a take about to be armed, in samples, from the tempo
-        in force where it will start. Message thread; shared by both
-        recorders so a MIDI take and an audio take count in identically. */
+        in force where it will start. Message thread. */
     int64_t countInLeadInSamples() const;
-
-    /** Translates a block's note messages into PODs and offers them to the
-        MIDI recorder. Audio thread; allocation-free. */
-    void captureMidi(const juce::MidiBuffer& midi, const ProcessContext& context) noexcept;
 
     /** Rebuilds and submits a track's chain from chainStructure_. Message
         thread. Also called when the device (re)starts, since a chain must be
@@ -939,7 +789,6 @@ private:
     std::atomic<double>      playSpeed_ { 1.0 };
     Varispeed                varispeed_;
     juce::AudioBuffer<float> varispeedScratch_;
-    juce::MidiBuffer         varispeedMidi_;
     bool                     varispeedActive_ = false; // audio thread only
 
     /** Renders the song at playSpeed_ into @p output, through varispeed_.

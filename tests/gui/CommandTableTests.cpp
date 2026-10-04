@@ -92,12 +92,10 @@ TEST_CASE("A shared shortcut goes to its context-specific command first", "[gui]
     // The command manager gives a key to the first enabled command in table
     // order. Two commands on one key is only right for the pairs designed
     // that way, and only with the narrower one first: the other way round,
-    // cmd+C would copy notes from inside the audio editor.
+    // the bare delete key would take the track a selected clip is on.
     JuceFixture fixture;
 
     const std::vector<std::pair<commands::Id, commands::Id>> designedPairs {
-        { commands::copyAudio,          commands::copyNotes },
-        { commands::pasteAudio,         commands::pasteNotes },
         { commands::deleteSelectedClip, commands::deleteTrack },
     };
 

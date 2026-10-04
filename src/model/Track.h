@@ -7,7 +7,6 @@
 #include "model/AutomationLane.h"
 #include "model/Clip.h"
 #include "model/Effects.h"
-#include "model/SynthSettings.h"
 
 namespace soundsplice::model
 {
@@ -15,9 +14,9 @@ namespace soundsplice::model
     the format: append, never renumber. */
 enum class TrackType
 {
-    Instrument = 0, // MIDI clips driving a synth
+    // 0 was a MIDI instrument track, 2 and 3 Looper-Audio's drum and guitar
+    // tracks: not reused.
     Audio      = 1, // audio-file clips
-    // 2 and 3 were Looper-Audio's drum and guitar tracks: not reused.
     Bus        = 4  // no clips: mixes what other tracks send it (model/Routing.h)
 };
 
@@ -47,25 +46,11 @@ enum class TrackParam
     Pan       = 1  // -1..+1
 };
 
-/** One cell of the session grid: a clip, or nothing. A vector of these on a
-    track is indexed by scene, so an empty slot has to be representable rather
-    than simply absent — the index *is* the scene.
-
-    The clip's startBeats is meaningless here and ignored: a session clip has
-    no timeline position, only a slot and a length to loop on. */
-struct SessionSlot
-{
-    bool hasClip = false;
-    Clip clip;
-
-    bool operator==(const SessionSlot&) const = default;
-};
-
 struct Track
 {
     int               id     = 0;
     std::string       name;
-    TrackType         type   = TrackType::Instrument;
+    TrackType         type   = TrackType::Audio;
     float             gainDb     = 0.0f;
     float             pan        = 0.0f; // -1 = hard left, 0 = centre, +1 = hard right
     bool              muted      = false;
@@ -82,7 +67,7 @@ struct Track
     int               recordInput = -1;
 
     // Mono (1) or stereo (2) for this track's takes, or 0 for what
-    // File > Recording Format chooses: a vocal mic and a stereo keyboard can
+    // File > Recording Format chooses: a vocal mic and a stereo synth can
     // be recorded in one take, each as it should be.
     int               recordChannels = 0;
 
@@ -111,19 +96,10 @@ struct Track
 
     std::vector<Clip> clips;
 
-    // The session grid's column for this track, indexed by scene. Kept the
-    // same length as Song::scenes (see model::addScene). Deliberately a
-    // separate container from `clips` rather than a flag on them: the
-    // arrangement is a sequence of placements, the session is a grid of
-    // alternatives, and merging the two would put a meaningless startBeats on
-    // every session clip. A track plays from one or the other, never both.
-    std::vector<SessionSlot> sessionSlots;
-
     // Automation lanes, keyed by TrackParam. A parameter with no lane (or an
     // empty one) simply uses its static value, which is why an unautomated
     // track carries no lanes at all rather than a set of empty ones.
     std::map<int, AutomationLane> automation;
-    SynthSettings     synthSettings; // only meaningful when type == Instrument
 
     // This track's insert effects, in order, applied to its output before the
     // fader (and so before its send too). A slot is a built-in or a hosted

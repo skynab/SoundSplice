@@ -339,7 +339,6 @@ void MainComponent::generateAudio(const engine::GeneratorSpec& spec)
         const double lengthBeats = model::clockFor(self->history_.current()).beatsAfter(at, juce::jmax(0.0, spec.seconds));
 
         model::Clip clip;
-        clip.type        = model::ClipType::Audio;
         clip.lengthBeats = lengthBeats;
         clip.audioFile   = file.getFullPathName().toStdString();
 
@@ -348,7 +347,6 @@ void MainComponent::generateAudio(const engine::GeneratorSpec& spec)
         for (size_t i = 0; i < targets.size(); ++i)
         {
             clipboard.tracks.push_back({ clip });
-            clipboard.trackTypes.push_back(model::TrackType::Audio);
         }
 
         auto replaced     = selection;

@@ -9,11 +9,8 @@ add_executable(soundsplice_tests
   engine/ClipFadeTests.cpp
   engine/ClipChannelsTests.cpp
   engine/ClipEnvelopeTests.cpp
-  engine/MidiNoteTests.cpp
   engine/SequencerMathTests.cpp
   engine/MetronomeMathTests.cpp
-  engine/MidiCaptureTests.cpp
-  engine/MidiRecorderTests.cpp
   engine/RawPcmTests.cpp
   engine/PcmContainersTests.cpp
   engine/VarispeedTests.cpp
@@ -43,10 +40,8 @@ add_executable(soundsplice_tests
   engine/HqStretchTests.cpp
   engine/PitchDetectionTests.cpp
   engine/DereverbTests.cpp
-  engine/NoteOpsTests.cpp
   engine/OscillatorTests.cpp
   engine/AutomationCurveTests.cpp
-  engine/SessionMathTests.cpp
   engine/WaveshaperTests.cpp
   engine/PedalDspTests.cpp
   engine/MasteringDspTests.cpp
@@ -98,10 +93,9 @@ add_executable(soundsplice_tests
   model/MasteringPresetsTests.cpp
   model/AutomationLaneTests.cpp
   app/TimelineGeometryTests.cpp
-  app/PianoRollGeometryTests.cpp
+  app/ClipPreviewTests.cpp
   app/DockLayoutTreeTests.cpp
   app/WorkspaceLayoutsTests.cpp
-  app/ClipPreviewTests.cpp
   app/AudioSelectionTests.cpp
   app/WaveformPeaksTests.cpp
   app/SampleDetailTests.cpp
@@ -109,9 +103,7 @@ add_executable(soundsplice_tests
   app/SampleDrawTests.cpp
   app/WaveformScaleTests.cpp
   app/RenderProgressTests.cpp
-  app/ScrollFollowTests.cpp
   app/TrackSelectionTests.cpp
-  app/RecordSourceChoiceTests.cpp
   app/RecordingPlanTests.cpp
   app/AutomationGeometryTests.cpp
   app/AutomationLanesTests.cpp
@@ -154,7 +146,6 @@ if (SOUNDSPLICE_BUILD_APP)
     gui/DesignSnapshots.cpp
   gui/AudioFileTypesTests.cpp
     gui/IconsTests.cpp
-    gui/PianoRollTests.cpp
     gui/AutomationPaneTests.cpp
     gui/RetroRecorderTests.cpp
     gui/ShortcutsTests.cpp

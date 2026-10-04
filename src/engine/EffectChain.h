@@ -81,7 +81,7 @@ struct EffectProcessor
     /** How late this node's output is against its input, in samples, as
         things stand (a bypassed node adds none). Most add none at all; a
         lookahead limiter and many plugins do. The track compensates for it -
-        see InstrumentTrack's delay compensation. Audio thread safe. */
+        see MixerTrack's delay compensation. Audio thread safe. */
     virtual int latencySamples() const noexcept { return 0; }
 
     /** The detector signal for this block, for an effect that can listen to
@@ -602,7 +602,7 @@ inline std::unique_ptr<EffectProcessor> makeBuiltInNode(EffectKind kind)
 
     Built and prepared on the message thread — where allocating a delay line
     is fine — then handed to the audio thread whole, the same pointer-swap the
-    rest of the engine uses (Sequencer::ClipList, TrackAutomation).
+    rest of the engine uses (AudioFilePlayerNode::ClipList, TrackAutomation).
     A swap can't be observed half-applied, which matters more here than
     usual: half a chain is a very different sound from all of it.
 
@@ -690,7 +690,7 @@ private:
     One chain the audio thread owns and the message thread replaces whole:
     submit() hands a rebuilt chain over, adopt() takes it up at the start of
     a block, and collectRetired() frees the ones let go. The master chain's;
-    a track keeps the same three pieces in InstrumentTrack.
+    a track keeps the same three pieces in MixerTrack.
 */
 class ChainHandoff
 {

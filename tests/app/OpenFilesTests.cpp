@@ -48,22 +48,18 @@ TEST_CASE("Stepping through open files wraps at both ends", "[app][openfiles]")
     REQUIRE(files.neighbour(99, 1) == 10); // none showing: start at the top
 }
 
-TEST_CASE("Clips that are gone, or aren't audio, drop out of the list", "[app][openfiles]")
+TEST_CASE("Clips that are gone drop out of the list", "[app][openfiles]")
 {
     model::Song song;
     const int   trackId = model::addTrack(song, model::TrackType::Audio, "Vox").id;
 
     model::Clip audio;
-    audio.type      = model::ClipType::Audio;
     audio.audioFile = "take.wav";
     const int kept  = model::addClip(song, trackId, audio)->id;
     const int gone  = model::addClip(song, trackId, audio)->id;
 
-    model::Clip notes;
-    const int   instrument = model::addClip(song, trackId, notes)->id;
-
     OpenFiles files;
-    for (int id : { kept, gone, instrument })
+    for (int id : { kept, gone })
         files.open(id);
 
     song.tracks[0].clips.erase(song.tracks[0].clips.begin() + 1);

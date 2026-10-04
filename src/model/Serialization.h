@@ -20,7 +20,7 @@ namespace soundsplice::model
 
     Layout is flat and count-prefixed so it parses deterministically. Numbers use
     %.17g (exact IEEE double round-trip); string fields (track name, audio file,
-    scene name, plugin fields) are the rest of their line, so they may contain
+    plugin fields) are the rest of their line, so they may contain
     spaces — which is why a value that belongs with such a record lives in a
     record of its own after it (CLIPGAIN after CLIP, for instance).
 
@@ -42,9 +42,15 @@ namespace soundsplice::model
     are read into the chain: each one that was on becomes a slot, which plays
     exactly as it did (detail::legacyMasterEffects).
 
+    Version 4 removed MIDI: the CLIP line lost its type and pattern length,
+    and the PEDALS, NOTES, SCENES, SYNTH and SESSION records went. An earlier
+    file's are read past and dropped - its MIDI clips with them, and a MIDI
+    track becomes an empty audio track, which keeps its effects, routing and
+    automation.
+
     Looper-Audio's ".looper" files are not read.
 */
-inline constexpr int kFormatVersion = 3;
+inline constexpr int kFormatVersion = 4;
 
 namespace detail
 {
@@ -73,13 +79,11 @@ namespace detail
     inline void writeEffectSlot(std::ostringstream& out, const EffectSlot& slot);
     inline void writeEffectParams(std::ostringstream& out, const EffectSlot& slot);
 
-    /** One clip record: its header plus its note list. Shared by the
-        arrangement's clips and the session grid's, so the two can't drift. */
+    /** One clip's records. */
     inline void writeClip(std::ostringstream& out, const Clip& clip)
     {
-        out << "CLIP " << clip.id << " " << (int) clip.type << " "
-            << num(clip.startBeats) << " " << num(clip.lengthBeats) << " "
-            << num(clip.pattern.lengthBeats) << " " << clip.audioFile << "\n";
+        out << "CLIP " << clip.id << " " << num(clip.startBeats) << " " << num(clip.lengthBeats) << " "
+            << clip.audioFile << "\n";
 
         // Its own record rather than another field on CLIP: audioFile is a
         // rest-of-line field (a path may contain spaces), so nothing can
@@ -153,16 +157,6 @@ namespace detail
             for (const auto& slot : clip.effects)
                 writeEffectSlot(out, slot);
         }
-
-        out << "PEDALS " << clip.pattern.pedals.size() << "\n";
-        for (const auto& pedal : clip.pattern.pedals)
-            out << "PEDAL " << num(pedal.beat) << " " << (pedal.down ? 1 : 0) << "\n";
-
-        out << "NOTES " << clip.pattern.notes.size() << "\n";
-
-        for (const auto& note : clip.pattern.notes)
-            out << "NOTE " << num(note.startBeats) << " " << num(note.lengthBeats)
-                << " " << note.noteNumber << " " << num((double) note.velocity) << "\n";
     }
 
     inline std::string trimLeadingSpace(std::string s)
@@ -476,10 +470,6 @@ inline std::string serialize(const Song& song)
         out << "TEMPOAT " << detail::num(change.beat) << " " << detail::num(change.bpm) << " "
             << (change.ramp ? 1 : 0) << "\n";
 
-    out << "SCENES " << song.scenes.size() << "\n";
-    for (const auto& scene : song.scenes)
-        out << "SCENE " << scene.name << "\n"; // name is rest-of-line, so it may contain spaces
-
     out << "TRACKS " << song.tracks.size() << "\n";
 
     for (const auto& track : song.tracks)
@@ -533,38 +523,11 @@ inline std::string serialize(const Song& song)
                 detail::writePoint(out, "TAPT", pt);
         }
 
-        const auto& synth = track.synthSettings;
-        out << "SYNTH " << synth.waveform << " "
-            << detail::num((double) synth.attackMs) << " " << detail::num((double) synth.decayMs) << " "
-            << detail::num((double) synth.sustain) << " " << detail::num((double) synth.releaseMs) << " "
-            << (synth.filterEnabled ? 1 : 0) << " " << synth.filterMode << " "
-            << detail::num((double) synth.filterCutoff) << " " << detail::num((double) synth.filterResonance) << " "
-            << detail::num((double) synth.gainDb) << " "
-            << detail::num((double) synth.filterEnvAmount) << " "
-            << detail::num((double) synth.filterEnvAttackMs) << " "
-            << detail::num((double) synth.filterEnvDecayMs) << " "
-            << detail::num((double) synth.filterEnvSustain) << " "
-            << detail::num((double) synth.filterEnvReleaseMs) << " "
-            << (synth.subOscEnabled ? 1 : 0) << " "
-            << detail::num((double) synth.subOscLevel) << " "
-            << synth.unisonVoices << " "
-            << detail::num((double) synth.unisonDetuneCents) << "\n";
-
         // The effect chain, in order.
         out << "FXCHAIN " << track.effectChain.size() << "\n";
         for (const auto& slot : track.effectChain)
         {
             detail::writeEffectSlot(out, slot);
-        }
-
-        // The session grid's column for this track. Slots are written by index
-        // including the empty ones, since the index is the scene.
-        out << "SESSION " << track.sessionSlots.size() << "\n";
-        for (const auto& slot : track.sessionSlots)
-        {
-            out << "SSLOT " << (slot.hasClip ? 1 : 0) << "\n";
-            if (slot.hasClip)
-                detail::writeClip(out, slot.clip);
         }
 
         out << "CLIPS " << track.clips.size() << "\n";
@@ -632,6 +595,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
     };
 
     std::string rest;
+    int         version = 0; // read from the header below; the clip reader needs it
 
     /** One effect slot, the mirror of detail::writeEffectSlot. Returns why
         it couldn't be read, or nullptr. */
@@ -694,18 +658,27 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         return nullptr;
     };
 
-    /** One clip record, the mirror of detail::writeClip — used for both the
-        arrangement's clips and the session grid's, so the two can't drift
-        apart. Returns false if the record is missing or truncated. */
-    auto readClip = [&](Clip& clip) -> bool
+    /** One clip record, the mirror of detail::writeClip. Returns false if the
+        record is missing or truncated. @p isAudio is false for an earlier
+        file's MIDI clip, which the caller drops. */
+    auto readClip = [&](Clip& clip, bool& isAudio) -> bool
     {
+        isAudio = true;
         if (! readTagged("CLIP", rest))
             return false;
         {
             std::istringstream cs(rest);
-            int typeInt = 0;
-            cs >> clip.id >> typeInt >> clip.startBeats >> clip.lengthBeats >> clip.pattern.lengthBeats;
-            clip.type = typeInt == (int) ClipType::Audio ? ClipType::Audio : ClipType::Instrument;
+            if (version < 4)
+            {
+                int    typeInt = 1;
+                double patternLength = 0.0;
+                cs >> clip.id >> typeInt >> clip.startBeats >> clip.lengthBeats >> patternLength;
+                isAudio = typeInt == 1;
+            }
+            else
+            {
+                cs >> clip.id >> clip.startBeats >> clip.lengthBeats;
+            }
             std::string audio;
             std::getline(cs, audio);
             clip.audioFile = detail::trimLeadingSpace(std::move(audio));
@@ -847,38 +820,19 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             }
         }
 
-        if (readTagged("PEDALS", rest))
+        // An earlier file's sustain pedal and notes, which every clip carried.
+        if (version < 4)
         {
-            const int pedalCount = std::atoi(rest.c_str());
-            for (int i = 0; i < pedalCount; ++i)
-            {
-                if (! readTagged("PEDAL", rest))
-                    return false;
+            if (readTagged("PEDALS", rest))
+                for (int i = std::atoi(rest.c_str()); i > 0; --i)
+                    if (! readTagged("PEDAL", rest))
+                        return false;
 
-                std::istringstream ps(rest);
-                engine::PedalEvent pedal;
-                int down = 0;
-                ps >> pedal.beat >> down;
-                pedal.down = down != 0;
-                clip.pattern.pedals.push_back(pedal);
-            }
-        }
-
-        if (! readTagged("NOTES", rest))
-            return false;
-        const int noteCount = std::atoi(rest.c_str());
-
-        for (int k = 0; k < noteCount; ++k)
-        {
-            if (! readTagged("NOTE", rest))
+            if (! readTagged("NOTES", rest))
                 return false;
-            std::istringstream ns(rest);
-            engine::Note note;
-            double velocity = 0.0;
-            ns >> note.startBeats >> note.lengthBeats >> note.noteNumber >> velocity;
-            note.velocity = (float) velocity;
-
-            clip.pattern.notes.push_back(note);
+            for (int k = std::atoi(rest.c_str()); k > 0; --k)
+                if (! readTagged("NOTE", rest))
+                    return false;
         }
         return true;
     };
@@ -886,7 +840,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
     if (! readTagged("SOUNDSPLICE", rest))
         return fail("not a SoundSplice project file");
 
-    const int version = std::atoi(rest.c_str());
+    version = std::atoi(rest.c_str());
     if (version <= 0)
         return fail("unrecognised project format version");
     if (version > kFormatVersion)
@@ -1091,15 +1045,10 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
     std::sort(song.tempoChanges.begin(), song.tempoChanges.end(),
               [](const engine::TempoChange& a, const engine::TempoChange& b) { return a.beat < b.beat; });
 
+    // An earlier file's session-grid rows.
     if (readTagged("SCENES", rest))
-    {
-        const int sceneCount = std::atoi(rest.c_str());
-        for (int s = 0; s < sceneCount; ++s)
-        {
+        for (int s = std::atoi(rest.c_str()); s > 0; --s)
             if (! readTagged("SCENE", rest)) return fail("truncated scene list");
-            song.scenes.push_back(Scene { rest });
-        }
-    }
 
     if (! readTagged("TRACKS", rest)) return fail("missing track list");
     const int trackCount = std::atoi(rest.c_str());
@@ -1117,8 +1066,10 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             unsigned int colour = 0;
             ts >> track.id >> typeInt >> gain >> muteInt >> soloInt >> pan >> colour;
 
-            if (typeInt != (int) TrackType::Instrument && typeInt != (int) TrackType::Audio
-                && typeInt != (int) TrackType::Bus)
+            // 0 was a MIDI track, in an earlier file: an audio track now.
+            if (typeInt == 0 && version < 4)
+                typeInt = (int) TrackType::Audio;
+            if (typeInt != (int) TrackType::Audio && typeInt != (int) TrackType::Bus)
                 return fail("unknown track type");
 
             track.type   = (TrackType) typeInt;
@@ -1193,47 +1144,7 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             }
         }
 
-        if (readTagged("SYNTH", rest))
-        {
-            std::istringstream ss(rest);
-            const SynthSettings defaults;
-            int    waveform = defaults.waveform, filterEnabled = defaults.filterEnabled ? 1 : 0;
-            int    filterMode = defaults.filterMode;
-            double attackMs = defaults.attackMs, decayMs = defaults.decayMs;
-            double sustain = defaults.sustain, releaseMs = defaults.releaseMs;
-            double filterCutoff = defaults.filterCutoff, filterResonance = defaults.filterResonance;
-            double gainDb = defaults.gainDb;
-            double filterEnvAmount = defaults.filterEnvAmount, filterEnvAttackMs = defaults.filterEnvAttackMs;
-            double filterEnvDecayMs = defaults.filterEnvDecayMs, filterEnvSustain = defaults.filterEnvSustain;
-            double filterEnvReleaseMs = defaults.filterEnvReleaseMs;
-            int    subOscEnabled = defaults.subOscEnabled ? 1 : 0;
-            double subOscLevel = defaults.subOscLevel;
-            int    unisonVoices = defaults.unisonVoices;
-            double unisonDetuneCents = defaults.unisonDetuneCents;
-            ss >> waveform >> attackMs >> decayMs >> sustain >> releaseMs
-               >> filterEnabled >> filterMode >> filterCutoff >> filterResonance >> gainDb
-               >> filterEnvAmount >> filterEnvAttackMs >> filterEnvDecayMs >> filterEnvSustain >> filterEnvReleaseMs
-               >> subOscEnabled >> subOscLevel >> unisonVoices >> unisonDetuneCents;
-            track.synthSettings.waveform           = waveform;
-            track.synthSettings.attackMs           = (float) attackMs;
-            track.synthSettings.decayMs            = (float) decayMs;
-            track.synthSettings.sustain            = (float) sustain;
-            track.synthSettings.releaseMs          = (float) releaseMs;
-            track.synthSettings.filterEnabled      = filterEnabled != 0;
-            track.synthSettings.filterMode         = filterMode;
-            track.synthSettings.filterCutoff       = (float) filterCutoff;
-            track.synthSettings.filterResonance    = (float) filterResonance;
-            track.synthSettings.gainDb             = (float) gainDb;
-            track.synthSettings.filterEnvAmount    = (float) filterEnvAmount;
-            track.synthSettings.filterEnvAttackMs  = (float) filterEnvAttackMs;
-            track.synthSettings.filterEnvDecayMs   = (float) filterEnvDecayMs;
-            track.synthSettings.filterEnvSustain   = (float) filterEnvSustain;
-            track.synthSettings.filterEnvReleaseMs = (float) filterEnvReleaseMs;
-            track.synthSettings.subOscEnabled      = subOscEnabled != 0;
-            track.synthSettings.subOscLevel        = (float) subOscLevel;
-            track.synthSettings.unisonVoices       = unisonVoices;
-            track.synthSettings.unisonDetuneCents  = (float) unisonDetuneCents;
-        }
+        readTagged("SYNTH", rest); // an earlier file's synth settings
 
         if (readTagged("FXCHAIN", rest))
         {
@@ -1247,18 +1158,17 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
             }
         }
 
+        // An earlier file's session grid column, read past.
         if (readTagged("SESSION", rest))
         {
-            const int slotCount = std::atoi(rest.c_str());
-            for (int s = 0; s < slotCount; ++s)
+            for (int s = std::atoi(rest.c_str()); s > 0; --s)
             {
                 if (! readTagged("SSLOT", rest)) return fail("truncated session grid");
 
-                SessionSlot slot;
-                slot.hasClip = std::atoi(rest.c_str()) != 0;
-                if (slot.hasClip && ! readClip(slot.clip))
+                Clip discarded;
+                bool isAudio = true;
+                if (std::atoi(rest.c_str()) != 0 && ! readClip(discarded, isAudio))
                     return fail("truncated session clip");
-                track.sessionSlots.push_back(std::move(slot));
             }
         }
 
@@ -1269,9 +1179,11 @@ inline bool deserialize(const std::string& text, Song& out, std::string* errorOu
         for (int j = 0; j < clipCount; ++j)
         {
             Clip clip;
-            if (! readClip(clip))
+            bool isAudio = true;
+            if (! readClip(clip, isAudio))
                 return fail("truncated clip list");
-            track.clips.push_back(std::move(clip));
+            if (isAudio)
+                track.clips.push_back(std::move(clip));
         }
 
         song.tracks.push_back(std::move(track));

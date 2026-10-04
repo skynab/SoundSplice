@@ -42,7 +42,7 @@ namespace soundsplice::scripting
 struct TrackInfo
 {
     std::string name;
-    std::string type; // "audio", "midi", "bus", ...
+    std::string type; // "audio" or "bus"
     int         clips   = 0;
     double      volumeDb = 0.0;
     double      pan      = 0.0;

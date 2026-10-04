@@ -3,19 +3,17 @@
 A cross-platform **audio editor** written in C++, in the spirit of Audacity: record, import,
 edit and process audio on a multi-track timeline, then export the result.
 
-> SoundSplice started from Looper-Audio, a loop-centric DAW, and is being stripped down to a
-> focused editor. Some of that heritage is still here — MIDI clips, a basic synth and the Session
-> view are kept for now while the Session view is reviewed. Looper-Audio's `.looper` project files
-> are not read; [`docs/PLAN.md`](docs/PLAN.md) is its original build plan, kept for reference.
+> SoundSplice started from Looper-Audio, a loop-centric DAW, and has been stripped down to a
+> focused audio editor: its MIDI, synth and Session view are gone. Looper-Audio's `.looper`
+> project files are not read; [`docs/PLAN.md`](docs/PLAN.md) is its original build plan, kept for reference.
 
 ## Features
 
-- **Tracks** — audio tracks holding file-backed clips, and instrument tracks holding MIDI clips
-  played by a built-in synth. Clips can be moved, resized, copied, duplicated and dragged between
-  compatible tracks on a zoomable timeline.
+- **Tracks** — audio tracks holding file-backed clips, and bus tracks that mix what is routed or
+  sent to them. Clips can be moved, resized, copied, duplicated and dragged between audio tracks
+  on a zoomable timeline.
 - **Import and record** — drag audio files onto the timeline or import them from the file browser;
-  record from an audio input (with count-in, metronome and input monitoring) or from a MIDI
-  controller. MIDI files can be imported and exported.
+  record from an audio input (with count-in, metronome and input monitoring).
 - **Audio editing** — a waveform editor with cut, copy, paste, delete, trim to selection, split,
   silence, fade in/out, reverse, normalize, per-clip gain, speed and pitch changes, noise reduction
   (capture a noise print, then reduce), and applying an effect chain to a selection. Edits write a
@@ -28,16 +26,15 @@ edit and process audio on a multi-track timeline, then export the result.
 - **Mastering and analysis** — a master-bus mastering rack (EQ, exciter, widener, reverb,
   maximizer) with presets, and a spectrum analyser for a selection.
 - **Export** — WAV, AIFF, FLAC, Ogg Vorbis or MP3, as a full mix or as per-track stems.
-- **Workspace** — dockable panes you can rearrange by dragging tabs, with built-in *Music Creation*
-  and *Audio Editing* layouts, and undo/redo for every document edit.
-- **Session view** — a clip-launching grid of scenes, kept for review.
+- **Workspace** — dockable panes you can rearrange by dragging tabs, with built-in *Multitrack*
+  and *Waveform* layouts, and undo/redo for every document edit.
 
 Projects are saved as `.soundsplice` files.
 
 ## Tech stack
 
 - **C++20**, **CMake** (≥ 3.24), dependencies via **CPM.cmake**
-- **JUCE 8** for audio I/O, MIDI, plugin hosting and GUI
+- **JUCE 8** for audio I/O, plugin hosting and GUI
 - **LAME** (built from source) for MP3 export
 - **Catch2 v3** for unit tests
 - CI on macOS, Windows and Linux via GitHub Actions
@@ -143,7 +140,7 @@ and build again.
 
 ```
 src/rt/     Lock-free real-time primitives (no JUCE dependency)
-src/engine/ Headless audio engine: transport, sequencer, tracks, effects, export, recording
+src/engine/ Headless audio engine: transport, tracks, effects, export, recording
 src/model/  Project document: Song, Track, Clip, undo history, save/load (no JUCE)
 src/app/    Application shell and UI panes
 tools/      soundsplice-cli — convert, analyze, apply a macro, render a project;

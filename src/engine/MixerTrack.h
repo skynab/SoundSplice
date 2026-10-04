@@ -11,9 +11,6 @@
 #include "engine/EffectChain.h"
 #include "engine/MixRouting.h"
 #include "engine/ProcessContext.h"
-#include "engine/Sequencer.h"
-#include "engine/SessionPlayer.h"
-#include "engine/SynthInstrumentNode.h"
 
 namespace soundsplice::engine
 {
@@ -33,17 +30,13 @@ inline void applyEffectAutomation(EffectChain& chain, const TrackAutomation& aut
 }
 
 /**
-    One mixer channel: a synth driven by its own sequencer, *and* an audio-clip
-    player, both summed into the same per-track gain, pan, mute, solo and
-    post-gain peak metering. A track only uses whichever of these
-    it's been given content for — an Instrument-type track gets a pattern for
-    the synth, an Audio-type track gets a decoded clip via audioPlayer — but
-    both nodes always exist on every pool slot, so there's no track-type
-    branching in most of the engine.
+    One mixer channel: an audio-clip player, or for a bus what reaches its
+    input, through the track's effects and into its gain, pan, mute, solo and
+    post-gain peak metering.
 
     Tracks live in a fixed, pre-allocated pool inside the engine, so
     activating/deactivating a track is just an atomic flag — there is no real-time
-    graph surgery. To apply per-track gain the synth renders into a scratch buffer
+    graph surgery. To apply per-track gain the clips render into a scratch buffer
     which is then summed into the mix. The same render() is used by the live
     engine and the offline renderer, so the offline bounce genuinely exercises
     this path (gain included).
@@ -53,7 +46,7 @@ inline void applyEffectAutomation(EffectChain& chain, const TrackAutomation& aut
     track goes silent if it's muted, or if some other track is soloed and this one
     isn't — the standard "solo overrides, mute always wins" behaviour.
 */
-struct InstrumentTrack
+struct MixerTrack
 {
     /** Where one block of this track goes (see renderRouted): its output -
         the master or a bus's input, or nowhere - and its sends, and whether
@@ -78,9 +71,6 @@ struct InstrumentTrack
         bool                                                           keepKey = false;
     };
 
-    SynthInstrumentNode      synth;
-    Sequencer                sequencer;
-    SessionPlayer            session;
     AudioFilePlayerNode      audioPlayer;
 
     // This track's insert chain, applied to its own output before the fader.
@@ -111,7 +101,6 @@ struct InstrumentTrack
     std::array<std::atomic<int>, mixrouting::kMaxKeys> keySource {};
     std::atomic<int>         keyCount    { 0 };
     juce::AudioBuffer<float> keyOutput; // this block's output, for tracks keyed from it
-    juce::MidiBuffer         trackMidi;
     juce::AudioBuffer<float> scratch;
 
     std::atomic<float>       channelPeak_[2] {};
@@ -127,7 +116,7 @@ struct InstrumentTrack
     rt::SpscRingBuffer<TrackAutomation*> automationInbox_   { 8 };  // message -> audio
     rt::SpscRingBuffer<TrackAutomation*> automationReclaim_ { 16 }; // audio -> message
 
-    ~InstrumentTrack()
+    ~MixerTrack()
     {
         collectRetiredAutomation();
         delete automation_;
@@ -179,9 +168,7 @@ struct InstrumentTrack
 
     void prepare(double sampleRate, int blockSize)
     {
-        synth.prepare(sampleRate, blockSize);
         audioPlayer.prepare(sampleRate, blockSize);
-        trackMidi.ensureSize(2048);
         scratch.setSize(2, juce::jmax(1, blockSize));
         busInput.setSize(2, juce::jmax(1, blockSize));
         busInput.clear();
@@ -310,23 +297,20 @@ public:
         delayed so it lands as late as @p alignToLatency - the latest any
         track's effects make it - and so lines up with every other track.
         Unrouted: the offline renderer and the tests' way in. */
-    void render(juce::AudioBuffer<float>& mix,
-                const juce::MidiBuffer& liveMidi,
-                const ProcessContext& context, bool receivesLiveMidi, bool anySoloActive,
-                double launchQuantumSamples = 0.0, int alignToLatency = 0)
+    void render(juce::AudioBuffer<float>& mix, const ProcessContext& context, bool anySoloActive,
+                int alignToLatency = 0)
     {
         Destinations to;
         to.output  = &mix;
         to.audible = ! anySoloActive || solo.load(std::memory_order_relaxed);
         to.delay   = alignToLatency - chainLatency();
-        renderRouted(liveMidi, context, receivesLiveMidi, launchQuantumSamples, to);
+        renderRouted(context, to);
     }
 
     /** Audio thread: render this track into @p to's output and sends - the
         master, or the inputs of the buses it feeds. A bus starts from what
         has reached its busInput. */
-    void renderRouted(const juce::MidiBuffer& liveMidi, const ProcessContext& context, bool receivesLiveMidi,
-                      double launchQuantumSamples, const Destinations& to)
+    void renderRouted(const ProcessContext& context, const Destinations& to)
     {
         TrackAutomation* incoming = nullptr;
         while (automationInbox_.pop(incoming))
@@ -335,21 +319,6 @@ public:
                 automationReclaim_.push(automation_); // rare drop-on-full leaks until dtor
             automation_ = incoming;
         }
-
-        trackMidi.clear();
-
-        // A launched session clip takes the track over completely: the
-        // arrangement's clips are ignored while one is engaged, and its
-        // sequencer is reset so nothing it left sounding hangs behind the
-        // session clip. Stopping the session hands the track back. Summing
-        // both would have no musical meaning.
-        if (session.renderBlock(trackMidi, context, launchQuantumSamples))
-            sequencer.reset(trackMidi);
-        else
-            sequencer.renderBlock(trackMidi, context);
-
-        if (receivesLiveMidi)
-            trackMidi.addEvents(liveMidi, 0, context.numSamples, 0);
 
         const bool audible = ! muted.load(std::memory_order_relaxed) && to.audible;
 
@@ -368,8 +337,7 @@ public:
         // No reallocation: scratch was prepared to the maximum block size.
         scratch.setSize(2, juce::jmax(1, numSamples), false, false, true);
         scratch.clear();
-        synth.process(scratch, trackMidi, context);
-        audioPlayer.process(scratch, trackMidi, context); // adds in; midi is ignored
+        audioPlayer.process(scratch, context); // adds in
         if (isBus.load(std::memory_order_relaxed))
             for (int ch = 0; ch < juce::jmin(scratch.getNumChannels(), busInput.getNumChannels()); ++ch)
                 scratch.addFrom(ch, 0, busInput, ch, 0, juce::jmin(numSamples, busInput.getNumSamples()));

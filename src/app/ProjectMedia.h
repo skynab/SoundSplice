@@ -56,8 +56,8 @@ inline std::string pathOf(const juce::File& file)
     return file.getFullPathName().toStdString();
 }
 
-/** Calls @p fn with every audio clip's path in @p song, arrangement and
-    session grid alike, and every convolution reverb's impulse response:
+/** Calls @p fn with every audio clip's path in @p song, and every
+    convolution reverb's impulse response:
     `std::string&` for a mutable song, `const std::string&` for a const one.
     A response counts as the project's audio, so one kept in the project's
     folder is stored relative to it and never swept away as unused; one the
@@ -68,12 +68,8 @@ void forEachAudioPath(SongType& song, Fn&& fn)
     for (auto& track : song.tracks)
     {
         for (auto& clip : track.clips)
-            if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty())
+            if (! clip.audioFile.empty())
                 fn(clip.audioFile);
-
-        for (auto& slot : track.sessionSlots)
-            if (slot.hasClip && slot.clip.type == model::ClipType::Audio && ! slot.clip.audioFile.empty())
-                fn(slot.clip.audioFile);
 
         for (auto& effect : track.effectChain)
             if (! effect.convolution.irFile.empty())

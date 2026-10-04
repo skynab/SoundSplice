@@ -52,7 +52,7 @@ inline std::vector<TrackWord> wordsOn(const Song& song, int trackIndex)
 
     for (const auto& clip : song.tracks[(size_t) trackIndex].clips)
     {
-        if (clip.type != ClipType::Audio || clip.warp || clip.transcript.empty())
+        if (clip.warp || clip.transcript.empty())
             continue;
         const double clipStart = clock.secondsAt(clip.startBeats);
         const double length    = clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);

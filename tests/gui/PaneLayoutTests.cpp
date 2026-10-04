@@ -9,7 +9,6 @@
 #include <app/FileBrowserPanel.h>
 #include <app/MixerStrip.h>
 #include <app/OpenFilesPane.h>
-#include <app/SessionView.h>
 
 using namespace soundsplice;
 
@@ -30,26 +29,6 @@ namespace
         { 0, 0, 260, 160 },
         { 0, 0, 140, 90 },
     };
-
-    model::Song songWithEverything()
-    {
-        model::Song song;
-        const int synth  = model::addTrack(song, model::TrackType::Instrument, "Synth").id;
-        const int bass   = model::addTrack(song, model::TrackType::Instrument, "Bass").id;
-        model::addTrack(song, model::TrackType::Audio, "Vox");
-
-        model::Clip clip;
-        clip.type                = model::ClipType::Instrument;
-        clip.lengthBeats         = 4.0;
-        clip.pattern.lengthBeats = 4.0;
-        model::addClip(song, synth, clip);
-        model::addClip(song, bass, clip);
-
-        model::addScene(song, "Intro");
-        model::addScene(song, "Chorus");
-        model::setSessionClip(song, 0, 0, clip);
-        return song;
-    }
 
     std::vector<model::EffectSlot> chainOfEveryKind()
     {
@@ -134,23 +113,6 @@ TEST_CASE("The audio editor is usable with no clip selected", "[gui][panes]")
     pane.resized();
 
     paneaudit::requireUsable(pane, "AudioEditorPane with no clip");
-}
-
-TEST_CASE("The session view lays out usably at every size", "[gui][panes]")
-{
-    JuceFixture fixture;
-
-    for (const auto& size : kSizes)
-    {
-        SessionView view;
-        view.setVisible(true);
-        view.setBounds(size);
-        view.setSong(songWithEverything());
-        view.setPlayingSlots({ 0, -1, -1 });
-        view.resized();
-
-        paneaudit::requireUsable(view, "SessionView at " + size.toString());
-    }
 }
 
 TEST_CASE("A mixer strip lays out usably at every size", "[gui][panes]")

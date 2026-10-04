@@ -15,10 +15,9 @@ namespace soundsplice::engine
 /**
     Plays a track's audio clips, slaved to the transport: each clip plays only
     within its own [startBeats, startBeats + lengthBeats) window (silence
-    outside every clip's window), the same clip-list scheduling Sequencer
-    applies to MIDI clips. Unlike a MIDI pattern, a clip never loops within
-    its window — once the file's samples run out it stays silent for the
-    rest of that window. File/device sample-rate differences are corrected
+    outside every clip's window). A clip never loops within its window —
+    once the file's samples run out it stays silent for the rest of that
+    window. File/device sample-rate differences are corrected
     with linear interpolation.
 
     Clip-list hand-off is lock-free and allocation-free on the audio thread:
@@ -88,7 +87,7 @@ public:
     }
 
     // ---- audio thread ----
-    void process(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midi*/, const ProcessContext& context) override
+    void process(juce::AudioBuffer<float>& buffer, const ProcessContext& context) override
     {
         ClipList* incoming = nullptr;
         while (inbox_.pop(incoming))

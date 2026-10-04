@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <engine/AudioFilePlayerNode.h>
-#include <engine/InstrumentTrack.h>
+#include <engine/MixerTrack.h>
 
 #include <cmath>
 
@@ -48,8 +48,7 @@ namespace
             context.transport.ppqAtBlockEnd   = (double) (at + kBlock) / samplesPerBeat;
 
             juce::AudioBuffer<float> view(out.getArrayOfWritePointers(), 2, at, kBlock);
-            juce::MidiBuffer         midi;
-            player.process(view, midi, context);
+            player.process(view, context);
         }
 
         return out;
@@ -210,7 +209,7 @@ TEST_CASE("Delay compensation lines a track with a latent effect up with one wit
 
     const auto peakAt = [&](bool limited, int alignTo, int& latencyOut)
     {
-        InstrumentTrack track;
+        MixerTrack track;
         track.prepare(kRate, kBlock);
         track.active.store(true);
 
@@ -247,8 +246,7 @@ TEST_CASE("Delay compensation lines a track with a latent effect up with one wit
             context.transport.ppqAtBlockEnd   = (double) (at + kBlock) / samplesPerBeat;
 
             juce::AudioBuffer<float> view(out.getArrayOfWritePointers(), 2, at, kBlock);
-            juce::MidiBuffer         midi;
-            track.render(view, midi, context, false, false, 0.0, alignTo);
+            track.render(view, context, false, alignTo);
         }
 
         int peak = 0;
@@ -411,8 +409,7 @@ TEST_CASE("An audio clip after a tempo change plays where the map puts it, at it
         context.transport.bpm             = map.tempoAtBeat(context.transport.ppqPosition);
 
         juce::AudioBuffer<float> view(out.getArrayOfWritePointers(), 2, at, kBlock);
-        juce::MidiBuffer         midi;
-        player.process(view, midi, context);
+        player.process(view, context);
     }
 
     REQUIRE(out.getSample(0, 143998) == 0.0f);

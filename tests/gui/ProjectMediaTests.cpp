@@ -32,21 +32,18 @@ namespace
         return file;
     }
 
-    model::Song songUsing(const juce::File& arranged, const juce::File& inSession)
+    model::Song songUsing(const juce::File& first, const juce::File& second)
     {
         model::Song song;
         auto& track = model::addTrack(song, model::TrackType::Audio, "Take");
 
         model::Clip clip;
-        clip.type      = model::ClipType::Audio;
-        clip.audioFile = media::pathOf(arranged);
+        clip.audioFile = media::pathOf(first);
         track.clips.push_back(clip);
 
-        model::SessionSlot slot;
-        slot.hasClip        = true;
-        slot.clip           = clip;
-        slot.clip.audioFile = media::pathOf(inSession);
-        track.sessionSlots.push_back(slot);
+        clip.startBeats = 8.0;
+        clip.audioFile  = media::pathOf(second);
+        track.clips.push_back(clip);
 
         return song;
     }
@@ -90,7 +87,7 @@ TEST_CASE("A project moved with its audio folder still finds its audio", "[gui][
 
     const auto moved = media::withResolvedPaths(loaded, there.getChildFile("song.soundsplice"));
     REQUIRE(media::fileFromPath(moved.tracks[0].clips[0].audioFile) == there.getChildFile("song Audio/a.wav"));
-    REQUIRE(media::fileFromPath(moved.tracks[0].sessionSlots[0].clip.audioFile)
+    REQUIRE(media::fileFromPath(moved.tracks[0].clips[1].audioFile)
             == there.getChildFile("song Audio/b.wav"));
 }
 

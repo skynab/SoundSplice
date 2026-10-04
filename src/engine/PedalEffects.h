@@ -263,7 +263,7 @@ private:
 
     bpm arrives through setBpm() rather than a constructor argument or a
     per-process() parameter: it is pushed once per block by whatever holds
-    the transport (see InstrumentTrack::render), the same way enabled/rate/
+    the transport (see MixerTrack::render), the same way enabled/rate/
     depth are pushed from the message thread, because it can change between
     blocks exactly like a knob can. Every other node in the chain ignores
     setBpm() (see EffectProcessor's default), since tempo has no meaning to a

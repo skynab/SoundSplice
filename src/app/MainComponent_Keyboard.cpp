@@ -35,7 +35,7 @@ juce::String MainComponent::describeTrack(int index) const
     const auto& track = song.tracks[(size_t) index];
     juce::String text = "Track " + juce::String(index + 1) + " of " + juce::String((int) song.tracks.size()) + ", "
                       + juce::String(track.name) + ", "
-                      + (track.type == model::TrackType::Audio ? "audio" : track.type == model::TrackType::Bus ? "bus" : "MIDI");
+                      + (track.type == model::TrackType::Bus ? "bus" : "audio");
     if (track.type != model::TrackType::Bus)
         text << ", " << (int) track.clips.size() << (track.clips.size() == 1 ? " clip" : " clips");
     if (track.muted)
@@ -65,8 +65,7 @@ juce::String MainComponent::describeClip(int trackIndex, int clipIndex) const
         if (other.startBeats < clip.startBeats)
             ++place;
 
-    const auto name = clip.type == model::ClipType::Audio ? juce::File(clip.audioFile).getFileNameWithoutExtension()
-                                                          : juce::String("notes");
+    const auto name = juce::File(clip.audioFile).getFileNameWithoutExtension();
     return "Clip " + juce::String(place) + " of " + juce::String((int) clips.size())
          + (name.isEmpty() ? juce::String() : ", " + name)
          + ", at " + secondsText(clock.secondsAt(clip.startBeats))

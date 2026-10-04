@@ -24,12 +24,7 @@ namespace channelops
         void forEachAudioClip(Track& track, Fn&& fn)
         {
             for (auto& clip : track.clips)
-                if (clip.type == ClipType::Audio)
-                    fn(clip);
-
-            for (auto& slot : track.sessionSlots)
-                if (slot.hasClip && slot.clip.type == ClipType::Audio)
-                    fn(slot.clip);
+                fn(clip);
         }
 
         /** What a clip plays once only one side of what it played is kept. */
@@ -111,16 +106,12 @@ namespace channelops
             False if a clip pair isn't a left and right half. */
         inline bool asLeftHalf(const Track& left, Track right, Track& out)
         {
-            if (right.clips.size() != left.clips.size() || right.sessionSlots.size() != left.sessionSlots.size())
+            if (right.clips.size() != left.clips.size())
                 return false;
 
             const auto match = [](const Clip& l, Clip& r)
             {
-                if (l.type != r.type)
-                    return false;
                 r.id = l.id;
-                if (l.type != ClipType::Audio)
-                    return true;
                 engine::ClipChannels joined;
                 if (! joinedSides(l.channels, r.channels, joined))
                     return false;
@@ -130,11 +121,6 @@ namespace channelops
 
             for (size_t i = 0; i < left.clips.size(); ++i)
                 if (! match(left.clips[i], right.clips[i]))
-                    return false;
-
-            for (size_t i = 0; i < left.sessionSlots.size(); ++i)
-                if (left.sessionSlots[i].hasClip && right.sessionSlots[i].hasClip
-                    && ! match(left.sessionSlots[i].clip, right.sessionSlots[i].clip))
                     return false;
 
             right.id   = left.id;
@@ -173,18 +159,8 @@ namespace channelops
         auto&       left  = song.tracks[(size_t) index];
         const auto& right = song.tracks[(size_t) index + 1];
 
-        const auto join = [](Clip& l, const Clip& r)
-        {
-            if (l.type == ClipType::Audio)
-                detail::joinedSides(l.channels, r.channels, l.channels);
-        };
-
         for (size_t i = 0; i < left.clips.size(); ++i)
-            join(left.clips[i], right.clips[i]);
-
-        for (size_t i = 0; i < left.sessionSlots.size(); ++i)
-            if (left.sessionSlots[i].hasClip)
-                join(left.sessionSlots[i].clip, right.sessionSlots[i].clip);
+            detail::joinedSides(left.clips[i].channels, right.clips[i].channels, left.clips[i].channels);
 
         left.name = detail::withoutSideSuffix(left.name);
         song.tracks.erase(song.tracks.begin() + index + 1);

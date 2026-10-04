@@ -14,7 +14,6 @@ namespace
         const int id = addTrack(song, TrackType::Audio, "Voice").id;
 
         Clip clip;
-        clip.type                = ClipType::Audio;
         clip.audioFile           = "voice.wav";
         clip.lengthBeats         = 10.0;
         clip.sourceOffsetSeconds = 1.0;

@@ -21,8 +21,7 @@ MainComponent::EffectChainRef MainComponent::editedChainRef() const
         return { selectedTrackIndex_, -1 };
 
     const auto& clips = song.tracks[(size_t) selectedTrackIndex_].clips;
-    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) clips.size()
-        || clips[(size_t) selectedClipIndex_].type != model::ClipType::Audio)
+    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) clips.size())
         return {};
     return { selectedTrackIndex_, selectedClipIndex_ };
 }
@@ -65,8 +64,7 @@ void MainComponent::pushEffectSlotToEngine(const EffectChainRef& ref, int slotIn
 }
 
 /** Shows the selected track's insert effects, its selected clip's own, or
-    the master's. Applies to *every* track type — an audio track wants a
-    filter as much as an instrument one does. */
+    the master's. Applies to buses as much as to audio tracks. */
 void MainComponent::refreshEffectChainForSelected()
 {
     if (effectChain_.masterScope())

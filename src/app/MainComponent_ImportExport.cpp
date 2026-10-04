@@ -9,7 +9,7 @@
 #include "MainComponentInternal.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
-// Getting audio and MIDI in and out: preview, import, and export of mixes and stems.
+// Getting audio in and out: preview, import, and export of mixes and stems.
 
 namespace soundsplice
 {
@@ -44,42 +44,6 @@ void MainComponent::previewAudioFile(const juce::File& file)
                           juce::dontSendNotification);
     else
         showError("Could not load: " + file.getFileName());
-}
-
-void MainComponent::importMidiFileDialog()
-{
-    chooser_ = std::make_unique<juce::FileChooser>("Import MIDI file", juce::File{}, "*.mid;*.midi");
-    const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-
-    chooser_->launchAsync(flags, [this](const juce::FileChooser& fc)
-    {
-        const auto file = fc.getResult();
-        if (file == juce::File{})
-            return;
-
-        engine::MidiImportResult result;
-        history_.edit("Import MIDI", [&file, &result](model::Song& s)
-        {
-            result = engine::importMidiFile(file, s);
-        });
-
-        if (! result.ok)
-        {
-            showError("Could not import: " + file.getFileName());
-            return;
-        }
-
-        syncEngineTracks();
-        arrangementView_.setSong(history_.current());
-        updateMixerStrips();
-        updateEditingLabel();
-
-        auto msg = "Imported " + juce::String(result.tracksImported) + " track(s) at "
-                 + juce::String(history_.current().bpm, 1) + " BPM";
-        if (result.extraTempoEventsIgnored > 0)
-            msg += " (" + juce::String(result.extraTempoEventsIgnored) + " further tempo change(s) not imported)";
-        showStatus(msg);
-    });
 }
 
 void MainComponent::importRawDataDialog()
@@ -212,30 +176,6 @@ void MainComponent::importRawData(const juce::File& source, const engine::RawPcm
     renderJob_ = app::OfflineRenderJob::launch("Import Raw Data", std::move(work), std::move(onFinished));
 }
 
-void MainComponent::exportMidiFileDialog()
-{
-    chooser_ = std::make_unique<juce::FileChooser>("Export MIDI file", juce::File{}, "*.mid");
-    const auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
-                      | juce::FileBrowserComponent::warnAboutOverwriting;
-
-    chooser_->launchAsync(flags, [this](const juce::FileChooser& fc)
-    {
-        auto file = fc.getResult();
-        if (file == juce::File{})
-            return;
-        file = file.withFileExtension("mid");
-
-        const bool ok = engine::exportMidiFile(file, history_.current());
-        if (ok)
-            showStatus("Exported: " + file.getFileName());
-        else
-            showError("MIDI export failed (no instrument track has any notes)");
-    });
-}
-
-/** Imports an audio file onto a brand-new Audio track (as its one clip, at
-    beat 0), so it actually plays back as part of the mix — unlike "Import
-    Audio..." above, which only feeds the disconnected global preview player. */
 void MainComponent::importAudioToNewTrack()
 {
     if (trackCount() >= engine_.maxTracks())
@@ -265,9 +205,9 @@ void MainComponent::importAudioToNewTrack()
     Dropping onto an existing Audio-type track adds a clip there instead of
     creating a new track — the track keeps its single-clip unbounded window
     if it still only has one clip, or gets real per-clip length gating (see
-    AudioFilePlayerNode) the moment it has more than one, exactly like
-    instrument clips. Any other drop target (empty space, or a non-Audio
-    track) creates a brand-new Audio track instead, as it always has. */
+    AudioFilePlayerNode) the moment it has more than one. Any other drop
+    target (empty space, or a bus) creates a brand-new Audio track instead,
+    as it always has. */
 void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBeats,
                                           int targetTrackIndex)
 {
@@ -303,7 +243,6 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
 
             model::Clip clip;
             clip.id          = model::allocateId(s);
-            clip.type        = model::ClipType::Audio;
             clip.startBeats  = juce::jmax(0.0, startBeats);
             clip.lengthBeats = lengthBeats;
             clip.audioFile   = path;
@@ -333,7 +272,6 @@ void MainComponent::importAudioFileAtBeat(const juce::File& file, double startBe
 
         model::Clip clip;
         clip.id          = model::allocateId(s);
-        clip.type        = model::ClipType::Audio;
         clip.startBeats  = juce::jmax(0.0, startBeats);
         clip.lengthBeats = lengthBeats;
         clip.audioFile   = path;
@@ -486,7 +424,7 @@ void MainComponent::addReportDetails(std::vector<ExportTask>& tasks) const
         {
             app::renderreport::ClipLine line;
             line.track         = juce::String(clip.track);
-            line.file          = clip.audioFile.empty() ? juce::String("(notes)") : juce::File(clip.audioFile).getFileName();
+            line.file          = juce::File(clip.audioFile).getFileName();
             line.startSeconds  = clip.startSeconds;
             line.lengthSeconds = clip.lengthSeconds;
             task.clips.push_back(line);
@@ -1109,7 +1047,6 @@ void MainComponent::mixAndRenderToNewTrack()
 
             model::Clip clip;
             clip.id          = model::allocateId(s);
-            clip.type        = model::ClipType::Audio;
             clip.startBeats  = startBeats;
             clip.lengthBeats = lengthBeats;
             clip.audioFile   = path;
@@ -1563,9 +1500,7 @@ void MainComponent::refreshTranscriptPane(bool force)
         empty = "Select a track to see what's said on it.";
     else
     {
-        bool hasAudio = false;
-        for (const auto& clip : song.tracks[(size_t) selectedTrackIndex_].clips)
-            hasAudio = hasAudio || clip.type == model::ClipType::Audio;
+        const bool hasAudio = ! song.tracks[(size_t) selectedTrackIndex_].clips.empty();
         empty = hasAudio ? "Transcribe this track to edit its audio as text: delete words to cut them, "
                            "find the ums and long pauses to take out. It runs on this computer."
                          : "This track has no audio to transcribe.";
@@ -1597,7 +1532,7 @@ void MainComponent::transcribeSelectedTrack()
 
     std::vector<std::string> files;
     for (const auto& clip : song.tracks[(size_t) selectedTrackIndex_].clips)
-        if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty() && ! clip.warp
+        if (! clip.audioFile.empty() && ! clip.warp
             && std::find(files.begin(), files.end(), clip.audioFile) == files.end())
             files.push_back(clip.audioFile);
     if (files.empty())

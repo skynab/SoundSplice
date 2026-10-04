@@ -122,7 +122,6 @@ TEST_CASE("Design snapshots", "[.snapshot]")
             for (int c = 0; c < 2; ++c)
             {
                 model::Clip clip;
-                clip.type        = model::ClipType::Audio;
                 clip.audioFile   = audio.getFullPathName().toStdString();
                 clip.startBeats  = 2.0 + c * 18.0 + i * 3.0;
                 clip.lengthBeats = 12.0;

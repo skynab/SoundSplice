@@ -1,5 +1,5 @@
-# Headless offline-render smoke tool: renders a demo pattern to a WAV with no
-# audio device, so the synth + sequencer audio path can be verified in CI / by hand.
+# Headless offline-render smoke tool: renders a generated tone through a track
+# to a WAV with no audio device, so the audio path can be verified in CI / by hand.
 juce_add_console_app(soundsplice_bounce PRODUCT_NAME "soundsplice-bounce")
 
 target_sources(soundsplice_bounce PRIVATE
@@ -36,7 +36,7 @@ target_link_libraries(soundsplice_bounce
     soundsplice_no_float_equal_warning)
 
 # Register as a smoke test: it renders audio and exits non-zero if the output is
-# silent, so CI verifies the synth + sequencer on every platform.
+# silent, so CI verifies the track render path on every platform.
 if(SOUNDSPLICE_BUILD_TESTS)
   add_test(NAME bounce_smoke COMMAND soundsplice_bounce)
 endif()

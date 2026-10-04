@@ -17,8 +17,8 @@ namespace soundsplice::model
     ramp into its tempo - see engine::TempoMap, which plays them.
 
     Every edit here keeps audio where it is in time, as changing the starting
-    tempo always has (model/Timebase.h): instrument tracks follow the beat,
-    but a recording plays in real time, so the beat positions of audio clips,
+    tempo always has (model/Timebase.h): a recording plays in real time,
+    so the beat positions of audio clips,
     their tracks' automation and the markers are moved to wherever the same
     moment now falls.
 */
@@ -62,8 +62,7 @@ namespace tempoedit
     /**
         Moves everything on audio tracks, and the markers, from where the
         tempo map @p before put them in time to the same times under @p after.
-        Instrument tracks, the session grid and the master lane stay on
-        their beats.
+        Buses and the master lane stay on their beats.
     */
     inline void retimeAudio(Song& song, const std::vector<engine::TempoChange>& before,
                             const std::vector<engine::TempoChange>& after)

@@ -15,8 +15,7 @@ namespace soundsplice
     value and a y-coordinate, and answers "is the cursor on that point?".
 
     JUCE-free so the conversion math is unit-tested headless, the same way
-    TimelineGeometry and PianoRollGeometry are — and for the same reason those
-    exist: the mapping is where an editor like this actually goes wrong, and a
+    TimelineGeometry is — and for the same reason that exists: the mapping is where an editor like this actually goes wrong, and a
     mapping that only fails visibly on screen is a mapping nobody can check.
 
     The x axis is deliberately absent: beats-to-pixels already has one correct

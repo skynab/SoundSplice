@@ -16,14 +16,6 @@ namespace soundsplice::model
     (later) serialization straightforward. All mutation goes through the helper
     functions below so ids are allocated consistently.
 */
-/** One row of the session grid, shared across every track. */
-struct Scene
-{
-    std::string name;
-
-    bool operator==(const Scene&) const = default;
-};
-
 /** A named point or range on the timeline: what Audacity calls a label and
     Audition a marker. A point marker has no length. See model/Markers.h for
     what can be done with them. */
@@ -75,7 +67,6 @@ struct Song
     int    timeSigDenominator = 4;
 
     std::vector<Track> tracks;
-    std::vector<Scene> scenes; // session-grid rows; every track's sessionSlots matches this length
     int                nextId = 1; // monotonic id source for tracks and clips
     // The master bus's insert effects, in order: after every track, before
     // the mastering rack. A chain like a track's (EffectSlot), without
@@ -109,63 +100,8 @@ inline Track& addTrack(Song& song, TrackType type, std::string name)
     track.id   = allocateId(song);
     track.type = type;
     track.name = std::move(name);
-    // A new track joins the existing scenes with every slot empty, so the grid
-    // stays rectangular without anyone having to remember to resize it.
-    track.sessionSlots.resize(song.scenes.size());
     song.tracks.push_back(std::move(track));
     return song.tracks.back();
-}
-
-/** Appends a scene (a session-grid row), giving every track an empty slot in
-    it. Returns its index. */
-inline int addScene(Song& song, std::string name)
-{
-    song.scenes.push_back(Scene { std::move(name) });
-    for (auto& track : song.tracks)
-        track.sessionSlots.resize(song.scenes.size());
-    return (int) song.scenes.size() - 1;
-}
-
-/** The clip in a session cell, or nullptr when the cell is empty or the
-    coordinates are out of range. */
-inline const Clip* sessionClip(const Song& song, int trackIndex, int sceneIndex)
-{
-    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
-        return nullptr;
-    const auto& slots = song.tracks[(size_t) trackIndex].sessionSlots;
-    if (sceneIndex < 0 || sceneIndex >= (int) slots.size())
-        return nullptr;
-    const auto& slot = slots[(size_t) sceneIndex];
-    return slot.hasClip ? &slot.clip : nullptr;
-}
-
-/** Puts @p clip into a session cell, growing the track's column if the grid
-    was resized behind its back. Returns false if the coordinates are invalid. */
-inline bool setSessionClip(Song& song, int trackIndex, int sceneIndex, Clip clip)
-{
-    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
-        return false;
-    if (sceneIndex < 0 || sceneIndex >= (int) song.scenes.size())
-        return false;
-
-    auto& slots = song.tracks[(size_t) trackIndex].sessionSlots;
-    if ((int) slots.size() <= sceneIndex)
-        slots.resize(song.scenes.size());
-
-    clip.id                 = allocateId(song);
-    slots[(size_t) sceneIndex].hasClip = true;
-    slots[(size_t) sceneIndex].clip    = std::move(clip);
-    return true;
-}
-
-/** Empties a session cell. */
-inline void clearSessionClip(Song& song, int trackIndex, int sceneIndex)
-{
-    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
-        return;
-    auto& slots = song.tracks[(size_t) trackIndex].sessionSlots;
-    if (sceneIndex >= 0 && sceneIndex < (int) slots.size())
-        slots[(size_t) sceneIndex] = SessionSlot {};
 }
 
 inline Track* findTrack(Song& song, int id)
@@ -247,8 +183,7 @@ inline void reissueTrackIds(Song& song, Track& track);
 /** Copies a track and everything on it, inserting the copy directly after
     the original and returning it (nullptr if @p index is out of range).
 
-    Every id is reissued: the track's, each arrangement clip's, and each
-    session slot's. Ids are how the rest of the app addresses things, so a
+    Every id is reissued: the track's and each clip's. Ids are how the rest of the app addresses things, so a
     copy sharing them would be a second track that edits resolve to at random
     — the one bug this function exists to avoid.
 
@@ -261,10 +196,6 @@ inline void reissueTrackIds(Song& song, Track& track)
 
     for (auto& clip : track.clips)
         clip.id = allocateId(song);
-
-    for (auto& slot : track.sessionSlots)
-        if (slot.hasClip)
-            slot.clip.id = allocateId(song);
 }
 
 inline Track* duplicateTrack(Song& song, int index)
@@ -288,23 +219,6 @@ inline Track& appendTrackCopy(Song& song, Track track)
     reissueTrackIds(song, track);
     song.tracks.push_back(std::move(track));
     return song.tracks.back();
-}
-
-/** Removes a session-grid row, taking that slot out of every track's column
-    so the grid stays rectangular — the invariant every session lookup relies
-    on. Returns false if there's no such scene. */
-inline bool removeScene(Song& song, int sceneIndex)
-{
-    if (sceneIndex < 0 || sceneIndex >= (int) song.scenes.size())
-        return false;
-
-    song.scenes.erase(song.scenes.begin() + sceneIndex);
-
-    for (auto& track : song.tracks)
-        if (sceneIndex < (int) track.sessionSlots.size())
-            track.sessionSlots.erase(track.sessionSlots.begin() + sceneIndex);
-
-    return true;
 }
 
 } // namespace soundsplice::model

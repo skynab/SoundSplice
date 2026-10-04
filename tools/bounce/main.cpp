@@ -6,17 +6,18 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
-#include "engine/ClipSlot.h"
+#include "engine/ClipData.h"
 #include "engine/EffectChain.h"
-#include "engine/InstrumentTrack.h"
+#include "engine/MixerTrack.h"
 #include "engine/OfflineRenderer.h"
 #include "engine/PluginHost.h"
 #include "engine/PluginNode.h"
 
 /*
-    soundsplice-bounce: renders a demo two-track arpeggio to a WAV with no
-    audio device, and exits non-zero if it's silent - a smoke test of the
-    synth and sequencer that CI runs on every platform (CTest's bounce_smoke).
+    soundsplice-bounce: renders a generated tone through a track to a WAV
+    with no audio device, and exits non-zero if it's silent - a smoke test of
+    the clip player and track path that CI runs on every platform (CTest's
+    bounce_smoke).
 
     It also hosts a real plugin, if the machine has one, since that needs the
     plugin-host build flags this tool has and the test binaries don't. The
@@ -34,22 +35,28 @@ namespace
     constexpr double kSampleRate = 44100.0;
     constexpr int    kBlock      = 512;
 
-    Pattern arpeggio()
+    /** @p seconds of a stereo tone stepping up an arpeggio, a half-second a
+        note, as a clip ready to play. */
+    ClipData arpeggio(double seconds)
     {
-        Pattern arp;
-        arp.lengthBeats = 4.0;
-        for (const int interval : { 0, 4, 7, 12 })
-            arp.notes.push_back({ (double) arp.notes.size(), 0.5, 60 + interval, 0.8f });
-        return arp;
-    }
+        ClipData clip;
+        clip.sourceSampleRate = kSampleRate;
+        clip.numChannels      = 2;
+        clip.lengthSamples    = (int) (seconds * kSampleRate);
+        clip.audio.setSize(2, clip.lengthSamples);
 
-    Pattern bassline()
-    {
-        Pattern bass;
-        bass.lengthBeats = 4.0;
-        bass.notes.push_back({ 0.0, 1.0, 36, 0.9f });
-        bass.notes.push_back({ 2.0, 1.0, 43, 0.9f });
-        return bass;
+        const int    noteSamples = (int) (0.5 * kSampleRate);
+        const double ratios[]    = { 1.0, 1.25, 1.5, 2.0 };
+        double       phase       = 0.0;
+        for (int i = 0; i < clip.lengthSamples; ++i)
+        {
+            const double hz = 261.63 * ratios[(i / noteSamples) % 4];
+            phase += 2.0 * juce::MathConstants<double>::pi * hz / kSampleRate;
+            const float value = 0.3f * (float) std::sin(phase);
+            clip.audio.setSample(0, i, value);
+            clip.audio.setSample(1, i, value);
+        }
+        return clip;
     }
 
     /** A second of the arpeggio through one track, through @p plugin if
@@ -60,7 +67,7 @@ namespace
         juce::AudioBuffer<float> mix(2, totalSamples);
         mix.clear();
 
-        InstrumentTrack track;
+        MixerTrack track;
         track.prepare(kSampleRate, kBlock);
         if (plugin != nullptr)
         {
@@ -72,12 +79,8 @@ namespace
             track.setEffectChain(chain.release());
         }
 
-        ClipSlot slot;
-        slot.pattern     = arpeggio();
-        slot.lengthBeats = 1.0e9;
-        track.sequencer.submitClips(new std::vector<ClipSlot> { slot });
+        track.audioPlayer.submitSingleClip(new ClipData(arpeggio(1.0)));
 
-        juce::MidiBuffer noLiveMidi;
         for (int pos = 0; pos < totalSamples; pos += kBlock)
         {
             const int      n = std::min(kBlock, totalSamples - pos);
@@ -90,7 +93,7 @@ namespace
             context.transport.timeSigDenominator = 4;
 
             juce::AudioBuffer<float> blockView(mix.getArrayOfWritePointers(), 2, pos, n);
-            track.render(blockView, noLiveMidi, context, false, false);
+            track.render(blockView, context, false);
         }
         return mix;
     }
@@ -157,7 +160,7 @@ namespace
 
 int main(int argc, char** argv)
 {
-    const auto mix = OfflineRenderer::render({ arpeggio(), bassline() }, { 0.0f, 0.0f }, kBpm, kSampleRate, 4.0);
+    const auto mix = OfflineRenderer::renderAudioClip(arpeggio(4.0), 0.0, 0.0f, kBpm, kSampleRate, 4.0);
     const auto out = juce::File::getCurrentWorkingDirectory().getChildFile(argc > 1 ? argv[1] : "bounce.wav");
     if (! OfflineRenderer::writeWav(out, mix, kSampleRate))
     {

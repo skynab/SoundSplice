@@ -30,9 +30,6 @@ namespace soundsplice::commands
     context-specific command comes first and is enabled only in its context,
     and the general one takes the key everywhere else:
 
-      - Copy Audio and Paste Audio come before Copy Notes and Paste Notes:
-        cmd+C and cmd+V act on the waveform while the Audio pane is in front
-        (see the note in Shortcuts.h).
       - Delete Selected Clip comes before Delete Track: the bare delete key
         removes a selected clip rather than the track it's on.
 */
@@ -49,9 +46,7 @@ enum Id : int
     saveProjectAs,
     previewAudioFile,
     importAudio,
-    importMidi,
     importRawData,
-    exportMidi,
     exportAudio,
     setProjectRoot,
     audioSettings,
@@ -60,12 +55,9 @@ enum Id : int
     // Edit
     undo,
     redo,
-    clearNotes,
     cutAudio,
     copyAudio,
     pasteAudio,
-    copyNotes,
-    pasteNotes,
     deleteAudio,
     trimToSelection,
     splitAtCursor,
@@ -144,10 +136,6 @@ enum Id : int
     mixAndRender,
     renameTrack,
     deleteTrack,
-    quantize,
-    swingLight,
-    swingMedium,
-    swingHeavy,
 
     // Transport
     playPause,
@@ -267,15 +255,13 @@ inline const std::vector<Definition>& all()
         { previewAudioFile, "Preview Audio File...", "File", "Listen to an audio file without adding it to the project.", {} },
         { importAudio,      "Import Audio to Track...   (or drag files in)", "File", "Add an audio file to a new track.", {} },
         { loadVideo,        "Load Video...",        "File", "A video to work to - dubbing, a podcast's picture - shown in the Video pane in step with the playhead.", {} },
-        { importMidi,       "Import MIDI...",       "File", "Add the tracks of a MIDI file to the project.", {} },
         { importRawData,    "Import Raw Data...",   "File", "Add a headerless file of samples to a new track, saying how its bytes are stored.", {} },
         { renderQueue,      "Render Queue...",      "File", "The exports queued from Export Audio, rendered one after another in the background.", {} },
         { exportCdImage,    "Export CD Image...",   "File", "Write the mix as a CUE sheet and BIN for burning an audio CD, a track at each marker.", {} },
-        { exportMidi,       "Export MIDI...",       "File", "Write the project's notes to a MIDI file.", {} },
         { exportAudio,      "Export Audio...",      "File", "Render the mix, or each track as a stem, to audio files.", { keys::exportAudio } },
         { setProjectRoot,   "Set Project Root Folder...", "File", "Choose the folder the file browser starts in.", {} },
         { preferences,      "Preferences...",       "File", "Every setting in one place: devices, recording, editing, display, folders and the cache.", { keys::preferences } },
-        { audioSettings,    "Audio Settings...",    "File", "Choose the audio and MIDI devices.", {} },
+        { audioSettings,    "Audio Settings...",    "File", "Choose the audio devices.", {} },
         { keyboardShortcuts, "Keyboard Shortcuts...", "File", "Change the key for any command, and import or export a set of shortcuts.", {} },
         { followSystemOutput, "Follow System Output Device", "File", "Switch output when the system's default device changes.", {} },
         { recordingFormat,  "Recording Format...",  "File", "Choose the bit depth, mono or stereo, and which inputs takes are recorded from.", {} },
@@ -286,12 +272,9 @@ inline const std::vector<Definition>& all()
 
         { undo,             "Undo",                 "Edit", "Undo the last edit.", { keys::undo } },
         { redo,             "Redo",                 "Edit", "Redo the last undone edit.", { keys::redo, keys::redoAlt } },
-        { clearNotes,       "Clear Notes",          "Edit", "Remove every note from the open clip.", {} },
         { cutAudio,         "Cut Audio",            "Edit", "Cut the arrangement's time selection, or the audio editor's selection, to the clipboard.", { keys::cutAudio } },
-        { copyAudio,        "Copy Audio",           "Edit", "Copy the audio editor's selection to the audio clipboard.", { keys::copyNotes } },
-        { pasteAudio,       "Paste Audio",          "Edit", "Paste at the arrangement's time selection, or at the audio editor's cursor.", { keys::pasteNotes } },
-        { copyNotes,        "Copy Notes",           "Edit", "Copy the selected notes.", { keys::copyNotes } },
-        { pasteNotes,       "Paste Notes",          "Edit", "Paste copied notes into the open clip.", { keys::pasteNotes } },
+        { copyAudio,        "Copy Audio",           "Edit", "Copy the audio editor's selection to the audio clipboard.", { keys::copyAudio } },
+        { pasteAudio,       "Paste Audio",          "Edit", "Paste at the arrangement's time selection, or at the audio editor's cursor.", { keys::pasteAudio } },
         { deleteAudio,      "Delete Audio",         "Edit", "Remove the arrangement's time selection, closing the gap, or the audio editor's selection.", {} },
         { trimToSelection,  "Trim to Selection",    "Edit", "Cut the clip down to the audio editor's selection.", {} },
         { splitAtCursor,    "Split at Cursor",      "Edit", "Split the clip in two where the selection starts.", {} },
@@ -377,10 +360,6 @@ inline const std::vector<Definition>& all()
         { mixAndRender,     "Mix and Render to New Track", "Edit", "Render the time selection's tracks, or the selected track, into one audio file on a new track.", {} },
         { renameTrack,      "Rename Track...",      "Edit", "Rename the selected track.", {} },
         { deleteTrack,      "Delete Track",         "Edit", "Remove the selected track.", { keys::deleteTrack, keys::deleteTrackAlt } },
-        { quantize,         "Quantize",             "Edit", "Move the selected notes onto the grid.", { keys::quantize } },
-        { swingLight,       "Swing - Light",        "Edit", "Quantize with a light swing.", {} },
-        { swingMedium,      "Swing - Medium",       "Edit", "Quantize with a medium swing.", {} },
-        { swingHeavy,       "Swing - Heavy",        "Edit", "Quantize with a heavy swing.", {} },
 
         { playPause,        "Play / Pause",         "Transport", "Start or pause playback.", { keys::playPause } },
         { playFaster,       "Play Faster",          "Transport", "Play the song faster, higher in pitch, as a tape would.", {} },

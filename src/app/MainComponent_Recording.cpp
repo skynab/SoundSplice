@@ -3,60 +3,10 @@
 #include "model/Takes.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
-// Recording audio and MIDI takes.
+// Recording audio takes.
 
 namespace soundsplice
 {
-/** Toggles between arming/starting a take and stopping it.
-
-    The take streams straight to its file as it is played, so the destination
-    and the track it will land on are both decided *here*, at arm time. They
-    used to be decided when the take ended — which meant every recording became
-    a new track at bar 1, however the project was set up when you hit record. */
-app::RecordSource MainComponent::chooseRecordSource(int trackIndex, juce::String& explanation) const
-{
-    const auto& song = history_.current();
-
-    // An Instrument track is driven by MIDI clips, so it can hold a recorded
-    // pattern; an Audio track cannot.
-    const bool trackHoldsMidi = trackIndex >= 0 && trackIndex < (int) song.tracks.size()
-                             && song.tracks[(size_t) trackIndex].type != model::TrackType::Audio;
-
-    // The decision itself lives in app/RecordSourceChoice.h, where the whole
-    // table is enumerated and tested — this function only gathers the inputs
-    // and turns the reason into something worth reading.
-    const auto decision = app::chooseRecordSource(trackHoldsMidi,
-                                                  engine_.hasMidiInput(),
-                                                  engine_.hasAudioInput(),
-                                                  engine_.inputOpenError().isNotEmpty());
-
-    switch (decision.reason)
-    {
-        case app::RecordSourceReason::Ok:
-            break;
-
-        case app::RecordSourceReason::FallbackToAudioNoMidi:
-            explanation = "No MIDI input connected - recording audio to a new track instead";
-            break;
-
-        case app::RecordSourceReason::NoAudioInput:
-            explanation = "No audio input device to record from";
-            break;
-
-        case app::RecordSourceReason::NoAudioInputPermission:
-            explanation = "No audio input - check microphone permission "
-                          "(System Settings > Privacy & Security > Microphone), then restart";
-            break;
-
-        case app::RecordSourceReason::NothingConnected:
-            explanation = "Nothing to record from - connect a MIDI controller, or an audio "
-                          "input (and check microphone permission)";
-            break;
-    }
-
-    return decision.source;
-}
-
 bool MainComponent::ensureMicrophoneAccess()
 {
     const auto status = app::microphonePermission();
@@ -140,63 +90,30 @@ bool MainComponent::ensureMicrophoneAccess()
     return false;
 }
 
+/** Toggles between arming/starting a take and stopping it.
+
+    The take streams straight to its file as it is played, so the destination
+    and the track it will land on are both decided *here*, at arm time. They
+    used to be decided when the take ended — which meant every recording became
+    a new track at bar 1, however the project was set up when you hit record. */
 void MainComponent::toggleRecording()
 {
-    // Stopping always goes back to whichever take is actually running — the
-    // sources are re-examined only when starting one.
-    if (midiTake_.running)
-    {
-        toggleMidiRecording();
-        return;
-    }
-
     if (! audioTake_.running)
     {
-        // Devices are re-scanned here rather than trusted from startup: a
-        // controller plugged in after launch is extremely common, and before
-        // this it was invisible to the app for the whole session.
-        engine_.refreshMidiInputs();
-
-        juce::String explanation;
-        auto         source = chooseRecordSource(selectedTrackIndex_, explanation);
-
-        // A MIDI take needs no microphone, so it is decided before any
-        // permission question — prompting a controller user for microphone
-        // access would be a non-sequitur.
-        if (source == app::RecordSource::Midi)
-        {
-            toggleMidiRecording();
-            return;
-        }
-
-        // Everything else wants audio — *including* the "nothing connected"
-        // answer, which is exactly what a blocked microphone looks like from
-        // here, since a denied permission shows up as a device with no input
-        // channels. So permission is settled before that answer is treated as
-        // final; otherwise a one-click fix gets reported as missing hardware.
+        // Permission is settled before a missing input is reported: a denied
+        // microphone looks exactly like a device with no input channels from
+        // here, and a one-click fix shouldn't be reported as missing hardware.
         if (! ensureMicrophoneAccess())
             return; // prompting, or already explained
 
-        // Asked again, because granting access can have just opened an input
-        // and turned None into Audio (and because a controller may have been
-        // plugged in while a prompt was up).
-        explanation.clear();
-        source = chooseRecordSource(selectedTrackIndex_, explanation);
-
-        if (source == app::RecordSource::None)
+        if (! engine_.hasAudioInput())
         {
-            showError(explanation);
+            showError(engine_.inputOpenError().isNotEmpty()
+                          ? "No audio input - check microphone permission "
+                            "(System Settings > Privacy & Security > Microphone), then restart"
+                          : "No audio input device to record from");
             return;
         }
-
-        if (source == app::RecordSource::Midi)
-        {
-            toggleMidiRecording();
-            return;
-        }
-
-        if (explanation.isNotEmpty())
-            showStatus(explanation); // audio, but not from the armed track
     }
 
     if (! audioTake_.running)
@@ -556,142 +473,6 @@ int MainComponent::makeLoopTakesFromRecording(const juce::File& file, int64_t st
     return (int) offsets.size();
 }
 
-/** Starts or stops a MIDI take. The mirror of toggleRecording's audio path,
-    and deliberately the same shape — the transport handling, the button state
-    and the looping-off rule are identical, because they are the same
-    behaviours for the same reasons. What differs is only which recorder is
-    armed and that there is no file to open, so this cannot fail: a controller
-    that is absent simply sends nothing, which is an empty take rather than an
-    error. */
-void MainComponent::toggleMidiRecording()
-{
-    if (! midiTake_.running)
-    {
-        midiTake_.events.clear();
-        midiTake_.targetTrack = selectedTrackIndex_;
-
-        engine_.beginMidiRecording();
-        midiTake_.running = true;
-
-        recordButton.setToggleState(true, juce::dontSendNotification);
-        recordButton.setTooltip(withShortcut("Stop recording", keys::record));
-
-        // Looping off for the length of a take, restored when it ends — the
-        // same reasoning as the audio path: looping would wrap the transport
-        // at the end of what is already arranged, which is precisely where a
-        // recording needs to keep going.
-        post(Cmd::SetLooping, 0.0);
-        post(Cmd::SetPlaying, 1.0);
-    }
-    else
-    {
-        engine_.stopMidiRecording();
-        post(Cmd::SetPlaying, 0.0);
-        post(Cmd::SetLooping, loopButton.getToggleState() ? 1.0 : 0.0);
-        recordButton.setToggleState(false, juce::dontSendNotification);
-        recordButton.setTooltip(withShortcut("Record", keys::record));
-    }
-}
-
-void MainComponent::finishMidiRecordingIfReady()
-{
-    if (! midiTake_.running)
-        return;
-
-    // Drained every tick, take finished or not: this is what keeps the
-    // engine's ring from having to hold a whole take (see engine::MidiRecorder
-    // for why that matters — a fixed ring sized for a take is a silent cap).
-    engine_.drainMidiTake(midiTake_.events);
-
-    if (! engine_.isMidiRecordingFinished())
-        return;
-    midiTake_.running = false;
-
-    // Every ending passes through here, so this is where looping is put back
-    // — restoring it only in the stop handler would leave it silently off
-    // after any other route out, including the empty take that returns below.
-    post(Cmd::SetLooping, loopButton.getToggleState() ? 1.0 : 0.0);
-
-    const int64_t dropped   = engine_.midiRecordedDroppedEvents();
-    const int64_t startedAt = engine_.midiTakeStartSample();
-    const int64_t endedAt   = engine_.midiTakeEndSample();
-    const int     target    = midiTake_.targetTrack;
-
-    midiTake_.targetTrack = -1;
-
-    if (midiTake_.events.empty() || startedAt < 0)
-    {
-        midiTake_.events.clear();
-        showError("Recording was empty (no MIDI input captured)");
-        return;
-    }
-
-    commitMidiTake(target, startedAt, endedAt);
-    midiTake_.events.clear();
-
-    // Reported after the commit, so the take is on the timeline either way —
-    // a take missing a note is still worth keeping, it just must not be
-    // presented as a clean one.
-    if (dropped > 0)
-        showError("Recorded with gaps - " + juce::String((int) dropped)
-                  + " MIDI event(s) were lost");
-}
-
-void MainComponent::commitMidiTake(int targetTrack, int64_t startSample, int64_t endSample)
-{
-    if (targetTrack < 0 || targetTrack >= trackCount())
-        return;
-
-    // Through the tempo map the UI already reads (see clipFromMidiTake).
-    auto take = app::recording::clipFromMidiTake(midiTake_.events, startSample, endSample, uiTempoMap_);
-    if (! take)
-    {
-        showError("Recording was empty (no MIDI input captured)");
-        return;
-    }
-
-    const int noteCount = (int) take->notes.size();
-    int       newClipIndex = -1;
-
-    history_.edit("Record MIDI", [&](model::Song& s)
-    {
-        if (targetTrack < 0 || targetTrack >= (int) s.tracks.size())
-            return;
-        auto& track = s.tracks[(size_t) targetTrack];
-
-        model::Clip clip;
-        clip.id                  = model::allocateId(s);
-        clip.type                = model::ClipType::Instrument;
-        clip.startBeats          = take->startBeats;
-        clip.lengthBeats         = take->lengthBeats;
-        clip.pattern.lengthBeats = take->lengthBeats;
-        clip.pattern.notes       = std::move(take->notes);
-
-        track.clips.push_back(clip);
-        newClipIndex = (int) track.clips.size() - 1;
-    });
-
-    if (newClipIndex < 0)
-        return;
-
-    // Open the take in the piano roll, the way Add Clip opens the clip it
-    // made: the first thing anyone does with a recorded part is look at it.
-    selectedTrackIndex_ = targetTrack;
-    selectedClipIndex_  = newClipIndex;
-
-    syncEngineTracks();
-    refreshPianoRollForSelected();
-    refreshEffectChainForSelected();
-    refreshAudioEditorForSelected();
-    refreshAutomationPaneForSelected();
-    refreshSessionView();
-    arrangementView_.setSong(history_.current());
-    arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
-    updateEditingLabel();
-
-    showStatus("Recorded " + juce::String(noteCount) + " note(s)");
-}
-
 /** Punches the clip a recording was just imported as (the selected one) in
     over the selection it was started with: it replaces what the track had
     there, and its lead-up is dropped. Folded into the recording's undo step.
@@ -794,7 +575,7 @@ void MainComponent::showTimerRecordDialog()
 void MainComponent::tickTimerRecord()
 {
     using Action = app::recording::TimerRecord::Action;
-    if (timerRecord_.tick(juce::Time::currentTimeMillis(), audioTake_.running || midiTake_.running) != Action::None)
+    if (timerRecord_.tick(juce::Time::currentTimeMillis(), audioTake_.running) != Action::None)
         toggleRecording(); // starts or stops, whichever is due
 }
 
@@ -803,7 +584,7 @@ void MainComponent::tickTimerRecord()
     the song ends, for a track with nothing on it yet. */
 void MainComponent::recordAtEndOfTrack()
 {
-    if (audioTake_.running || midiTake_.running)
+    if (audioTake_.running)
         return;
 
     const auto& song = history_.current();

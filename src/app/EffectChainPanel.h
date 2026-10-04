@@ -34,7 +34,7 @@ namespace soundsplice
     dialog, with nothing else to wire.
 
     Owns no document state: it draws from a snapshot and reports intent through
-    the callbacks, like ArrangementView and SessionView.
+    the callbacks, like ArrangementView.
 */
 class EffectChainPanel final : public juce::Component
 {

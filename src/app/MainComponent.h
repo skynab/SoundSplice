@@ -11,8 +11,6 @@
 
 #include "engine/AudioEngine.h"
 #include "engine/MasteringPreset.h"
-#include "engine/MidiCapture.h"
-#include "app/RecordSourceChoice.h"
 #include "app/RecordingPlan.h"
 #include "app/MicrophonePermission.h"
 #include "engine/AudioEdits.h"
@@ -75,7 +73,6 @@
 #include "MixerStrip.h"
 #include "OpenFiles.h"
 #include "OpenFilesPane.h"
-#include "PianoRoll.h"
 #include "PluginEditorWindow.h"
 #include "ApplyEffectsDialog.h"
 #include "Autosave.h"
@@ -84,7 +81,6 @@
 #include "ProjectMedia.h"
 #include "DragCommit.h"
 #include "TrackSelection.h"
-#include "SessionView.h"
 #include "TrackColours.h"
 #include "ShellBars.h"
 #include "StatusBanner.h"
@@ -106,9 +102,7 @@ public:
 
 /**
     Phase 3 UI. Owns the project document (a Song under an undo History) and a
-    headless AudioEngine. The document may hold several instrument tracks; the
-    piano roll edits the selected one, and the mixer tab shows a channel strip per
-    track. All edits go through the history (undo/redo) and are mirrored into the
+    headless AudioEngine. The mixer tab shows a channel strip per track. All edits go through the history (undo/redo) and are mirrored into the
     engine's fixed track pool.
 */
 class MainComponent final : public juce::Component,
@@ -205,9 +199,7 @@ private:
                             std::function<void(model::Song&, float)> write);
     void post(engine::EngineCommand::Type type, double a = 0.0, double b = 0.0);
 
-    void                   editPattern(const engine::Pattern& pattern);
     void                   refreshFromModel();
-    const engine::Pattern& currentPattern() const;
     void                   newProject();
     void                   createEmptyProject();
     void                   saveProject(std::function<void(bool saved)> onDone = {});
@@ -276,12 +268,10 @@ private:
     void                   importAudioFileAtBeat(const juce::File& file, double startBeats,
                                                  int targetTrackIndex = -1);
     void                   previewAudioFile(const juce::File& file);
-    void                   importMidiFileDialog();
     /** Import Raw Data: asks how a headerless file's samples are stored, then
         converts it to a WAV in the project's audio folder on a new track. */
     void                   importRawDataDialog();
     void                   importRawData(const juce::File& source, const engine::RawPcmFormat& format);
-    void                   exportMidiFileDialog();
     void                   setProjectRootFolderDialog();
 
     void                   refreshAutomationPaneForSelected();
@@ -314,31 +304,13 @@ private:
     static constexpr double kRecentInputSeconds = 120.0;
 
     /**
-        Decides what pressing Record captures, from the armed track's type
-        *and* what is actually plugged in.
-
-        The armed track's type alone is not enough, which is exactly how this
-        first shipped broken: with the default Instrument track selected,
-        Record chose MIDI and captured nothing on a machine with only a
-        microphone. What a track *can* hold and what there is to record *from*
-        are two different questions, and both have to be asked.
-
-        @p explanation is filled in whenever the answer is worth saying out
-        loud — why nothing can be recorded, or why a take is going somewhere
-        other than the armed track.
-    */
-    app::RecordSource      chooseRecordSource(int trackIndex, juce::String& explanation) const;
-
-    /**
         Makes sure the OS microphone permission is settled before an audio take
         starts, prompting for it if it has never been asked and offering System
         Settings if it was refused.
 
         Returns true if recording can go ahead right now. False means this has
         taken over: either a prompt is up (and Record retries itself once the
-        answer arrives) or the user has been told why it cannot proceed. Never
-        called for a MIDI take — a controller needs no microphone, and
-        prompting for one would be a non-sequitur.
+        answer arrives) or the user has been told why it cannot proceed.
     */
     bool                   ensureMicrophoneAccess();
 
@@ -346,12 +318,6 @@ private:
         that still leaves no usable input reports that instead of prompting in
         a loop. */
     bool                   retryingAfterMicPermission_ = false;
-    void                   toggleMidiRecording();
-    void                   finishMidiRecordingIfReady();
-    /** Turns the drained take into a clip on the target track. Split out of
-        finishMidiRecordingIfReady so the beats conversion and the commit can
-        be read (and reasoned about) apart from the take's lifecycle. */
-    void                   commitMidiTake(int targetTrack, int64_t startSample, int64_t endSample);
     juce::File             recordingsDirectory() const;
     /** Where a new recording or edit should be written: the saved project's
         audio folder, or @p scratchDirectory for a project not saved yet. */
@@ -363,7 +329,6 @@ private:
     void                   addTrack();
     double                 beatsPerBar() const;
     void                   syncEngineTracks();
-    void                   refreshPianoRollForSelected();
     void                   refreshAudioEditorForSelected();
 
     // The Open Files list — see app/OpenFiles.h.
@@ -683,11 +648,6 @@ private:
     void                   scanForPlugins();
     void                   openPluginEditor(int slotIndex);
     void                   closePluginEditors();
-    void                   refreshSessionView();
-    void                   addSessionScene();
-    void                   deleteSessionScene(int sceneIndex);
-    void                   captureClipIntoSession(int trackIndex, int sceneIndex);
-    void                   previewNote(int noteNumber);
     void                   updateMixerStrips();
     void                   beginFaderDrag(int trackIndex, MixerStrip::Fader fader);
     void                   endFaderDrag(int trackIndex, MixerStrip::Fader fader);
@@ -699,7 +659,6 @@ private:
     void                   setTrackPan(int index, float pan);
     void                   selectTrack(int index);
     void                   selectTrackAndClip(int trackIndex, int clipIndex);
-    void                   addClipToSelectedTrack();
     void                   setClipLength(int trackIndex, int clipIndex, double newLengthBeats);
     void                   trimClipStartTo(int trackIndex, int clipIndex, double newStartBeats);
     void                   slipClipTo(int trackIndex, int clipIndex, double newOffsetSeconds);
@@ -811,8 +770,6 @@ private:
     void                   indentTrack(int trackIndex);
     void                   outdentTrack(int trackIndex);
     std::vector<int>       linkedTracks(int trackIndex) const;
-    void                   copyNotes();
-    void                   pasteNotes();
     void                   copyClip();
     void                   pasteClip();
     void                   copyTrack();
@@ -828,12 +785,8 @@ private:
     void                   showTrackSettingsMenu(int trackIndex);
     void                   setTrackColour(int trackIndex, unsigned int argb);
     void                   moveClipToTrack(int srcTrackIndex, int clipIndex, int destTrackIndex, double newStartBeats);
-    void                   quantizeNotes(double swingAmount);
-    void                   setPatternBars(int bars);
     void                   setTimeSignature(int numerator, int denominator);
     void                   updateTimeSignatureControls();
-    void                   updateBarsControl();
-    void                   updateEditingLabel();
     void                   layoutLeftPane();
     void                   applyTransportCollapse();
 
@@ -862,15 +815,9 @@ private:
                                              double minZoom, double maxZoom,
                                              const juce::String& tooltip,
                                              std::function<void(float)> onZoom);
-    void                   setKeysZoom(float zoom);
-    void                   updateKeysZoomControls();
-    void                   setKeysTimeZoom(float zoom);
-    void                   followKeysPlayhead();
-    void                   updateKeysTimeZoomControls();
     void                   setTimelineZoom(float zoom);
     void                   updateZoomControls();
     void                   layoutArrangeTab();
-    void                   layoutEditTab();
     int                    trackCount() const;
 
     engine::AudioEngine         engine_;
@@ -901,9 +848,6 @@ private:
     app::recording::AudioTake audioTake_;
     juce::File                recordingFile_; // the main take's, kept from the audio clean-up while it records
 
-    // A MIDI take in progress.
-    app::recording::MidiTakeInProgress midiTake_;
-
     app::recording::TimerRecord timerRecord_;
 
     // Tracks armed to record, by id - session state, not part of the song.
@@ -918,10 +862,6 @@ private:
 
     // Set while that job owns the engine — see timerCallback.
     bool                        offlineRenderInProgress_ = false;
-
-    // Timer ticks since MIDI inputs were last re-enumerated — see
-    // timerCallback for why this is throttled rather than done every tick.
-    int                         midiRescanTicks_ = 0;
 
     // App-level preferences (not project data): which panel lives in which
     // dock region, and the file browser's user bookmarks. Saved on the
@@ -1055,22 +995,14 @@ private:
     juce::Label        masterLabel { {}, "Master" };
     juce::Label  positionLabel, clipLabel;
 
-    juce::MidiKeyboardComponent        keyboard_ { engine_.keyboardState(),
-                                                   juce::MidiKeyboardComponent::horizontalKeyboard };
     LevelMeter                         meter_;
     LoudnessReadout                    loudnessReadout_;
     StereoScopeView                    stereoScope_;
     std::vector<std::pair<float, float>> scopePairs_; // reused each tick
 
-    CallbackComponent                  editTab_;
-    juce::Label                        editingLabel_;
-    juce::Label                        barsLabel_ { {}, "Bars" };
-    juce::ComboBox                     barsBox_; // pattern length of the open clip
-    PianoRoll                          pianoRoll_;
 
     EffectChainPanel                   effectChain_;
     juce::OwnedArray<PluginEditorWindow> pluginWindows_;
-    SessionView                        sessionView_;
     AudioEditorPane                    audioEditor_; // its own dock panel — see refreshAudioEditorForSelected
     MasteringPane                      masteringPane_; // ditto — see updateMasteringControls
     AnalyserPane                       analyserPane_;
@@ -1119,9 +1051,9 @@ private:
     // The captured noise print, one profile per channel, plus the file it
     // was measured from — a print is only meaningful for the recording it
     // came from, so it's dropped when the selection moves to another.
-    // Audio clipboard, deliberately separate from the note/clip/track ones
-    // above: Cmd-C already means Copy Notes, and this app's rule is that a
-    // command means one thing rather than depending on focus.
+    // Audio clipboard, deliberately separate from the clip and track ones:
+    // this app's rule is that a command means one thing rather than
+    // depending on focus.
     std::vector<std::vector<float>>    audioClipboard_;
     double                             audioClipboardSampleRate_ = 0.0;
 
@@ -1169,20 +1101,6 @@ private:
     juce::Slider                       zoomSlider_;
     juce::Slider                       zoomBox_;
 
-    // The same control for the keys pane, zooming the pitch axis.
-    juce::DrawableButton               keysZoomIcon_ { "Zoom", juce::DrawableButton::ImageFitted };
-    juce::Slider                       keysZoomSlider_;
-    juce::Slider                       keysZoomBox_;
-
-    // ...and again for the time axis, which scrolls in this viewport once the
-    // grid is wider than the pane.
-    juce::DrawableButton               keysTimeZoomIcon_ { "Zoom", juce::DrawableButton::ImageFitted };
-    juce::Slider                       keysTimeZoomSlider_;
-    juce::Slider                       keysTimeZoomBox_;
-    juce::Viewport                     keysViewport_;
-    juce::ToggleButton                 keysFollowButton_;
-    juce::TextButton                   addClipButton_       { "Add Clip" };
-
     CallbackComponent                  mixerView_;
     CallbackComponent                  masterPanel_; // own top-level dock tab; see layoutMasterPanel()
     juce::OwnedArray<MixerStrip>       trackStrips_;
@@ -1192,10 +1110,7 @@ private:
 
     // An app-level clipboard holding model values, deliberately not the system
     // clipboard: pasting between two running copies of the app isn't worth a
-    // serialization format yet. Notes and clips are kept apart so the Edit
-    // menu's commands can say exactly what they act on, rather than depending
-    // on which pane happens to have focus.
-    std::vector<engine::Note> noteClipboard_;
+    // serialization format yet.
     std::vector<model::Clip>  clipClipboard_;
 
     // Its own buffer rather than sharing the clip one: pasting a track when a

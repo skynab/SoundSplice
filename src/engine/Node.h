@@ -19,7 +19,7 @@ public:
     virtual ~Node() = default;
 
     virtual void prepare(double sampleRate, int maxBlockSize) = 0;
-    virtual void process(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, const ProcessContext& context) = 0;
+    virtual void process(juce::AudioBuffer<float>& buffer, const ProcessContext& context) = 0;
     virtual void release() {}
 };
 

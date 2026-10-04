@@ -19,7 +19,6 @@ TEST_CASE("Two states of a song are compared in plain words", "[model][diff]")
     Song before;
     auto& voice = addTrack(before, TrackType::Audio, "Voice");
     Clip clip;
-    clip.type        = ClipType::Audio;
     clip.lengthBeats = 4.0;
     addClip(before, voice.id, clip);
     addClip(before, voice.id, clip);

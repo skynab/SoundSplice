@@ -21,7 +21,7 @@ enum class Glyph
     waveform, rows, folder, bookmark, history, sliders, stack, chartBar,
     play, pause, stop, skipBack, skipForward, rewind, fastForward, record, repeat,
     plus, cross, check, caretDown, floppy, textT, selection, scissors, cursor,
-    zeroCrossing, warning, sparkle, gear, microphone, video, pianoKeys, faders,
+    zeroCrossing, warning, sparkle, gear, microphone, video, faders,
     code, waves, transcript, keyboard, gauge, envelope, grid, export_, bandaid,
     spectrum, arrowLeftRight, layout, magnet, speakerSlash, trendUp, trendDown, normalize, trash,
     copy, clipboard, crop, reverse, split, eyedropper, speed
@@ -236,13 +236,6 @@ namespace detail
                 p.addRoundedRectangle(1.5f, 4.0f, 9.5f, 8.0f, 1.5f);
                 polyline(p, { { 11.0f, 7.0f }, { 14.5f, 5.0f }, { 14.5f, 11.0f }, { 11.0f, 9.0f } });
                 break;
-            case Glyph::pianoKeys:
-                p.addRoundedRectangle(2.0f, 2.5f, 12.0f, 11.0f, 1.0f);
-                line(p, 6.0f, 9.0f, 6.0f, 13.5f);
-                line(p, 10.0f, 9.0f, 10.0f, 13.5f);
-                f.addRectangle(5.0f, 2.5f, 2.0f, 6.5f);
-                f.addRectangle(9.0f, 2.5f, 2.0f, 6.5f);
-                break;
             case Glyph::faders:
                 line(p, 4.0f, 2.0f, 4.0f, 14.0f);
                 line(p, 8.0f, 2.0f, 8.0f, 14.0f);
@@ -440,15 +433,15 @@ inline Glyph forPanel(const juce::String& name)
     static const Entry entries[] = {
         { "Files", Glyph::folder },          { "Open Files", Glyph::waveform },
         { "Transport", Glyph::play },        { "Tracks", Glyph::rows },
-        { "Keys", Glyph::pianoKeys },        { "Audio", Glyph::waveform },
+        { "Audio", Glyph::waveform },
         { "Mastering", Glyph::sliders },     { "Analyser", Glyph::spectrum },
         { "Diagnostics", Glyph::warning },   { "Essential Sound", Glyph::sparkle },
         { "Script", Glyph::code },           { "Delivery", Glyph::check },
         { "History", Glyph::history },       { "Transcript", Glyph::transcript },
         { "Video", Glyph::video },           { "Automation", Glyph::envelope },
-        { "Session", Glyph::grid },          { "Track FX", Glyph::stack },
+        { "Track FX", Glyph::stack },
         { "Mixer", Glyph::faders },          { "Master", Glyph::gauge },
-        { "Keyboard", Glyph::keyboard },     { "Markers", Glyph::bookmark },
+        { "Markers", Glyph::bookmark },
     };
     for (const auto& e : entries)
         if (name == e.name)

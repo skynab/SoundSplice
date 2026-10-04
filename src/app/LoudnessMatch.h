@@ -40,7 +40,7 @@ inline std::vector<MatchedClip> clipsToMatch(const model::Song& song, const mode
         std::vector<const model::Clip*> found;
         for (const auto& clip : track.clips)
         {
-            if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+            if (clip.audioFile.empty())
                 continue;
             if (byTime && (clip.startBeats >= selection.endBeats || clip.startBeats + clip.lengthBeats <= selection.startBeats))
                 continue;

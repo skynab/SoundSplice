@@ -27,7 +27,7 @@ namespace soundsplice::layouts
 */
 enum class Workspace
 {
-    MusicCreation, // the piano roll, session grid and mixer — composing
+    MusicCreation, // the timeline and mixer — multitrack work
     AudioEditing   // the waveform editor and the mastering rack
 };
 
@@ -117,8 +117,7 @@ inline std::unique_ptr<DockLayoutNode> buildWorkspaceLayout(Workspace workspace)
 
     // Multitrack, as its mockup lays it out: the files over the track's
     // effects rack down the left, the timeline taking the middle with the
-    // mixer and the instruments under it, and down the right the master over
-    // the history.
+    // mixer under it, and down the right the master over the history.
     return beside(0.18,
                   above(0.60,
                         leaf({ "Files" }),
@@ -126,7 +125,7 @@ inline std::unique_ptr<DockLayoutNode> buildWorkspaceLayout(Workspace workspace)
                   beside(0.78,
                          above(0.68,
                                leaf({ "Tracks" }),
-                               leaf({ "Mixer", "Keys", "Session", "Keyboard" }, "Mixer")),
+                               leaf({ "Mixer" }, "Mixer")),
                          above(0.55,
                                leaf({ "Master", "Transport" }, "Master"),
                                leaf({ "History" }))));

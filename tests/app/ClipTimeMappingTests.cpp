@@ -9,7 +9,6 @@ namespace
     model::Clip audioClip(double start, double length, double offset)
     {
         model::Clip clip;
-        clip.type                = model::ClipType::Audio;
         clip.audioFile           = "take.wav";
         clip.startBeats          = start;
         clip.lengthBeats         = length;
@@ -41,14 +40,9 @@ TEST_CASE("The clip under a beat is found, edges included, earlier one first", "
     track.clips.push_back(audioClip(4.0, 4.0, 0.0));  // 4..8
     track.clips.push_back(audioClip(0.0, 4.0, 0.0));  // 0..4, added second
 
-    auto midi        = audioClip(10.0, 4.0, 0.0);
-    midi.type        = model::ClipType::Instrument;
-    track.clips.push_back(midi);
-
     REQUIRE(app::audioClipAt(track, 2.0) == &track.clips[1]);
     REQUIRE(app::audioClipAt(track, 6.0) == &track.clips[0]);
     REQUIRE(app::audioClipAt(track, 4.0) == &track.clips[1]); // where two meet, the earlier
     REQUIRE(app::audioClipAt(track, 8.0) == &track.clips[0]); // an end counts
     REQUIRE(app::audioClipAt(track, 9.0) == nullptr);
-    REQUIRE(app::audioClipAt(track, 12.0) == nullptr);        // instrument clips have no audio
 }

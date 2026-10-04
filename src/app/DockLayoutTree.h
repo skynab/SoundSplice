@@ -15,7 +15,7 @@ namespace soundsplice
     between this and its real tree of DockRegions).
 
     Deliberately JUCE-free so the text round-trip can be unit-tested headless,
-    exactly like model::Serialization and PianoRollGeometry. Getting this
+    exactly like model::Serialization. Getting this
     grammar wrong silently resets everyone's saved workspace, so it's worth
     testing on its own rather than only through the UI.
 */

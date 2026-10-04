@@ -10,14 +10,13 @@ namespace
     Song threeTracks()
     {
         Song song;
-        for (const auto type : { TrackType::Audio, TrackType::Audio, TrackType::Instrument })
+        for (const char* file : { "a.wav", "a.wav", "" })
         {
-            const int id = addTrack(song, type, "t").id;
+            const int id = addTrack(song, TrackType::Audio, "t").id;
             for (const double start : { 8.0, 0.0 })
             {
                 Clip clip;
-                clip.type        = type == TrackType::Audio ? ClipType::Audio : ClipType::Instrument;
-                clip.audioFile   = type == TrackType::Audio ? "a.wav" : "";
+                clip.audioFile   = file;
                 clip.startBeats  = start;
                 clip.lengthBeats = 4.0;
                 addClip(song, id, clip);
@@ -33,7 +32,7 @@ TEST_CASE("Match Loudness takes the clips the time selection touches, in time or
     const TimeSelection selection { 2.0, 9.0, { song.tracks[0].id, song.tracks[2].id } };
 
     const auto clips = app::clipsToMatch(song, selection, -1);
-    REQUIRE(clips.size() == 2); // track 0's two clips; the instrument track has no audio
+    REQUIRE(clips.size() == 2); // track 0's two clips; track 2's have no audio
     REQUIRE(clips[0] == app::MatchedClip { song.tracks[0].id, song.tracks[0].clips[1].id }); // the one at beat 0 first
     REQUIRE(clips[1] == app::MatchedClip { song.tracks[0].id, song.tracks[0].clips[0].id });
 

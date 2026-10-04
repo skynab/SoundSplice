@@ -10,7 +10,7 @@ TEST_CASE("addTrack assigns increasing ids and appends", "[model][song]")
     Song s;
     // Capture ids by value — addTrack returns a reference into the vector, which
     // a subsequent addTrack may invalidate by reallocating.
-    const int aId = addTrack(s, TrackType::Instrument, "Synth").id;
+    const int aId = addTrack(s, TrackType::Audio, "Synth").id;
     const int bId = addTrack(s, TrackType::Audio, "Vocals").id;
 
     REQUIRE(s.tracks.size() == 2);
@@ -23,7 +23,7 @@ TEST_CASE("addTrack assigns increasing ids and appends", "[model][song]")
 TEST_CASE("findTrack and removeTrack behave", "[model][song]")
 {
     Song s;
-    const int id = addTrack(s, TrackType::Instrument, "A").id;
+    const int id = addTrack(s, TrackType::Audio, "A").id;
 
     REQUIRE(findTrack(s, id) != nullptr);
     REQUIRE(findTrack(s, 999) == nullptr);
@@ -35,7 +35,7 @@ TEST_CASE("findTrack and removeTrack behave", "[model][song]")
 TEST_CASE("addClip appends to a track with a fresh id", "[model][song]")
 {
     Song s;
-    const int trackId = addTrack(s, TrackType::Instrument, "A").id;
+    const int trackId = addTrack(s, TrackType::Audio, "A").id;
 
     Clip clip;
     clip.lengthBeats = 8.0;
@@ -50,7 +50,7 @@ TEST_CASE("addClip appends to a track with a fresh id", "[model][song]")
 TEST_CASE("Song edits are undoable through History", "[model][song][history]")
 {
     Song initial;
-    addTrack(initial, TrackType::Instrument, "Synth");
+    addTrack(initial, TrackType::Audio, "Synth");
 
     History<Song> h(initial);
     h.edit("Add track", [](Song& s) { addTrack(s, TrackType::Audio, "Drums"); });
@@ -67,7 +67,7 @@ TEST_CASE("Song edits are undoable through History", "[model][song][history]")
 TEST_CASE("A clip can be removed from a track", "[model][song]")
 {
     Song song;
-    const int id = addTrack(song, TrackType::Instrument, "Synth").id;
+    const int id = addTrack(song, TrackType::Audio, "Synth").id;
     addClip(song, id, Clip {});
     addClip(song, id, Clip {});
     const int secondClipId = findTrack(song, id)->clips[1].id;
@@ -80,7 +80,7 @@ TEST_CASE("A clip can be removed from a track", "[model][song]")
 TEST_CASE("Removing a clip refuses coordinates it doesn't have", "[model][song]")
 {
     Song song;
-    const int id = addTrack(song, TrackType::Instrument, "Synth").id;
+    const int id = addTrack(song, TrackType::Audio, "Synth").id;
     addClip(song, id, Clip {});
 
     REQUIRE_FALSE(removeClip(song, id, 1));    // past the end
@@ -94,72 +94,17 @@ TEST_CASE("A removed clip's id is never handed out again", "[model][song]")
     // Ids come from a counter that only counts up. If removal freed ids for
     // reuse, a clip could inherit a stale reference to a deleted one.
     Song song;
-    const int id = addTrack(song, TrackType::Instrument, "Synth").id;
+    const int id = addTrack(song, TrackType::Audio, "Synth").id;
     const int firstId = addClip(song, id, Clip {})->id;
 
     REQUIRE(removeClip(song, id, 0));
     REQUIRE(addClip(song, id, Clip {})->id != firstId);
 }
 
-TEST_CASE("Removing a track takes its session column with it", "[model][song]")
-{
-    Song song;
-    const int keep = addTrack(song, TrackType::Instrument, "Keep").id;
-    const int drop = addTrack(song, TrackType::Instrument, "Drop").id;
-    addScene(song, "A");
-    addScene(song, "B");
-    setSessionClip(song, 1, 0, Clip {});
-
-    REQUIRE(removeTrack(song, drop));
-    REQUIRE(song.tracks.size() == 1);
-    REQUIRE(song.tracks[0].id == keep);
-    REQUIRE(song.tracks[0].sessionSlots.size() == 2); // the grid is still two rows deep
-}
-
-TEST_CASE("Removing a scene keeps the session grid rectangular", "[model][song]")
-{
-    // Every session lookup indexes a track's slots by scene index, so a grid
-    // that loses a row from the scene list but not from the tracks would read
-    // the wrong cell from then on.
-    Song song;
-    addTrack(song, TrackType::Instrument, "One");
-    addTrack(song, TrackType::Instrument, "Two");
-    addScene(song, "A");
-    addScene(song, "B");
-    addScene(song, "C");
-
-    Clip marker;
-    marker.lengthBeats = 7.0;
-    setSessionClip(song, 0, 2, marker); // a clip in scene C
-
-    REQUIRE(removeScene(song, 0)); // drop scene A
-
-    REQUIRE(song.scenes.size() == 2);
-    for (const auto& track : song.tracks)
-        REQUIRE(track.sessionSlots.size() == 2);
-
-    // C was the third row and is now the second; the clip must have moved
-    // with it rather than staying at an index that no longer means C.
-    const Clip* moved = sessionClip(song, 0, 1);
-    REQUIRE(moved != nullptr);
-    REQUIRE(moved->lengthBeats == 7.0);
-}
-
-TEST_CASE("Removing a scene refuses an index it doesn't have", "[model][song]")
-{
-    Song song;
-    addTrack(song, TrackType::Instrument, "One");
-    addScene(song, "A");
-
-    REQUIRE_FALSE(removeScene(song, 1));
-    REQUIRE_FALSE(removeScene(song, -1));
-    REQUIRE(song.scenes.size() == 1);
-}
-
 TEST_CASE("A track can be renamed", "[model][song]")
 {
     Song song;
-    const int id = addTrack(song, TrackType::Instrument, "Synth 1").id;
+    const int id = addTrack(song, TrackType::Audio, "Synth 1").id;
 
     REQUIRE(renameTrack(song, id, "Lead"));
     REQUIRE(findTrack(song, id)->name == "Lead");
@@ -184,7 +129,7 @@ TEST_CASE("A duplicated track's clips get their own ids", "[model][song]")
     // Ids are how the rest of the app addresses clips. Sharing them would
     // make an edit to one resolve to the other at random.
     Song song;
-    const int trackId = addTrack(song, TrackType::Instrument, "Keys").id;
+    const int trackId = addTrack(song, TrackType::Audio, "Keys").id;
     addClip(song, trackId, Clip {});
     addClip(song, trackId, Clip {});
 
@@ -203,33 +148,17 @@ TEST_CASE("A duplicated track's clips get their own ids", "[model][song]")
     REQUIRE(copy->clips[0].id != copy->clips[1].id);
 }
 
-TEST_CASE("A duplicated track's session clips get their own ids", "[model][song]")
-{
-    Song song;
-    addTrack(song, TrackType::Instrument, "Keys");
-    addScene(song, "A");
-    setSessionClip(song, 0, 0, Clip {});
-
-    const int originalSlotId = song.tracks[0].sessionSlots[0].clip.id;
-
-    Track* copy = duplicateTrack(song, 0);
-    REQUIRE(copy != nullptr);
-    REQUIRE(copy->sessionSlots.size() == 1);
-    REQUIRE(copy->sessionSlots[0].hasClip);
-    REQUIRE(copy->sessionSlots[0].clip.id != originalSlotId);
-}
-
 TEST_CASE("A duplicate keeps the music and lands next to the original", "[model][song]")
 {
     Song song;
-    addTrack(song, TrackType::Instrument, "One");
-    const int second = addTrack(song, TrackType::Instrument, "Two").id;
-    addTrack(song, TrackType::Instrument, "Three");
+    addTrack(song, TrackType::Audio, "One");
+    const int second = addTrack(song, TrackType::Audio, "Two").id;
+    addTrack(song, TrackType::Audio, "Three");
 
     Clip clip;
     clip.startBeats  = 8.0;
     clip.lengthBeats = 4.0;
-    clip.pattern.notes.push_back({ 1.0, 0.5, 64, 0.9f });
+    clip.audioFile   = "two.wav";
     addClip(song, second, clip);
 
     song.tracks[1].gainDb = -6.0f;
@@ -247,21 +176,20 @@ TEST_CASE("A duplicate keeps the music and lands next to the original", "[model]
     REQUIRE(song.tracks[2].colour == 0xff36618e);
     REQUIRE(song.tracks[2].clips.size() == 1);
     REQUIRE(song.tracks[2].clips[0].startBeats == 8.0);
-    REQUIRE(song.tracks[2].clips[0].pattern.notes.size() == 1);
-    REQUIRE(song.tracks[2].clips[0].pattern.notes[0].noteNumber == 64);
+    REQUIRE(song.tracks[2].clips[0].audioFile == "two.wav");
 }
 
 TEST_CASE("A duplicate is named so it can be told apart", "[model][song]")
 {
     Song song;
-    addTrack(song, TrackType::Instrument, "Bass");
+    addTrack(song, TrackType::Audio, "Bass");
     REQUIRE(duplicateTrack(song, 0)->name == "Bass copy");
 }
 
 TEST_CASE("Duplicating a track that isn't there does nothing", "[model][song]")
 {
     Song song;
-    addTrack(song, TrackType::Instrument, "One");
+    addTrack(song, TrackType::Audio, "One");
 
     REQUIRE(duplicateTrack(song, -1) == nullptr);
     REQUIRE(duplicateTrack(song, 5) == nullptr);
@@ -274,7 +202,7 @@ TEST_CASE("Pasting the same track twice gives two separate tracks", "[model][son
     // rather than being reissued, the second paste would produce a track the
     // app couldn't tell from the first.
     Song song;
-    const int sourceId = addTrack(song, TrackType::Instrument, "Pad").id;
+    const int sourceId = addTrack(song, TrackType::Audio, "Pad").id;
     addClip(song, sourceId, Clip {});
 
     const Track buffer = song.tracks[0]; // as a clipboard would hold it
@@ -297,16 +225,16 @@ TEST_CASE("An appended copy keeps its music and its name", "[model][song]")
     // Unlike duplicating, pasting doesn't rename: the buffer already carries
     // whatever the user called it.
     Song song;
-    const int id = addTrack(song, TrackType::Instrument, "Riff").id;
+    const int id = addTrack(song, TrackType::Audio, "Riff").id;
     Clip clip;
-    clip.pattern.notes.push_back({ 0.0, 1.0, 55, 0.8f });
+    clip.audioFile = "riff.wav";
     addClip(song, id, clip);
 
     const Track buffer = song.tracks[0];
     Track& pasted = appendTrackCopy(song, buffer);
 
     REQUIRE(pasted.name == "Riff");
-    REQUIRE(pasted.type == TrackType::Instrument);
+    REQUIRE(pasted.type == TrackType::Audio);
     REQUIRE(pasted.clips.size() == 1);
-    REQUIRE(pasted.clips[0].pattern.notes[0].noteNumber == 55);
+    REQUIRE(pasted.clips[0].audioFile == "riff.wav");
 }

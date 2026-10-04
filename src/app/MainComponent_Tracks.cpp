@@ -7,38 +7,11 @@
 #include "model/TrackResample.h"
 
 // Part of MainComponent (shared pieces in MainComponentInternal.h).
-// Tracks, clips, notes, the session grid and the mixer, and keeping the engine's
-// tracks in step with the document.
+// Tracks, clips and the mixer, and keeping the engine's tracks in step with
+// the document.
 
 namespace soundsplice
 {
-const engine::Pattern& MainComponent::currentPattern() const
-{
-    static const engine::Pattern empty;
-    const auto& song = history_.current();
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
-        return empty;
-    const auto& track = song.tracks[(size_t) selectedTrackIndex_];
-    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) track.clips.size())
-        return empty;
-    return track.clips[(size_t) selectedClipIndex_].pattern;
-}
-
-void MainComponent::editPattern(const engine::Pattern& pattern)
-{
-    const int trackIdx = selectedTrackIndex_;
-    const int clipIdx  = selectedClipIndex_;
-    history_.edit("Edit notes", [&pattern, trackIdx, clipIdx](model::Song& s)
-    {
-        if (trackIdx < 0 || trackIdx >= (int) s.tracks.size())
-            return;
-        auto& clips = s.tracks[(size_t) trackIdx].clips;
-        if (clipIdx >= 0 && clipIdx < (int) clips.size())
-            clips[(size_t) clipIdx].pattern = pattern;
-    });
-    syncEngineTracks(); // rebuilds every track's clip list, including this edit
-}
-
 void MainComponent::addTrack()
 {
     if (trackCount() >= engine_.maxTracks())
@@ -46,28 +19,19 @@ void MainComponent::addTrack()
 
     history_.edit("Add track", [](model::Song& s)
     {
-        const auto name = "Synth " + juce::String((int) s.tracks.size() + 1);
-        const int  id   = model::addTrack(s, model::TrackType::Instrument, name.toStdString()).id;
-        model::Clip clip;
-        clip.type                = model::ClipType::Instrument;
-        clip.lengthBeats         = 4.0;
-        clip.pattern.lengthBeats = 4.0;
-        model::addClip(s, id, clip);
+        const auto name = "Audio " + juce::String((int) s.tracks.size() + 1);
+        model::addTrack(s, model::TrackType::Audio, name.toStdString());
     });
 
     selectedTrackIndex_ = trackCount() - 1;
     selectedClipIndex_  = 0;
     syncEngineTracks();
-    engine_.setArmedTrack(selectedTrackIndex_);
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
     updateMixerStrips();
-    updateEditingLabel();
 }
 
 /** Bar length in beats, from the current time signature. */
@@ -76,194 +40,7 @@ double MainComponent::beatsPerBar() const
     return juce::jmax(1.0, uiTempoMap_.quartersPerBar());
 }
 
-/** Adds a new clip to the currently selected track, positioned 2 beats after
-    its last existing clip (or at beat 0 if it has none), and selects it for
-    editing. */
-void MainComponent::addClipToSelectedTrack()
-{
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
-        return;
-    if (! model::routing::holdsClips(history_.current().tracks[(size_t) selectedTrackIndex_]))
-    {
-        showError("A bus has no clips - route or send tracks to it instead");
-        return;
-    }
-
-    const int trackIdx = selectedTrackIndex_;
-    int       newClipIndex = -1;
-
-    history_.edit("Add clip", [trackIdx, &newClipIndex](model::Song& s)
-    {
-        if (trackIdx < 0 || trackIdx >= (int) s.tracks.size())
-            return;
-        auto& track = s.tracks[(size_t) trackIdx];
-
-        double nextStart = 0.0;
-        for (const auto& c : track.clips)
-            nextStart = juce::jmax(nextStart, c.startBeats + c.lengthBeats);
-        if (! track.clips.empty())
-            nextStart += 2.0; // a small gap after the last clip
-
-        model::Clip clip;
-        clip.id                  = model::allocateId(s);
-        clip.type                = model::ClipType::Instrument;
-        clip.startBeats          = nextStart;
-        clip.lengthBeats         = 4.0;
-        clip.pattern.lengthBeats = 4.0;
-        track.clips.push_back(clip);
-        newClipIndex = (int) track.clips.size() - 1;
-    });
-
-    if (newClipIndex < 0)
-        return;
-
-    selectedClipIndex_ = newClipIndex;
-    syncEngineTracks();
-    refreshPianoRollForSelected();
-    refreshEffectChainForSelected();
-    refreshAudioEditorForSelected();
-    refreshAutomationPaneForSelected();
-    refreshSessionView();
-    arrangementView_.setSong(history_.current());
-    arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
-    updateEditingLabel();
-}
-
-/** Redraws the session grid from the document. Which cells are *playing* is
-    pushed separately from the engine each timer tick — see timerCallback —
-    because a launch stays pending until the next bar line and the grid would
-    otherwise light the wrong cell. */
-void MainComponent::refreshSessionView()
-{
-    sessionView_.setSong(history_.current());
-}
-
-/** Adds a scene (a grid row), giving every track an empty slot in it. */
-/** Removes a session row and every clip in it. Stops playback first: the
-    slots the engine is holding are addressed by index, and the row below
-    would inherit the index of the one that just went away. */
-void MainComponent::deleteSessionScene(int sceneIndex)
-{
-    const auto& song = history_.current();
-    if (sceneIndex < 0 || sceneIndex >= (int) song.scenes.size())
-        return;
-
-    const auto name = song.scenes[(size_t) sceneIndex].name;
-
-    engine_.stopAllSessionSlots();
-
-    history_.edit("Delete scene", [sceneIndex](model::Song& s) { model::removeScene(s, sceneIndex); });
-
-    syncEngineTracks();
-    refreshSessionView();
-
-    // Bigger blast radius than a track deletion — every clip on every track
-    // in the row — so it earns the same reassurance, not less.
-    showStatus("Deleted \"" + juce::String(name) + "\" - undo to bring it back");
-}
-
-void MainComponent::addSessionScene()
-{
-    std::string name;
-    history_.edit("Add scene", [&name](model::Song& s)
-    {
-        name = "Scene " + std::to_string(s.scenes.size() + 1);
-        model::addScene(s, name);
-    });
-
-    syncEngineTracks();
-    refreshSessionView();
-    showStatus("Added \"" + juce::String(name) + "\"");
-}
-
-/** Clicking an empty cell fills it with a copy of the track's currently open
-    clip — the quickest way to get material into the grid without a separate
-    "new session clip" flow. Declines if there's nothing to copy. */
-void MainComponent::captureClipIntoSession(int trackIndex, int sceneIndex)
-{
-    const auto& song = history_.current();
-    if (trackIndex < 0 || trackIndex >= (int) song.tracks.size())
-        return;
-
-    const auto& clips = song.tracks[(size_t) trackIndex].clips;
-    if (clips.empty())
-    {
-        showError("Nothing to capture - this track has no clips");
-        return;
-    }
-
-    const int  sourceIndex = juce::jlimit(0, (int) clips.size() - 1,
-                                          trackIndex == selectedTrackIndex_ ? selectedClipIndex_ : 0);
-    const auto source      = clips[(size_t) sourceIndex];
-
-    history_.edit("Add session clip", [trackIndex, sceneIndex, &source](model::Song& s)
-    {
-        model::setSessionClip(s, trackIndex, sceneIndex, source);
-    });
-
-    syncEngineTracks();
-    refreshSessionView();
-}
-/** Copies the piano roll's selected notes, or the whole pattern if nothing
-    is selected — the same "no selection means everything" rule quantize
-    uses, so both commands are useful before the selection gesture is
-    discovered. */
-void MainComponent::copyNotes()
-{
-    const auto& pattern   = currentPattern();
-    const auto& selection = pianoRoll_.selectedNoteIndices();
-
-    noteClipboard_.clear();
-    if (selection.empty())
-    {
-        noteClipboard_ = pattern.notes;
-    }
-    else
-    {
-        for (int index : selection)
-            if (index >= 0 && index < (int) pattern.notes.size())
-                noteClipboard_.push_back(pattern.notes[(size_t) index]);
-    }
-
-    showStatus("Copied " + juce::String((int) noteClipboard_.size()) + " note(s)");
-}
-
-/** Pastes notes into the open clip at the positions they were copied from,
-    which is what makes "copy this part into that clip" work. Anything past
-    the destination pattern's end is dropped rather than pasted somewhere it
-    can't be seen or heard. */
-void MainComponent::pasteNotes()
-{
-    if (noteClipboard_.empty() || selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
-        return;
-
-    const int trackIdx = selectedTrackIndex_;
-    const int clipIdx  = selectedClipIndex_;
-    const auto notes   = noteClipboard_;
-
-    history_.edit("Paste notes", [trackIdx, clipIdx, &notes](model::Song& s)
-    {
-        if (trackIdx < 0 || trackIdx >= (int) s.tracks.size())
-            return;
-        auto& clips = s.tracks[(size_t) trackIdx].clips;
-        if (clipIdx < 0 || clipIdx >= (int) clips.size())
-            return;
-
-        auto& pattern = clips[(size_t) clipIdx].pattern;
-        for (const auto& note : notes)
-            if (note.startBeats < pattern.lengthBeats)
-                pattern.notes.push_back(note);
-    });
-
-    syncEngineTracks();
-    refreshPianoRollForSelected();
-    refreshEffectChainForSelected();
-    refreshAudioEditorForSelected();
-    refreshAutomationPaneForSelected();
-    refreshSessionView();
-}
-
-/** Copies the selected clip whole — pattern, length and all. */
+/** Copies the selected clip whole. */
 void MainComponent::copyClip()
 {
     const auto& song = history_.current();
@@ -285,9 +62,9 @@ void MainComponent::pasteClip()
 {
     if (clipClipboard_.empty() || selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
         return;
-    if (! model::rangeedit::fits(history_.current().tracks[(size_t) selectedTrackIndex_], clipClipboard_.front().type))
+    if (! model::rangeedit::appliesTo(history_.current().tracks[(size_t) selectedTrackIndex_]))
     {
-        showError("That clip can't go on this track - audio goes on audio tracks, notes on instrument ones");
+        showError("A bus has no clips - paste onto an audio track");
         return;
     }
 
@@ -313,14 +90,11 @@ void MainComponent::pasteClip()
         selectedClipIndex_ = newIndex;
 
     syncEngineTracks();
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
-    updateEditingLabel();
 }
 
 /** Copy + paste in one step, landing the copy immediately after the original
@@ -366,14 +140,11 @@ void MainComponent::deleteSelectedClip()
     selectedClipIndex_ = clips.empty() ? 0 : juce::jmin(clipIndex, (int) clips.size() - 1);
 
     syncEngineTracks();
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
-    updateEditingLabel();
 
     // Reachable by a bare key and the most-used delete in the app, so it's
     // the one most likely to be hit by accident — same reasoning as track
@@ -442,8 +213,8 @@ void MainComponent::renameSelectedTrack()
 /** Copies a track and everything on it, putting the copy directly after it.
 
     The point of duplicating a track here is a second copy of a part to loop
-    against the first, so the copy has to be complete — clips, instrument
-    settings, effect chain and all — and it has to be genuinely separate,
+    against the first, so the copy has to be complete — clips, effect chain
+    and all — and it has to be genuinely separate,
     which is what model::duplicateTrack's reissuing of every id gives. */
 void MainComponent::duplicateTrackAt(int trackIndex)
 {
@@ -634,8 +405,8 @@ void MainComponent::makeStereoTrack()
                 stereo.clear();
             }
 
-            const float leftGain  = engine::InstrumentTrack::panGainFor(0, pans[side]);
-            const float rightGain = engine::InstrumentTrack::panGainFor(1, pans[side]);
+            const float leftGain  = engine::MixerTrack::panGainFor(0, pans[side]);
+            const float rightGain = engine::MixerTrack::panGainFor(1, pans[side]);
             const int   samples   = juce::jmin(stereo.getNumSamples(), buffer.getNumSamples());
             const auto* inLeft    = buffer.getReadPointer(0);
             const auto* inRight   = buffer.getReadPointer(juce::jmin(1, buffer.getNumChannels() - 1));
@@ -686,11 +457,9 @@ void MainComponent::makeStereoTrack()
             track.id   = model::allocateId(s);
             track.name = name;
             track.type = model::TrackType::Audio;
-            track.sessionSlots.resize(s.scenes.size());
 
             model::Clip clip;
             clip.id          = model::allocateId(s);
-            clip.type        = model::ClipType::Audio;
             clip.startBeats  = startBeats;
             clip.lengthBeats = length;
             clip.audioFile   = path;
@@ -941,7 +710,6 @@ void MainComponent::resampleSelectedTrack(double sampleRate)
         // Every clip is where it was, so the selection stays.
         self->syncEngineTracks();
         self->refreshAudioEditorForSelected();
-        self->refreshSessionView();
         self->arrangementView_.setSong(self->history_.current());
         self->showStatus("Resampled the track to " + rateText);
     };
@@ -1407,7 +1175,7 @@ void MainComponent::detectClipTempo(int trackIndex, int clipId)
         return;
     const int   trackId = song.tracks[(size_t) trackIndex].id;
     const auto* clip    = model::warpedit::findClip(song, trackId, clipId);
-    if (clip == nullptr || clip->type != model::ClipType::Audio)
+    if (clip == nullptr)
         return;
 
     showBusy("Detecting the clip's tempo...");
@@ -1535,7 +1303,7 @@ void MainComponent::moveClipToTrack(int srcTrackIndex, int clipIndex, int destTr
         return;
 
     const auto& destTrack = song.tracks[(size_t) destTrackIndex];
-    if (srcTrack.type != destTrack.type || srcTrack.type == model::TrackType::Audio)
+    if (srcTrack.type != model::TrackType::Audio || destTrack.type != model::TrackType::Audio)
         return;
 
     const int srcTrackId  = srcTrack.id;
@@ -1566,14 +1334,11 @@ void MainComponent::moveClipToTrack(int srcTrackIndex, int clipIndex, int destTr
     selectedClipIndex_  = newClipIndex;
 
     syncEngineTracks();
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
-    updateEditingLabel();
 }
 
 void MainComponent::renameTrackAt(int trackIndex)
@@ -1602,9 +1367,7 @@ void MainComponent::renameTrackAt(int trackIndex)
 
             syncEngineTracks();
             updateMixerStrips();
-            refreshSessionView();
             arrangementView_.setSong(history_.current());
-            updateEditingLabel();
         });
 }
 
@@ -1637,76 +1400,15 @@ void MainComponent::duplicateClip()
         selectedClipIndex_ = newIndex;
 
     syncEngineTracks();
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
-    updateEditingLabel();
-}
-
-/** Snaps the open clip's notes onto the grid, optionally swung. Acts on the
-    piano roll's selection, or the whole pattern when nothing is selected. */
-void MainComponent::quantizeNotes(double swingAmount)
-{
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
-        return;
-
-    const auto& song = history_.current();
-    if (selectedTrackIndex_ >= (int) song.tracks.size())
-        return;
-    const auto& clips = song.tracks[(size_t) selectedTrackIndex_].clips;
-    if (selectedClipIndex_ < 0 || selectedClipIndex_ >= (int) clips.size())
-        return;
-
-    const int  trackIdx  = selectedTrackIndex_;
-    const int  clipIdx   = selectedClipIndex_;
-    const auto selection = pianoRoll_.selectedNoteIndices();
-    const int  affected  = selection.empty()
-                              ? (int) clips[(size_t) clipIdx].pattern.notes.size()
-                              : (int) selection.size();
-
-    if (affected == 0)
-    {
-        showStatus("Nothing to " + juce::String(swingAmount > 0.0 ? "swing" : "quantize")
-                   + " - this clip has no notes");
-        return;
-    }
-
-    history_.edit(swingAmount > 0.0 ? "Swing" : "Quantize",
-                  [trackIdx, clipIdx, swingAmount, &selection](model::Song& s)
-    {
-        if (trackIdx < 0 || trackIdx >= (int) s.tracks.size())
-            return;
-        auto& trackClips = s.tracks[(size_t) trackIdx].clips;
-        if (clipIdx < 0 || clipIdx >= (int) trackClips.size())
-            return;
-
-        // The grid the editor draws is 16ths, so that's what notes snap to.
-        engine::NoteOps::quantizeNotes(trackClips[(size_t) clipIdx].pattern.notes, 0.25, swingAmount, selection);
-    });
-
-    syncEngineTracks();
-    refreshPianoRollForSelected();
-    refreshEffectChainForSelected();
-    refreshAudioEditorForSelected();
-    refreshAutomationPaneForSelected();
-    refreshSessionView();
-
-    // Reloading the pattern clears the selection, which would silently widen
-    // a follow-up Swing to the whole part. Quantizing never adds, removes or
-    // reorders notes, so the same indices still mean the same notes.
-    pianoRoll_.setSelectedNoteIndices(selection);
-
-    showStatus((swingAmount > 0.0 ? "Swung " : "Quantized ") + juce::String(affected)
-               + (affected == 1 ? " note" : " notes"));
 }
 
 /** Sets a clip's window on the timeline (from the arrangement's resize
-    handle). Note this is the window, not the pattern's loop length — see
-    setPatternBars. A track holding a *single* clip is still given an
+    handle). A track holding a *single* clip is still given an
     unbounded window by syncEngineTracks (the long-standing "one clip plays
     until Stop" rule), so resizing a lone clip changes what you see and what
     gets exported, but not when it stops sounding; that only bites once the
@@ -1727,7 +1429,6 @@ void MainComponent::setClipLength(int trackIndex, int clipIndex, double newLengt
 
     syncEngineTracks();
     arrangementView_.setSong(history_.current());
-    updateEditingLabel();
 }
 
 /** Moves an audio clip's left edge (from the arrangement's left resize
@@ -1745,8 +1446,7 @@ void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newSta
             return;
 
         auto& clip = clips[(size_t) clipIndex];
-        if (clip.type == model::ClipType::Audio)
-            clip = trimClipStart(clip, newStartBeats, model::clockFor(s), kMinTrimmedClipBeats);
+        clip = trimClipStart(clip, newStartBeats, model::clockFor(s), kMinTrimmedClipBeats);
         if (crossfade)
             model::arrangeedit::applyAutoCrossfades(s, trackIndex);
     });
@@ -1754,7 +1454,6 @@ void MainComponent::trimClipStartTo(int trackIndex, int clipIndex, double newSta
     syncEngineTracks();
     refreshAudioEditorForSelected();
     arrangementView_.setSong(history_.current());
-    updateEditingLabel();
 }
 
 /** Slides an audio clip's audio inside its edges (a Ctrl-drag in the
@@ -1771,15 +1470,12 @@ void MainComponent::slipClipTo(int trackIndex, int clipIndex, double newOffsetSe
         if (clipIndex < 0 || clipIndex >= (int) clips.size())
             return;
 
-        auto& clip = clips[(size_t) clipIndex];
-        if (clip.type == model::ClipType::Audio)
-            clip.sourceOffsetSeconds = std::max(0.0, newOffsetSeconds);
+        clips[(size_t) clipIndex].sourceOffsetSeconds = std::max(0.0, newOffsetSeconds);
     });
 
     syncEngineTracks();
     refreshAudioEditorForSelected();
     arrangementView_.setSong(history_.current());
-    updateEditingLabel();
 }
 
 /** Replaces an audio clip's fades as one undo step, from dragging a fade
@@ -1797,8 +1493,6 @@ void MainComponent::setClipFades(int trackIndex, int clipIndex, const engine::Cl
             return;
 
         auto& clip = clips[(size_t) clipIndex];
-        if (clip.type != model::ClipType::Audio)
-            return;
 
         // A fade set by hand is the user's from now on, not an automatic one.
         if (fades.inSeconds != clip.fades.inSeconds || fades.inShape != clip.fades.inShape)
@@ -1826,8 +1520,7 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
         return;
 
     const auto& clips = song.tracks[(size_t) trackIndex].clips;
-    if (clipIndex < 0 || clipIndex >= (int) clips.size()
-        || clips[(size_t) clipIndex].type != model::ClipType::Audio)
+    if (clipIndex < 0 || clipIndex >= (int) clips.size())
         return;
 
     const auto fades = clips[(size_t) clipIndex].fades;
@@ -1886,7 +1579,7 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
 
     int overlapping = 0;
     for (const auto& other : track.clips)
-        if (other.type == model::ClipType::Audio && other.startBeats < clip.startBeats + clip.lengthBeats
+        if (other.startBeats < clip.startBeats + clip.lengthBeats
             && other.startBeats + other.lengthBeats > clip.startBeats)
             ++overlapping;
     menu.addItem(kCombineTakes, "Combine Overlapping Clips into Takes", overlapping > 1);
@@ -1897,17 +1590,14 @@ void MainComponent::showClipMenu(int trackIndex, int clipIndex)
     static constexpr int kDetectTempo     = 5;
     static constexpr int kSetClipTempo    = 6;
     static constexpr int kProjectFromClip = 7;
-    if (clip.type == model::ClipType::Audio)
-    {
-        menu.addSeparator();
-        const bool knows = clip.sourceBpm > 0.0;
-        menu.addItem(kWarp, knows ? "Warp to Song Tempo   (clip is " + juce::String(clip.sourceBpm, 1) + " BPM)"
-                                  : juce::String("Warp to Song Tempo   (detect or set its tempo first)"),
-                     knows, clip.warp);
-        menu.addItem(kDetectTempo, "Detect Clip Tempo");
-        menu.addItem(kSetClipTempo, "Set Clip Tempo...");
-        menu.addItem(kProjectFromClip, "Set Song Tempo from Clip", knows);
-    }
+    menu.addSeparator();
+    const bool knows = clip.sourceBpm > 0.0;
+    menu.addItem(kWarp, knows ? "Warp to Song Tempo   (clip is " + juce::String(clip.sourceBpm, 1) + " BPM)"
+                              : juce::String("Warp to Song Tempo   (detect or set its tempo first)"),
+                 knows, clip.warp);
+    menu.addItem(kDetectTempo, "Detect Clip Tempo");
+    menu.addItem(kSetClipTempo, "Set Clip Tempo...");
+    menu.addItem(kProjectFromClip, "Set Song Tempo from Clip", knows);
 
     menu.showMenuAsync(juce::PopupMenu::Options(),
         [self = juce::Component::SafePointer<MainComponent>(this), trackIndex, clipIndex, fades, clipId,
@@ -2017,7 +1707,7 @@ void MainComponent::combineOverlappingClipsIntoTakes(int trackIndex, int clipInd
     const auto&      clip = track.clips[(size_t) clipIndex];
     std::vector<int> ids;
     for (const auto& other : track.clips)
-        if (other.type == model::ClipType::Audio && other.startBeats < clip.startBeats + clip.lengthBeats
+        if (other.startBeats < clip.startBeats + clip.lengthBeats
             && other.startBeats + other.lengthBeats > clip.startBeats)
             ids.push_back(other.id);
 
@@ -2035,64 +1725,6 @@ void MainComponent::combineOverlappingClipsIntoTakes(int trackIndex, int clipInd
                "or select a range and use a take for it");
 }
 
-/** Sets how many bars the open clip's pattern loops over. Growing the pattern
-    also grows the clip's window if the window would otherwise be too short to
-    contain it — keeping a clip able to hold its own content isn't the same as
-    silently re-looping it, which is why the window is only ever grown here,
-    never shrunk. */
-void MainComponent::setPatternBars(int bars)
-{
-    if (bars <= 0 || selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
-        return;
-
-    const double beatsPerBar = juce::jmax(1.0, uiTempoMap_.quartersPerBar());
-    const double lengthBeats = beatsPerBar * bars;
-    const int    trackIdx    = selectedTrackIndex_;
-    const int    clipIdx     = selectedClipIndex_;
-
-    history_.edit("Set pattern length", [trackIdx, clipIdx, lengthBeats](model::Song& s)
-    {
-        if (trackIdx < 0 || trackIdx >= (int) s.tracks.size())
-            return;
-        auto& clips = s.tracks[(size_t) trackIdx].clips;
-        if (clipIdx < 0 || clipIdx >= (int) clips.size())
-            return;
-
-        auto& clip = clips[(size_t) clipIdx];
-        clip.pattern.lengthBeats = lengthBeats;
-        clip.lengthBeats         = juce::jmax(clip.lengthBeats, lengthBeats);
-
-        // Notes now past the end would be unreachable in the editor and
-        // silent in the sequencer, so drop them rather than leave them
-        // invisibly attached to the clip.
-        auto& notes = clip.pattern.notes;
-        notes.erase(std::remove_if(notes.begin(), notes.end(),
-                                   [lengthBeats](const engine::Note& n) { return n.startBeats >= lengthBeats; }),
-                    notes.end());
-    });
-
-    syncEngineTracks();
-    refreshPianoRollForSelected();
-    refreshEffectChainForSelected();
-    refreshAudioEditorForSelected();
-    refreshAutomationPaneForSelected();
-    refreshSessionView();
-    arrangementView_.setSong(history_.current());
-    updateEditingLabel();
-}
-
-/** Mirrors the open clip's pattern length into the Bars box. */
-void MainComponent::updateBarsControl()
-{
-    const double beatsPerBar = juce::jmax(1.0, uiTempoMap_.quartersPerBar());
-    const auto&  pattern     = currentPattern();
-    const int    bars        = juce::jmax(1, (int) std::llround(pattern.lengthBeats / beatsPerBar));
-
-    // Only reflects lengths the box actually offers; an odd length set
-    // elsewhere leaves it blank rather than silently rounding the clip.
-    barsBox_.setSelectedId(bars == 1 || bars == 2 || bars == 4 ? bars : 0, juce::dontSendNotification);
-}
-
 void MainComponent::syncEngineTracks()
 {
     const auto& song = history_.current();
@@ -2102,32 +1734,16 @@ void MainComponent::syncEngineTracks()
     {
         const auto& track = song.tracks[(size_t) i];
 
-        std::vector<engine::ClipSlot> slots;
-        for (const auto& clip : track.clips)
-        {
-            if (clip.type != model::ClipType::Instrument)
-                continue; // audio clips aren't sequenced
-
-            engine::ClipSlot slot;
-            slot.pattern     = clip.pattern;
-            slot.startBeats  = clip.startBeats;
-            slot.lengthBeats = clip.lengthBeats;
-            slots.push_back(slot);
-        }
-        engine_.setTrackClips(i, slots);
-
-        // Audio clips -> the track's own audio-clip player. Each Audio-type
-        // clip becomes one AudioClipSlot, gated to its own
-        // [startBeats, startBeats+lengthBeats) window exactly like the
-        // instrument clips above. Unconditionally resubmitted every sync,
-        // same as instrument clips — cheap, since AudioEngine caches decoded
-        // audio by file path (see AudioEngine::setTrackAudioClips), so this
+        // Clips -> the track's own audio-clip player. Each clip becomes one
+        // AudioClipSlot, gated to its own [startBeats, startBeats+lengthBeats)
+        // window. Unconditionally resubmitted every sync — cheap, since
+        // AudioEngine caches decoded audio by file path (see AudioEngine::setTrackAudioClips), so this
         // never re-decodes a file it's already loaded, even across tracks
         // that share one.
         std::vector<engine::AudioClipSpec> audioSpecs;
         for (const auto& clip : track.clips)
         {
-            if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+            if (clip.audioFile.empty())
                 continue;
 
             engine::AudioClipSpec spec;
@@ -2169,42 +1785,6 @@ void MainComponent::syncEngineTracks()
         engine_.setTrackPan(i, track.pan);
         engine_.setTrackAutomation(i, engineAutomationFor(i, track));
 
-        // The session grid's column for this track. Empty slots are submitted
-        // too — the index is the scene, so the list has to stay aligned with
-        // Song::scenes even where there's nothing to play.
-        std::vector<engine::SessionSlotData> sessionSlots;
-        sessionSlots.reserve(track.sessionSlots.size());
-        for (const auto& slot : track.sessionSlots)
-        {
-            engine::SessionSlotData data;
-            data.hasClip = slot.hasClip && slot.clip.type == model::ClipType::Instrument;
-            if (data.hasClip)
-                data.pattern = slot.clip.pattern;
-            sessionSlots.push_back(std::move(data));
-        }
-        engine_.setTrackSessionSlots(i, sessionSlots);
-
-        const auto& synth = track.synthSettings;
-        engine_.setTrackSynthWaveform(i, synth.waveform);
-        engine_.setTrackSynthAttackMs(i, synth.attackMs);
-        engine_.setTrackSynthDecayMs(i, synth.decayMs);
-        engine_.setTrackSynthSustain(i, synth.sustain);
-        engine_.setTrackSynthReleaseMs(i, synth.releaseMs);
-        engine_.setTrackSynthFilterEnabled(i, synth.filterEnabled);
-        engine_.setTrackSynthFilterMode(i, synth.filterMode);
-        engine_.setTrackSynthFilterCutoff(i, synth.filterCutoff);
-        engine_.setTrackSynthFilterResonance(i, synth.filterResonance);
-        engine_.setTrackSynthGainDb(i, synth.gainDb);
-        engine_.setTrackSynthFilterEnvAmount(i, synth.filterEnvAmount);
-        engine_.setTrackSynthFilterEnvAttackMs(i, synth.filterEnvAttackMs);
-        engine_.setTrackSynthFilterEnvDecayMs(i, synth.filterEnvDecayMs);
-        engine_.setTrackSynthFilterEnvSustain(i, synth.filterEnvSustain);
-        engine_.setTrackSynthFilterEnvReleaseMs(i, synth.filterEnvReleaseMs);
-        engine_.setTrackSynthSubOscEnabled(i, synth.subOscEnabled);
-        engine_.setTrackSynthSubOscLevel(i, synth.subOscLevel);
-        engine_.setTrackSynthUnisonVoices(i, synth.unisonVoices);
-        engine_.setTrackSynthUnisonDetuneCents(i, synth.unisonDetuneCents);
-
         // The chain's shape, in order. Only pushed when it actually changed —
         // rebuilding resets every tail in the chain, so an unrelated edit must
         // not glitch a delay (see AudioEngine::setTrackEffectChain).
@@ -2240,29 +1820,6 @@ void MainComponent::syncEngineTracks()
     updateLoopRegion();
 }
 
-void MainComponent::refreshPianoRollForSelected()
-{
-    pianoRoll_.setPattern(currentPattern());
-    updateBarsControl();
-
-    // The same condition currentPattern() falls back to its shared empty
-    // Pattern for — the roll can't otherwise tell "nothing is open" apart
-    // from "a real clip that's genuinely empty."
-    const auto& song = history_.current();
-    const bool  noClipOpen = selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size()
-                          || selectedClipIndex_ < 0
-                          || selectedClipIndex_ >= (int) song.tracks[(size_t) selectedTrackIndex_].clips.size();
-    pianoRoll_.setNoClipSelected(noClipOpen);
-
-    if (! noClipOpen)
-    {
-        const auto& track = song.tracks[(size_t) selectedTrackIndex_];
-        pianoRoll_.setTrackInfo(track.name, track.colour);
-    }
-}
-
-/** Hands the automation pane the selected track's lane for whichever
-    parameter it is showing. */
 void MainComponent::refreshAutomationPaneForSelected()
 {
     if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= trackCount())
@@ -2349,54 +1906,6 @@ void MainComponent::applyEditedAutomationLane(const AutomationTarget& target,
 
     syncEngineTracks();
     arrangementView_.setSong(history_.current());
-}
-
-/** Briefly sounds @p noteNumber through whichever track is currently armed —
-    the same live-MIDI path the on-screen keyboard already uses (see
-    InstrumentTrack::render's receivesLiveMidi routing), so it plays through
-    that track's synth. Fired when clicking to add a note in the piano roll,
-    so pitches can be found by ear. */
-void MainComponent::previewNote(int noteNumber)
-{
-    engine_.keyboardState().noteOn(1, noteNumber, 0.8f);
-
-    // Guarded by a SafePointer rather than capturing `this` directly: the
-    // note-off fires 150ms later, and quitting the app within that window
-    // would otherwise run this lambda against a destroyed MainComponent (and
-    // a destroyed engine). A dangling preview is easy to trigger — click a
-    // note, close the window — and would crash on the way out.
-    juce::Component::SafePointer<MainComponent> safeThis(this);
-    juce::Timer::callAfterDelay(150, [safeThis, noteNumber]
-    {
-        if (auto* self = safeThis.getComponent())
-            self->engine_.keyboardState().noteOff(1, noteNumber, 0.8f);
-    });
-}
-
-void MainComponent::updateEditingLabel()
-{
-    const auto& song = history_.current();
-
-    if (selectedTrackIndex_ < 0 || selectedTrackIndex_ >= (int) song.tracks.size())
-    {
-        editingLabel_.setText("No track selected", juce::dontSendNotification);
-        return;
-    }
-
-    const auto& track = song.tracks[(size_t) selectedTrackIndex_];
-    const auto  name  = track.name.empty() ? ("Track " + juce::String(selectedTrackIndex_ + 1))
-                                           : juce::String(track.name);
-
-    juce::String text = "Editing: " + name;
-    if (! track.clips.empty())
-    {
-        text << "   |   Clip " << (selectedClipIndex_ + 1) << " of " << (int) track.clips.size();
-
-        if (selectedClipIndex_ >= 0 && selectedClipIndex_ < (int) track.clips.size()
-            && track.clips[(size_t) selectedClipIndex_].type == model::ClipType::Audio)
-            text << "  (audio clip - not MIDI-editable)";
-    }
-    editingLabel_.setText(text, juce::dontSendNotification);
 }
 
 void MainComponent::updateMixerStrips()
@@ -2597,15 +2106,11 @@ void MainComponent::selectTrackAndClip(int trackIndex, int clipIndex)
 
     selectedTrackIndex_ = trackIndex;
     selectedClipIndex_  = clipIndex;
-    engine_.setArmedTrack(selectedTrackIndex_);
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     updateMixerStrips(); // refreshes the selection highlight
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
-    updateEditingLabel();
 }
 
 /** Points the whole UI at a track: every pane that shows per-track state is
@@ -2619,16 +2124,12 @@ void MainComponent::selectTrackAndRefreshAll(int newTrackIndex)
     selectedTrackIndex_ = newTrackIndex;
     selectedClipIndex_  = 0;
     syncEngineTracks();
-    engine_.setArmedTrack(selectedTrackIndex_);
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
     updateMixerStrips();
-    updateEditingLabel();
 }
 
 } // namespace soundsplice

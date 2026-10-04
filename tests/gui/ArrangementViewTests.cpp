@@ -77,12 +77,10 @@ namespace
         model::Song song;
         for (int i = 0; i < count; ++i)
         {
-            const int id = model::addTrack(song, model::TrackType::Instrument,
+            const int id = model::addTrack(song, model::TrackType::Audio,
                                            "Track " + std::to_string(i + 1)).id;
             model::Clip clip;
-            clip.type                = model::ClipType::Instrument;
-            clip.lengthBeats         = 4.0;
-            clip.pattern.lengthBeats = 4.0;
+            clip.lengthBeats = 4.0;
             model::addClip(song, id, clip);
         }
         return song;
@@ -217,7 +215,7 @@ TEST_CASE("Every track type has a tag, and they are distinct", "[gui][arrangemen
 {
     // Renaming a track is only free if something else still says what kind it
     // is. Two types sharing a tag would defeat that for one of them.
-    const model::TrackType types[] = { model::TrackType::Instrument, model::TrackType::Audio };
+    const model::TrackType types[] = { model::TrackType::Audio, model::TrackType::Bus };
 
     std::vector<std::string> tags;
     for (auto type : types)
@@ -390,36 +388,34 @@ TEST_CASE("The ruler and the space past the last lane are not tracks", "[gui][ar
     REQUIRE(view->trackAtYForTesting(ruler + lane * 50.0f) == -1);
 }
 
-TEST_CASE("A clip can only be dragged onto a track of the same type", "[gui][arrangement]")
+TEST_CASE("A clip can only be dragged from one audio track to another", "[gui][arrangement]")
 {
-    // Only tracks that hold note patterns can trade clips by dragging.
+    // A bus holds no clips, so it can neither give nor take one.
     using Type = model::TrackType;
 
-    REQUIRE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Instrument, Type::Instrument));
-
-    // Audio never qualifies, not even against itself: a file-backed clip
-    // has no Pattern to move onto another track's timeline the same way.
-    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Audio, Type::Audio));
-    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Instrument, Type::Audio));
+    REQUIRE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Audio, Type::Audio));
+    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Audio, Type::Bus));
+    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Bus, Type::Audio));
+    REQUIRE_FALSE(ArrangementView::typesAreCompatibleForClipMoveForTesting(Type::Bus, Type::Bus));
 }
 
 namespace
 {
-    /** A song with @p count tracks of mixed types, one clip each, for
-        exercising cross-track drag compatibility end to end. Track 0 and 1
-        are both Instrument (compatible with each other); track 2, if
-        present, is Audio (incompatible with the other two). */
+    /** A song with @p count tracks of mixed types, for exercising
+        cross-track drag compatibility end to end. Tracks 0 and 1 are audio,
+        a clip each (compatible with each other); track 2, if present, is a
+        bus (incompatible with the other two). */
     model::Song mixedTypeSongWithTracks(int count)
     {
         model::Song song;
         for (int i = 0; i < count; ++i)
         {
-            const auto type = i == 2 ? model::TrackType::Audio : model::TrackType::Instrument;
+            const auto type = i == 2 ? model::TrackType::Bus : model::TrackType::Audio;
             const int  id   = model::addTrack(song, type, "Track " + std::to_string(i + 1)).id;
+            if (type == model::TrackType::Bus)
+                continue;
             model::Clip clip;
-            clip.type                = model::ClipType::Instrument;
-            clip.lengthBeats         = 4.0;
-            clip.pattern.lengthBeats = 4.0;
+            clip.lengthBeats = 4.0;
             model::addClip(song, id, clip);
         }
         return song;
@@ -429,9 +425,7 @@ namespace
 namespace
 {
     /** A synthetic mouse event at @p position, with @p mouseDownPosition as
-        where the gesture started — matching PianoRollTests.cpp's clickAt
-        helper's verified-working juce::MouseEvent constructor call, extended
-        with a mouse-down position so a drag sequence (down at one point, up
+        where the gesture started, so a drag sequence (down at one point, up
         at another) is expressible, not just a single click. */
     juce::MouseEvent dragEventAt(juce::Component& target, juce::Point<float> position,
                                  juce::Point<float> mouseDownPosition,
@@ -462,7 +456,7 @@ TEST_CASE("Dragging a clip onto a compatible track fires onClipMovedToTrack, not
     auto view = std::make_unique<ArrangementView>();
     view->setVisible(true);
     view->setSize(900, 500);
-    view->setSong(mixedTypeSongWithTracks(3)); // 0: Instrument, 1: Instrument, 2: Audio
+    view->setSong(mixedTypeSongWithTracks(3)); // 0: audio, 1: audio, 2: bus
     view->setZoom(1.0f);
 
     bool movedSameTrack = false;
@@ -599,7 +593,6 @@ TEST_CASE("With volume curves shown, a click on an audio clip adds a point and a
     const int trackId = model::addTrack(song, model::TrackType::Audio, "Voice").id;
 
     model::Clip clip;
-    clip.type                = model::ClipType::Audio;
     clip.audioFile           = "voice.wav";
     clip.lengthBeats         = 16.0;
     clip.sourceOffsetSeconds = 1.0;
@@ -646,14 +639,14 @@ TEST_CASE("With volume curves shown, a click on an audio clip adds a point and a
 
 TEST_CASE("Dragging a clip onto an incompatible track is refused", "[gui][arrangement]")
 {
-    // Track 2 is Audio; tracks 0/1 are Instrument. The ghost never follows
+    // Track 2 is a bus; tracks 0/1 are audio. The ghost never follows
     // into track 2's lane (see mouseDrag's compatibility gate), so a
     // mouse-up there must still read as "stayed on its own track."
     JuceFixture fixture;
     auto view = std::make_unique<ArrangementView>();
     view->setVisible(true);
     view->setSize(900, 500);
-    view->setSong(mixedTypeSongWithTracks(3)); // 0: Instrument, 1: Instrument, 2: Audio
+    view->setSong(mixedTypeSongWithTracks(3)); // 0: audio, 1: audio, 2: bus
     view->setZoom(1.0f);
 
     bool movedToTrack = false;
@@ -752,9 +745,8 @@ TEST_CASE("Ctrl-dragging an audio clip slips its audio and leaves it in place", 
     view->setVisible(true);
     view->setSize(900, 500);
 
-    auto song = mixedTypeSongWithTracks(3); // track 2 is audio
-    auto& clip = song.tracks[2].clips.at(0);
-    clip.type                = model::ClipType::Audio;
+    auto song = mixedTypeSongWithTracks(3); // track 0 is audio
+    auto& clip = song.tracks[0].clips.at(0);
     clip.audioFile           = "not-scanned.wav"; // no length known, so only the file's start limits a slip
     clip.sourceOffsetSeconds = 4.0;
     view->setSong(song);
@@ -766,7 +758,7 @@ TEST_CASE("Ctrl-dragging an audio clip slips its audio and leaves it in place", 
     view->onClipMoved   = [&](int, int, double) { moved = true; };
     view->onClipSlipped = [&](int t, int c, double seconds) { track = t; clipIndex = c; offset = seconds; };
 
-    const float laneY  = view->rulerHeightForTesting() + view->laneHeightForTesting() * 2.5f;
+    const float laneY  = view->rulerHeightForTesting() + view->laneHeightForTesting() * 0.5f;
     const float clipX  = view->gutterWidthForTesting() + 20.0f;
     const auto  ctrl   = juce::ModifierKeys(juce::ModifierKeys::commandModifier);
     const auto  source = juce::Desktop::getInstance().getMainMouseSource();
@@ -784,7 +776,7 @@ TEST_CASE("Ctrl-dragging an audio clip slips its audio and leaves it in place", 
     sendMouseUp(*view, eventAt({ clipX + 10.0f, laneY }));
 
     REQUIRE_FALSE(moved);
-    REQUIRE(track == 2);
+    REQUIRE(track == 0);
     REQUIRE(clipIndex == 0);
     // Dragged right, so the clip shows audio from earlier in its file.
     REQUIRE(offset < 4.0);
@@ -803,7 +795,6 @@ TEST_CASE("Take lanes: a click on a row chooses that take, a drag along one swip
     model::Song song;
     const int   trackId = model::addTrack(song, model::TrackType::Audio, "Vox").id;
     model::Clip clip;
-    clip.type        = model::ClipType::Audio;
     clip.lengthBeats = 16.0;
     clip.audioFile   = "c.wav";
     clip.takes       = { { "a.wav", 0.0, "One" }, { "b.wav", 0.0, "Two" }, { "c.wav", 0.0, "Three" } };

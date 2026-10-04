@@ -18,8 +18,8 @@ namespace
         headless tests can't include — and the point of the test is exactly
         that the two agree. */
     const std::set<std::string> kRegisteredPanels {
-        "Files", "Transport", "Tracks", "Keys",
-        "Audio", "Open Files", "Mastering", "Analyser", "Diagnostics", "Essential Sound", "Script", "Delivery", "History", "Transcript", "Video", "Session", "Track FX", "Mixer", "Master", "Keyboard"
+        "Files", "Transport", "Tracks",
+        "Audio", "Open Files", "Mastering", "Analyser", "Diagnostics", "Essential Sound", "Script", "Delivery", "History", "Transcript", "Video", "Track FX", "Mixer", "Master"
     };
 }
 
@@ -96,7 +96,7 @@ TEST_CASE("No layout shows the same panel twice", "[app][layouts]")
 
 TEST_CASE("Each layout opens the panes its job needs", "[app][layouts]")
 {
-    // The whole reason for having two: composing wants the instruments,
+    // The whole reason for having two: multitrack work wants the mixer,
     // editing wants the waveform and the rack. A layout that opened
     // everything would be the crowded workspace this replaces.
     const auto music = layouts::panelsInWorkspace(layouts::Workspace::MusicCreation);
@@ -107,11 +107,11 @@ TEST_CASE("Each layout opens the panes its job needs", "[app][layouts]")
         return std::find(panels.begin(), panels.end(), name) != panels.end();
     };
 
-    for (const char* instrument : { "Keys", "Session" })
+    for (const char* mixing : { "Mixer", "Track FX" })
     {
-        INFO(instrument);
-        REQUIRE(has(music, instrument));
-        REQUIRE_FALSE(has(audio, instrument));
+        INFO(mixing);
+        REQUIRE(has(music, mixing));
+        REQUIRE_FALSE(has(audio, mixing));
     }
 
     REQUIRE(has(audio, "Audio"));

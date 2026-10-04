@@ -85,7 +85,7 @@ inline std::vector<Chapter> chapters(const model::Song& song, double startBeats,
 struct ReportClip
 {
     std::string track;
-    std::string audioFile;    // empty for an instrument clip
+    std::string audioFile;
     double      startSeconds  = 0.0; // from the start of what's rendered
     double      lengthSeconds = 0.0;
 };
@@ -106,7 +106,7 @@ inline std::vector<ReportClip> reportClips(const model::Song& song, int soloTrac
                 continue;
             ReportClip line;
             line.track         = song.tracks[(size_t) t].name;
-            line.audioFile     = clip.type == model::ClipType::Audio ? clip.audioFile : std::string();
+            line.audioFile     = clip.audioFile;
             line.startSeconds  = clock.secondsBetween(fromBeats, clip.startBeats);
             line.lengthSeconds = clock.secondsBetween(clip.startBeats, clip.startBeats + clip.lengthBeats);
             out.push_back(line);

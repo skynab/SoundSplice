@@ -256,7 +256,7 @@ MainComponent::MainComponent(bool headless)
         const auto& sig = kTimeSignatures[i];
         timeSigBox_.addItem(juce::String(sig.numerator) + "/" + juce::String(sig.denominator), i + 1);
     }
-    timeSigBox_.setTooltip("Time signature - sets the bar length, and the grid in the Tracks and Keys panes");
+    timeSigBox_.setTooltip("Time signature - sets the bar length, and the grid in the Tracks pane");
     timeSigBox_.onChange = [this]
     {
         const int index = timeSigBox_.getSelectedId() - 1;
@@ -393,43 +393,6 @@ MainComponent::MainComponent(bool headless)
 
     mixerView_.onResized = [this] { layoutMixerView(); };
 
-    pianoRoll_.onChange = [this](const engine::Pattern& p) { editPattern(p); };
-    pianoRoll_.onNotePreview = [this](int noteNumber) { previewNote(noteNumber); };
-    pianoRoll_.onNotesDeleted = [this](int count)
-    {
-        // Delete in the keys pane always means notes, so it reports even when
-        // nothing was selected — otherwise a user who expected the track to
-        // go, or who forgot to select, gets silence and no idea which.
-        if (count > 0)
-            showStatus("Deleted " + juce::String(count) + (count == 1 ? " note" : " notes"));
-        else
-            showStatus("Select notes first - shift-click, or shift-drag a box");
-    };
-
-    // ---- edit tab: a header showing which track/clip is open, and the piano
-    // roll ----
-    editingLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
-    editTab_.addAndMakeVisible(editingLabel_);
-
-    // Pattern length of the open clip, in bars — how long the content loops
-    // over, as opposed to the clip's window on the timeline (which the
-    // arrangement's resize handle sets). Deliberately separate controls: they
-    // are separate concepts, and resizing the window shouldn't silently
-    // re-loop the notes inside it.
-    barsLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
-    barsLabel_.setJustificationType(juce::Justification::centredRight);
-    editTab_.addAndMakeVisible(barsLabel_);
-
-    for (int bars : { 1, 2, 4 })
-        barsBox_.addItem(juce::String(bars), bars);
-    barsBox_.onChange = [this] { setPatternBars(barsBox_.getSelectedId()); };
-    editTab_.addAndMakeVisible(barsBox_);
-
-    // Not added to editTab_ directly: keysViewport_ takes it as its viewed
-    // component below, and adding it here as well would reparent it straight
-    // back out of the viewport.
-    editTab_.onResized = [this] { layoutEditTab(); };
-
     // ---- arrange tab: a zoomable/scrollable timeline, click to seek ----
     arrangementViewport_.setViewedComponent(&arrangementView_, false);
     arrangeTab_.addAndMakeVisible(arrangementViewport_);
@@ -444,38 +407,6 @@ MainComponent::MainComponent(bool headless)
                       withShortcut("Timeline zoom", keys::zoomIn),
                       [this](float zoom) { setTimelineZoom(zoom); });
 
-    setUpZoomControls(editTab_, keysZoomIcon_, keysZoomSlider_, keysZoomBox_,
-                      PianoRoll::kMinPitchZoom, PianoRoll::kMaxPitchZoom,
-                      "Pitch zoom - how many notes the grid shows (cmd-scroll)",
-                      [this](float zoom) { setKeysZoom(zoom); });
-
-    setUpZoomControls(editTab_, keysTimeZoomIcon_, keysTimeZoomSlider_, keysTimeZoomBox_,
-                      PianoRoll::kMinTimeZoom, PianoRoll::kMaxTimeZoom,
-                      "Time zoom - how wide each step is (shift-scroll)",
-                      [this](float zoom) { setKeysTimeZoom(zoom); });
-
-    // The roll scrolls horizontally once it's wider than its pane, exactly as
-    // the arrangement does.
-    keysViewport_.setViewedComponent(&pianoRoll_, false);
-    keysViewport_.setScrollBarsShown(false, true); // horizontal only: rows fill the height
-    editTab_.addAndMakeVisible(keysViewport_);
-
-    pianoRoll_.onTimeZoomChanged = [this] { updateKeysTimeZoomControls(); layoutEditTab(); };
-
-    // On by default: a scrolled grid that doesn't follow playback means the
-    // playhead simply leaves the screen. Off is for editing one bar while the
-    // rest of the pattern plays, where the view jumping is the annoyance.
-    keysFollowButton_.setButtonText("Follow");
-    keysFollowButton_.setTooltip("Scroll the grid to keep the playhead in view");
-    keysFollowButton_.setToggleState(true, juce::dontSendNotification);
-    editTab_.addAndMakeVisible(keysFollowButton_);
-
-    // The wheel zooms the roll too, so the control follows it rather than
-    // drifting from what's on screen.
-    pianoRoll_.onPitchZoomChanged = [this] { updateKeysZoomControls(); };
-    addClipButton_.onClick = [this] { addClipToSelectedTrack(); };
-
-    arrangeTab_.addAndMakeVisible(addClipButton_);
     arrangeTab_.onResized = [this] { layoutArrangeTab(); };
 
     arrangementView_.onSeek = [this](double beat)
@@ -580,24 +511,6 @@ MainComponent::MainComponent(bool headless)
     {
         moveClipToTrack(srcTrackIndex, clipIndex, destTrackIndex, newStartBeats);
     };
-
-    sessionView_.onLaunchClip  = [this](int track, int scene)
-    {
-        engine_.launchSessionSlot(track, scene);
-        if (! engine_.isPlaying())
-            post(Cmd::SetPlaying, 1.0); // launching implies you want to hear it
-    };
-    sessionView_.onLaunchScene = [this](int scene)
-    {
-        engine_.launchScene(scene);
-        if (! engine_.isPlaying())
-            post(Cmd::SetPlaying, 1.0);
-    };
-    sessionView_.onStopTrack   = [this](int track) { engine_.stopSessionSlot(track); };
-    sessionView_.onStopAll     = [this] { engine_.stopAllSessionSlots(); };
-    sessionView_.onAddScene    = [this] { addSessionScene(); };
-    sessionView_.onDeleteScene = [this](int scene) { deleteSessionScene(scene); };
-    sessionView_.onClipSelected = [this](int track, int scene) { captureClipIntoSession(track, scene); };
 
     audioEditor_.onGainChanged   = [this](float gainDb) { setSelectedClipGainDb(gainDb); };
     audioEditor_.onGainDragStart = [this] { beginClipGainDrag(); };
@@ -746,7 +659,6 @@ MainComponent::MainComponent(bool headless)
     workspace_.registerPanel("Files", fileBrowser_);
     workspace_.registerPanel("Transport", leftPane_);
     workspace_.registerPanel("Tracks", arrangeTab_);
-    workspace_.registerPanel("Keys", editTab_);
     workspace_.registerPanel("Audio", audioEditor_);
     workspace_.registerPanel("Open Files", openFilesPane_);
     workspace_.registerPanel("Mastering", masteringPane_);
@@ -798,11 +710,9 @@ MainComponent::MainComponent(bool headless)
     deliveryPane_.onCheck      = [this](int spec) { runDeliveryCheck(spec); };
     deliveryPane_.onMakeItPass = [this](int spec) { exportToDeliverySpec(spec); };
     workspace_.registerPanel("Automation", automationPane_);
-    workspace_.registerPanel("Session", sessionView_);
     workspace_.registerPanel("Track FX", effectChain_);
     workspace_.registerPanel("Mixer", mixerView_);
     workspace_.registerPanel("Master", masterPanel_);
-    workspace_.registerPanel("Keyboard", keyboard_);
     loadDockLayout(); // last session's arrangement, or the default one
 
     fileBrowser_.setRecordingsDirectory(recordingsDirectory());
@@ -929,17 +839,13 @@ MainComponent::MainComponent(bool headless)
 
     // Mirror the initial document into the engine + UI.
     syncEngineTracks();
-    engine_.setArmedTrack(0);
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
     updateMixerStrips();
     updateMasteringControls();
-    updateEditingLabel();
 
     engine_.deviceManager().addChangeListener(this);
     logAudioDeviceStatus();
@@ -955,8 +861,6 @@ MainComponent::MainComponent(bool headless)
             entry.run();
     };
     updateZoomControls();     // the readouts must say something before the first click
-    updateKeysZoomControls();
-    updateKeysTimeZoomControls();
 
     // The document the app opens with counts as saved, so an untouched session
     // doesn't prompt on quit. This has to come *after* all the control setup
@@ -1050,8 +954,8 @@ int MainComponent::trackCount() const
 
 void MainComponent::refreshFromModel()
 {
-    // The song's metre drives both tempo maps: the UI's (bar/beat readout,
-    // bars-to-beats for pattern lengths) and the engine's (which decides
+    // The song's metre drives both tempo maps: the UI's (bar/beat readout)
+    // and the engine's (which decides
     // where the metronome's downbeat accent falls). Neither was ever told,
     // so both sat at 4/4 no matter what the document said.
     const auto& song = history_.current();
@@ -1061,7 +965,6 @@ void MainComponent::refreshFromModel()
     pushTempoMap();
     post(Cmd::SetTimeSignature, (double) song.timeSigNumerator, (double) song.timeSigDenominator);
     updateTimeSignatureControls();
-    pianoRoll_.setBeatsPerBar(beatsPerBar());
 
     if (selectedTrackIndex_ >= trackCount())
         selectedTrackIndex_ = juce::jmax(0, trackCount() - 1);
@@ -1073,12 +976,9 @@ void MainComponent::refreshFromModel()
         selectedClipIndex_ = juce::jmax(0, clipCount - 1);
 
     syncEngineTracks();
-    engine_.setArmedTrack(selectedTrackIndex_);
-    refreshPianoRollForSelected();
     refreshEffectChainForSelected();
     refreshAudioEditorForSelected();
     refreshAutomationPaneForSelected();
-    refreshSessionView();
     arrangementView_.setSong(history_.current());
     arrangementView_.setSelectedClip(selectedTrackIndex_, selectedClipIndex_);
     updateMixerStrips();
@@ -1086,7 +986,6 @@ void MainComponent::refreshFromModel()
     fileBrowser_.setProjectRootFolder(history_.current().projectRootFolder.empty()
                                           ? juce::File{}
                                           : juce::File(history_.current().projectRootFolder));
-    updateEditingLabel();
 }
 
 /** Puts a passing message on screen. Deliberately not routed through any
@@ -1156,18 +1055,6 @@ void MainComponent::timerCallback()
     videoPane_.sync(model::clockFor(history_.current()).secondsAt(playheadBeat()), engine_.isPlaying(), engine_.playSpeed());
     if (engine_.isPlaying())
         transcriptPane_.setPlayhead(model::clockFor(history_.current()).secondsAt(playheadBeat()));
-    finishMidiRecordingIfReady();
-
-    // Hot-plugged MIDI, on a slow cadence: enumerating devices is a system
-    // call and this timer runs at 30Hz, so once every two seconds rather than
-    // every tick. Arming a take re-scans immediately anyway (see
-    // toggleRecording) — this is what makes a controller plugged in mid-session
-    // *play* without having to press Record first.
-    if (++midiRescanTicks_ >= 60)
-    {
-        midiRescanTicks_ = 0;
-        engine_.refreshMidiInputs();
-    }
     updateWindowTitle();
     updateShell();
     autosaveIfDue();
@@ -1175,7 +1062,6 @@ void MainComponent::timerCallback()
 
     addTrackButton.setEnabled(trackCount() < engine_.maxTracks());
     addBusButton.setEnabled(trackCount() < engine_.maxTracks());
-    addClipButton_.setEnabled(selectedTrackIndex_ >= 0 && selectedTrackIndex_ < trackCount());
 
     const double sampleRate = engine_.sampleRate();
     uiTempoMap_.setSampleRate(sampleRate > 0.0 ? sampleRate : 48000.0);
@@ -1273,41 +1159,6 @@ void MainComponent::timerCallback()
     // watched doing what it does while the song runs.
     automationPane_.setPlayheadBeat(uiTempoMap_.ppqFromSamples(playhead));
 
-    // Which session cells are actually sounding comes from the engine, not the
-    // document: a launch is pending until the next bar line, so the grid would
-    // light the wrong cell if it guessed.
-    {
-        std::vector<int> playingSlots((size_t) n);
-        for (int i = 0; i < n; ++i)
-            playingSlots[(size_t) i] = engine_.sessionSlotPlaying(i);
-        sessionView_.setPlayingSlots(playingSlots);
-    }
-
-    // The piano roll's playhead walks the pattern's own loop, so it needs the
-    // position relative to the open clip's start rather than the song's.
-    {
-        const auto&  song      = history_.current();
-        double       clipStart = 0.0;
-        if (selectedTrackIndex_ >= 0 && selectedTrackIndex_ < (int) song.tracks.size())
-        {
-            const auto& clips = song.tracks[(size_t) selectedTrackIndex_].clips;
-            if (selectedClipIndex_ >= 0 && selectedClipIndex_ < (int) clips.size())
-                clipStart = clips[(size_t) selectedClipIndex_].startBeats;
-        }
-        const double intoClip = uiTempoMap_.ppqFromSamples(playhead) - clipStart;
-
-        // Wrapped into the pattern, because a clip loops: the engine wraps
-        // playback within the pattern length, so an unwrapped position would
-        // walk off the right of the grid on the first repeat and never
-        // return. Only shown while the clip is actually under the playhead.
-        const double patternBeats = currentPattern().lengthBeats;
-        const bool   inClip       = intoClip >= 0.0 && engine_.isPlaying();
-        pianoRoll_.setPlayheadBeats(patternBeats > 0.0 ? engine::wrapPositive(intoClip, patternBeats)
-                                                       : 0.0,
-                                    inClip);
-        followKeysPlayhead();
-    }
-
     // Gain automation playback (coarse, message-thread; sample-accurate on
     // export — see bounceProject()). Master and per-track lanes both apply.
     tickAutomationWrites();
@@ -1333,7 +1184,7 @@ void MainComponent::timerCallback()
         }
 
         // Per-track automation is *applied* by the engine now (each track
-        // ramps its own curves across every block, see InstrumentTrack), so
+        // ramps its own curves across every block, see MixerTrack), so
         // this only moves the controls to follow along. Pushing values from
         // here as well would fight the engine and re-introduce the 30Hz
         // stepping this replaced.

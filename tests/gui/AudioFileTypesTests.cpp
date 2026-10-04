@@ -118,7 +118,7 @@ namespace
     model::Song songWithOneTrack()
     {
         model::Song song;
-        model::addTrack(song, model::TrackType::Instrument, "Synth");
+        model::addTrack(song, model::TrackType::Audio, "Vocals");
         return song;
     }
 }

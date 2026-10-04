@@ -12,7 +12,7 @@ namespace soundsplice
     a bar length is part of the piece, not a knob you ride while listening.
 
     Everything that measures bars has to follow: the engine's metronome and
-    count-in, the loop region, and the grids in the tracks and keys panes. */
+    count-in, the loop region, and the tracks pane's grid. */
 void MainComponent::setTimeSignature(int numerator, int denominator)
 {
     if (numerator <= 0 || denominator <= 0)
@@ -33,7 +33,6 @@ void MainComponent::setTimeSignature(int numerator, int denominator)
 
     updateTimeSignatureControls();
     updateLoopRegion();               // bars just changed length, so the loop did too
-    pianoRoll_.setBeatsPerBar(beatsPerBar());
     arrangementView_.setSong(history_.current());
 
     showStatus("Time signature: " + juce::String(numerator) + "/" + juce::String(denominator));
@@ -78,8 +77,8 @@ double MainComponent::tempoAtPlayhead() const
 
 /** Sets the tempo in force at the playhead - the starting tempo, or the
     change the playhead is past - as one undoable edit. Audio tracks keep
-    their clips and automation at the same time in seconds, while
-    instrument tracks stay on their beats: see model::tempoedit. */
+    their clips and automation at the same time in seconds: see
+    model::tempoedit. */
 void MainComponent::setProjectTempo(double bpm)
 {
     if (std::abs(tempoAtPlayhead() - bpm) < 1.0e-9)
@@ -168,7 +167,6 @@ void MainComponent::pushTempoMap()
     updateLoopRegion();
 
     arrangementView_.setSong(song);
-    updateEditingLabel();
 }
 
 /** Moves the playhead to @p beat, clamped at zero. */

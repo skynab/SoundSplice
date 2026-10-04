@@ -18,7 +18,7 @@ namespace
     void prepare(AutomationPane& pane, const model::AutomationLane& lane = {})
     {
         pane.setSize(800, 240);
-        pane.setLane("Bass", model::TrackType::Instrument, lane, 64.0);
+        pane.setLane("Bass", model::TrackType::Audio, lane, 64.0);
     }
 
     juce::MouseEvent eventAt(juce::Component& component, juce::Point<float> position,

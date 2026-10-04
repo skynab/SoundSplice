@@ -15,20 +15,19 @@ namespace
     struct Fixture
     {
         Song song;
-        int  audio = 0, other = 0, synth = 0;
+        int  audio = 0, other = 0, bus = 0;
 
         Fixture()
         {
             song.bpm = 60.0;
             audio    = addTrack(song, TrackType::Audio, "Audio").id;
             other    = addTrack(song, TrackType::Audio, "Other").id;
-            synth    = addTrack(song, TrackType::Instrument, "Synth").id;
+            bus      = addTrack(song, TrackType::Bus, "Bus").id;
         }
 
         Clip& add(int trackId, double start, double length, double offset = 0.0, const char* file = "take.wav")
         {
             Clip clip;
-            clip.type                = ClipType::Audio;
             clip.audioFile           = file;
             clip.startBeats          = start;
             clip.lengthBeats         = length;
@@ -60,7 +59,7 @@ TEST_CASE("Splitting at a beat splits only the clips it falls inside, on the cho
     f.add(f.other, 0.0, 10.0);          // under it, but not chosen
     f.add(f.audio, 20.0, 5.0);
 
-    REQUIRE(splitClipsAt(f.song, { f.audio, f.synth }, 4.0) == 1);
+    REQUIRE(splitClipsAt(f.song, { f.audio, f.bus }, 4.0) == 1);
 
     const auto clips = f.sorted(f.audio);
     REQUIRE(clips.size() == 4);
@@ -209,7 +208,7 @@ TEST_CASE("A silent clip is removed, and no silence or no clip changes nothing",
     REQUIRE(f.song == before);
 
     REQUIRE(detachAtSilences(f.song, f.audio, 999, { { 0.0, 1.0 } }) == -1);
-    REQUIRE(detachAtSilences(f.song, f.synth, loud, { { 0.0, 1.0 } }) == -1);
+    REQUIRE(detachAtSilences(f.song, f.bus, loud, { { 0.0, 1.0 } }) == -1);
 }
 
 TEST_CASE("Crossfading split pieces overlaps them from their hidden audio, fading linearly", "[model][arrange]")
@@ -256,11 +255,10 @@ TEST_CASE("Crossfade leaves clips that don't meet in the selection alone", "[mod
     f.add(f.audio, 6.0, 4.0, 6.0);            // a gap
     f.add(f.other, 0.0, 10.0, 0.0);
     f.add(f.other, 10.0, 10.0, 0.0);          // meets at 10, outside the selection
-    f.add(f.synth, 0.0, 4.0);
     const auto length = [](const std::string&) { return 60.0; };
     const auto before = f.song;
 
-    REQUIRE(crossfadeClips(f.song, { f.audio, f.other, f.synth }, 3.0, 7.0, length) == 0);
+    REQUIRE(crossfadeClips(f.song, { f.audio, f.other, f.bus }, 3.0, 7.0, length) == 0);
     REQUIRE(f.song == before);
 
     // And a second clip with no audio before its start has nothing to overlap with.

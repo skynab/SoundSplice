@@ -2,7 +2,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <engine/EffectSlotFactory.h>
-#include <engine/InstrumentTrack.h>
+#include <engine/MixerTrack.h>
 #include <engine/PluginNode.h>
 #include <model/EffectParams.h>
 

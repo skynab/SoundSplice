@@ -15,11 +15,11 @@ namespace
         return lane;
     }
 
-    /** One instrument track with a delay in slot 0. */
+    /** One track with a delay in slot 0. */
     model::Song songWithDelay()
     {
         model::Song song;
-        auto&       track = model::addTrack(song, model::TrackType::Instrument, "Synth");
+        auto&       track = model::addTrack(song, model::TrackType::Audio, "Synth");
         model::EffectSlot delay;
         delay.kind = model::EffectKind::Delay;
         track.effectChain.push_back(delay);

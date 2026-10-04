@@ -16,7 +16,6 @@ namespace
         song.bpm = 120.0;
         trackId  = addTrack(song, TrackType::Audio, "loop").id;
         Clip clip;
-        clip.type                = ClipType::Audio;
         clip.startBeats          = 4.0;
         clip.lengthBeats         = 4.0; // two seconds at 120
         clip.sourceOffsetSeconds = 0.5;

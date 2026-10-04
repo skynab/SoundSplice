@@ -11,12 +11,12 @@ TEST_CASE("A take goes onto every armed audio track, or else the selected one", 
 {
     model::Song song;
     const int audioA = model::addTrack(song, model::TrackType::Audio, "A").id;      // 0
-    const int synth  = model::addTrack(song, model::TrackType::Instrument, "S").id; // 1
+    const int bus    = model::addTrack(song, model::TrackType::Bus, "S").id;   // 1
     const int audioB = model::addTrack(song, model::TrackType::Audio, "B").id;      // 2
 
     // Armed: in track order, whatever order they were armed in, and only
     // the audio ones.
-    REQUIRE(takeTargets(song, { audioB, audioA, synth }, 1) == std::vector<int> { 0, 2 });
+    REQUIRE(takeTargets(song, { audioB, audioA, bus }, 1) == std::vector<int> { 0, 2 });
 
     // None armed: the selected track if it can hold audio...
     REQUIRE(takeTargets(song, {}, 2) == std::vector<int> { 2 });
@@ -24,7 +24,7 @@ TEST_CASE("A take goes onto every armed audio track, or else the selected one", 
     // ...otherwise a new track.
     REQUIRE(takeTargets(song, {}, 1) == std::vector<int> { -1 });
     REQUIRE(takeTargets(song, {}, -1) == std::vector<int> { -1 });
-    REQUIRE(takeTargets(song, { synth }, 7) == std::vector<int> { -1 });
+    REQUIRE(takeTargets(song, { bus }, 7) == std::vector<int> { -1 });
 }
 
 TEST_CASE("Recordings are moved back by the round trip measured at this rate, else the reported one", "[app][recording]")
@@ -97,31 +97,6 @@ TEST_CASE("A timed take starts once, and stops once its length is up", "[app][re
     timer.cancel();
     REQUIRE_FALSE(timer.isPending());
     REQUIRE(timer.tick(60000, false) == Action::None);
-}
-
-TEST_CASE("A MIDI take becomes a clip of whole bars where it was played", "[app][recording]")
-{
-    engine::TempoMap tempo; // 4/4
-    tempo.setSampleRate(48000.0);
-    tempo.setTempo(120.0); // a beat every 24000 samples
-
-    // From beat 4: a note on beat 4.5 held for a beat, and a stray note-off
-    // from a key already down when the take began.
-    const std::vector<engine::RecordedMidiEvent> events {
-        { 96000, 64, 0.0f, false },
-        { 108000, 60, 0.8f, true },
-        { 132000, 60, 0.0f, false },
-    };
-    const auto take = clipFromMidiTake(events, 96000, 144000, tempo);
-    REQUIRE(take);
-    REQUIRE(take->startBeats == Approx(4.0));
-    REQUIRE(take->lengthBeats == Approx(4.0)); // two beats played, one bar
-    REQUIRE(take->notes.size() == 1);
-    REQUIRE(take->notes[0].startBeats == Approx(0.5));
-    REQUIRE(take->notes[0].lengthBeats == Approx(1.0));
-
-    // Nothing played: no clip.
-    REQUIRE_FALSE(clipFromMidiTake({ { 96000, 64, 0.0f, false } }, 96000, 144000, tempo));
 }
 
 TEST_CASE("A take goes round the selection with Loop on, or punches into it", "[app][recording]")

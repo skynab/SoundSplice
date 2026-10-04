@@ -17,7 +17,7 @@ namespace warpedit
         @p map: 1 for a clip that isn't warped or whose tempo isn't known. */
     inline double factorUnder(const std::vector<engine::TempoChange>& map, const Clip& clip)
     {
-        if (! clip.warp || clip.type != ClipType::Audio || clip.sourceBpm <= 0.0)
+        if (! clip.warp || clip.sourceBpm <= 0.0)
             return 1.0;
 
         engine::TempoMap tempo;

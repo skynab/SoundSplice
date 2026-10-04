@@ -10,16 +10,15 @@ using namespace soundsplice::model;
 
 namespace
 {
-    /** An audio clip at beat 16 and a synth clip at beat 16, at 120 bpm. */
+    /** Two audio clips at beat 16, at 120 bpm. */
     Song twoClips()
     {
         Song song;
         song.bpm = 120.0;
-        for (const auto type : { TrackType::Audio, TrackType::Instrument })
+        for (int i = 0; i < 2; ++i)
         {
-            const int id = addTrack(song, type, "t").id;
+            const int id = addTrack(song, TrackType::Audio, "t").id;
             Clip clip;
-            clip.type        = type == TrackType::Audio ? ClipType::Audio : ClipType::Instrument;
             clip.startBeats  = 16.0;
             clip.lengthBeats = 4.0;
             addClip(song, id, clip);
@@ -29,7 +28,7 @@ namespace
     }
 }
 
-TEST_CASE("A tempo change keeps audio at its time and instrument parts on their beats", "[model][tempo]")
+TEST_CASE("A tempo change keeps audio at its time", "[model][tempo]")
 {
     auto song = twoClips();
 
@@ -41,7 +40,7 @@ TEST_CASE("A tempo change keeps audio at its time and instrument parts on their 
     const auto& audio = song.tracks[0].clips[0];
     REQUIRE(audio.startBeats == Approx(10.0).margin(1.0e-4));
     REQUIRE(audio.lengthBeats == Approx(2.0).margin(1.0e-4)); // 2 s, now a beat a second
-    REQUIRE(song.tracks[1].clips[0].startBeats == 16.0);         // the synth part stays
+    REQUIRE(song.tracks[1].clips[0].startBeats == Approx(10.0).margin(1.0e-4));
     REQUIRE(song.markers[0].startBeats == Approx(10.0).margin(1.0e-4));
 
     // Removing it puts everything back.
@@ -119,7 +118,6 @@ TEST_CASE("Splitting a clip across a tempo change lands on the audio that's ther
     song.bpm = 120.0;
     const int id = addTrack(song, TrackType::Audio, "a").id;
     Clip clip;
-    clip.type        = ClipType::Audio;
     clip.startBeats  = 2.0;
     clip.lengthBeats = 4.0;
     addClip(song, id, clip);

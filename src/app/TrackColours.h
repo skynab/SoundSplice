@@ -61,11 +61,10 @@ inline const char* trackTypeTag(model::TrackType type)
 {
     switch (type)
     {
-        case model::TrackType::Instrument: return "SYN";
         case model::TrackType::Audio:      return "AUD";
         case model::TrackType::Bus:        return "BUS";
     }
-    return "SYN";
+    return "AUD";
 }
 
 /** How tall a track-identity header (see paintTrackHeader) is. A caller
@@ -78,8 +77,8 @@ inline constexpr int kTrackHeaderHeight = 20;
     reused here so a pane reached through a dock tab (whose title doesn't
     change per track) can say which track is actually open.
 
-    Switching tracks while parked on a tab titled "Keys" or "Automation" gave
-    no on-screen confirmation of which track's notes or lanes were showing — this is the fix, applied the same way in
+    Switching tracks while parked on a tab titled "Automation" gave no
+    on-screen confirmation of which track's lanes were showing — this is the fix, applied the same way in
     every pane that needed it rather than once per file.
 
     A free function rather than a Component: every pane that needs this

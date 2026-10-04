@@ -26,7 +26,7 @@ inline const model::Clip* audioClipAt(const model::Track& track, double beat)
 
     for (const auto& clip : track.clips)
     {
-        if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+        if (clip.audioFile.empty())
             continue;
 
         if (beat >= clip.startBeats && beat <= clip.startBeats + clip.lengthBeats

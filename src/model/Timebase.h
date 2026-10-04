@@ -18,9 +18,9 @@ namespace soundsplice::model
 
     So a tempo change rescales the beat positions of everything on audio
     tracks (clip starts and lengths, and their automation) by new/old, which
-    leaves each one at the same time in seconds. Instrument tracks, the
-    session grid and the master lane are musical and stay on their beats. A
-    clip's source offset and fades are already in seconds and need nothing.
+    leaves each one at the same time in seconds. Buses and the master lane
+    stay on their beats. A clip's source offset and fades are already in
+    seconds and need nothing.
 */
 inline void retimeAudioForTempoChange(Song& song, double oldBpm, double newBpm)
 {

@@ -12,11 +12,10 @@ namespace soundsplice::engine
 {
 /**
     One audio clip's placement on a track's timeline: decoded audio data plus
-    its [startBeats, startBeats + lengthBeats) window — the audio equivalent
-    of ClipSlot (MIDI). AudioFilePlayerNode is given a track's whole list of
-    AudioClipSlots and plays whichever one's window covers the current
-    transport position (they're expected not to overlap); playback never
-    loops within a clip (unlike a MIDI pattern) — it just plays once from the
+    its [startBeats, startBeats + lengthBeats) window. AudioFilePlayerNode
+    is given a track's whole list of AudioClipSlots and plays whichever one's
+    window covers the current transport position (they're expected not to
+    overlap); playback never loops within a clip — it just plays once from the
     clip's start and goes silent once the file runs out or the window ends,
     whichever comes first.
 

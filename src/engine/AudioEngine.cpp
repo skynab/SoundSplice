@@ -64,18 +64,10 @@ AudioEngine::AudioEngine(bool openDevice)
     }
 
     deviceManager_.addAudioCallback(this);
-
-    refreshMidiInputs();
 }
 
 AudioEngine::~AudioEngine()
 {
-    // Whatever we actually registered, not whatever happens to be plugged in
-    // now — a device unplugged during the session is not in
-    // getAvailableDevices() any more, and its callback would never be removed.
-    for (const auto& identifier : registeredMidiInputs_)
-        deviceManager_.removeMidiInputDeviceCallback(identifier, this);
-
     deviceManager_.removeAudioCallback(this);
     deviceManager_.closeAudioDevice();
 
@@ -108,60 +100,10 @@ bool AudioEngine::reopenAudioInput()
     return hasAudioInput();
 }
 
-bool AudioEngine::refreshMidiInputs()
-{
-    const auto available = juce::MidiInput::getAvailableDevices();
-
-    juce::StringArray current;
-    for (const auto& input : available)
-        current.add(input.identifier);
-
-    bool changed = false;
-
-    // Newly arrived: enable and register. Registering an identifier twice
-    // would deliver every message twice, so what has already been registered
-    // is tracked here rather than re-derived from the device list.
-    for (const auto& input : available)
-    {
-        if (registeredMidiInputs_.contains(input.identifier))
-            continue;
-
-        deviceManager_.setMidiInputDeviceEnabled(input.identifier, true);
-        deviceManager_.addMidiInputDeviceCallback(input.identifier, this);
-        registeredMidiInputs_.add(input.identifier);
-        changed = true;
-    }
-
-    // Gone: unregister, so a controller can be unplugged and replaced without
-    // accumulating dead callbacks for the engine's whole lifetime.
-    for (int i = registeredMidiInputs_.size(); --i >= 0;)
-    {
-        const auto identifier = registeredMidiInputs_[i];
-        if (current.contains(identifier))
-            continue;
-
-        deviceManager_.removeMidiInputDeviceCallback(identifier, this);
-        registeredMidiInputs_.remove(i);
-        changed = true;
-    }
-
-    return changed;
-}
-
-bool AudioEngine::hasMidiInput() const
-{
-    return ! registeredMidiInputs_.isEmpty();
-}
-
 bool AudioEngine::hasAudioInput() const
 {
     auto* device = deviceManager_.getCurrentAudioDevice();
     return device != nullptr && device->getActiveInputChannels().countNumberOfSetBits() > 0;
-}
-
-void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* /*source*/, const juce::MidiMessage& message)
-{
-    midiCollector_.addMessageToQueue(message);
 }
 
 std::unique_ptr<ClipData> AudioEngine::decodeAudioFile(const juce::File& file)
@@ -584,7 +526,7 @@ int64_t AudioEngine::countInLeadInSamples() const
 {
     // The count-in is expressed in samples here, on the message thread, from
     // the tempo in force when recording starts — the audio thread only ever
-    // counts it down (see AudioRecorder::process, MidiRecorder::process).
+    // counts it down (see AudioRecorder::process).
     // Measured from where the take will actually start rather than from a
     // single samples-per-bar figure: with a tempo map a bar's length depends on
     // where it is, so a count-in at bar 40 is not necessarily a count-in at
@@ -623,25 +565,11 @@ bool AudioEngine::beginExtraRecording(int slot, const juce::File& destination, c
     return extra.arm(destination, recordWriterThread_, joinNow ? 0 : countInLeadInSamples());
 }
 
-void AudioEngine::beginMidiRecording()
-{
-    // Grown on the message thread, before the audio thread can need it: the
-    // capture translation in the callback must never allocate.
-    midiCaptureScratch_.reserve(kMaxCapturedEventsPerBlock);
-    midiRecorder_.arm(countInLeadInSamples());
-}
-
 void AudioEngine::setActiveTrackCount(int count)
 {
     const int clamped = juce::jlimit(0, kMaxTracks, count);
     for (int i = 0; i < kMaxTracks; ++i)
         tracks_[(size_t) i].active.store(i < clamped, std::memory_order_relaxed);
-}
-
-void AudioEngine::setTrackClips(int index, const std::vector<ClipSlot>& clips)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].sequencer.submitClips(new std::vector<ClipSlot>(clips));
 }
 
 void AudioEngine::setTrackMuted(int index, bool muted)
@@ -783,43 +711,6 @@ void AudioEngine::setTrackPan(int index, float pan)
         tracks_[(size_t) index].pan.store(juce::jlimit(-1.0f, 1.0f, pan), std::memory_order_relaxed);
 }
 
-void AudioEngine::setTrackSessionSlots(int index, const std::vector<SessionSlotData>& slots)
-{
-    if (index < 0 || index >= kMaxTracks)
-        return;
-
-    auto& track = tracks_[(size_t) index];
-    track.session.collectRetired();
-    track.session.submitSlots(new SessionPlayer::SlotList(slots));
-}
-
-void AudioEngine::launchSessionSlot(int index, int sceneIndex)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].session.requestLaunch(sceneIndex);
-}
-
-void AudioEngine::stopSessionSlot(int index)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].session.requestStop();
-}
-
-void AudioEngine::launchScene(int sceneIndex)
-{
-    // Every track is told something, including the ones with nothing in this
-    // scene: a scene says what the whole grid should be playing, so a track
-    // with an empty slot falls silent rather than keeping its previous clip.
-    for (auto& track : tracks_)
-        track.session.requestLaunch(sceneIndex);
-}
-
-void AudioEngine::stopAllSessionSlots()
-{
-    for (auto& track : tracks_)
-        track.session.requestStop();
-}
-
 void AudioEngine::setTrackAutomation(int index, const TrackAutomation& curves)
 {
     if (index < 0 || index >= kMaxTracks)
@@ -828,120 +719,6 @@ void AudioEngine::setTrackAutomation(int index, const TrackAutomation& curves)
     auto& track = tracks_[(size_t) index];
     track.collectRetiredAutomation();
     track.setAutomation(new TrackAutomation(curves));
-}
-
-void AudioEngine::setTrackSynthWaveform(int index, int waveform)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setWaveform(waveform);
-}
-
-void AudioEngine::setTrackSynthAttackMs(int index, float ms)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setAttackMs(ms);
-}
-
-void AudioEngine::setTrackSynthDecayMs(int index, float ms)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setDecayMs(ms);
-}
-
-void AudioEngine::setTrackSynthSustain(int index, float level)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setSustain(level);
-}
-
-void AudioEngine::setTrackSynthReleaseMs(int index, float ms)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setReleaseMs(ms);
-}
-
-void AudioEngine::setTrackSynthFilterEnabled(int index, bool enabled)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterEnabled(enabled);
-}
-
-void AudioEngine::setTrackSynthFilterMode(int index, int mode)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterMode(mode);
-}
-
-void AudioEngine::setTrackSynthFilterCutoff(int index, float hz)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterCutoff(hz);
-}
-
-void AudioEngine::setTrackSynthFilterResonance(int index, float q)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterResonance(q);
-}
-
-void AudioEngine::setTrackSynthGainDb(int index, float db)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setGainDb(db);
-}
-
-void AudioEngine::setTrackSynthFilterEnvAmount(int index, float hz)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterEnvAmount(hz);
-}
-
-void AudioEngine::setTrackSynthFilterEnvAttackMs(int index, float ms)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterEnvAttackMs(ms);
-}
-
-void AudioEngine::setTrackSynthFilterEnvDecayMs(int index, float ms)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterEnvDecayMs(ms);
-}
-
-void AudioEngine::setTrackSynthFilterEnvSustain(int index, float level)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterEnvSustain(level);
-}
-
-void AudioEngine::setTrackSynthFilterEnvReleaseMs(int index, float ms)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setFilterEnvReleaseMs(ms);
-}
-
-void AudioEngine::setTrackSynthSubOscEnabled(int index, bool enabled)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setSubOscEnabled(enabled);
-}
-
-void AudioEngine::setTrackSynthSubOscLevel(int index, float level)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setSubOscLevel(level);
-}
-
-void AudioEngine::setTrackSynthUnisonVoices(int index, int voices)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setUnisonVoices(voices);
-}
-
-void AudioEngine::setTrackSynthUnisonDetuneCents(int index, float cents)
-{
-    if (index >= 0 && index < kMaxTracks)
-        tracks_[(size_t) index].synth.setUnisonDetuneCents(cents);
 }
 
 void AudioEngine::rebuildTrackEffectChain(int index, double rate)
@@ -1116,19 +893,12 @@ PluginNode* AudioEngine::masterPluginNode(int slotIndex)
     return dynamic_cast<PluginNode*>(submittedMasterChain_->nodeAt((size_t) slotIndex));
 }
 
-void AudioEngine::setArmedTrack(int index)
-{
-    armedTrack_.store(juce::jlimit(0, kMaxTracks - 1, index), std::memory_order_relaxed);
-}
-
 void AudioEngine::pump() noexcept
 {
     for (auto& track : tracks_)
     {
-        track.sequencer.collectRetired();
         track.audioPlayer.collectRetiredClips();
         track.collectRetiredAutomation();
-        track.session.collectRetired();
         track.collectRetiredEffectChain();
     }
 
@@ -1178,10 +948,6 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     juce::AudioBuffer<float> output(outputChannelData, numOutputChannels, numSamples);
     output.clear();
 
-    incomingMidi_.clear();
-    midiCollector_.removeNextBlockOfMessages(incomingMidi_, numSamples);
-    keyboardState_.processNextMidiBuffer(incomingMidi_, 0, numSamples, true);
-
     ProcessContext context;
     context.sampleRate = sampleRate_.load(std::memory_order_relaxed);
     context.numSamples = numSamples;
@@ -1199,19 +965,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     retro_.process(inputChannelData, numInputChannels, numSamples, context.transport.playing,
                    context.transport.playheadSamples);
 
-    // Before processBlock, so what is captured is exactly what the armed track
-    // is about to play — the take and the monitoring can't disagree. Capturing
-    // here rather than in handleIncomingMidiMessage is what makes the timing
-    // sample-accurate: the collector has already placed each message at its
-    // offset within this block, and on-screen keyboard input comes through the
-    // same buffer, so it records too.
-    captureMidi(incomingMidi_, context);
-
     // Play-at-speed renders the song in blocks of its own; everything below
     // that isn't the song (monitoring, preview, click) stays at the device's.
     const double speed    = playSpeed_.load(std::memory_order_relaxed);
     const bool   atSpeed  = context.transport.playing && std::abs(speed - 1.0) > 1.0e-6
-                         && ! recorder_.isArmed() && ! midiRecorder_.isArmed() && ! isCountingIn()
+                         && ! recorder_.isArmed() && ! isCountingIn()
                          && varispeed_.isPrepared() && numSamples <= varispeed_.maxOutputFrames();
 
     if (atSpeed)
@@ -1225,7 +983,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
             varispeed_.reset();
             varispeedActive_ = false;
         }
-        processBlock(output, incomingMidi_, context);
+        processBlock(output, context);
     }
 
     // A/B against a reference: on what the song made, before monitoring and
@@ -1274,7 +1032,6 @@ void AudioEngine::renderAtSpeed(juce::AudioBuffer<float>& output, double speed, 
         juce::AudioBuffer<float> block(varispeedScratch_.getArrayOfWritePointers(),
                                        varispeedScratch_.getNumChannels(), n);
         block.clear();
-        varispeedMidi_.clear();
 
         ProcessContext context;
         context.sampleRate  = rate;
@@ -1282,65 +1039,13 @@ void AudioEngine::renderAtSpeed(juce::AudioBuffer<float>& output, double speed, 
         context.transport   = transport_.snapshot(n);
         context.streamEpoch = streamer_.beginBlock();
 
-        processBlock(block, varispeedMidi_, context);
+        processBlock(block, context);
 
         varispeed_.push(block.getArrayOfReadPointers(), block.getNumChannels(), n);
         need -= n;
     }
 
     varispeed_.pull(output.getArrayOfWritePointers(), output.getNumChannels(), numSamples, speed);
-}
-
-void AudioEngine::captureMidi(const juce::MidiBuffer& midi, const ProcessContext& context) noexcept
-{
-    const bool armed = midiRecorder_.isArmed();
-
-    // No take armed and none still closing is the overwhelmingly common case,
-    // and it must cost nothing. The second half of that condition is load-
-    // bearing: process() is what publishes finished_ once a take is disarmed,
-    // so returning on `! armed` alone would leave every take permanently
-    // unfinished and the UI stuck mid-record.
-    if (! armed && midiRecorder_.isFinished())
-        return;
-
-    midiCaptureScratch_.clear();
-
-    // A disarmed-but-unfinished take still needs its process() call below, but
-    // has nothing left to capture — so the buffer walk is what's skipped, not
-    // the call.
-    if (armed)
-    {
-        for (const auto metadata : midi)
-        {
-            const auto message = metadata.getMessage();
-
-            // Notes only. Pitch bend, CC and aftertouch are real performance
-            // data and worth recording one day, but a Pattern has nowhere to
-            // put them — capturing them now would mean silently discarding
-            // them later.
-            if (! message.isNoteOnOrOff())
-                continue;
-
-            if (midiCaptureScratch_.size() >= kMaxCapturedEventsPerBlock)
-                break; // never grown on this thread
-
-            RecordedMidiEvent event;
-            event.timeSamples = (int64_t) metadata.samplePosition;
-            event.noteNumber  = message.getNoteNumber();
-            event.velocity    = message.getFloatVelocity();
-            // A note-on with velocity 0 is left as-is rather than normalised
-            // here: MidiCapture treats it as a note-off, and translating it at
-            // this layer would hide from the take what the controller
-            // actually sent.
-            event.noteOn      = message.isNoteOn();
-
-            midiCaptureScratch_.push_back(event);
-        }
-    }
-
-    midiRecorder_.process(midiCaptureScratch_.data(), (int) midiCaptureScratch_.size(),
-                          context.numSamples, context.transport.playing,
-                          context.transport.playheadSamples);
 }
 
 void AudioEngine::mixInputMonitoring(juce::AudioBuffer<float>& output,
@@ -1394,24 +1099,13 @@ int AudioEngine::latestTrackLatency() noexcept
     // Along each track's way out, through the buses it feeds.
     std::array<mixrouting::Node, kMaxTracks> nodes;
     snapshotRouting(nodes);
-    return juce::jmin(mixrouting::latestPath(nodes.data(), kMaxTracks), InstrumentTrack::kMaxCompensation - 1);
+    return juce::jmin(mixrouting::latestPath(nodes.data(), kMaxTracks), MixerTrack::kMaxCompensation - 1);
 }
 
-void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffer& midi,
-                               const ProcessContext& context,
+void AudioEngine::processBlock(juce::AudioBuffer<float>& output, const ProcessContext& context,
                                int soloTrack, bool applyMasterBus) noexcept
 {
     const int numSamples = context.numSamples;
-
-    // Launch quantization is expressed in beats and converted here, once per
-    // block, from the block's own musical span: launch quantisation waits for
-    // the next N-beat boundary, and where that falls depends on the tempo.
-    const double blockBeats           = context.transport.blockLengthBeats();
-    const double samplesPerBeat       = blockBeats > 0.0
-                                          ? (double) numSamples / blockBeats : 0.0;
-    const double launchQuantumSamples = samplesPerBeat * launchQuantumBeats_.load(std::memory_order_relaxed);
-
-    const int armed = armedTrack_.load(std::memory_order_relaxed);
 
     // The routing for this block (engine/MixRouting.h): who renders before
     // whom, who solo leaves audible, and how late each track's path is.
@@ -1430,7 +1124,7 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
     // every active track even for a stem, so a stem lines up with the mix it
     // came from.
     const int latest = juce::jmin(mixrouting::latestPath(nodes.data(), kMaxTracks),
-                                  InstrumentTrack::kMaxCompensation - 1);
+                                  MixerTrack::kMaxCompensation - 1);
 
     // A stem renders one track: straight to the output, as it leaves its
     // fader. A bus's stem is the bus with what feeds it.
@@ -1490,7 +1184,7 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
             continue;
 
         const auto& node = nodes[(size_t) i];
-        InstrumentTrack::Destinations to;
+        MixerTrack::Destinations to;
         to.audible = audible[i];
         to.delay   = mixrouting::compensationFor(nodes.data(), kMaxTracks, i, latest);
 
@@ -1534,14 +1228,13 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
             ++to.keyCount;
         }
 
-        tracks_[(size_t) i].renderRouted(midi, context, i == armed, launchQuantumSamples, to);
+        tracks_[(size_t) i].renderRouted(context, to);
         rendered[(size_t) i] = true;
     }
 
     if (applyMasterBus)
     {
-        // The file player and master ignore the MIDI buffer.
-        filePlayer_.process(output, midi, context);
+        filePlayer_.process(output, context);
         if (auto* chain = masterChain_.adopt(); chain != nullptr && ! chain->empty())
         {
             chain->setBpm(context.transport.bpm);
@@ -1552,7 +1245,7 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& output, juce::MidiBuffe
         // meter reads it — a ceiling that something after it could exceed
         // wouldn't be one.
         mastering_.process(output);
-        master_.process(output, midi, context);
+        master_.process(output, context);
     }
 
     transport_.advance(numSamples);
@@ -1623,8 +1316,6 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
     output.setSize(2, rendered);
     output.clear();
 
-    juce::MidiBuffer noLiveMidi;
-
     // Every 16th block rather than every block: at 512 samples that is roughly
     // every 190ms, which is smooth enough for a progress bar while keeping a
     // std::function call out of the inner loop.
@@ -1649,8 +1340,7 @@ juce::AudioBuffer<float> AudioEngine::renderOffline(const OfflineRenderOptions& 
         context.offline     = true;
 
         juce::AudioBuffer<float> view(output.getArrayOfWritePointers(), 2, pos, n);
-        noLiveMidi.clear();
-        processBlock(view, noLiveMidi, context, options.soloTrack, options.applyMasterBus);
+        processBlock(view, context, options.soloTrack, options.applyMasterBus);
 
         if (options.onProgress != nullptr && blockIndex % kBlocksPerProgressReport == 0)
         {
@@ -1698,12 +1388,10 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
     const int    blockSize  = device->getCurrentBufferSizeSamples();
 
     sampleRate_.store(sampleRate, std::memory_order_relaxed);
-    midiCollector_.reset(sampleRate);
 
     // Before the callback starts: the room is for this rate, and what was
     // kept at another one can't be placed any more.
     retro_.prepare(sampleRate, retroSeconds_);
-    incomingMidi_.ensureSize(2048);
 
     prepareAll(sampleRate, blockSize);
 }
@@ -1716,7 +1404,6 @@ void AudioEngine::prepareAll(double sampleRate, int blockSize)
 
     // Room for a device that hands over up to twice the block it promised.
     varispeedScratch_.setSize(2, juce::jmax(1, blockSize));
-    varispeedMidi_.ensureSize(2048);
     varispeed_.prepare(2, juce::jmax(1, blockSize) * 2, juce::jmax(1, blockSize));
 
     for (auto& track : tracks_)

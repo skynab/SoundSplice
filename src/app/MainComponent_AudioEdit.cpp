@@ -25,7 +25,7 @@ const model::Clip* MainComponent::selectedAudioClip() const
         return nullptr;
 
     const auto& clip = clips[(size_t) selectedClipIndex_];
-    if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+    if (clip.audioFile.empty())
         return nullptr;
 
     return &clip;

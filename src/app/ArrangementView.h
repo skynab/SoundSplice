@@ -6,11 +6,11 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "ClipPreview.h"
 #include "Theme.h"
 #include "model/Song.h"
 
 #include "AudioFileTypes.h"
-#include "ClipPreview.h"
 #include "Icons.h"
 #include "ClipWindow.h"
 #include "EnvelopeGeometry.h"
@@ -41,9 +41,7 @@ namespace soundsplice
     zoom) rather than the viewport — the owner wraps it in a juce::Viewport so
     long or heavily-zoomed timelines scroll instead of squeezing. Click empty
     ruler/lane space to seek the transport there; drag a clip to move where it
-    starts (the engine now delays a track's pattern until its clip's start beat,
-    so this is a real scheduling change, not just cosmetic — see Sequencer's
-    clip-start gating).
+    starts.
 
     Accepts files from two different places, which need two different JUCE
     interfaces — and only having the first is why dragging a file in from
@@ -195,7 +193,7 @@ public:
         for (const auto& track : song_.tracks)
             for (const auto& clip : track.clips)
             {
-                if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty())
+                if (! clip.audioFile.empty())
                     waveforms_.ensure(juce::File(clip.audioFile));
 
                 // Every take's, for the take lanes.
@@ -267,7 +265,6 @@ public:
     bool canZoomIn() const noexcept  { return geometry_.zoom < kMaxZoom; }
     bool canZoomOut() const noexcept { return geometry_.zoom > kMinZoom; }
 
-    /** Highlights the clip currently open in the piano roll. */
     /** Whether dragging and resizing clips snaps to whole beats. Alt still
         inverts it for a single drag — see mouseDrag. */
     void setSnapToGrid(bool shouldSnap) { snapToGrid_ = shouldSnap; }
@@ -567,7 +564,7 @@ public:
                 else
                     paintClipContents(g, clip, r);
 
-                if (showEnvelopes_ && clip.type == model::ClipType::Audio)
+                if (showEnvelopes_)
                     paintEnvelope(g, envelopeEditing_ && i == envelopeTrack_ && c == envelopeClip_
                                          ? envelopePreview_ : clip.envelope,
                                   clip, r);
@@ -580,16 +577,14 @@ public:
                     g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + kClipNameHeight + 2.0f,
                                kResizeEdgePixels - 1.0f, r.getHeight() - kClipNameHeight - 4.0f);
 
-                    // Audio clips can be trimmed from the left as well — see
-                    // isOnClipLeftEdge.
-                    if (clip.type == model::ClipType::Audio)
-                        g.fillRect(r.getX() + 1.0f, r.getY() + kClipNameHeight + 2.0f,
-                                   kResizeEdgePixels - 1.0f, r.getHeight() - kClipNameHeight - 4.0f);
+                    // And from the left — see isOnClipLeftEdge.
+                    g.fillRect(r.getX() + 1.0f, r.getY() + kClipNameHeight + 2.0f,
+                               kResizeEdgePixels - 1.0f, r.getHeight() - kClipNameHeight - 4.0f);
                 }
             }
 
             // An empty lane otherwise looks identical to a broken one —
-            // EffectChainPanel and SessionView already say so when they're
+            // EffectChainPanel already says so when it's
             // empty; a track with nothing arranged deserves the same.
             if (track.clips.empty())
             {
@@ -774,8 +769,8 @@ private:
             g.drawText(gain, strip.removeFromRight(56.0f), juce::Justification::centredRight, false);
         }
 
-        // A clip is known by its recording; a pattern has no name of its own.
-        const auto name = clip.type == model::ClipType::Audio && ! clip.audioFile.empty()
+        // A clip is known by its recording.
+        const auto name = ! clip.audioFile.empty()
                               ? juce::File(clip.audioFile).getFileNameWithoutExtension()
                               : juce::String();
         g.setFont(theme::font(10.0f));
@@ -914,8 +909,6 @@ private:
         trim and resize grip. */
     int fadeHandleAt(const model::Clip& clip, int trackIndex, juce::Point<float> point) const
     {
-        if (clip.type != model::ClipType::Audio)
-            return 0;
 
         const float top = laneTop(trackIndex) + 3.0f;
         if (point.y < top || point.y > top + kFadeHandleSize + 2.0f)
@@ -1158,7 +1151,7 @@ private:
         audio with two takes or more, and its box is tall enough for them. */
     app::TakeLaneLayout takeLanesFor(const model::Clip& clip, juce::Rectangle<float> bounds) const
     {
-        if (! showTakeLanes_ || clip.type != model::ClipType::Audio)
+        if (! showTakeLanes_)
             return {};
         return app::takeLaneLayout(bounds.getY(), bounds.getHeight(), (int) clip.takes.size());
     }
@@ -1243,47 +1236,11 @@ private:
     void paintClipContents(juce::Graphics& g, const model::Clip& clip,
                            juce::Rectangle<float> bounds)
     {
-        if (clip.type == model::ClipType::Audio)
-        {
-            paintAudioClipContents(g, clip, bounds.getHeight() >= kClipNameHeight * 2.0f
-                                                ? bounds.withTrimmedTop(kClipNameHeight - 2.0f)
-                                                : bounds);
-            paintClipFades(g, clip, bounds);
-            paintClipTake(g, clip, bounds);
-            return;
-        }
-
-        if (clip.type != model::ClipType::Instrument)
-            return;
-
-        // Below this the blocks are smaller than the corner rounding and read
-        // as noise rather than as content.
-        if (bounds.getWidth() < 16.0f || bounds.getHeight() < 10.0f)
-            return;
-
-        const auto area = bounds.reduced(2.0f, 3.0f);
-        if (area.getWidth() <= 0.0f || area.getHeight() <= 0.0f)
-            return;
-
-        const auto blocks = clipPreviewBlocks(clip.pattern.notes, clip.pattern.lengthBeats,
-                                              clip.lengthBeats);
-        if (blocks.empty())
-            return;
-
-        g.setColour(clipInk_.withAlpha(0.85f));
-
-        for (const auto& block : blocks)
-        {
-            // At least a pixel each way: a sixteenth in a long clip rounds to
-            // nothing otherwise, and a clip that looks empty is worse than
-            // one that looks approximate.
-            const float w = juce::jmax(1.0f, (float) block.width * area.getWidth());
-            const float h = juce::jmax(1.0f, (float) block.height * area.getHeight());
-
-            g.fillRect(area.getX() + (float) block.x * area.getWidth(),
-                       area.getY() + (float) block.y * area.getHeight(),
-                       w, h);
-        }
+        paintAudioClipContents(g, clip, bounds.getHeight() >= kClipNameHeight * 2.0f
+                                            ? bounds.withTrimmedTop(kClipNameHeight - 2.0f)
+                                            : bounds);
+        paintClipFades(g, clip, bounds);
+        paintClipTake(g, clip, bounds);
     }
 
     void mouseDown(const juce::MouseEvent& e) override
@@ -1425,7 +1382,7 @@ private:
             // With curves shown, a click on an audio clip edits its curve.
             // Started before the clip is reported selected: selecting can
             // hand this view a new song, and the edit reads the clip.
-            if (showEnvelopes_ && clip.type == model::ClipType::Audio)
+            if (showEnvelopes_)
             {
                 beginEnvelopeEdit(trackIndex, clipIndex, e);
                 if (onClipSelected)
@@ -1466,7 +1423,7 @@ private:
             // inside its edges. Not Alt, which already inverts snapping, nor
             // Shift, which selects time.
             slipping_           = fadeDrag_ == 0 && ! resizing_ && ! trimmingStart_
-                        && clip.type == model::ClipType::Audio && e.mods.isCommandDown();
+                        && e.mods.isCommandDown();
             dragOriginalOffset_ = clip.sourceOffsetSeconds;
             dragPreviewOffset_  = clip.sourceOffsetSeconds;
             dragOriginalFades_  = clip.fades;
@@ -1944,7 +1901,7 @@ private:
         if (findClipAt(e.position, trackIndex, clipIndex))
         {
             const auto& clip = song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex];
-            if (showEnvelopes_ && clip.type == model::ClipType::Audio)
+            if (showEnvelopes_)
             {
                 setMouseCursor(juce::MouseCursor::CrosshairCursor);
                 return;
@@ -1982,9 +1939,7 @@ private:
             && fadeHandleAt(song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex], trackIndex, pos) != 0)
             return "Drag to fade - right-click the clip for fade shapes";
 
-        if (findClipAt(pos, trackIndex, clipIndex)
-            && song_.tracks[(size_t) trackIndex].clips[(size_t) clipIndex].type == model::ClipType::Audio
-            && ! showEnvelopes_)
+        if (findClipAt(pos, trackIndex, clipIndex) && ! showEnvelopes_)
             return juce::String("Drag to move - ") + (juce::SystemStats::getOperatingSystemType() & juce::SystemStats::MacOSX ? "Cmd" : "Ctrl")
                    + "-drag to slip the audio inside the clip";
 
@@ -2322,7 +2277,7 @@ private:
         std::set<juce::String> files;
         for (const auto& track : song_.tracks)
             for (const auto& clip : track.clips)
-                if (clip.type == model::ClipType::Audio && ! clip.audioFile.empty())
+                if (! clip.audioFile.empty())
                 {
                     spectrograms_.ensure(juce::File(clip.audioFile));
                     files.insert(juce::File(clip.audioFile).getFullPathName());
@@ -2420,24 +2375,21 @@ private:
         return x >= right - kResizeEdgePixels && x <= right;
     }
 
-    /** Only audio clips have a grabbable left edge: trimming one moves where
-        its file starts playing (see trimClipStart), which a MIDI pattern has
-        no equivalent of. */
+    /** Trimming a clip's left edge moves where its file starts playing (see
+        trimClipStart). */
     bool isOnClipLeftEdge(const model::Clip& clip, float x) const
     {
-        if (clip.type != model::ClipType::Audio)
-            return false;
 
         const float left = geometry_.xForBeat(clip.startBeats);
         return x >= left && x <= left + kResizeEdgePixels;
     }
 
     /** Whether a clip can be dragged from a track of type @p from onto a
-        track of type @p to. Same type only, and never Audio: audio clips
-        are file-backed, not a Pattern, so they don't belong here at all. */
+        track of type @p to: audio track to audio track, since a bus holds no
+        clips. */
     static bool typesAreCompatibleForClipMove(model::TrackType from, model::TrackType to) noexcept
     {
-        return from == to && from != model::TrackType::Audio;
+        return from == to && from == model::TrackType::Audio;
     }
 
     bool   scrubAudible_      = false; // a ruler drag that has moved far enough to play

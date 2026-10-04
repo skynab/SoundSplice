@@ -56,24 +56,17 @@ inline const juce::KeyPress undo       = detail::with('Z', detail::cmd);
 inline const juce::KeyPress redo       = detail::with('Z', detail::cmd | detail::shift);
 inline const juce::KeyPress redoAlt    = detail::with('Y', detail::cmd);
 
-// Notes and clips get separate shortcuts for the same reason they get
-// separate menu commands: one pair whose meaning depends on which pane has
-// focus is a coin toss at the moment you press it.
-//
-// The audio editor is the deliberate exception. Cut/copy/paste on a waveform
-// are the most standard shortcuts there are, and a user working in that pane
-// reaches for them without thinking — so cmd+C/X/V mean audio while the Audio
-// pane is the active one, and notes everywhere else. The discriminator is
-// which pane is in front, not which control has keyboard focus, so it's
-// visible on screen at the moment the key is pressed rather than being an
-// invisible piece of state.
+// Audio, clips and tracks get separate shortcuts for the same reason they
+// get separate menu commands: one set whose meaning depends on which pane has
+// focus is a coin toss at the moment you press it. cmd+X/C/V are audio: the
+// audio editor's selection while the Audio pane is in front, otherwise the
+// arrangement's time selection.
 inline const juce::KeyPress cutAudio   = detail::with('X', detail::cmd);
-inline const juce::KeyPress copyNotes  = detail::with('C', detail::cmd);
-inline const juce::KeyPress pasteNotes = detail::with('V', detail::cmd);
+inline const juce::KeyPress copyAudio  = detail::with('C', detail::cmd);
+inline const juce::KeyPress pasteAudio = detail::with('V', detail::cmd);
 inline const juce::KeyPress copyClip   = detail::with('C', detail::cmd | detail::shift);
 inline const juce::KeyPress pasteClip  = detail::with('V', detail::cmd | detail::shift);
 inline const juce::KeyPress duplicate  = detail::with('D', detail::cmd);
-inline const juce::KeyPress quantize   = detail::with('U', detail::cmd);
 inline const juce::KeyPress deleteClip = detail::with(juce::KeyPress::backspaceKey, detail::cmd);
 
 // Audacity's keys for these, so hands that know it already know them.
@@ -81,7 +74,7 @@ inline const juce::KeyPress splitAtPlayhead = detail::with('I', detail::cmd);
 inline const juce::KeyPress joinClips       = detail::with('J', detail::cmd);
 inline const juce::KeyPress findZeroCrossings = detail::with('Z', detail::noMods);
 
-// Track-level copy/paste sits on the alt variants: cmd+C/V are notes and
+// Track-level copy/paste sits on the alt variants: cmd+C/V are audio and
 // cmd+shift+C/V are clips, so tracks take the remaining pair rather than
 // overloading either with a third meaning.
 inline const juce::KeyPress copyTrack      = detail::with('C', detail::cmd | detail::alt);
@@ -165,12 +158,11 @@ inline std::vector<NamedShortcut> all()
         { "Redo (alt)",      redoAlt },
 
         { "Cut Audio",       cutAudio },
-        { "Copy Notes",      copyNotes },
-        { "Paste Notes",     pasteNotes },
+        { "Copy Audio",      copyAudio },
+        { "Paste Audio",     pasteAudio },
         { "Copy Clip",       copyClip },
         { "Paste Clip",      pasteClip },
         { "Duplicate Clip",  duplicate },
-        { "Quantize",        quantize },
         { "Delete Clip",     deleteClip },
         { "Split at Playhead", splitAtPlayhead },
         { "Join Clips",      joinClips },

@@ -89,8 +89,7 @@ namespace
             context.transport.ppqAtBlockEnd = (double) (at + block) / samplesPerBeat;
 
             juce::AudioBuffer<float> view(out.getArrayOfWritePointers(), 2, b * block, block);
-            juce::MidiBuffer         midi;
-            player.process(view, midi, context);
+            player.process(view, context);
         }
 
         return out;

@@ -67,7 +67,7 @@ public:
             : 0.0f;
     }
 
-    void process(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midi*/, const ProcessContext& context) override
+    void process(juce::AudioBuffer<float>& buffer, const ProcessContext& context) override
     {
         gain_.setTargetValue(juce::Decibels::decibelsToGain(gainDb_));
 

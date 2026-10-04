@@ -14,18 +14,12 @@ void MainComponent::newProject()
     confirmDiscardChanges([this] { createEmptyProject(); });
 }
 
-/** The document a fresh launch and File > New both start from: one synth
-    track holding one empty one-bar clip, so the piano roll has something to
-    open and recording has somewhere to land. */
+/** The document a fresh launch and File > New both start from: one empty
+    audio track, so recording has somewhere to land. */
 model::Song MainComponent::makeEmptySong()
 {
     model::Song song;
-    const int id = model::addTrack(song, model::TrackType::Instrument, "Synth 1").id;
-    model::Clip clip;
-    clip.type                = model::ClipType::Instrument;
-    clip.lengthBeats         = 4.0;
-    clip.pattern.lengthBeats = 4.0;
-    model::addClip(song, id, clip);
+    model::addTrack(song, model::TrackType::Audio, "Audio 1");
     return song;
 }
 

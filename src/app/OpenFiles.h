@@ -97,7 +97,7 @@ public:
         {
             const auto& clips = song.tracks[t].clips;
             for (size_t c = 0; c < clips.size(); ++c)
-                if (clips[c].id == clipId && clips[c].type == model::ClipType::Audio)
+                if (clips[c].id == clipId)
                     return { (int) t, (int) c };
         }
         return {};

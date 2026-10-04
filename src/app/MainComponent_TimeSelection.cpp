@@ -63,7 +63,7 @@ bool MainComponent::editTimeSelection(const juce::String& label, bool copy, bool
     const auto& song = history_.current();
     if (! model::rangeedit::anyTrackApplies(song, timeSelection_))
     {
-        showError("Time selections edit audio and instrument tracks - include at least one");
+        showError("Time selections edit audio tracks - include at least one");
         return true;
     }
 
@@ -121,7 +121,7 @@ bool MainComponent::pasteAtTimeSelection()
 
     if (! model::rangeedit::anyTrackApplies(history_.current(), selection))
     {
-        showError("Time selections edit audio and instrument tracks - include at least one");
+        showError("Time selections edit audio tracks - include at least one");
         return true;
     }
 
@@ -225,7 +225,7 @@ bool MainComponent::pasteRazorClipboard()
     auto       trial     = song;
     if (model::razoredit::pasteAreas(trial, clipboard, topTrack, at).empty())
     {
-        showError("Those tracks can't take what was copied - audio goes on audio tracks, notes on instrument ones");
+        showError("Those tracks can't take what was copied - a bus has no clips");
         return true;
     }
 
@@ -380,7 +380,7 @@ std::optional<std::vector<std::pair<double, double>>> MainComponent::silencesInC
                                                                                     float thresholdDb,
                                                                                     double minSilenceSeconds) const
 {
-    if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+    if (clip.audioFile.empty())
         return std::nullopt;
 
     const juce::File file(clip.audioFile);
@@ -419,8 +419,8 @@ std::optional<std::vector<std::pair<double, double>>> MainComponent::silencesInC
 /** Truncate Silence, as Audacity's: every pause at least @p minSilenceSeconds
     long in the time selection, silent on all its tracks at once, is cut down
     to @p keepSeconds by taking out its middle and closing the gap. Silence is
-    measured in the audio clips; empty space between clips is silent too, and
-    instrument clips count as sound. Nothing is rewritten: clips are trimmed,
+    measured in the audio clips; empty space between clips is silent too.
+    Nothing is rewritten: clips are trimmed,
     split and moved. One undo step. */
 void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds, double keepSeconds)
 {
@@ -450,9 +450,7 @@ void MainComponent::truncateSilence(float thresholdDb, double minSilenceSeconds,
             if (clipEnd <= selection.startBeats || clip.startBeats >= selection.endBeats)
                 continue;
 
-            const auto silences = clip.type == model::ClipType::Audio
-                                    ? silencesInClip(clip, thresholdDb, minSilenceSeconds)
-                                    : std::nullopt;
+            const auto silences = silencesInClip(clip, thresholdDb, minSilenceSeconds);
             const auto quiet = silences ? *silences : std::vector<std::pair<double, double>> {};
 
             // The clip minus its silences is sound. Unreadable audio counts
@@ -536,7 +534,7 @@ void MainComponent::autoDuck(float thresholdDb, double duckDb, double fadeSecond
     for (const auto& clip : control->clips)
     {
         const double clipEnd = clip.startBeats + clip.lengthBeats;
-        if (clip.type != model::ClipType::Audio || clipEnd <= selection.startBeats
+        if (clipEnd <= selection.startBeats
             || clip.startBeats >= selection.endBeats)
             continue;
 
@@ -651,7 +649,7 @@ void MainComponent::repeatTimeSelection(int times)
     auto trial = history_.current();
     if (model::arrangeedit::repeatRange(trial, selection, times).isEmpty())
     {
-        showError("Select time on at least one audio or instrument track to repeat");
+        showError("Select time on at least one audio track to repeat");
         return;
     }
 
@@ -762,7 +760,7 @@ namespace
 
             for (const auto& clip : track.clips)
             {
-                if (clip.type != model::ClipType::Audio || clip.audioFile.empty()
+                if (clip.audioFile.empty()
                     || clip.startBeats + clip.lengthBeats <= selection.startBeats
                     || clip.startBeats >= selection.endBeats)
                     continue;
@@ -1029,7 +1027,7 @@ void MainComponent::detachAtSilences(float thresholdDb, double minSilenceSeconds
 
         for (const auto& clip : track.clips)
         {
-            if (clip.type != model::ClipType::Audio || clip.audioFile.empty())
+            if (clip.audioFile.empty())
                 continue;
 
             const double clipEnd = clip.startBeats + clip.lengthBeats;

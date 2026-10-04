@@ -24,10 +24,10 @@ What already exists, so the plan doesn't rebuild it:
 | Mastering | EQ, exciter, widener, reverb, maximizer, with presets |
 | Analysis | Spectrum of a selection |
 | Mix | Gain/pan/mute/solo, meters, gain/pan automation, master automation |
-| Record | Audio input with count-in, metronome and monitoring; MIDI recording |
+| Record | Audio input with count-in, metronome and monitoring |
 | I/O | Import WAV/AIFF/FLAC/Ogg/MP3; export the same five, mix or stems, with dither |
 | Workspace | Dockable panes, layouts, snapshot undo/redo |
-| 🔁 Removed | Drums/guitar/piano, generative loops (buses, sends, sidechain, tempo changes and warp are coming back: Phase 5) |
+| 🔁 Removed | Drums/guitar/piano, generative loops (buses, sends, sidechain, tempo changes and warp are coming back: Phase 5); MIDI, the synth, the on-screen keyboard and the Session view (2026-10-04) |
 
 ### Architectural limits that block parity
 
@@ -378,7 +378,7 @@ voice, podcast and restoration work:
     through the system's own decoders. File > Load Video keeps a video with the project; the Video pane
     follows the playhead (playing, seeking and scrubbing), picture only, from a start time you set
     (`src/app/VideoPane.h`)
-12. ✅ **Keep the Session view** as a sketchpad for musicians, which none of the three editors has (kept)
+12. 🔁 **Keep the Session view** as a sketchpad for musicians, which none of the three editors has (kept, then removed with the rest of MIDI on 2026-10-04)
 
 ---
 

@@ -80,7 +80,7 @@ target_compile_definitions(SoundSplice PRIVATE
 # deliberately and throughout: settings structs compare bit-for-bit so
 # undo/history can tell "unchanged" from "changed" (see DragCommit.h's
 # commitStructDrag), and a few DSP hot paths skip a ramp when a start value
-# exactly equals its end value (see InstrumentTrack.h). None of that is the
+# exactly equals its end value (see MixerTrack.h). None of that is the
 # fuzzy-comparison bug the warning exists to catch, so it's just noise here.
 # A target's own compile options are always placed *before* flags inherited
 # from linked interface libraries, so "-Wno-float-equal" can't just be added

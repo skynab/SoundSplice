@@ -524,7 +524,7 @@ private:
     size_t               selected_ = 0;
     model::AutomationLane lane_;
     juce::String         trackName_;
-    model::TrackType     trackType_ = model::TrackType::Instrument;
+    model::TrackType     trackType_ = model::TrackType::Audio;
     double               totalBeats_   = 64.0;
     double               playheadBeat_ = 0.0;
     bool                 hasTrack_     = false;

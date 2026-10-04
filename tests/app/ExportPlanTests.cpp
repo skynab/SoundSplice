@@ -84,7 +84,6 @@ TEST_CASE("A render report lists the clips sounding in its stretch, on its track
     model::Song song;
     auto&       vox = model::addTrack(song, model::TrackType::Audio, "Vox");
     model::Clip take;
-    take.type        = model::ClipType::Audio;
     take.audioFile   = "/takes/vox.wav";
     take.startBeats  = 8.0;
     take.lengthBeats = 4.0;
@@ -92,9 +91,9 @@ TEST_CASE("A render report lists the clips sounding in its stretch, on its track
     take.startBeats = 20.0; // after the stretch
     vox.clips.push_back(take);
 
-    auto&       synth = model::addTrack(song, model::TrackType::Instrument, "Synth");
+    auto&       synth = model::addTrack(song, model::TrackType::Audio, "Synth");
     model::Clip part;
-    part.type        = model::ClipType::Instrument;
+    part.audioFile   = "/takes/synth.wav";
     part.startBeats  = 2.0;
     part.lengthBeats = 4.0;
     synth.clips.push_back(part);
@@ -102,7 +101,7 @@ TEST_CASE("A render report lists the clips sounding in its stretch, on its track
     const auto mix = reportClips(song, -1, 4.0, 16.0);
     REQUIRE(mix.size() == 2);
     REQUIRE(mix[0].track == "Synth"); // in the order they start
-    REQUIRE(mix[0].audioFile.empty());
+    REQUIRE(mix[0].audioFile == "/takes/synth.wav");
     REQUIRE(mix[0].startSeconds == Approx(-1.0)); // began before the stretch
     REQUIRE(mix[1].track == "Vox");
     REQUIRE(mix[1].audioFile == "/takes/vox.wav");

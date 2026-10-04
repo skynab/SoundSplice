@@ -8,12 +8,10 @@
 #include "SettingsLocation.h"
 #include "MainComponent.h"
 
-#include "ScrollFollow.h"
 #include "Shortcuts.h"
 
 #include "Icons.h"
 
-#include "engine/ClipSlot.h"
 #include "app/BatchProcess.h"
 #include "app/EffectRender.h"
 #include "app/ExportAudioDialog.h"
@@ -26,8 +24,6 @@
 #include "app/StemNaming.h"
 #include "app/TimelineZoom.h"
 #include "engine/EffectSlotFactory.h"
-#include "engine/NoteOps.h"
-#include "engine/MidiFileIO.h"
 #include "engine/OfflineRenderer.h"
 #include "engine/SequenceAudioFormat.h"
 #include "model/RazorEdits.h"
@@ -83,10 +79,6 @@ inline constexpr int kFirstColourMenuId = 200;
 inline constexpr int kFirstEditGroupMenuId = 300; // None, then each group
 inline constexpr int kIndentTrackMenuId    = 3;
 inline constexpr int kOutdentTrackMenuId   = 4;
-
-/** How close to the edge the playhead gets before the keys grid pages. Small,
-    so almost the whole width is travelled before each jump. */
-inline constexpr int kKeysFollowMargin = 24;
 
 /** Extra beats rendered past the last clip when bouncing, so reverb and delay
     tails decay into the file instead of being chopped off at the final beat.
@@ -156,7 +148,7 @@ namespace mainui
 
 /** Live tweak from the Track FX pane — updates the document in place (not a
     separate undo step per knob notch) and mirrors it into the engine, the
-    same pattern the mixer faders and the Synth pane use. */
+    same pattern the mixer faders use. */
 /** One chain slot's parameters in the engine's terms. `enabled` is the
     slot's own bypass, not the per-settings flag — bypass has to mean the same
     thing for a hosted plugin as for a built-in. */

@@ -10,7 +10,6 @@ namespace
     Clip audioClip()
     {
         Clip clip;
-        clip.type = ClipType::Audio;
         clip.effects.push_back(makeEffectSlot(EffectKind::Reverb)); // added by hand
         return clip;
     }

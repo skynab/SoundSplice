@@ -103,8 +103,6 @@ inline std::vector<std::string> differences(const Song& from, const Song& to, si
         say("Master bus changed");
     if (! (from.info == to.info))
         say("Project info changed");
-    if (from.scenes != to.scenes)
-        say("Session scenes changed");
 
     if (out.empty())
         say("No difference");

@@ -75,7 +75,6 @@ TEST_CASE("The templates are set up for their work", "[model][templates]")
     REQUIRE(named(music, "Vocals")->sends.size() == 1);
     REQUIRE(named(music, "Vocals")->sends[0].busId == reverb);
     REQUIRE(named(music, "Drums")->sends.empty());
-    REQUIRE(named(music, "Synth")->type == TrackType::Instrument);
 
     const auto voiceOver = templates::make(templates::Builtin::VoiceOver);
     REQUIRE(named(voiceOver, "Music Bed")->effectChain[0].sidechainTrackId == named(voiceOver, "Voice")->id);
@@ -86,7 +85,6 @@ TEST_CASE("A project kept as a template loses its audio, not its setup", "[model
     auto song = templates::make(templates::Builtin::Podcast);
     song.bpm  = 96.0;
     Clip clip;
-    clip.type        = ClipType::Audio;
     clip.audioFile   = "/audio/interview.wav";
     clip.lengthBeats = 16.0;
     addClip(song, named(song, "Host")->id, clip);

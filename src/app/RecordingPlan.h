@@ -7,7 +7,6 @@
 #include <set>
 #include <vector>
 
-#include "engine/MidiCapture.h"
 #include "engine/TempoMap.h"
 #include "model/Song.h"
 #include "model/TimeSelection.h"
@@ -16,9 +15,9 @@ namespace soundsplice::app::recording
 {
 /**
     The decisions recording makes, apart from the doing of it: which tracks a
-    take lands on, how late it comes back, when a timed take starts and stops,
-    and what a MIDI take becomes. JUCE-free and tested, as RecordSourceChoice
-    is; MainComponent_Recording.cpp gathers the inputs and acts on the answers.
+    take lands on, how late it comes back, and when a timed take starts and
+    stops. JUCE-free and tested; MainComponent_Recording.cpp gathers the inputs
+    and acts on the answers.
 */
 
 /** The tracks a take records onto, by index, the first being the main take:
@@ -97,21 +96,6 @@ inline std::optional<int> freeRecorderSlot(const std::vector<ExtraTake>& extras,
             return slot;
     return std::nullopt;
 }
-
-/** A MIDI take in progress. Separate from the audio take rather than one
-    shared "recording" flag: the two finish through different engine calls,
-    and a single flag would make "which recorder do I ask" a question with
-    two possible answers at the moment it matters most. */
-struct MidiTakeInProgress
-{
-    bool running     = false;
-    int  targetTrack = -1;
-
-    // Drained from the engine's ring on every timer tick, not only at the
-    // end of the take - which is what keeps the ring small and the take
-    // unbounded (see engine::MidiRecorder).
-    std::vector<engine::RecordedMidiEvent> events;
-};
 
 /** The Recording Latency settings. */
 struct Latency
@@ -210,54 +194,5 @@ private:
     int64_t                startMs_ = 0;
     std::optional<int64_t> stopMs_;
 };
-
-/** A MIDI take as the clip it becomes. */
-struct MidiTake
-{
-    double                    startBeats  = 0.0;
-    double                    lengthBeats = 0.0; // the take's, rounded up to a whole bar
-    std::vector<engine::Note> notes;             // from the clip's start
-};
-
-/** The take captured from @p startSample to @p endSample as a clip, through
-    @p tempo: a take spanning a tempo change can't be converted by one scalar,
-    which is why engine::MidiCapture works in beats and this does the
-    converting. Nothing if no note was played - every event an unmatched
-    note-off, from keys already down when capture began. */
-inline std::optional<MidiTake> clipFromMidiTake(const std::vector<engine::RecordedMidiEvent>& events,
-                                                int64_t startSample, int64_t endSample, const engine::TempoMap& tempo)
-{
-    MidiTake take;
-    take.startBeats = std::max(0.0, tempo.ppqFromSamples(startSample));
-    const double takeEndBeats = endSample > startSample ? std::max(take.startBeats, tempo.ppqFromSamples(endSample))
-                                                        : take.startBeats;
-
-    std::vector<engine::TimedMidiEvent> timed;
-    timed.reserve(events.size());
-    for (const auto& event : events)
-    {
-        engine::TimedMidiEvent converted;
-        // From the take's own start: a clip's notes are positioned from the
-        // clip start, and the clip is placed at startBeats.
-        converted.beats      = tempo.ppqFromSamples(event.timeSamples) - take.startBeats;
-        converted.noteNumber = event.noteNumber;
-        converted.velocity   = event.velocity;
-        converted.noteOn     = event.noteOn;
-        timed.push_back(converted);
-    }
-
-    take.notes = engine::MidiCapture::notesFromEvents(std::move(timed), takeEndBeats - take.startBeats);
-    if (take.notes.empty())
-        return std::nullopt;
-
-    // As long as the take, rounded up to a whole bar: a take is a musical
-    // phrase, and ending the clip on the last note's release would make a
-    // loop of it jarringly short.
-    double contentEnd = takeEndBeats - take.startBeats;
-    for (const auto& note : take.notes)
-        contentEnd = std::max(contentEnd, note.startBeats + note.lengthBeats);
-    take.lengthBeats = engine::MidiCapture::clipLengthForTake(contentEnd, std::max(1.0, tempo.quartersPerBar()));
-    return take;
-}
 
 } // namespace soundsplice::app::recording

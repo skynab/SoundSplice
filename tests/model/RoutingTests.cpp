@@ -62,8 +62,6 @@ TEST_CASE("A bus holds no clips", "[model][routing]")
     Ids  ids;
     auto song = mix(ids);
     REQUIRE_FALSE(routing::holdsClips(song.tracks[2]));
-    REQUIRE_FALSE(rangeedit::fits(song.tracks[2], ClipType::Instrument));
-    REQUIRE_FALSE(rangeedit::fits(song.tracks[2], ClipType::Audio));
     REQUIRE_FALSE(rangeedit::appliesTo(song.tracks[2]));
 }
 

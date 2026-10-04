@@ -16,7 +16,6 @@ namespace
         song.bpm = 120.0;
         auto& voice = addTrack(song, TrackType::Audio, "Voice");
         Clip clip;
-        clip.type        = ClipType::Audio;
         clip.audioFile   = "talk.wav";
         clip.lengthBeats = 20.0; // 10 s
         clip.transcript  = { { "So", 0.5, 0.8 }, { "um,", 1.0, 1.4 }, { "we", 1.5, 1.7 }, { "went", 1.7, 2.0 },

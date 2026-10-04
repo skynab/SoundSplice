@@ -18,7 +18,6 @@ namespace
         trackId  = addTrack(song, TrackType::Audio, "Vox").id;
 
         Clip first;
-        first.type        = ClipType::Audio;
         first.audioFile   = "a.wav";
         first.startBeats  = 0.0;
         first.lengthBeats = 4.0;
@@ -149,7 +148,6 @@ TEST_CASE("A loop recording's passes are found in its one file", "[model][takes]
 TEST_CASE("A loop recording becomes one clip over the loop with a take per pass", "[model][takes]")
 {
     Clip clip;
-    clip.type = ClipType::Audio;
     takeedit::makeLoopTakes(clip, "rec.wav", { -2.0, 2.0, 6.0 }, 16.0, 8.0);
 
     REQUIRE(clip.startBeats == 16.0);
@@ -171,14 +169,12 @@ TEST_CASE("Punching in replaces the range and nothing either side of it", "[mode
     const int trackId = addTrack(song, TrackType::Audio, "Vox").id;
 
     Clip original;
-    original.type        = ClipType::Audio;
     original.audioFile   = "verse.wav";
     original.lengthBeats = 16.0;
     addClip(song, trackId, original);
 
     // Recorded from beat 4 with a bar of pre-roll, punched over beats 8 to 12.
     Clip recorded;
-    recorded.type        = ClipType::Audio;
     recorded.audioFile   = "fix.wav";
     recorded.startBeats  = 4.0;
     recorded.lengthBeats = 12.0;

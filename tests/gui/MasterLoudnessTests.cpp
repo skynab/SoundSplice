@@ -20,7 +20,6 @@ namespace
         constexpr int    block = 512;
 
         juce::AudioBuffer<float> buffer(2, block);
-        juce::MidiBuffer         midi;
         engine::ProcessContext   context;
         context.sampleRate = rate;
         context.numSamples = block;
@@ -36,7 +35,7 @@ namespace
                 buffer.setSample(1, i, value);
                 phase += 2.0 * juce::MathConstants<double>::pi * 1000.0 / rate;
             }
-            master.process(buffer, midi, context);
+            master.process(buffer, context);
         }
     }
 }

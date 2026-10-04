@@ -57,7 +57,7 @@ namespace warpedit
     inline bool setWarp(Song& song, int trackId, int clipId, bool warp)
     {
         auto* clip = findClip(song, trackId, clipId);
-        if (clip == nullptr || clip->type != ClipType::Audio || (warp && clip->sourceBpm <= 0.0) || clip->warp == warp)
+        if (clip == nullptr || (warp && clip->sourceBpm <= 0.0) || clip->warp == warp)
             return false;
 
         const auto   clock   = clockFor(song);
@@ -76,7 +76,7 @@ namespace warpedit
     inline bool setSourceTempo(Song& song, int trackId, int clipId, double bpm)
     {
         auto* clip = findClip(song, trackId, clipId);
-        if (clip == nullptr || clip->type != ClipType::Audio || ! (bpm > 0.0))
+        if (clip == nullptr || ! (bpm > 0.0))
             return false;
 
         const double before = factorFor(song, *clip);

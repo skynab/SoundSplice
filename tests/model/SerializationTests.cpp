@@ -30,33 +30,25 @@ static Song makeSampleSong()
     s.masterGainDb.addPoint(4.0, 0.0f);
     s.masterGainDb.addPoint(8.0, -6.0f);
 
-    const int synthId = addTrack(s, TrackType::Instrument, "Synth Lead").id; // name with a space
+    const int leadId = addTrack(s, TrackType::Audio, "Synth Lead").id; // name with a space
 
-    Clip midiClip;
-    midiClip.type             = ClipType::Instrument;
-    midiClip.startBeats       = 8.0; // not at the origin: see below
-    midiClip.lengthBeats      = 4.0;
-    midiClip.pattern.lengthBeats = 4.0;
-    midiClip.pattern.notes.push_back({ 0.0, 0.5, 60, 0.8f });
-    midiClip.pattern.notes.push_back({ 1.0, 0.25, 64, 0.9f });
-    midiClip.pattern.notes.push_back({ 2.5, 1.0, 67, 0.6f });
-    addClip(s, synthId, midiClip);
+    Clip leadClip;
+    leadClip.startBeats  = 8.0; // not at the origin: see below
+    leadClip.lengthBeats = 4.0;
+    leadClip.audioFile   = "lead.wav";
+    addClip(s, leadId, leadClip);
 
     const int voxId = addTrack(s, TrackType::Audio, "Vox").id;
     Clip audioClip;
-    audioClip.type       = ClipType::Audio;
     audioClip.startBeats = 2.5; // deliberately off the bar line
     audioClip.audioFile  = "takes/vocal 01.wav";
     addClip(s, voxId, audioClip);
 
-    const int bassId = addTrack(s, TrackType::Instrument, "Bass").id;
+    const int bassId = addTrack(s, TrackType::Audio, "Bass").id;
     Clip bassClip;
-    bassClip.type             = ClipType::Instrument;
-    bassClip.startBeats       = 16.0;
-    bassClip.lengthBeats      = 4.0;
-    bassClip.pattern.lengthBeats = 4.0;
-    bassClip.pattern.notes.push_back({ 0.0, 0.25, 36, 1.0f });
-    bassClip.pattern.notes.push_back({ 1.0, 0.25, 38, 0.9f });
+    bassClip.startBeats  = 16.0;
+    bassClip.lengthBeats = 4.0;
+    bassClip.audioFile   = "bass.wav";
     addClip(s, bassId, bassClip);
 
     // Set solo/mute by index (not the returned reference — a later addTrack can
@@ -73,17 +65,6 @@ static Song makeSampleSong()
     s.tracks[0].laneFor(TrackParam::Gain).addPoint(4.0, 0.0f);
     s.tracks[0].laneFor(TrackParam::Pan).addPoint(0.0, -1.0f);
     s.tracks[0].laneFor(TrackParam::Pan).addPoint(8.0, 1.0f);
-
-    s.tracks[0].synthSettings.waveform        = 2; // square
-    s.tracks[0].synthSettings.attackMs        = 12.0f;
-    s.tracks[0].synthSettings.decayMs         = 300.0f;
-    s.tracks[0].synthSettings.sustain         = 0.5f;
-    s.tracks[0].synthSettings.releaseMs       = 400.0f;
-    s.tracks[0].synthSettings.filterEnabled   = true;
-    s.tracks[0].synthSettings.filterMode      = 1;
-    s.tracks[0].synthSettings.filterCutoff    = 2500.0f;
-    s.tracks[0].synthSettings.filterResonance = 1.5f;
-    s.tracks[0].synthSettings.gainDb          = -3.0f;
 
     // An effect chain with a plugin sandwiched between two built-ins, so the
     // round trip has to preserve both the ordering and the mixed kinds.
@@ -168,24 +149,6 @@ static Song makeSampleSong()
         s.tracks[2].effectChain = { reverbSlot };
     }
 
-    // A session grid: two scenes, with clips in some cells and not others —
-    // the empty ones matter as much, since the slot index is the scene.
-    addScene(s, "Intro");
-    addScene(s, "Chorus B");        // with a space, deliberately
-
-    Clip sessionClipA;
-    sessionClipA.type                = ClipType::Instrument;
-    sessionClipA.lengthBeats         = 4.0;
-    sessionClipA.pattern.lengthBeats = 4.0;
-    sessionClipA.pattern.notes.push_back({ 0.0, 0.5, 62, 0.7f });
-    setSessionClip(s, 0, 0, sessionClipA);
-
-    Clip sessionClipB;
-    sessionClipB.type                = ClipType::Instrument;
-    sessionClipB.lengthBeats         = 8.0;
-    sessionClipB.pattern.lengthBeats = 8.0;
-    setSessionClip(s, 2, 1, sessionClipB); // bass track, second scene
-
     return s;
 }
 
@@ -239,7 +202,6 @@ TEST_CASE("A project with Windows line endings opens the same", "[model][io]")
     // leaves it. The audio file path runs to the end of its line, so a \r
     // left on it named a file that doesn't exist.
     Song original = makeSampleSong();
-    original.tracks[0].clips[0].type      = ClipType::Audio;
     original.tracks[0].clips[0].audioFile = "C:\\Audio\\take one.wav";
 
     std::string crlf;
@@ -278,7 +240,6 @@ TEST_CASE("A clip's transcript round-trips with everything around it", "[model][
 {
     Song original = makeSampleSong();
     auto& clip    = original.tracks[0].clips[0];
-    clip.type      = ClipType::Audio;
     clip.audioFile = "voice.wav";
     clip.essential.role = SoundRole::Dialogue;     // written before the words
     clip.essential.amounts["noise"] = 4.0f;
@@ -408,7 +369,7 @@ TEST_CASE("A version 2 file's master effects become the master chain", "[model][
     REQUIRE(eq.eqPedal.highShelfHz == EqSettings::trebleHz);
     REQUIRE(eq.eqPedal.highShelfDb == 3.0f);
 
-    // Saved again, it's a version 3 file with the chain, and reads back the same.
+    // Saved again, it's a current file with the chain, and reads back the same.
     const auto saved = serialize(out);
     REQUIRE(saved.find("MASTERFX 3") != std::string::npos);
     REQUIRE(saved.find("\nFILTER ") == std::string::npos);
@@ -434,6 +395,83 @@ TEST_CASE("A version 2 file with its master effects off has an empty master chai
     Song out;
     REQUIRE(deserialize(text, out));
     REQUIRE(out.masterEffects.empty());
+}
+
+TEST_CASE("An earlier file's MIDI is read past, and its MIDI track becomes audio", "[model][io]")
+{
+    // A version 3 file as that build wrote it: a MIDI track with its synth,
+    // a session grid and note clips, beside an audio track.
+    const std::string text =
+        "SOUNDSPLICE 3\n"
+        "BPM 120\n"
+        "TSNUM 4\n"
+        "TSDEN 4\n"
+        "NEXTID 10\n"
+        "SCENES 2\n"
+        "SCENE Intro\n"
+        "SCENE Chorus B\n"
+        "TRACKS 2\n"
+        "TRACK 1 0 -3 0 0 0 0 Synth Lead\n"
+        "SYNTH 2 12 300 0.5 400 1 1 2500 1.5 -3 0 0 0 1 0 0 0.3 1 12\n"
+        "FXCHAIN 1\n"
+        "FXSLOT 4 1\n"
+        "SESSION 2\n"
+        "SSLOT 1\n"
+        "CLIP 5 0 0 4 4 \n"
+        "PEDALS 1\n"
+        "PEDAL 0 1\n"
+        "NOTES 1\n"
+        "NOTE 0 0.5 62 0.7\n"
+        "SSLOT 0\n"
+        "CLIPS 2\n"
+        "CLIP 2 0 8 4 4 \n"
+        "CLIPGAIN 0\n"
+        "NOTES 2\n"
+        "NOTE 0 0.5 60 0.8\n"
+        "NOTE 1 0.25 64 0.9\n"
+        "CLIP 3 1 12 4 0 takes/vocal 01.wav\n"
+        "CLIPGAIN -2\n"
+        "NOTES 0\n"
+        "TRACK 4 1 0 0 0 0 0 Vox\n"
+        "SESSION 2\n"
+        "SSLOT 0\n"
+        "SSLOT 0\n"
+        "CLIPS 1\n"
+        "CLIP 6 1 2.5 4 0 vocal.wav\n"
+        "PEDALS 0\n"
+        "NOTES 0\n";
+
+    Song        out;
+    std::string error;
+    REQUIRE(deserialize(text, out, &error));
+    REQUIRE(out.tracks.size() == 2);
+
+    // The MIDI track keeps everything but its notes: its name, level and
+    // effects, and the audio clip it held.
+    const auto& lead = out.tracks[0];
+    REQUIRE(lead.type == TrackType::Audio);
+    REQUIRE(lead.name == "Synth Lead");
+    REQUIRE(lead.gainDb == -3.0f);
+    REQUIRE(lead.effectChain.size() == 1);
+    REQUIRE(lead.clips.size() == 1);
+    REQUIRE(lead.clips[0].id == 3);
+    REQUIRE(lead.clips[0].startBeats == 12.0);
+    REQUIRE(lead.clips[0].audioFile == "takes/vocal 01.wav");
+    REQUIRE(lead.clips[0].gainDb == -2.0f);
+
+    const auto& vox = out.tracks[1];
+    REQUIRE(vox.type == TrackType::Audio);
+    REQUIRE(vox.clips.size() == 1);
+    REQUIRE(vox.clips[0].startBeats == 2.5);
+    REQUIRE(vox.clips[0].audioFile == "vocal.wav");
+
+    // Saved again, it's a current file with none of it.
+    const auto saved = serialize(out);
+    for (const char* gone : { "SCENES", "SYNTH", "SESSION", "NOTES", "PEDALS" })
+        REQUIRE(saved.find(gone) == std::string::npos);
+    Song again;
+    REQUIRE(deserialize(saved, again));
+    REQUIRE(again == out);
 }
 
 TEST_CASE("A track of an unknown type is refused, not guessed at", "[model][io]")
@@ -510,30 +548,6 @@ TEST_CASE("An effect chain round-trips with its order and mixed kinds", "[model]
     REQUIRE(chain[1].plugin.state == "YmFzZTY0LXN0YXRl");
 }
 
-TEST_CASE("The session grid round-trips, empty cells included", "[model][io]")
-{
-    const Song original = makeSampleSong();
-
-    Song restored;
-    REQUIRE(deserialize(serialize(original), restored));
-
-    REQUIRE(restored.scenes.size() == 2);
-    REQUIRE(restored.scenes[1].name == "Chorus B");
-
-    // Every track's column stays the same length as the scene list, so the
-    // grid can't go ragged on a round trip.
-    for (const auto& track : restored.tracks)
-        REQUIRE(track.sessionSlots.size() == restored.scenes.size());
-
-    const auto* filled = sessionClip(restored, 0, 0);
-    REQUIRE(filled != nullptr);
-    REQUIRE(filled->pattern.notes.size() == 1);
-    REQUIRE(filled->pattern.notes[0].noteNumber == 62);
-
-    REQUIRE(sessionClip(restored, 0, 1) == nullptr); // deliberately empty
-    REQUIRE(sessionClip(restored, 2, 1) != nullptr);
-}
-
 TEST_CASE("The mastering rack round-trips", "[model][io]")
 {
     Song original = makeSampleSong();
@@ -584,7 +598,6 @@ TEST_CASE("Clip gain survives an audio path containing spaces", "[model][io]")
     // anything written after it would be swallowed into the path. A path
     // with spaces is the case that would have exposed it.
     Song original = makeSampleSong();
-    original.tracks[0].clips[0].type      = ClipType::Audio;
     original.tracks[0].clips[0].audioFile = "/Users/me/My Recordings/take one.wav";
     original.tracks[0].clips[0].gainDb    = 3.0f;
 
@@ -598,7 +611,6 @@ TEST_CASE("Clip gain survives an audio path containing spaces", "[model][io]")
 TEST_CASE("A clip's source offset round-trips, and defaults to the file's start", "[model][io]")
 {
     Song original = makeSampleSong();
-    original.tracks[0].clips[0].type                = ClipType::Audio;
     original.tracks[0].clips[0].audioFile           = "/Users/me/My Recordings/take one.wav";
     original.tracks[0].clips[0].sourceOffsetSeconds = 12.345678901234567;
 
@@ -626,7 +638,6 @@ TEST_CASE("Clip fades round-trip, and an unknown shape reads as linear", "[model
 
     Song original = makeSampleSong();
     auto& clip = original.tracks[0].clips[0];
-    clip.type             = ClipType::Audio;
     clip.audioFile        = "/Users/me/My Recordings/take one.wav";
     clip.fades.inSeconds  = 0.25;
     clip.fades.inShape    = FadeShape::EqualPower;
@@ -652,36 +663,6 @@ TEST_CASE("Clip fades round-trip, and an unknown shape reads as linear", "[model
     REQUIRE(unknownShape.tracks[0].clips[0].fades.inSeconds == 0.25);
     REQUIRE(unknownShape.tracks[0].clips[0].fades.outShape == FadeShape::SCurve);
 }
-
-TEST_CASE("Sustain-pedal movements round-trip", "[model][io]")
-{
-    Song s;
-    const int trackId = addTrack(s, TrackType::Instrument, "Piano").id;
-
-    Clip clip;
-    clip.type = ClipType::Instrument;
-    clip.pattern.lengthBeats = 8.0;
-    clip.pattern.notes.push_back({ 0.0, 1.0, 60, 0.8f });
-    clip.pattern.pedals.push_back({ 0.0, true });
-    clip.pattern.pedals.push_back({ 3.5, false });
-    clip.pattern.pedals.push_back({ 4.0, true });
-    addClip(s, trackId, clip);
-
-    Song restored;
-    REQUIRE(deserialize(serialize(s), restored));
-
-    const auto& pedals = findTrack(restored, trackId)->clips[0].pattern.pedals;
-    REQUIRE(pedals.size() == 3);
-    REQUIRE(pedals[0].beat == 0.0);
-    REQUIRE(pedals[0].down);
-    REQUIRE(pedals[1].beat == 3.5);
-    REQUIRE_FALSE(pedals[1].down);
-    REQUIRE(pedals[2].down);
-
-    // The notes either side of the new record have to survive it.
-    REQUIRE(findTrack(restored, trackId)->clips[0].pattern.notes.size() == 1);
-}
-
 
 TEST_CASE("Utility effects round-trip, and older files load them at their defaults", "[model][io]")
 {
@@ -860,7 +841,6 @@ TEST_CASE("A clip's spectral edits round-trip", "[model][serialization]")
     Track track;
     track.type = TrackType::Audio;
     Clip clip;
-    clip.type      = ClipType::Audio;
     clip.audioFile = "C:/audio/take 1.wav";
 
     soundsplice::engine::SpectralRegion region;
@@ -954,7 +934,6 @@ TEST_CASE("A clip's own effects round-trip, and a clip without any writes none",
     const int id = addTrack(song, TrackType::Audio, "Vox").id;
 
     Clip clip;
-    clip.type      = ClipType::Audio;
     clip.audioFile = "takes/line one.wav";
     auto eq        = makeEffectSlot(EffectKind::ParametricEq);
     eq.parametricEq.band3GainDb = -4.5f;
@@ -965,7 +944,6 @@ TEST_CASE("A clip's own effects round-trip, and a clip without any writes none",
     addClip(song, id, clip);
 
     Clip plain;
-    plain.type      = ClipType::Audio;
     plain.audioFile = "takes/line two.wav";
     plain.startBeats = 16.0;
     addClip(song, id, plain);
@@ -987,7 +965,6 @@ TEST_CASE("A clip's takes round-trip, names and files with spaces included", "[m
     const int id = addTrack(song, TrackType::Audio, "Vox").id;
 
     Clip clip;
-    clip.type      = ClipType::Audio;
     clip.audioFile = "takes/pass two.wav";
     clip.takes     = { { "takes/pass one.wav", -0.25, "Pass 1" }, { "takes/pass two.wav", 0.0, "Pass 2 (keeper)" } };
     clip.activeTake = 1;

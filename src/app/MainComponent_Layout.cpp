@@ -199,9 +199,8 @@ void MainComponent::applyWorkspaceLayout(layouts::Workspace workspace)
 
 /** Builds one of the zoom controls: icon, slider and editable multiplier.
 
-    Shared by the tracks and keys panes. They zoom different axes — time in
-    one, pitch in the other — but the control is the same thing and reads the
-    same way, so it is built in one place. */
+    The tracks pane's: built in one place so the control reads the same way
+    wherever it appears. */
 void MainComponent::setUpZoomControls(juce::Component& parent, juce::DrawableButton& icon,
                                       juce::Slider& slider, juce::Slider& box,
                                       double minZoom, double maxZoom,
@@ -242,65 +241,6 @@ void MainComponent::setUpZoomControls(juce::Component& parent, juce::DrawableBut
     box.setTooltip(tooltip + " - type a multiplier, or drag");
     box.onValueChange = [&box, onZoom] { onZoom((float) box.getValue()); };
     parent.addAndMakeVisible(box);
-}
-
-/** Applies a new pitch zoom to the keys pane and keeps its controls
-    describing it. The roll stores a row count, so the zoom lands on the
-    nearest achievable window and the controls are set from where it landed
-    rather than from what was asked for. */
-void MainComponent::setKeysZoom(float zoom)
-{
-    pianoRoll_.setPitchZoom(zoom);
-    updateKeysZoomControls();
-}
-
-void MainComponent::updateKeysZoomControls()
-{
-    const double zoom = pianoRoll_.pitchZoom();
-    keysZoomSlider_.setValue(zoom, juce::dontSendNotification);
-    keysZoomBox_.setValue(zoom, juce::dontSendNotification);
-}
-
-/** Keeps the playhead in view while the keys pane is scrolled.
-
-    Only while playing: scrolling the view out from under someone who is
-    editing a stopped pattern would be worse than the problem it solves. The
-    paging rule itself is scrollToFollow, which is JUCE-free and tested — it
-    pages rather than centring, so the grid stays still while the playhead
-    crosses it instead of sliding continuously under a fixed line. */
-void MainComponent::followKeysPlayhead()
-{
-    if (! keysFollowButton_.getToggleState() || ! engine_.isPlaying())
-        return;
-
-    const int viewportWidth = keysViewport_.getMaximumVisibleWidth();
-    const int contentWidth  = pianoRoll_.getWidth();
-    if (viewportWidth <= 0 || contentWidth <= viewportWidth)
-        return; // nothing to scroll
-
-    const int current = keysViewport_.getViewPositionX();
-    const int wanted  = scrollToFollow((int) pianoRoll_.playheadX(), current,
-                                       viewportWidth, contentWidth, kKeysFollowMargin);
-
-    if (wanted != current)
-        keysViewport_.setViewPosition(wanted, keysViewport_.getViewPositionY());
-}
-
-/** Widens the grid and lets the viewport scroll it. Unlike pitch zoom, which
-    the roll stores as a row count and snaps, this is continuous — the roll
-    simply draws to whatever width it's given. */
-void MainComponent::setKeysTimeZoom(float zoom)
-{
-    pianoRoll_.setTimeZoom(zoom);
-    updateKeysTimeZoomControls();
-    layoutEditTab();
-}
-
-void MainComponent::updateKeysTimeZoomControls()
-{
-    const double zoom = pianoRoll_.timeZoom();
-    keysTimeZoomSlider_.setValue(zoom, juce::dontSendNotification);
-    keysTimeZoomBox_.setValue(zoom, juce::dontSendNotification);
 }
 
 /** Applies a new timeline zoom and keeps the controls describing it. */
@@ -378,43 +318,8 @@ void MainComponent::layoutArrangeTab()
     zoomSlider_.setBounds(toolbar.removeFromLeft(120));
     toolbar.removeFromLeft(6);
     zoomBox_.setBounds(toolbar.removeFromLeft(56));
-    toolbar.removeFromLeft(12);
-    addClipButton_.setBounds(toolbar.removeFromLeft(90));
 
     arrangementViewport_.setBounds(area);
-}
-
-void MainComponent::layoutEditTab()
-{
-    auto area   = editTab_.getLocalBounds();
-    auto header = area.removeFromTop(24);
-
-    barsBox_.setBounds(header.removeFromRight(56).reduced(2, 0));
-    barsLabel_.setBounds(header.removeFromRight(34));
-
-    header.removeFromRight(10);
-    keysZoomBox_.setBounds(header.removeFromRight(52).reduced(0, 2));
-    keysZoomSlider_.setBounds(header.removeFromRight(80).reduced(2, 1));
-    keysZoomIcon_.setBounds(header.removeFromRight(22).reduced(0, 1));
-
-    header.removeFromRight(10);
-    keysTimeZoomBox_.setBounds(header.removeFromRight(52).reduced(0, 2));
-    keysTimeZoomSlider_.setBounds(header.removeFromRight(80).reduced(2, 1));
-    keysTimeZoomIcon_.setBounds(header.removeFromRight(22).reduced(0, 1));
-
-    header.removeFromRight(8);
-    keysFollowButton_.setBounds(header.removeFromRight(72).reduced(0, 2));
-
-    editingLabel_.setBounds(header.reduced(6, 0));
-
-    keysViewport_.setBounds(area);
-
-    // The roll is as tall as the pane — rows fill it, and pitch zoom decides
-    // how many — and as wide as the time zoom asks for, which is what the
-    // viewport then scrolls.
-    const int visibleWidth = juce::jmax(1, keysViewport_.getMaximumVisibleWidth());
-    pianoRoll_.setSize(juce::jmax(visibleWidth, pianoRoll_.preferredWidth(visibleWidth)),
-                       juce::jmax(1, keysViewport_.getMaximumVisibleHeight()));
 }
 
 void MainComponent::layoutMixerView()

@@ -1,7 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <engine/InstrumentTrack.h>
+#include <engine/MixerTrack.h>
 
 using Catch::Approx;
 using namespace soundsplice::engine;
@@ -24,7 +24,7 @@ namespace
     }
 
     /** A track playing a constant 0.5 on both channels. */
-    void playConstant(InstrumentTrack& track)
+    void playConstant(MixerTrack& track)
     {
         auto clip              = std::make_shared<ClipData>();
         clip->sourceSampleRate = kRate;
@@ -45,7 +45,7 @@ namespace
 
 TEST_CASE("A routed track feeds its bus and its sends, pre and post fader", "[gui][routing]")
 {
-    InstrumentTrack source, bus, reverb;
+    MixerTrack source, bus, reverb;
     for (auto* track : { &source, &bus, &reverb })
     {
         track->prepare(kRate, kBlock);
@@ -57,13 +57,12 @@ TEST_CASE("A routed track feeds its bus and its sends, pre and post fader", "[gu
     source.gainDb.store(-6.0206f); // half
 
     const auto context = blockContext();
-    juce::MidiBuffer midi;
     bus.busInput.clear();
     reverb.busInput.clear();
 
     // Output to the bus; a post-fader send at half to the reverb, and a
     // pre-fader one at a quarter.
-    InstrumentTrack::Destinations to;
+    MixerTrack::Destinations to;
     to.output       = &bus.busInput;
     to.sends[0]     = &reverb.busInput;
     to.sendGains[0] = 0.5f;
@@ -71,7 +70,7 @@ TEST_CASE("A routed track feeds its bus and its sends, pre and post fader", "[gu
     to.sendGains[1] = 0.25f;
     to.sendPreFader[1] = true;
     to.sendCount    = 2;
-    source.renderRouted(midi, context, false, 0.0, to);
+    source.renderRouted(context, to);
 
     REQUIRE(bus.busInput.getSample(0, 100) == Approx(0.25f).margin(1.0e-4));    // 0.5 at half
     REQUIRE(reverb.busInput.getSample(1, 100) == Approx(0.125f + 0.125f).margin(1.0e-4)); // post 0.25*0.5 + pre 0.5*0.25
@@ -80,15 +79,15 @@ TEST_CASE("A routed track feeds its bus and its sends, pre and post fader", "[gu
     juce::AudioBuffer<float> master(2, kBlock);
     master.clear();
     bus.gainDb.store(0.0f);
-    InstrumentTrack::Destinations out;
+    MixerTrack::Destinations out;
     out.output = &master;
-    bus.renderRouted(midi, context, false, 0.0, out);
+    bus.renderRouted(context, out);
     REQUIRE(master.getSample(0, 100) == Approx(0.25f).margin(1.0e-4));
 
     // Muted, or left out by solo, a bus passes nothing on.
     master.clear();
     bus.muted.store(true);
-    bus.renderRouted(midi, context, false, 0.0, out);
+    bus.renderRouted(context, out);
     REQUIRE(master.getSample(0, 100) == 0.0f);
 }
 
