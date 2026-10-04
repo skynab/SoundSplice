@@ -115,10 +115,12 @@ TEST_CASE("The accent is the theme's own until one is chosen", "[gui][theme]")
 
     const auto& dark = theme::named("Nocturne");
     look.apply(dark, {}, false);
-    REQUIRE(look.findColour(juce::Slider::thumbColourId) == dark.accent);
+    REQUIRE(look.findColour(juce::Slider::trackColourId) == dark.accent);
 
+    // A slider's thumb is the accent's lighter step, so it follows too.
     look.apply(dark, juce::Colour(0xffff8c42), false);
-    REQUIRE(look.findColour(juce::Slider::thumbColourId) == juce::Colour(0xffff8c42));
+    REQUIRE(look.findColour(juce::Slider::trackColourId) == juce::Colour(0xffff8c42));
+    REQUIRE(look.findColour(juce::Slider::thumbColourId) == theme::accentStep(juce::Colour(0xffff8c42), 300));
     REQUIRE(look.findColour(juce::ToggleButton::tickColourId) == juce::Colour(0xffff8c42));
 
     // Focus rings: asked for in any theme, always in High Contrast.

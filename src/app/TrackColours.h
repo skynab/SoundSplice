@@ -20,27 +20,31 @@ struct TrackColourOption
     handful of distinguishable hues than with the whole spectrum, most of
     which is indistinguishable at the size a clip is drawn.
 
+    The hues are the SoundSplice mockups' track colours: light, softly
+    saturated tones that a clip's waveform is drawn in at full strength and
+    its body tinted with, so every one of them reads on the dark lanes.
+
     Stored on the track as the ARGB value rather than as an index into this
     list, so reordering or extending the palette can't silently recolour
     everyone's existing projects.
 */
 inline constexpr TrackColourOption kTrackColours[] = {
-    { "Default", 0x00000000 },
-    { "Red",     0xffb0413e },
-    { "Orange",  0xffb0703a },
-    { "Yellow",  0xff9c8f34 },
-    { "Green",   0xff3a7d44 },
-    { "Teal",    0xff2f7d78 },
-    { "Blue",    0xff36618e },
-    { "Purple",  0xff6b4a8f },
+    { "Default",  0x00000000 },
+    { "Lavender", 0xffb5abfc }, // color-accent-400
+    { "Teal",     0xff57cbd7 }, // oklch(0.78 0.105 205)
+    { "Green",    0xff89d298 }, // oklch(0.80 0.11 150)
+    { "Amber",    0xffeeba70 }, // oklch(0.82 0.11 75)
+    { "Red",      0xfffe8b83 }, // oklch(0.76 0.14 25)
+    { "Blue",     0xff79b6f4 }, // oklch(0.76 0.11 250)
+    { "Pink",     0xffee97c9 }, // oklch(0.78 0.12 345)
 };
 
 inline constexpr int kNumTrackColours = (int) (sizeof(kTrackColours) / sizeof(kTrackColours[0]));
 
-/** The colour a track with no colour of its own gets, in the gutter stripe
-    and the mixer — the green clips were drawn in before track colours
-    existed, kept so untouched projects keep the colour they had. */
-inline constexpr juce::uint32 kDefaultTrackColour = 0xff3a7d44;
+/** The colour a track with no colour of its own gets, in its clips, the
+    gutter stripe and the mixer: the accent's lighter step, as the mockups'
+    first track has it. */
+inline constexpr juce::uint32 kDefaultTrackColour = 0xffb5abfc;
 
 inline juce::Colour trackColour(juce::uint32 stored)
 {
