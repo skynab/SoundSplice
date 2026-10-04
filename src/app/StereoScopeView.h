@@ -137,7 +137,7 @@ private:
 
         const float centre = bar.getCentreX();
         const float x      = centre + (float) juce::jlimit(-1.0, 1.0, correlation_) * bar.getWidth() * 0.5f;
-        g.setColour(correlation_ < 0.0 ? theme::colour(*this, theme::dangerId).withAlpha(0.85f) : juce::Colour(0xff6fd08c));
+        g.setColour(correlation_ < 0.0 ? theme::colour(*this, theme::dangerId).withAlpha(0.85f) : theme::colour(*this, theme::okId));
         g.fillRect(juce::Rectangle<float>::leftTopRightBottom(juce::jmin(centre, x), bar.getY(), juce::jmax(centre, x), bar.getBottom()));
 
         g.setColour(juce::Colours::white.withAlpha(0.5f));

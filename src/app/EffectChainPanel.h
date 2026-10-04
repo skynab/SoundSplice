@@ -299,14 +299,14 @@ public:
 
             if (i == selected_)
             {
-                g.setColour(juce::Colours::orange.withAlpha(0.7f));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.7f));
                 g.drawRect(row, 1);
             }
 
             // Bypass indicator: filled when active, hollow when bypassed —
             // the same meaning for a plugin as for a built-in.
             const auto dot = juce::Rectangle<int>(row.getX() + 8, row.getCentreY() - 5, 10, 10).toFloat();
-            g.setColour(slot.enabled ? juce::Colours::limegreen : juce::Colours::white.withAlpha(0.25f));
+            g.setColour(slot.enabled ? theme::colour(*this, theme::signalId) : juce::Colours::white.withAlpha(0.25f));
             slot.enabled ? g.fillEllipse(dot) : g.drawEllipse(dot, 1.2f);
 
             g.setColour(juce::Colours::white.withAlpha(slot.enabled ? 0.9f : 0.45f));

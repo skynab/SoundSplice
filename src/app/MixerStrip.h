@@ -219,7 +219,7 @@ public:
 
         if (selected_)
         {
-            g.setColour(juce::Colours::orange.withAlpha(0.8f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.8f));
             g.drawRoundedRectangle(area.reduced(1.0f), 4.0f, 1.5f);
         }
     }

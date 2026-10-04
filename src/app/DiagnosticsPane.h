@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include "engine/Diagnostics.h"
 
 namespace soundsplice
@@ -141,11 +143,13 @@ private:
         if (row < 0 || row >= (int) rows_.size())
             return;
         if (selected)
-            g.fillAll(juce::Colours::orange.withAlpha(0.3f));
+            g.fillAll(theme::colour(*this, theme::accentId).withAlpha(0.3f));
 
-        static const juce::Colour kColours[] { juce::Colours::orange, juce::Colours::red,
-                                               juce::Colours::skyblue, juce::Colours::violet };
-        g.setColour(kColours[(int) rows_[(size_t) row].issue.kind]);
+        // Clicks warn, clipping is danger, silence is just the signal gone;
+        // DC offset keeps a colour of its own.
+        const juce::Colour colours[] { theme::colour(*this, theme::warnId), theme::colour(*this, theme::dangerId),
+                                       theme::colour(*this, theme::signalId), juce::Colours::violet };
+        g.setColour(colours[(int) rows_[(size_t) row].issue.kind]);
         g.fillEllipse(6.0f, (float) height * 0.5f - 4.0f, 8.0f, 8.0f);
         g.setColour(juce::Colours::white.withAlpha(0.9f));
         g.setFont(juce::FontOptions(13.0f));

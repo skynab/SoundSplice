@@ -6,6 +6,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 namespace soundsplice
 {
 /**
@@ -149,7 +151,7 @@ private:
     void paintRowBackground(juce::Graphics& g, int row, int, int, bool selected) override
     {
         if (selected)
-            g.fillAll(juce::Colours::orange.withAlpha(0.3f));
+            g.fillAll(theme::colour(*this, theme::accentId).withAlpha(0.3f));
         else if (row % 2 == 0)
             g.fillAll(juce::Colours::white.withAlpha(0.03f));
     }

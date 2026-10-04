@@ -37,9 +37,9 @@ inline constexpr TrackColourOption kTrackColours[] = {
 
 inline constexpr int kNumTrackColours = (int) (sizeof(kTrackColours) / sizeof(kTrackColours[0]));
 
-/** The lane colour a track with no colour of its own gets — the green clips
-    were drawn in before any of this existed, so untouched projects look
-    exactly as they did. */
+/** The colour a track with no colour of its own gets, in the gutter stripe
+    and the mixer — the green clips were drawn in before track colours
+    existed, kept so untouched projects keep the colour they had. */
 inline constexpr juce::uint32 kDefaultTrackColour = 0xff3a7d44;
 
 inline juce::Colour trackColour(juce::uint32 stored)

@@ -298,7 +298,7 @@ public:
         {
             g.setColour(juce::Colours::white.withAlpha(0.10f));
             g.fillRect(highlightBounds());
-            g.setColour(juce::Colours::orange.withAlpha(0.8f));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.8f));
             g.drawRect(highlightBounds(), 2);
         }
         // A region with no tabs left is the one place the workspace shows

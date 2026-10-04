@@ -83,9 +83,11 @@ TEST_CASE("Panes take their signal, warn and danger colours from the theme", "[g
         REQUIRE(theme::colour(pane, theme::dangerId) == t.danger);
         REQUIRE(theme::colour(pane, theme::dangerTextId) == t.dangerText);
         REQUIRE(theme::colour(pane, theme::accentId) == t.accent);
+        REQUIRE(theme::colour(pane, theme::okId) == t.ok);
+        REQUIRE(theme::colour(pane, theme::clipTopId) == t.clipTop);
 
         // Drawn on the panes, so they have to stand off them.
-        for (const auto c : { t.signal, t.signalInk, t.warn, t.dangerText })
+        for (const auto c : { t.signal, t.signalInk, t.warn, t.dangerText, t.ok })
             REQUIRE(c.getPerceivedBrightness() > t.pane.getPerceivedBrightness() + 0.3f);
     }
 
