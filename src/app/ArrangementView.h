@@ -83,7 +83,11 @@ public:
 
         // The gutter carries a colour stripe, a type tag, the name, and two
         // buttons. 110px fitted a name alone.
-        geometry_.gutterWidth = 168.0f;
+        geometry_.gutterWidth = 184.0f;
+
+        // Tall enough for a clip's name strip over a waveform that can be
+        // read, as the Multitrack mockup draws its lanes.
+        geometry_.laneHeight = 72.0f;
     }
 
     std::function<void(double)> onSeek; // beat position clicked
@@ -388,10 +392,10 @@ public:
         const float  timelineX = geometry_.gutterWidth;
         const int    numBars   = (int) std::ceil(totalBeats() / qpb);
 
-        // Ruler + bar lines.
-        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.06f));
-        g.fillRect(0.0f, 0.0f, width, geometry_.rulerHeight);
-        g.setFont(juce::FontOptions(12.0f));
+        // Ruler + bar lines: figures in the monospaced face over a rule.
+        g.setColour(theme::colour(*this, theme::dividerId));
+        g.fillRect(0.0f, geometry_.rulerHeight - 1.0f, width, 1.0f);
+        g.setFont(theme::monoFont(9.5f));
         if (timeDisplay_.format != app::TimeFormat::BarsBeats)
         {
             paintSecondsGrid(g, height);
@@ -421,9 +425,11 @@ public:
             for (int bar = 0; bar <= numBars; ++bar)
             {
                 const float x = geometry_.xForBeat((double) bar * qpb);
-                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.16f));
-                g.fillRect(x, 0.0f, 1.0f, height);
-                g.setColour(theme::colour(*this, theme::textMutedId));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.08f));
+                g.fillRect(x, geometry_.rulerHeight, 1.0f, height - geometry_.rulerHeight);
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.25f));
+                g.fillRect(x, geometry_.rulerHeight - 8.0f, 1.0f, 8.0f);
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.48f));
                 g.drawText(juce::String(bar + 1), (int) x + 4, 2, 40, (int) geometry_.rulerHeight - 4,
                            juce::Justification::centredLeft);
             }
@@ -442,18 +448,24 @@ public:
             const auto& track = song_.tracks[(size_t) i];
             const float y     = laneTop(i);
 
-            if (rowOfTrack_[(size_t) i] % 2 == 0)
-            {
-                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.03f));
-                g.fillRect(0.0f, y, width, geometry_.laneHeight);
-            }
+            // Lanes alternate a step apart, both sunk below the pane, and the
+            // track's header sits between them, ruled off below and on its
+            // right, as the Multitrack mockup draws them.
+            const auto ground = findColour(juce::ResizableWindow::backgroundColourId);
+            const auto pane   = theme::surface(*this, theme::paneId);
+            g.setColour(pane.interpolatedWith(ground, rowOfTrack_[(size_t) i] % 2 == 0 ? 0.48f : 0.62f));
+            g.fillRect(timelineX, y, width - timelineX, geometry_.laneHeight);
+            g.setColour(pane.interpolatedWith(ground, 0.5f));
+            g.fillRect(0.0f, y, timelineX, geometry_.laneHeight);
+            g.setColour(theme::colour(*this, theme::dividerId));
+            g.fillRect(0.0f, y + geometry_.laneHeight - 1.0f, width, 1.0f);
 
             const auto colour = trackColour(track.colour);
 
             // A stripe down the left of the gutter, so the colour is legible
             // even on a track whose clips are all scrolled out of view.
             g.setColour(colour.withAlpha(track.muted ? 0.35f : 1.0f));
-            g.fillRect(0.0f, y, 4.0f, geometry_.laneHeight);
+            g.fillRect(0.0f, y, 3.0f, geometry_.laneHeight - 1.0f);
 
             // The type tag. Track names double as the type indicator until
             // someone renames one — call an audio track "Verse" and nothing
@@ -462,10 +474,10 @@ public:
             const auto tagArea = juce::Rectangle<float>(tagLeft(i), y + geometry_.laneHeight * 0.5f - 8.0f,
                                                         32.0f, 16.0f);
             paintFolderMarks(g, i, y);
-            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.12f));
-            g.fillRoundedRectangle(tagArea, 3.0f);
+            g.setColour(theme::colour(*this, theme::dividerId));
+            g.drawRoundedRectangle(tagArea.reduced(0.5f), 4.0f, 1.0f);
             g.setColour(track.muted ? theme::colour(*this, theme::textFaintId) : theme::colour(*this, theme::textMutedId));
-            g.setFont(juce::FontOptions(10.0f));
+            g.setFont(theme::font(9.5f));
             g.drawText(trackTypeTag(track.type), tagArea, juce::Justification::centred);
 
             // A muted track's name dims with it, so the state reads from the
@@ -474,7 +486,7 @@ public:
             const float nameWidth = muteButtonBounds(i).getX() - nameX - 4.0f;
 
             g.setColour(track.muted ? theme::colour(*this, theme::textFaintId) : theme::colour(*this, theme::textId));
-            g.setFont(juce::FontOptions(13.0f));
+            g.setFont(theme::font(12.0f));
             g.drawText(track.name.empty() ? ("Track " + juce::String(i + 1)) : juce::String(track.name),
                        (int) nameX, (int) y, (int) juce::jmax(10.0f, nameWidth),
                        (int) geometry_.laneHeight, juce::Justification::centredLeft);
@@ -544,9 +556,11 @@ public:
                 const float cx = geometry_.xForBeat(startBeats);
                 const float cw = juce::jmax(2.0f, (float) lengthBeats * ppb);
                 const juce::Rectangle<float> r(cx, y + 3.0f, cw, geometry_.laneHeight - 6.0f);
-                // Every clip is the same teal, so the audio always reads the
-                // same; which track it is shows in the stripe down the gutter.
-                paintClipBody(g, r, track.muted);
+                // In its track's colour: the body a tint of it, the name strip
+                // a stronger one, the waveform the colour itself.
+                clipInk_ = colour;
+                paintClipBody(g, r, colour, track.muted, isEditSelected);
+                paintClipName(g, clip, r, colour);
 
                 if (const auto lanes = takeLanesFor(clip, r); lanes.shown())
                     paintTakeLanes(g, clip, r, lanes, i);
@@ -562,19 +576,16 @@ public:
                 // visible rather than only discoverable by hovering.
                 if (r.getWidth() > 3.0f * kResizeEdgePixels)
                 {
-                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.18f));
-                    g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + 2.0f,
-                               kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
+                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.10f));
+                    g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + kClipNameHeight + 2.0f,
+                               kResizeEdgePixels - 1.0f, r.getHeight() - kClipNameHeight - 4.0f);
 
                     // Audio clips can be trimmed from the left as well — see
                     // isOnClipLeftEdge.
                     if (clip.type == model::ClipType::Audio)
-                        g.fillRect(r.getX() + 1.0f, r.getY() + 2.0f,
-                                   kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
+                        g.fillRect(r.getX() + 1.0f, r.getY() + kClipNameHeight + 2.0f,
+                                   kResizeEdgePixels - 1.0f, r.getHeight() - kClipNameHeight - 4.0f);
                 }
-
-                g.setColour(isEditSelected ? theme::colour(*this, theme::accentId).withAlpha(0.9f) : juce::Colours::black.withAlpha(0.3f));
-                g.drawRoundedRectangle(r, 3.0f, isEditSelected ? 2.0f : 1.0f);
             }
 
             // An empty lane otherwise looks identical to a broken one —
@@ -616,7 +627,9 @@ public:
                 const float cw     = juce::jmax(2.0f, (float) dragPreviewLength_ * ppb);
                 const juce::Rectangle<float> r(cx, ghostY + 3.0f, cw, geometry_.laneHeight - 6.0f);
 
-                paintClipBody(g, r, false, 0.3f);
+                const auto ghostColour = trackColour(song_.tracks[(size_t) dragTrackIndex_].colour);
+                clipInk_ = ghostColour;
+                paintClipBody(g, r, ghostColour, false, true, 0.15f);
 
                 if (dragClipIndex_ >= 0 && dragClipIndex_ < (int) song_.tracks[(size_t) dragTrackIndex_].clips.size())
                 {
@@ -634,13 +647,10 @@ public:
 
                 if (r.getWidth() > 3.0f * kResizeEdgePixels)
                 {
-                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.18f));
-                    g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + 2.0f,
-                               kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
+                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.10f));
+                    g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + kClipNameHeight + 2.0f,
+                               kResizeEdgePixels - 1.0f, r.getHeight() - kClipNameHeight - 4.0f);
                 }
-
-                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.9f));
-                g.drawRoundedRectangle(r, 3.0f, 2.0f);
             }
         }
 
@@ -652,8 +662,18 @@ public:
         const float px = geometry_.xForBeat(playheadBeats_);
         if (px >= timelineX && px <= width)
         {
-            g.setColour(theme::colour(*this, theme::signalInkId).withAlpha(0.9f));
-            g.fillRect(px, 0.0f, 2.0f, height);
+            // The accent's lightest step with a glow of the accent, and a
+            // pin on the ruler.
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.16f));
+            g.fillRect(px - 3.0f, 0.0f, 7.0f, height);
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.22f));
+            g.fillRect(px - 1.0f, 0.0f, 3.0f, height);
+            g.setColour(theme::colour(*this, theme::signalInkId));
+            g.fillRect(px, 0.0f, 1.0f, height);
+            juce::Path pin;
+            pin.addTriangle(px - 6.0f, geometry_.rulerHeight - 12.0f, px + 7.0f, geometry_.rulerHeight - 12.0f,
+                            px + 0.5f, geometry_.rulerHeight - 2.0f);
+            g.fillPath(pin);
         }
 
         // Drop preview: a file is being dragged over the timeline.
@@ -695,26 +715,80 @@ private:
 
         A thumbnail still scanning draws nothing rather than a partial
         waveform that would redraw a moment later looking different. */
-    /** A clip's body: the theme's clip shading, top to bottom, ringed in
-        the signal. A muted track's clips are greyed and darkened; a dragged
-        clip's ghost is lifted by @p brighter. */
-    void paintClipBody(juce::Graphics& g, juce::Rectangle<float> r, bool muted, float brighter = 0.0f) const
+    /** A clip's body in its track's @p colour, as the Multitrack mockup
+        draws one: the colour 14% into the window's ground, a strip along
+        the top for its name the colour 26% into the surface, and a faint
+        edge - or, when it's the clip being edited, an edge in the colour
+        itself with a shadow under it. A muted track's clips are greyed and
+        darkened; a dragged clip's ghost is lifted by @p brighter. */
+    void paintClipBody(juce::Graphics& g, juce::Rectangle<float> r, juce::Colour colour, bool muted, bool selected,
+                       float brighter = 0.0f) const
     {
-        auto top    = theme::colour(*this, theme::clipTopId).brighter(brighter);
-        auto bottom = theme::colour(*this, theme::clipBottomId).brighter(brighter);
-        auto ring   = theme::colour(*this, theme::signalId).withAlpha(0.35f);
+        const auto ground = findColour(juce::ResizableWindow::backgroundColourId);
+        const auto pane   = theme::surface(*this, theme::paneId);
         if (muted)
+            colour = colour.withMultipliedSaturation(0.25f).withMultipliedBrightness(0.7f);
+
+        if (selected)
         {
-            top    = top.withMultipliedSaturation(0.3f).withMultipliedBrightness(0.7f);
-            bottom = bottom.withMultipliedSaturation(0.3f).withMultipliedBrightness(0.7f);
-            ring   = ring.withMultipliedSaturation(0.3f);
+            juce::Path outline;
+            outline.addRoundedRectangle(r, 4.0f);
+            juce::DropShadow(juce::Colours::black.withAlpha(0.45f), 12, { 0, 4 }).drawForPath(g, outline);
         }
 
-        g.setGradientFill(juce::ColourGradient::vertical(top, r.getY(), bottom, r.getBottom()));
-        g.fillRoundedRectangle(r, 3.0f);
-        g.setColour(ring);
-        g.drawRoundedRectangle(r.reduced(0.5f), 3.0f, 1.0f);
+        g.setColour(ground.interpolatedWith(colour, 0.14f).brighter(brighter));
+        g.fillRoundedRectangle(r, 4.0f);
+
+        if (r.getHeight() >= kClipNameHeight * 2.0f)
+        {
+            juce::Graphics::ScopedSaveState state(g);
+            g.reduceClipRegion(r.withHeight(kClipNameHeight).toNearestInt());
+            g.setColour(pane.interpolatedWith(colour, 0.26f).brighter(brighter));
+            g.fillRoundedRectangle(r, 4.0f);
+        }
+
+        if (selected)
+        {
+            g.setColour(colour);
+            g.drawRoundedRectangle(r.reduced(0.75f), 4.0f, 1.5f);
+        }
+        else
+        {
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.12f));
+            g.drawRoundedRectangle(r.reduced(0.5f), 4.0f, 1.0f);
+        }
     }
+
+    /** The clip's name along its strip, and its gain when it has one. */
+    void paintClipName(juce::Graphics& g, const model::Clip& clip, juce::Rectangle<float> r, juce::Colour colour) const
+    {
+        if (r.getHeight() < kClipNameHeight * 2.0f || r.getWidth() < 24.0f)
+            return;
+
+        auto strip = r.withHeight(kClipNameHeight).reduced(6.0f, 0.0f);
+        if (std::abs(clip.gainDb) > 0.05f && strip.getWidth() > 90.0f)
+        {
+            g.setFont(theme::monoFont(9.5f));
+            g.setColour(colour.interpolatedWith(theme::colour(*this, theme::textId), 0.5f));
+            const auto gain = (clip.gainDb > 0.0f ? "+" : "") + juce::String(clip.gainDb, 1) + " dB";
+            g.drawText(gain, strip.removeFromRight(56.0f), juce::Justification::centredRight, false);
+        }
+
+        // A clip is known by its recording; a pattern has no name of its own.
+        const auto name = clip.type == model::ClipType::Audio && ! clip.audioFile.empty()
+                              ? juce::File(clip.audioFile).getFileNameWithoutExtension()
+                              : juce::String();
+        g.setFont(theme::font(10.0f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.9f));
+        g.drawText(name, strip, juce::Justification::centredLeft, true);
+    }
+
+    /** The height of a clip's name strip. */
+    static constexpr float kClipNameHeight = 15.0f;
+
+    /** The colour the clip being painted is drawn in, set just before its
+        contents are: its track's. */
+    juce::Colour clipInk_ { kDefaultTrackColour };
 
     void paintAudioClipContents(juce::Graphics& g, const model::Clip& clip,
                                 juce::Rectangle<float> bounds, float insetY = 3.0f)
@@ -772,7 +846,9 @@ private:
         // the level was visible in the audio editor and invisible here, which
         // is worse than showing it nowhere: two views of the same clip
         // disagreeing reads as one of them being wrong.
-        g.setColour(theme::colour(*this, theme::signalId).withAlpha(0.8f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.10f));
+        g.fillRect(area.getX(), area.getCentreY(), area.getWidth(), 1.0f);
+        g.setColour(clipInk_.withAlpha(0.9f));
         thumbnail->drawChannels(g, area.toNearestInt(),
                                 clip.sourceOffsetSeconds / stretch, (clip.sourceOffsetSeconds + seconds) / stretch,
                                 juce::Decibels::decibelsToGain(clip.gainDb));
@@ -1169,7 +1245,9 @@ private:
     {
         if (clip.type == model::ClipType::Audio)
         {
-            paintAudioClipContents(g, clip, bounds);
+            paintAudioClipContents(g, clip, bounds.getHeight() >= kClipNameHeight * 2.0f
+                                                ? bounds.withTrimmedTop(kClipNameHeight - 2.0f)
+                                                : bounds);
             paintClipFades(g, clip, bounds);
             paintClipTake(g, clip, bounds);
             return;
@@ -1192,7 +1270,7 @@ private:
         if (blocks.empty())
             return;
 
-        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.55f));
+        g.setColour(clipInk_.withAlpha(0.85f));
 
         for (const auto& block : blocks)
         {
@@ -2525,7 +2603,7 @@ private:
             }
         }
 
-        g.setColour(juce::Colours::yellow.withAlpha(0.9f));
+        g.setColour(theme::colour(*this, theme::envelopeId));
         g.strokePath(curve, juce::PathStrokeType(1.5f));
 
         for (const auto& point : envelope.points())
