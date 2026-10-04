@@ -33,6 +33,16 @@ enum class Workspace
 
 inline constexpr int kNumWorkspaces = 2;
 
+/** What the toolbar and the menus call @p workspace: the mockups name them
+    for their editor. */
+inline const char* workspaceTitle(Workspace workspace)
+{
+    return workspace == Workspace::AudioEditing ? "Waveform" : "Multitrack";
+}
+
+/** The name @p workspace's arrangement is saved under. Kept as it was when
+    the workspaces were named for their jobs, so a saved arrangement is still
+    found. */
 inline const char* workspaceName(Workspace workspace)
 {
     switch (workspace)
@@ -88,41 +98,38 @@ inline std::unique_ptr<DockLayoutNode> buildWorkspaceLayout(Workspace workspace)
 
     if (workspace == Workspace::AudioEditing)
     {
-        // The waveform gets the most room, because that's what's being worked
-        // on. Tracks stays visible above it so a clip can still be selected
-        // without switching away, and the mastering rack sits down the right
-        // where its curve and meter are readable at a glance.
-        return beside(0.16,
-                      leaf({ "Open Files", "Files", "History" }, "Open Files"),
-                      beside(0.70,
-                             above(0.25,
-                                   leaf({ "Tracks" }),
-                                   above(0.80,
-                                         leaf({ "Audio", "Transcript" }, "Audio"),
-                                         leaf({ "Transport", "Keyboard" }, "Transport"))),
-                             above(0.45,
-                                   leaf({ "Mastering", "Essential Sound" }, "Mastering"),
-                                   above(0.55,
-                                         leaf({ "Analyser", "Diagnostics", "Delivery", "Script", "Video" }, "Analyser"),
-                                         leaf({ "Master" })))));
+        // Waveform, as its mockup lays it out: the files down the left, the
+        // editor taking the middle, and down the right the history over the
+        // amplitude readings. The timeline is a tab behind the editor, so a
+        // clip can still be picked without switching away; the mastering
+        // rack is a tab behind the history, which the toolbar's Effects Rack
+        // brings forward.
+        return beside(0.17,
+                      above(0.68,
+                            leaf({ "Open Files", "Files" }, "Open Files"),
+                            leaf({ "Diagnostics", "Transport" }, "Diagnostics")),
+                      beside(0.78,
+                             leaf({ "Audio", "Tracks", "Transcript", "Video" }, "Audio"),
+                             above(0.60,
+                                   leaf({ "History", "Mastering", "Essential Sound" }, "History"),
+                                   leaf({ "Analyser", "Delivery", "Script", "Master" }, "Analyser"))));
     }
 
-    // Music Creation — the arrangement the app shipped with as its only
-    // default, kept exactly so switching to it lands somewhere familiar.
+    // Multitrack, as its mockup lays it out: the files over the track's
+    // effects rack down the left, the timeline taking the middle with the
+    // mixer and the instruments under it, and down the right the master over
+    // the history.
     return beside(0.18,
-                  leaf({ "Files" }),
-                  beside(0.72,
-                         above(0.45,
+                  above(0.60,
+                        leaf({ "Files" }),
+                        leaf({ "Track FX" })),
+                  beside(0.78,
+                         above(0.68,
                                leaf({ "Tracks" }),
-                               beside(0.62,
-                                      above(0.68,
-                                            leaf({ "Keys", "Session" },
-                                                 "Keys"),
-                                            leaf({ "Transport", "Keyboard" }, "Transport")),
-                                      leaf({ "Track FX" }))),
-                         beside(0.72,
-                                leaf({ "Mixer" }),
-                                leaf({ "Master" }))));
+                               leaf({ "Mixer", "Keys", "Session", "Keyboard" }, "Mixer")),
+                         above(0.55,
+                               leaf({ "Master", "Transport" }, "Master"),
+                               leaf({ "History" }))));
 }
 
 /** The layout string for @p workspace, in the same grammar a saved layout

@@ -14,8 +14,7 @@ MainComponent::MainComponent(bool headless)
 {
     headless_ = headless;
     initAutomationRecorder();
-    menuBar_.setModel(this);
-    addAndMakeVisible(menuBar_);
+    menuBar_.setModel(this); // shown in the title strip (see setUpShell)
 
     // Every command goes through one manager, so the menus and the keyboard
     // can't disagree about what a command is or whether it can be used right
@@ -172,13 +171,17 @@ MainComponent::MainComponent(bool headless)
     };
     leftPane_.addAndMakeVisible(collapseTransportButton_);
 
-    leftPane_.addAndMakeVisible(firstFrameButton);
-    leftPane_.addAndMakeVisible(previousFrameButton);
-    leftPane_.addAndMakeVisible(playPauseButton);
-    leftPane_.addAndMakeVisible(nextFrameButton);
-    leftPane_.addAndMakeVisible(lastFrameButton);
-    leftPane_.addAndMakeVisible(recordButton);
-    leftPane_.addAndMakeVisible(loopButton);
+    // The transport's own buttons are played from the transport bar along
+    // the window's bottom (see setUpShell), which clicks these. They stay
+    // here, hidden, as the controls the commands and the keyboard go
+    // through.
+    leftPane_.addChildComponent(firstFrameButton);
+    leftPane_.addChildComponent(previousFrameButton);
+    leftPane_.addChildComponent(playPauseButton);
+    leftPane_.addChildComponent(nextFrameButton);
+    leftPane_.addChildComponent(lastFrameButton);
+    leftPane_.addChildComponent(recordButton);
+    leftPane_.addChildComponent(loopButton);
 
     // Click + count-in. Both are app preferences rather than project data —
     // how you like to record, not part of the song — so they persist through
@@ -941,6 +944,7 @@ MainComponent::MainComponent(bool headless)
     engine_.deviceManager().addChangeListener(this);
     logAudioDeviceStatus();
 
+    setUpShell(); // after the transport's controls, whose tooltips it copies
     addChildComponent(status_);
     addChildComponent(palette_);
     palette_.onChosen = [this](const palette::Entry& entry)
@@ -1165,6 +1169,7 @@ void MainComponent::timerCallback()
         engine_.refreshMidiInputs();
     }
     updateWindowTitle();
+    updateShell();
     autosaveIfDue();
     stopAtEndOfArrangement();
 
@@ -1397,14 +1402,15 @@ void MainComponent::paint(juce::Graphics& g)
 void MainComponent::resized()
 {
     auto full = getLocalBounds();
-    menuBar_.setBounds(full.removeFromTop(24));
+    layoutShell(full);          // the chrome takes its strips off the edges
     workspace_.setBounds(full); // the workspace lays its own tree out from here
 
     // The palette drops from the top, centred, as VS Code's does.
     const int paletteWidth = juce::jmin(640, getWidth() - 32);
     palette_.setBounds((getWidth() - paletteWidth) / 2, 40, paletteWidth, juce::jmin(420, getHeight() - 80));
 
-    // Sits over the workspace, against the bottom of the window.
+    // Sits over the workspace, against the bottom of it.
+    status_.setBottomInset(shell::kTransportHeight + shell::kStatusHeight);
     status_.updateBounds();
 }
 

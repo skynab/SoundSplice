@@ -19,26 +19,16 @@ void MainComponent::layoutLeftPane()
     // The controls wrap onto another row when they don't fit — see
     // app::wrapRow for what went wrong when they didn't.
     //
-    // First / previous / play-pause / next / last, in that order. The
-    // frame-step glyphs are wider than tall, play/pause is taller than wide,
-    // so they get different widths to keep the drawn glyphs a similar size.
+    // Play, record and loop are on the transport bar; what's left here is
+    // how a take is recorded.
     const std::vector<app::RowItem> items {
-        { 32,  0, { 2, 2 } }, // first frame
-        { 26,  0, { 2, 2 } }, // previous frame
-        { 30,  0, { 3, 1 } }, // play/pause
-        { 26,  0, { 2, 2 } }, // next frame
-        { 32,  0, { 2, 2 } }, // last frame
-        { 60, 12, { 0, 0 } }, // loop
-        { 30, 12, { 1, 1 } }, // record — square: the icon is 25x25
-        { 64, 12, { 0, 0 } }, // click
+        { 64,  0, { 0, 0 } }, // click
         { 78,  6, { 0, 0 } }, // monitor
         { 110, 6, { 0, 2 } }, // count-in
         { 90,  8, { 7, 7 } }, // input meter
     };
 
     juce::Component* const controls[] {
-        &firstFrameButton, &previousFrameButton, &playPauseButton,
-        &nextFrameButton, &lastFrameButton, &loopButton, &recordButton,
         &metronomeButton, &monitorButton, &countInBox_, &inputMeter_
     };
 
@@ -204,7 +194,7 @@ void MainComponent::applyWorkspaceLayout(layouts::Workspace workspace)
 
     resized();
     saveActiveWorkspaceLayout();
-    showStatus("Layout: " + juce::String(layouts::workspaceName(workspace)));
+    showStatus("Layout: " + juce::String(layouts::workspaceTitle(workspace)));
 }
 
 /** Builds one of the zoom controls: icon, slider and editable multiplier.

@@ -1,5 +1,6 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include "DarkTitleBar.h"
 #include "MainComponent.h"
 #include "PluginProbe.h"
 
@@ -183,6 +184,10 @@ private:
             setResizable(true, true);
             centreWithSize(getWidth(), getHeight());
             setVisible(true);
+
+            // The frame dark like the interface, where the platform asks.
+            if (auto* peer = getPeer())
+                useDarkTitleBar(peer->getNativeHandle());
         }
 
         void closeButtonPressed() override

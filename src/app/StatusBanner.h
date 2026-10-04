@@ -50,6 +50,10 @@ public:
         startTimerHz(kFrameRate);
     }
 
+    /** Keeps the banner @p inset clear of its parent's bottom edge, above
+        whatever is docked along it. */
+    void setBottomInset(int inset) { bottomInset_ = inset; }
+
     /** Sizes and places the banner against its parent — bottom centre, clear
         of the edge. Called on show and whenever the window resizes. */
     void updateBounds()
@@ -63,7 +67,7 @@ public:
         const int height    = kHeight;
 
         setBounds(parent->getWidth() / 2 - width / 2,
-                  parent->getHeight() - height - kMargin,
+                  parent->getHeight() - height - kMargin - bottomInset_,
                   juce::jmax(width, 1),
                   height);
     }
@@ -91,6 +95,8 @@ private:
     static constexpr int   kHeight      = 30;
     static constexpr int   kPadding     = 16;
     static constexpr int   kMargin      = 14;
+
+    int bottomInset_ = 0;
 
     static juce::Font font() { return juce::FontOptions(14.0f); }
 

@@ -86,6 +86,7 @@
 #include "TrackSelection.h"
 #include "SessionView.h"
 #include "TrackColours.h"
+#include "ShellBars.h"
 #include "StatusBanner.h"
 
 namespace soundsplice
@@ -835,6 +836,14 @@ private:
     void                   updateEditingLabel();
     void                   layoutLeftPane();
     void                   applyTransportCollapse();
+
+    // The window's chrome around the workspace (MainComponent_Shell.cpp).
+    void                   setUpShell();
+    void                   layoutShell(juce::Rectangle<int>& area);
+    void                   layoutToolbar();
+    void                   updateShell();
+    bool                   commandIsTicked(int commandId);
+    void                   invokeCommand(int commandId);
     int                    panelMenuIndex(const juce::String& name) const;
     void                   togglePanel(int index);
     void                   buildDefaultDockLayout();
@@ -990,6 +999,22 @@ private:
     // so collapsing or closing a pane can't hide what the app is telling you.
     StatusBanner                    status_;
     CommandPalette                  palette_;
+
+    // The chrome round the workspace, top to bottom: the title strip (which
+    // holds the menu bar), the toolbar, then after the panes the transport
+    // bar and the status line. See MainComponent_Shell.cpp.
+    TitleStrip                      titleStrip_ { menuBar_ };
+    ToolbarStrip                    toolbar_;
+    SegmentedControl                workspaceSwitch_;   // Waveform | Multitrack
+    SegmentedControl                viewSwitch_;        // Waveform | Spectral, in the audio editor
+    BarSeparator                    toolbarRules_[2];
+    std::vector<std::unique_ptr<GlyphButton>> toolButtons_; // the workspace's tools, rebuilt on a switch
+    std::vector<int>                toolCommands_;      // the command each tool button stands for
+    juce::TextButton                effectsRackButton_ { "Effects Rack" };
+    juce::TextButton                primaryActionButton_;
+    TransportBar                    transportBar_;
+    StatusLine                      statusLine_;
+    int                             toolsBuiltFor_ = -1; // the workspace toolButtons_ were made for
 
     // The whole dockable workspace: a tree of tab groups the user arranges by
     // dragging tabs (onto a region's middle to add a tab there, onto an edge

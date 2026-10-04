@@ -1000,7 +1000,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         for (int i = 0; i < layouts::kNumWorkspaces; ++i)
         {
             const auto workspace = (layouts::Workspace) i;
-            layoutMenu.addItem(kFirstLayoutMenuId + i, layouts::workspaceName(workspace),
+            layoutMenu.addItem(kFirstLayoutMenuId + i, layouts::workspaceTitle(workspace),
                                true, workspace == activeWorkspace_);
         }
         if (! screensets_.empty())
@@ -1213,7 +1213,7 @@ std::vector<palette::Entry> MainComponent::paletteEntries()
     {
         const auto workspace = (layouts::Workspace) i;
         palette::Entry entry;
-        entry.name        = juce::String("Layout: ") + layouts::workspaceName(workspace);
+        entry.name        = juce::String("Layout: ") + layouts::workspaceTitle(workspace);
         entry.category    = "View";
         entry.description = "Arrange the panes for this kind of work.";
         entry.ticked      = workspace == activeWorkspace_;

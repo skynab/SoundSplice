@@ -22,6 +22,7 @@ juce_add_gui_app(SoundSplice
 # MainComponent is one class split across several files by area, rather than one
 # file of several thousand lines. MainComponentInternal.h holds what they share.
 target_sources(SoundSplice PRIVATE
+  DarkTitleBar.cpp
   Main.cpp
   MainComponent.cpp
   MainComponent_Analyze.cpp
@@ -34,6 +35,7 @@ target_sources(SoundSplice PRIVATE
   MainComponent_Keyboard.cpp
   MainComponent_ImportExport.cpp
   MainComponent_Layout.cpp
+  MainComponent_Shell.cpp
   MainComponent_Loudness.cpp
   MainComponent_Markers.cpp
   MainComponent_Project.cpp
