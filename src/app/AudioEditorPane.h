@@ -123,6 +123,23 @@ public:
     AudioEditorPane()
     {
         addChildComponent(selectionActions_);
+
+        // The edit and noise rows carry glyphs, as the mockups' actions do.
+        {
+            using glyphs::Glyph;
+            const std::pair<juce::TextButton*, Glyph> withGlyphs[] = {
+                { &cutButton_, Glyph::scissors },          { &copyButton_, Glyph::copy },
+                { &pasteButton_, Glyph::clipboard },       { &deleteButton_, Glyph::trash },
+                { &trimButton_, Glyph::crop },             { &silenceButton_, Glyph::speakerSlash },
+                { &fadeInButton_, Glyph::trendUp },        { &fadeOutButton_, Glyph::trendDown },
+                { &reverseButton_, Glyph::reverse },       { &splitButton_, Glyph::split },
+                { &effectsButton_, Glyph::sparkle },       { &speedPitchButton_, Glyph::speed },
+                { &captureNoiseButton_, Glyph::eyedropper }, { &reduceNoiseButton_, Glyph::waves },
+                { &normaliseButton_, Glyph::normalize },
+            };
+            for (auto [button, glyph] : withGlyphs)
+                theme::setGlyph(*button, glyph);
+        }
         placeholderLabel_.setText("Select an Audio clip to edit it", juce::dontSendNotification);
         placeholderLabel_.setJustificationType(juce::Justification::centred);
         placeholderLabel_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));

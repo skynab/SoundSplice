@@ -23,7 +23,8 @@ enum class Glyph
     plus, cross, check, caretDown, floppy, textT, selection, scissors, cursor,
     zeroCrossing, warning, sparkle, gear, microphone, video, pianoKeys, faders,
     code, waves, transcript, keyboard, gauge, envelope, grid, export_, bandaid,
-    spectrum, arrowLeftRight, layout, magnet, speakerSlash, trendUp, trendDown, normalize, trash
+    spectrum, arrowLeftRight, layout, magnet, speakerSlash, trendUp, trendDown, normalize, trash,
+    copy, clipboard, crop, reverse, split, eyedropper, speed
 };
 
 namespace detail
@@ -362,6 +363,44 @@ namespace detail
                 polyline(p, { { 3.5f, 4.0f }, { 4.25f, 14.0f }, { 11.75f, 14.0f }, { 12.5f, 4.0f } });
                 line(p, 6.5f, 7.0f, 6.5f, 11.0f);
                 line(p, 9.5f, 7.0f, 9.5f, 11.0f);
+                break;
+            case Glyph::copy:
+                p.addRoundedRectangle(5.5f, 5.5f, 8.5f, 8.5f, 1.25f);
+                polyline(p, { { 10.5f, 5.5f }, { 10.5f, 2.0f }, { 2.0f, 2.0f }, { 2.0f, 10.5f }, { 5.5f, 10.5f } });
+                break;
+            case Glyph::clipboard:
+                polyline(p, { { 5.5f, 3.0f }, { 3.0f, 3.0f }, { 3.0f, 14.0f }, { 13.0f, 14.0f }, { 13.0f, 3.0f },
+                              { 10.5f, 3.0f } });
+                p.addRoundedRectangle(5.5f, 1.75f, 5.0f, 3.0f, 1.0f);
+                line(p, 5.5f, 8.5f, 10.5f, 8.5f);
+                line(p, 5.5f, 11.0f, 9.0f, 11.0f);
+                break;
+            case Glyph::crop:
+                polyline(p, { { 4.0f, 1.5f }, { 4.0f, 12.0f }, { 14.5f, 12.0f } });
+                polyline(p, { { 1.5f, 4.0f }, { 12.0f, 4.0f }, { 12.0f, 14.5f } });
+                break;
+            case Glyph::reverse:
+                line(p, 2.0f, 5.0f, 13.0f, 5.0f);
+                polyline(p, { { 10.5f, 2.5f }, { 13.0f, 5.0f }, { 10.5f, 7.5f } });
+                line(p, 14.0f, 11.0f, 3.0f, 11.0f);
+                polyline(p, { { 5.5f, 8.5f }, { 3.0f, 11.0f }, { 5.5f, 13.5f } });
+                break;
+            case Glyph::split:
+                line(p, 8.0f, 1.5f, 8.0f, 14.5f);
+                polyline(p, { { 5.5f, 4.0f }, { 2.0f, 4.0f }, { 2.0f, 12.0f }, { 5.5f, 12.0f } });
+                polyline(p, { { 10.5f, 4.0f }, { 14.0f, 4.0f }, { 14.0f, 12.0f }, { 10.5f, 12.0f } });
+                break;
+            case Glyph::eyedropper:
+                line(p, 2.0f, 14.0f, 9.0f, 7.0f);
+                polyline(p, { { 7.0f, 5.0f }, { 11.0f, 9.0f } });
+                p.startNewSubPath(9.0f, 7.0f);
+                p.lineTo(11.5f, 4.5f);
+                p.quadraticTo(13.0f, 3.0f, 14.0f, 2.0f);
+                break;
+            case Glyph::speed:
+                arc(p, 8.0f, 9.5f, 6.0f, -120.0f, 120.0f);
+                line(p, 8.0f, 9.5f, 11.5f, 5.5f);
+                f.addEllipse(7.0f, 8.5f, 2.0f, 2.0f);
                 break;
             case Glyph::layout:
                 p.addRoundedRectangle(2.0f, 2.5f, 12.0f, 11.0f, 1.25f);

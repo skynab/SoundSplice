@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Glyphs.h"
+
 namespace soundsplice
 {
 /**
@@ -286,6 +288,14 @@ namespace theme
         button.repaint();
     }
 
+    /** Gives a TextButton @p glyph, drawn beside its text (or alone, when
+        the button is too narrow for both). */
+    inline void setGlyph(juce::Component& button, glyphs::Glyph glyph)
+    {
+        button.getProperties().set("glyph", (int) glyph);
+        button.repaint();
+    }
+
     inline juce::String styleOf(const juce::Component& button)
     {
         const auto style = button.getProperties()["style"].toString();
@@ -503,8 +513,30 @@ public:
         if (! button.isEnabled())
             ink = ink.withMultipliedAlpha(0.45f);
 
-        g.setFont(getTextButtonFont(button, button.getHeight()));
+        const auto font = getTextButtonFont(button, button.getHeight());
+        g.setFont(font);
         g.setColour(ink);
+
+        // A glyph and its word centred together as one; the glyph alone
+        // when the word won't fit beside it.
+        if (const auto& glyph = button.getProperties()["glyph"]; ! glyph.isVoid())
+        {
+            const float size  = juce::jmin(13.0f, (float) button.getHeight() - 8.0f);
+            const float room  = (float) button.getWidth() - 16.0f;
+            const float words = juce::GlyphArrangement::getStringWidth(font, button.getButtonText());
+            const bool  both  = button.getButtonText().isNotEmpty() && size + 6.0f + words <= room;
+            const float width = both ? size + 6.0f + words : size;
+            auto area = juce::Rectangle<float>(width, (float) button.getHeight())
+                            .withCentre(button.getLocalBounds().toFloat().getCentre());
+            glyphs::draw(g, (glyphs::Glyph) (int) glyph, area.removeFromLeft(size), ink, size);
+            if (both)
+            {
+                area.removeFromLeft(6.0f);
+                g.drawText(button.getButtonText(), area, juce::Justification::centredLeft, false);
+            }
+            return;
+        }
+
         g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(juce::jmin(8, button.getWidth() / 6), 0),
                          juce::Justification::centred, 1, 0.8f);
     }
