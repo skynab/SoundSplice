@@ -13,8 +13,10 @@ namespace soundsplice
     All of them are dark. The panes paint their text and waveforms in light
     colours of their own, so a light theme would need every one of them
     reworked; what changes here is what they're painted on, the widgets, and
-    the accent. High Contrast is the accessibility theme: black, white,
-    yellow, and a ring round whatever has keyboard focus.
+    the accent. Nocturne, the first, is the design system's and the default;
+    a saved name that no longer exists (the old Dark) falls back to it. High
+    Contrast is the accessibility theme: black, white, yellow, and a ring
+    round whatever has keyboard focus.
 
     The panes ask for their surfaces by role (theme::surface), so a theme
     reaches them without each one knowing about themes.
@@ -46,10 +48,17 @@ namespace theme
     {
         using Scheme = juce::LookAndFeel_V4::ColourScheme;
         static const std::vector<Theme> themes {
-            { "Dark", juce::LookAndFeel_V4::getDarkColourScheme(),
-              juce::Colour(0xff1e1e22), juce::Colour(0xff121216), juce::Colour(0xff26262a),
-              juce::Colour(0xff3d3d44), juce::Colour(0xff2a2a2e), juce::Colour(0xff26292e),
-              juce::Colour(0xff42a2c8), false },
+            // The design system's own (SoundSplice, after Cutline's Nocturne):
+            // panes on color-bg, plots in color-inset, color-frame between the
+            // panes, color-surface for the active tab and popups, and the
+            // blurple accent. The scheme's outline is color-neutral-800 and its
+            // highlight color-accent-800.
+            { "Nocturne",
+              Scheme(0xff161826, 0xff232532, 0xff232532, 0xff3f424d, 0xffe9e9ed,
+                     0xff9184d9, 0xffe9e9ed, 0xff423a6a, 0xffe9e9ed),
+              juce::Colour(0xff161826), juce::Colour(0xff0d0e16), juce::Colour(0xff0e0f18),
+              juce::Colour(0xff232532), juce::Colour(0xff161826), juce::Colour(0xff232532),
+              juce::Colour(0xff9184d9), false },
             { "Midnight", juce::LookAndFeel_V4::getMidnightColourScheme(),
               juce::Colour(0xff1c1c26), juce::Colour(0xff111118), juce::Colour(0xff24242e),
               juce::Colour(0xff3a3a4a), juce::Colour(0xff292934), juce::Colour(0xff262633),
@@ -97,23 +106,23 @@ namespace theme
         return list;
     }
 
-    /** A pane's colour for @p role, from its look and feel, or Dark's when
+    /** A pane's colour for @p role, from its look and feel, or Nocturne's when
         the look and feel isn't the app's (in a test, say). */
     inline juce::Colour surface(const juce::Component& component, int role)
     {
         auto& lookAndFeel = component.getLookAndFeel();
         if (lookAndFeel.isColourSpecified(role))
             return lookAndFeel.findColour(role);
-        const auto& dark = all().front();
+        const auto& nocturne = all().front();
         switch (role)
         {
-            case insetId:       return dark.inset;
-            case workspaceId:   return dark.workspace;
-            case tabActiveId:   return dark.tabActive;
-            case tabInactiveId: return dark.tabInactive;
-            case popupId:       return dark.popup;
-            case focusRingId:   return dark.accent;
-            default:            return dark.pane;
+            case insetId:       return nocturne.inset;
+            case workspaceId:   return nocturne.workspace;
+            case tabActiveId:   return nocturne.tabActive;
+            case tabInactiveId: return nocturne.tabInactive;
+            case popupId:       return nocturne.popup;
+            case focusRingId:   return nocturne.accent;
+            default:            return nocturne.pane;
         }
     }
 }
@@ -140,7 +149,7 @@ public:
         setColour(theme::tabActiveId, theme.tabActive);
         setColour(theme::tabInactiveId, theme.tabInactive);
         setColour(theme::popupId, theme.popup);
-        setColour(theme::focusRingId, theme.focusRings ? juce::Colour(0xffffd400) : chosen.brighter(0.3f));
+        setColour(theme::focusRingId, theme.focusRings ? juce::Colour(0xffffd400) : chosen);
 
         // The accent where JUCE's own widgets show something on or chosen.
         setColour(juce::TextButton::buttonOnColourId, chosen.withMultipliedSaturation(0.8f).darker(0.2f));

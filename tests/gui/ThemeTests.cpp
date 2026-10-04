@@ -43,7 +43,7 @@ TEST_CASE("Panes take their surfaces from the theme", "[gui][theme]")
 
     juce::Component pane;
 
-    // Without the app's look and feel (a test, a headless render): Dark's.
+    // Without the app's look and feel (a test, a headless render): Nocturne's.
     REQUIRE(theme::surface(pane, theme::paneId) == theme::all().front().pane);
     REQUIRE(theme::surface(pane, theme::insetId) == theme::all().front().inset);
 
@@ -68,7 +68,7 @@ TEST_CASE("The accent is the theme's own until one is chosen", "[gui][theme]")
     JuceFixture fixture;
     AppLookAndFeel look;
 
-    const auto& dark = theme::named("Dark");
+    const auto& dark = theme::named("Nocturne");
     look.apply(dark, {}, false);
     REQUIRE(look.findColour(juce::Slider::thumbColourId) == dark.accent);
 

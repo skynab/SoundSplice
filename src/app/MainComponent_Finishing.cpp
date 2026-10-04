@@ -1160,7 +1160,7 @@ std::vector<prefs::Page> MainComponent::preferencePages()
                       [] { juce::StringArray names; for (const auto& t : theme::all()) names.add(t.name); return names; }(),
                       [this]
                       {
-                          const auto& current = theme::named(settings_.getValue("theme", "Dark"));
+                          const auto& current = theme::named(settings_.getValue("theme", "Nocturne"));
                           for (int i = 0; i < (int) theme::all().size(); ++i)
                               if (&theme::all()[(size_t) i] == &current)
                                   return i;
@@ -1291,7 +1291,7 @@ void MainComponent::applyTheme()
         return;
 
     const auto accentText = settings_.getValue("theme.accent");
-    appLook->apply(theme::named(settings_.getValue("theme", "Dark")),
+    appLook->apply(theme::named(settings_.getValue("theme", "Nocturne")),
                        accentText.isEmpty() ? juce::Colours::transparentBlack : juce::Colour::fromString(accentText),
                        settings_.getBoolValue("theme.focusRings", false));
     settings_.saveIfNeeded();
@@ -1329,7 +1329,7 @@ void MainComponent::chooseCustomAccent(juce::Component& near)
 
     auto picker = std::make_unique<Picker>();
     const auto saved = settings_.getValue("theme.accent");
-    picker->selector.setCurrentColour(saved.isEmpty() ? theme::named(settings_.getValue("theme", "Dark")).accent
+    picker->selector.setCurrentColour(saved.isEmpty() ? theme::named(settings_.getValue("theme", "Nocturne")).accent
                                                       : juce::Colour::fromString(saved),
                                       juce::dontSendNotification);
     picker->onChange = [safe = juce::Component::SafePointer<MainComponent>(this)](juce::Colour colour)
