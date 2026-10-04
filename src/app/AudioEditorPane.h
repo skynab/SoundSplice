@@ -13,6 +13,8 @@
 
 #include "AudioFileTypes.h"
 #include "AudioSelection.h"
+#include "Glyphs.h"
+#include "SelectionActions.h"
 #include "TrackColours.h"
 #include "SampleDetail.h"
 #include "SampleDraw.h"
@@ -120,6 +122,7 @@ public:
 
     AudioEditorPane()
     {
+        addChildComponent(selectionActions_);
         placeholderLabel_.setText("Select an Audio clip to edit it", juce::dontSendNotification);
         placeholderLabel_.setJustificationType(juce::Justification::centred);
         placeholderLabel_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
@@ -363,6 +366,27 @@ public:
         of the file — that's how audio gets pasted after the recording. */
     double cursorSeconds() const { return playheadSeconds_; }
 
+    /** The actions offered on the bar that floats over a selection. An empty
+        list leaves the bar hidden. */
+    void setSelectionActions(std::vector<SelectionActions::Action> actions)
+    {
+        selectionActions_.setActions(std::move(actions));
+        positionSelectionActions();
+    }
+
+    /** The file being edited, or none. */
+    juce::File file() const { return file_; }
+
+    /** How long the clip being edited is. */
+    double lengthSeconds() const { return geometry_.fileLengthSeconds; }
+
+    /** The stretch of the clip the waveform shows, in seconds from its start. */
+    std::pair<double, double> visibleSeconds() const
+    {
+        const double from = geometry_.visibleStartSeconds;
+        return { from, from + juce::jmax(0.0, geometry_.secondsPerPixel) * (double) waveformArea().getWidth() };
+    }
+
     /** The decoded peaks for the clip on show. Built by the owner (which is
         what reads files) and pushed in only when the file actually changes —
         rebuilding on every refresh would re-read the file dozens of times
@@ -546,8 +570,8 @@ public:
         if (area.isEmpty())
             return;
 
-        g.setColour(theme::surface(*this, theme::insetId));
-        g.fillRect(area);
+        paintOverview(g, overviewArea());
+        paintRuler(g, rulerArea());
 
         // The selection is painted under the waveform, so the waveform stays
         // fully legible inside it — a selection drawn on top dims exactly the
@@ -580,7 +604,11 @@ public:
         if (! samples.isEmpty())
             paintWaveform(g, samples);
         if (! spectrogram.isEmpty())
+        {
+            g.setColour(theme::surface(*this, theme::insetId));
+            g.fillRect(spectrogram);
             paintSpectrogram(g, spectrogram);
+        }
         if (! samples.isEmpty() && ! spectrogram.isEmpty())
         {
             g.setColour(theme::colour(*this, theme::dividerId));
@@ -675,17 +703,24 @@ public:
         // well as the playhead, and a cursor you can place but not see would
         // be no use for deciding where to click next.
         {
+            // A line in the accent's lightest step with a glow of the accent
+            // round it, as the mockups draw the playhead.
             const float x = geometry_.xForSeconds(playheadSeconds_);
             if (x >= (float) area.getX() && x <= (float) area.getRight())
             {
-                g.setColour(theme::colour(*this, theme::signalInkId).withAlpha(playing_ ? 0.9f : 0.55f));
+                const float strength = playing_ ? 1.0f : 0.7f;
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.16f * strength));
+                g.fillRect(juce::Rectangle<float>(x - 3.0f, (float) area.getY(), 7.0f, (float) area.getHeight()));
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.22f * strength));
+                g.fillRect(juce::Rectangle<float>(x - 1.0f, (float) area.getY(), 3.0f, (float) area.getHeight()));
+                g.setColour(theme::colour(*this, theme::signalInkId).withAlpha(strength));
                 g.drawVerticalLine((int) x, (float) area.getY(), (float) area.getBottom());
             }
         }
 
         if (! selection_.isEmpty() && ! frequencyBand())
         {
-            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.8f));
+            g.setColour(theme::accentStep(*this, 300));
             for (double edge : { selection_.startSeconds, selection_.endSeconds })
             {
                 const float x = geometry_.xForSeconds(edge);
@@ -711,10 +746,21 @@ public:
         const int   channels = juce::jmax(1, peaks_.numChannels());
         const int   laneH    = area.getHeight() / channels;
 
+        // Each channel on a plot of its own, a few pixels apart, labelled
+        // in its corner and scaled down the gutter on the right.
         for (int ch = 0; ch < channels; ++ch)
         {
             auto lane = area.withY(area.getY() + ch * laneH).withHeight(laneH);
+            if (channels > 1)
+                lane = lane.withTrimmedTop(ch > 0 ? kLaneGap / 2 : 0).withTrimmedBottom(ch < channels - 1 ? kLaneGap / 2 : 0);
             paintChannel(g, lane, ch, gain);
+
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.5f));
+            g.setFont(theme::monoFont(10.0f));
+            const juce::String name = channels == 2 ? (ch == 0 ? "L" : "R") : juce::String(ch + 1);
+            g.drawText(name, lane.getX() + 6, lane.getY() + 3, 24, 14, juce::Justification::topLeft);
+
+            paintScale(g, lane.withX(lane.getRight() + 6).withWidth(kScaleGutter - 6));
         }
     }
 
@@ -934,6 +980,13 @@ public:
 
     void mouseDown(const juce::MouseEvent& e) override
     {
+        if (contentVisible_ && overviewArea().contains(e.getPosition()))
+        {
+            overviewDragging_ = true;
+            scrollToOverview(e.position.x);
+            return;
+        }
+
         if (! contentVisible_ || ! waveformArea().contains(e.getPosition()))
             return;
 
@@ -968,6 +1021,12 @@ public:
 
     void mouseDrag(const juce::MouseEvent& e) override
     {
+        if (overviewDragging_)
+        {
+            scrollToOverview(e.position.x);
+            return;
+        }
+
         if (drawing_)
         {
             continueStroke(e.position);
@@ -1014,6 +1073,12 @@ public:
 
     void mouseUp(const juce::MouseEvent&) override
     {
+        if (overviewDragging_)
+        {
+            overviewDragging_ = false;
+            return;
+        }
+
         if (drawing_)
         {
             endStroke();
@@ -1184,13 +1249,195 @@ public:
         // starts so a pixel means the same thing in paint() and in a click.
         geometry_.contentLeft = (float) area.getX();
         geometry_.visibleStartSeconds =
-            geometry_.clampedStart(geometry_.visibleStartSeconds, (float) area.getWidth());
+            geometry_.clampedStart(geometry_.visibleStartSeconds, (float) waveformArea().getWidth());
 
         requestSampleDetailIfZoomedIn(); // a wider pane shows more samples
     }
 
 private:
     static constexpr int kToolRowHeight = 24;
+    static constexpr int kOverviewHeight = 30;
+    static constexpr int kRulerHeight    = 22;
+    static constexpr int kRowGap         = 6;
+    static constexpr int kScaleGutter    = 40;
+    static constexpr int kLaneGap        = 4;
+
+    /** The clip in miniature: its peaks across the strip, the selection
+        tinted, the stretch in view outlined, and the playhead. Clicked or
+        dragged, it moves the view there. */
+    void paintOverview(juce::Graphics& g, juce::Rectangle<int> area)
+    {
+        if (area.isEmpty())
+            return;
+
+        const auto box = area.toFloat();
+        g.setColour(findColour(juce::ResizableWindow::backgroundColourId));
+        g.fillRoundedRectangle(box, 5.0f);
+
+        const double length = geometry_.fileLengthSeconds;
+        if (length > 0.0 && ! peaks_.isEmpty() && peaksSampleRate_ > 0.0)
+        {
+            const float  centre = box.getCentreY();
+            const float  half   = box.getHeight() * 0.42f;
+            const double perPx  = length / (double) juce::jmax(1, area.getWidth());
+            g.setColour(theme::accentStep(*this, 500));
+            for (int x = 0; x < area.getWidth(); ++x)
+            {
+                const int from = (int) ((double) x * perPx * peaksSampleRate_);
+                const int to   = (int) ((double) (x + 1) * perPx * peaksSampleRate_);
+                float     peak = 0.0f;
+                for (int ch = 0; ch < peaks_.numChannels(); ++ch)
+                    peak = juce::jmax(peak, peaks_.range(ch, juce::jmax(0, from), juce::jmax(from + 1, to)).magnitude());
+                const float h = juce::jmax(0.5f, juce::jmin(1.0f, peak) * half);
+                g.drawVerticalLine(area.getX() + x, centre - h, centre + h);
+            }
+
+            const auto xFor = [&](double seconds)
+            { return box.getX() + (float) (seconds / length) * box.getWidth(); };
+
+            if (! selection_.isEmpty())
+            {
+                g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.30f));
+                g.fillRect(juce::Rectangle<float>(xFor(selection_.startSeconds), box.getY(),
+                                                  xFor(selection_.endSeconds) - xFor(selection_.startSeconds),
+                                                  box.getHeight()));
+            }
+
+            const double shownFrom = geometry_.visibleStartSeconds;
+            const double shownTo   = shownFrom + geometry_.visibleSeconds((float) waveformArea().getWidth());
+            if (shownFrom > 1.0e-6 || shownTo < length - 1.0e-6)
+            {
+                const auto view = juce::Rectangle<float>(xFor(shownFrom), box.getY(),
+                                                         juce::jmax(2.0f, xFor(juce::jmin(shownTo, length)) - xFor(shownFrom)),
+                                                         box.getHeight());
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.06f));
+                g.fillRect(view);
+                g.setColour(theme::accentStep(*this, 300).withAlpha(0.8f));
+                g.drawRect(view, 1.0f);
+            }
+
+            g.setColour(theme::colour(*this, theme::signalInkId));
+            g.fillRect(juce::Rectangle<float>(xFor(juce::jlimit(0.0, length, playheadSeconds_)), box.getY(), 1.0f,
+                                              box.getHeight()));
+        }
+
+        g.setColour(theme::colour(*this, theme::dividerId));
+        g.drawRoundedRectangle(box.reduced(0.5f), 5.0f, 1.0f);
+    }
+
+    /** Ticks along the top of the waveform at a spacing that leaves room
+        for their labels, each labelled with its time. */
+    void paintRuler(juce::Graphics& g, juce::Rectangle<int> area)
+    {
+        if (area.isEmpty() || geometry_.secondsPerPixel <= 0.0)
+            return;
+
+        g.setColour(theme::colour(*this, theme::dividerId));
+        g.fillRect(area.getX(), area.getBottom() - 1, area.getWidth(), 1);
+
+        const double from  = geometry_.visibleStartSeconds;
+        const double to    = from + geometry_.visibleSeconds((float) area.getWidth());
+        double       step  = 0.001;
+        for (double candidate : { 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0,
+                                  60.0, 120.0, 300.0, 600.0 })
+        {
+            step = candidate;
+            if (candidate / geometry_.secondsPerPixel >= 64.0)
+                break;
+        }
+
+        const auto label = [step](double seconds)
+        {
+            const int    minutes = (int) (seconds / 60.0);
+            const double rest    = seconds - minutes * 60.0;
+            const int    places  = step >= 1.0 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
+            return juce::String(minutes) + ":" + juce::String(rest, places).paddedLeft('0', places > 0 ? places + 3 : 2);
+        };
+
+        g.setFont(theme::monoFont(9.5f));
+        for (double t = std::ceil(from / step) * step; t <= to; t += step)
+        {
+            const float x = geometry_.xForSeconds(t);
+            if (x < (float) area.getX() || x > (float) area.getRight())
+                continue;
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.25f));
+            g.fillRect(juce::Rectangle<float>(x, (float) area.getBottom() - 8.0f, 1.0f, 8.0f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.48f));
+            g.drawText(label(t), juce::Rectangle<float>(x + 4.0f, (float) area.getY(), 64.0f, (float) area.getHeight() - 5.0f),
+                       juce::Justification::bottomLeft, false);
+        }
+    }
+
+    /** A channel's level scale down the gutter beside it: full scale at
+        the edges, -6 dB, and silence in the middle. */
+    void paintScale(juce::Graphics& g, juce::Rectangle<int> area)
+    {
+        if (area.getWidth() < 12 || area.getHeight() < 40)
+            return;
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.40f));
+        g.setFont(theme::monoFont(9.0f));
+        const float sixDb = waveformscale::heightFor(juce::Decibels::decibelsToGain(-6.0f), dbScale_);
+        const float half  = (float) area.getHeight() * 0.5f;
+        const float mid   = (float) area.getCentreY();
+        const auto  at    = [&](const juce::String& text, float y)
+        {
+            g.drawText(text, juce::Rectangle<float>((float) area.getX(), y - 6.0f, (float) area.getWidth(), 12.0f)
+                                 .constrainedWithin(area.toFloat()),
+                       juce::Justification::centredLeft, false);
+        };
+        at("0", (float) area.getY());
+        at("-6", mid - sixDb * half);
+        at(juce::String::fromUTF8("-\xe2\x88\x9e"), mid);
+        at("-6", mid + sixDb * half);
+        at("0", (float) area.getBottom());
+    }
+
+    /** Puts the action bar over the middle of the selection, near the top
+        of the waveform - or hides it, when there's no selection to act on. */
+    void positionSelectionActions()
+    {
+        const auto area = samplesArea();
+        const bool show = contentVisible_ && selectionActions_.hasActions() && ! selection_.isEmpty()
+                       && ! frequencyBand() && ! area.isEmpty() && area.getHeight() > 80;
+        selectionActions_.setVisible(show);
+        if (! show)
+            return;
+
+        const auto seconds = [](double s)
+        {
+            const int minutes = (int) (s / 60.0);
+            return juce::String(minutes) + ":" + juce::String(s - minutes * 60.0, 3).paddedLeft('0', 6);
+        };
+        selectionActions_.setDuration(seconds(selection_.lengthSeconds()));
+
+        const int   width  = juce::jmin(selectionActions_.idealWidth(), area.getWidth() + 2 * SelectionActions::kShadow);
+        const float middle = (geometry_.xForSeconds(selection_.startSeconds) + geometry_.xForSeconds(selection_.endSeconds)) * 0.5f;
+        const float left   = (float) area.getX() + (float) area.getWidth() * 0.3f;
+        const float right  = (float) area.getX() + (float) area.getWidth() * 0.7f;
+        const int   centre = (int) juce::jlimit(juce::jmin(left, right), juce::jmax(left, right), middle);
+        auto bounds = juce::Rectangle<int>(width, SelectionActions::idealHeight())
+                          .withCentre({ centre, area.getY() + 10 + SelectionActions::idealHeight() / 2 - SelectionActions::kShadow });
+        const auto limits = area.expanded(SelectionActions::kShadow);
+        bounds = bounds.constrainedWithin(limits);
+        selectionActions_.setBounds(bounds);
+    }
+
+    /** Moves the view so @p x on the overview is in its middle. */
+    void scrollToOverview(float x)
+    {
+        const auto overview = overviewArea();
+        const auto area     = waveformArea();
+        if (overview.isEmpty() || area.isEmpty() || geometry_.fileLengthSeconds <= 0.0)
+            return;
+        const double at    = (double) ((x - (float) overview.getX()) / (float) overview.getWidth()) * geometry_.fileLengthSeconds;
+        const double shown = geometry_.visibleSeconds((float) area.getWidth());
+        geometry_.visibleStartSeconds = geometry_.clampedStart(at - shown * 0.5, (float) area.getWidth());
+        requestSampleDetailIfZoomedIn();
+        repaint();
+    }
+
+    SelectionActions selectionActions_;
+    bool             overviewDragging_ = false;
 
     /** Travel that turns a click into a drag-select. */
     static constexpr int kDragThresholdPixels = 3;
@@ -1224,13 +1471,51 @@ private:
     static constexpr int kSelectionLabelWidth = 240;
     static constexpr int kLabelNeedsWidth     = 420;
 
-    juce::Rectangle<int> waveformArea() const
+    /** Everything between the tool rows: the overview, the ruler, and the
+        waveform with its scale. */
+    juce::Rectangle<int> editorArea() const
     {
         auto area = getLocalBounds();
         area.removeFromTop(kTrackHeaderHeight);
         area = area.reduced(6);
         area.removeFromTop(kToolRowHeight);
-        area.removeFromBottom(kToolRowHeight);
+
+        // Clear of the control rows under it, which resized() shows only
+        // while there's room for them - so this asks the same questions.
+        if (area.getHeight() >= kMinWaveformHeight + 2 * kToolRowHeight)
+        {
+            area.removeFromBottom(2 * kToolRowHeight);
+            if (area.getHeight() >= kMinWaveformHeight + 2 * kToolRowHeight)
+                area.removeFromBottom(2 * kToolRowHeight);
+        }
+        area.removeFromBottom(kRowGap);
+        return area;
+    }
+
+    /** The whole clip in miniature across the top, with the view on it. */
+    juce::Rectangle<int> overviewArea() const
+    {
+        auto area = editorArea().withTrimmedRight(kScaleGutter);
+        area.removeFromTop(kRowGap);
+        return area.getHeight() >= kMinWaveformHeight + kOverviewHeight + kRulerHeight + 2 * kRowGap
+                   ? area.removeFromTop(kOverviewHeight)
+                   : juce::Rectangle<int>();
+    }
+
+    /** Times along the top of the waveform. */
+    juce::Rectangle<int> rulerArea() const
+    {
+        const auto overview = overviewArea();
+        if (overview.isEmpty())
+            return {};
+        return overview.withY(overview.getBottom() + kRowGap).withHeight(kRulerHeight);
+    }
+
+    juce::Rectangle<int> waveformArea() const
+    {
+        auto area = editorArea().withTrimmedRight(kScaleGutter);
+        if (const auto ruler = rulerArea(); ! ruler.isEmpty())
+            area.setTop(ruler.getBottom());
         return area;
     }
 
@@ -1242,6 +1527,20 @@ private:
         const float halfH   = (float) lane.getHeight() * 0.5f;
         const auto  height  = [this](float sample) { return waveformscale::heightFor(sample, dbScale_); };
 
+        // The plot: color-bg 70% into the surface, softly rounded, with the
+        // selection tinted on it under the waveform.
+        g.setColour(theme::surface(*this, theme::insetId));
+        g.fillRoundedRectangle(lane.toFloat(), 4.0f);
+        if (! selection_.isEmpty() && ! frequencyBand())
+        {
+            const float x1 = juce::jlimit((float) lane.getX(), (float) lane.getRight(),
+                                          geometry_.xForSeconds(selection_.startSeconds));
+            const float x2 = juce::jlimit((float) lane.getX(), (float) lane.getRight(),
+                                          geometry_.xForSeconds(selection_.endSeconds));
+            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.22f));
+            g.fillRect(juce::Rectangle<float>(x1, (float) lane.getY(), x2 - x1, (float) lane.getHeight()));
+        }
+
         // dBFS gridlines. Levels are judged in decibels, and a linear
         // waveform with no reference makes -6 and -12 look nearly identical.
         // The dB scale spreads its range evenly, so its lines are wider apart.
@@ -1250,22 +1549,20 @@ private:
         for (float db : dbScale_ ? dbLines : linearLines)
         {
             const float fraction = waveformscale::heightFor(juce::Decibels::decibelsToGain(db), dbScale_);
-            g.setColour(theme::colour(*this, theme::dividerSoftId));
+            g.setColour(db > -7.0f && db < -5.0f ? juce::Colour(0xff3f424d) // -6: color-neutral-800
+                                                 : theme::colour(*this, theme::dividerSoftId));
             for (float sign : { -1.0f, 1.0f })
                 g.drawHorizontalLine((int) (centreY + sign * fraction * halfH),
                                      (float) lane.getX(), (float) lane.getRight());
         }
 
-        // Full scale, drawn brighter — the line the gained waveform must not
-        // cross.
-        g.setColour(theme::colour(*this, theme::dividerId));
-        g.drawHorizontalLine(lane.getY(), (float) lane.getX(), (float) lane.getRight());
-        g.drawHorizontalLine(lane.getBottom() - 1, (float) lane.getX(), (float) lane.getRight());
+        // Full scale is the plot's own edge - the line the gained waveform
+        // must not cross.
 
         // Centre line, so a silent passage is visibly silent rather than
         // merely thin — the whole judgement being made when picking a noise
         // print.
-        g.setColour(theme::colour(*this, theme::dividerId));
+        g.setColour(juce::Colour(0xff595d6c)); // color-neutral-700
         g.drawHorizontalLine((int) centreY, (float) lane.getX(), (float) lane.getRight());
 
         const double secondsPerPixel = geometry_.secondsPerPixel > 0.0 ? geometry_.secondsPerPixel : 1.0e-9;
@@ -1314,8 +1611,8 @@ private:
             // edge: a waveform that just touches the top looks the same
             // whether it is at full scale or 6dB past it, and those are very
             // different problems.
-            g.setColour(clips ? theme::colour(*this, theme::dangerId)
-                              : theme::colour(*this, theme::signalId).withAlpha(0.85f));
+            g.setColour(clips ? theme::colour(*this, theme::dangerTextId)
+                              : theme::colour(*this, theme::signalId));
             g.drawVerticalLine(x, centreY - height(top) * halfH, centreY - height(bottom) * halfH);
 
             // The RMS level inside the peaks, lighter, as Audacity draws it:
@@ -1328,7 +1625,7 @@ private:
             const float rmsBottom = centreY - height(juce::jmax(-level, bottom)) * halfH;
             if (level > 0.0f && rmsBottom > rmsTop)
             {
-                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.45f));
+                g.setColour(theme::colour(*this, theme::signalInkId).withAlpha(0.22f));
                 g.drawVerticalLine(x, rmsTop, rmsBottom);
             }
         }
@@ -1424,6 +1721,7 @@ private:
         }
         updateSelectionLabel();
         updateNoiseControls();
+        positionSelectionActions();
         repaint();
     }
 
@@ -1592,6 +1890,7 @@ private:
         and what's held doesn't already cover it. */
     void requestSampleDetailIfZoomedIn()
     {
+        positionSelectionActions(); // every change of view passes through here
         const auto area = waveformArea();
         if (! contentVisible_ || area.isEmpty() || ! onSampleDetailNeeded
             || ! SampleDetail::wanted(geometry_.secondsPerPixel, peaksSampleRate_))

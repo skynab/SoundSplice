@@ -23,7 +23,7 @@ enum class Glyph
     plus, cross, check, caretDown, floppy, textT, selection, scissors, cursor,
     zeroCrossing, warning, sparkle, gear, microphone, video, pianoKeys, faders,
     code, waves, transcript, keyboard, gauge, envelope, grid, export_, bandaid,
-    spectrum, arrowLeftRight, layout, magnet
+    spectrum, arrowLeftRight, layout, magnet, speakerSlash, trendUp, trendDown, normalize, trash
 };
 
 namespace detail
@@ -335,6 +335,33 @@ namespace detail
                 p.closeSubPath();
                 line(p, 3.0f, 5.5f, 6.0f, 5.5f);
                 line(p, 10.0f, 5.5f, 13.0f, 5.5f);
+                break;
+            case Glyph::speakerSlash:
+                polyline(p, { { 2.0f, 6.0f }, { 4.5f, 6.0f }, { 8.5f, 2.75f }, { 8.5f, 13.25f },
+                              { 4.5f, 10.0f }, { 2.0f, 10.0f } }, true);
+                line(p, 11.0f, 6.0f, 14.5f, 9.5f);
+                line(p, 14.5f, 6.0f, 11.0f, 9.5f);
+                break;
+            case Glyph::trendUp:
+                polyline(p, { { 1.5f, 12.5f }, { 6.0f, 8.0f }, { 9.0f, 11.0f }, { 14.0f, 4.5f } });
+                polyline(p, { { 10.0f, 4.5f }, { 14.0f, 4.5f }, { 14.0f, 8.5f } });
+                break;
+            case Glyph::trendDown:
+                polyline(p, { { 1.5f, 3.5f }, { 6.0f, 8.0f }, { 9.0f, 5.0f }, { 14.0f, 11.5f } });
+                polyline(p, { { 10.0f, 11.5f }, { 14.0f, 11.5f }, { 14.0f, 7.5f } });
+                break;
+            case Glyph::normalize:
+                line(p, 8.0f, 1.5f, 8.0f, 14.5f);
+                polyline(p, { { 5.5f, 4.0f }, { 8.0f, 1.5f }, { 10.5f, 4.0f } });
+                polyline(p, { { 5.5f, 12.0f }, { 8.0f, 14.5f }, { 10.5f, 12.0f } });
+                line(p, 2.0f, 8.0f, 14.0f, 8.0f);
+                break;
+            case Glyph::trash:
+                line(p, 2.0f, 4.0f, 14.0f, 4.0f);
+                polyline(p, { { 6.0f, 4.0f }, { 6.0f, 2.25f }, { 10.0f, 2.25f }, { 10.0f, 4.0f } });
+                polyline(p, { { 3.5f, 4.0f }, { 4.25f, 14.0f }, { 11.75f, 14.0f }, { 12.5f, 4.0f } });
+                line(p, 6.5f, 7.0f, 6.5f, 11.0f);
+                line(p, 9.5f, 7.0f, 9.5f, 11.0f);
                 break;
             case Glyph::layout:
                 p.addRoundedRectangle(2.0f, 2.5f, 12.0f, 11.0f, 1.25f);

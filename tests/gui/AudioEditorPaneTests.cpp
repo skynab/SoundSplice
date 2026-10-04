@@ -65,10 +65,13 @@ namespace
     /** A point inside the waveform area, at a fraction across it. The pane
         reserves a header and two tool rows, so the vertical middle is
         reliably inside the waveform at any usable size. */
+    /** A point @p fractionAcross the clip's plot - the waveform, the
+        spectrogram, or both - which has the level scale to its right and the
+        overview and ruler above it. */
     juce::Point<float> waveformPoint(const AudioEditorPane& pane, float fractionAcross)
     {
-        const auto bounds = pane.getLocalBounds();
-        return { (float) bounds.getWidth() * fractionAcross, (float) bounds.getCentreY() };
+        const auto bounds = pane.samplesArea().getUnion(pane.spectrogramArea());
+        return { (float) bounds.getX() + (float) bounds.getWidth() * fractionAcross, (float) bounds.getCentreY() };
     }
 }
 
