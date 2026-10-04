@@ -6,6 +6,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 namespace soundsplice
 {
 /**
@@ -323,7 +325,7 @@ namespace prefs
                 case Row::Kind::Folder:
                 {
                     widget.value = std::make_unique<juce::Label>();
-                    widget.value->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+                    widget.value->setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
                     widget.value->setMinimumHorizontalScale(0.6f);
                     addAndMakeVisible(*widget.value);
 
@@ -355,7 +357,7 @@ namespace prefs
                     if (row.status)
                     {
                         widget.value = std::make_unique<juce::Label>();
-                        widget.value->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+                        widget.value->setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
                         addAndMakeVisible(*widget.value);
                     }
                     auto button = std::make_unique<juce::TextButton>(row.actionText);

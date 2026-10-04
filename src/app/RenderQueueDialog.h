@@ -228,11 +228,11 @@ private:
             g.fillAll(juce::Colours::steelblue.withAlpha(0.4f));
         const auto& job   = jobs_[(size_t) row];
         const auto& state = states_[(size_t) row];
-        g.setColour(juce::Colours::white);
+        g.setColour(theme::colour(*this, theme::textId));
         g.setFont(juce::FontOptions(14.0f));
         g.drawText(job.label, 8, 2, width - 16, height / 2, juce::Justification::centredLeft, true);
         g.setFont(juce::FontOptions(12.0f));
-        g.setColour(state.failed ? theme::colour(*this, theme::dangerTextId) : juce::Colours::white.withAlpha(0.6f));
+        g.setColour(state.failed ? theme::colour(*this, theme::dangerTextId) : theme::colour(*this, theme::textMutedId));
         g.drawText(engine::displayNameFor(job.choice.options.format) + "  -  " + state.text, 8, height / 2, width - 16,
                    height / 2 - 2, juce::Justification::centredLeft, true);
     }

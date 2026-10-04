@@ -77,7 +77,7 @@ private:
         const auto  square = area.withSizeKeepingCentre(size, size);
         const float half   = size * 0.5f;
 
-        g.setColour(juce::Colours::white.withAlpha(0.12f));
+        g.setColour(theme::colour(*this, theme::dividerSoftId));
         g.drawVerticalLine((int) square.getCentreX(), square.getY(), square.getBottom());   // mono
         g.drawHorizontalLine((int) square.getCentreY(), square.getX(), square.getRight());  // out of phase
         g.drawLine(square.getX(), square.getBottom(), square.getRight(), square.getY(), 1.0f); // right only
@@ -96,7 +96,7 @@ private:
             g.fillRect(x, y, 1.5f, 1.5f);
         }
 
-        g.setColour(juce::Colours::white.withAlpha(0.4f));
+        g.setColour(theme::colour(*this, theme::textFaintId));
         g.setFont(juce::FontOptions(9.0f));
         g.drawText("L", square.withTrimmedRight(size * 0.75f).withHeight(12.0f), juce::Justification::centredLeft);
         g.drawText("R", square.withTrimmedLeft(size * 0.75f).withHeight(12.0f), juce::Justification::centredRight);
@@ -111,7 +111,7 @@ private:
         {
             const auto lane = channel == 0 ? area.withHeight(area.getHeight() * 0.5f)
                                            : area.withTrimmedTop(area.getHeight() * 0.5f);
-            g.setColour(juce::Colours::white.withAlpha(0.1f));
+            g.setColour(theme::colour(*this, theme::dividerSoftId));
             g.drawHorizontalLine((int) lane.getCentreY(), lane.getX(), lane.getRight());
 
             juce::Path wave;
@@ -132,7 +132,7 @@ private:
 
     void paintCorrelation(juce::Graphics& g, juce::Rectangle<float> bar)
     {
-        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.1f));
         g.fillRect(bar);
 
         const float centre = bar.getCentreX();
@@ -140,7 +140,7 @@ private:
         g.setColour(correlation_ < 0.0 ? theme::colour(*this, theme::dangerId).withAlpha(0.85f) : theme::colour(*this, theme::okId));
         g.fillRect(juce::Rectangle<float>::leftTopRightBottom(juce::jmin(centre, x), bar.getY(), juce::jmax(centre, x), bar.getBottom()));
 
-        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.5f));
         g.drawVerticalLine((int) centre, bar.getY(), bar.getBottom());
         g.setFont(juce::FontOptions(9.0f));
         g.drawText("-1", bar, juce::Justification::centredLeft);

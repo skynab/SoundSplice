@@ -93,7 +93,7 @@ public:
 
         if (entries_.empty())
         {
-            g.setColour(juce::Colours::white.withAlpha(0.4f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.setFont(juce::Font(juce::FontOptions(12.0f)));
             g.drawFittedText("Audio clips opened in the Audio editor are listed here.",
                              list_.getBounds().reduced(12), juce::Justification::centred, 3);
@@ -133,11 +133,11 @@ private:
         area.removeFromLeft(6);
         area.reduce(0, 3);
 
-        g.setColour(juce::Colours::white.withAlpha(0.92f));
+        g.setColour(theme::colour(*this, theme::textId));
         g.setFont(juce::Font(juce::FontOptions(13.0f)));
         g.drawText(entry.name, area.removeFromTop(area.getHeight() / 2), juce::Justification::centredLeft, true);
 
-        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.setColour(theme::colour(*this, theme::textMutedId));
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
         g.drawText(entry.detail, area, juce::Justification::centredLeft, true);
     }

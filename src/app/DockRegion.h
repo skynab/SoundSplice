@@ -38,7 +38,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.fillAll(theme::surface(*this, active_ ? theme::tabActiveId : theme::tabInactiveId));
-        g.setColour(juce::Colours::white.withAlpha(active_ ? 0.95f : 0.55f));
+        g.setColour(active_ ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textMutedId));
 
         // The label gives up the right-hand strip to the close cross, so a
         // long name can't run underneath it.
@@ -51,7 +51,7 @@ public:
         if (closeVisible())
         {
             const auto cross = closeBounds().toFloat().reduced(5.0f);
-            g.setColour(juce::Colours::white.withAlpha(closeHovered_ ? 0.95f : 0.45f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(closeHovered_ ? 0.95f : 0.45f));
             g.drawLine(cross.getX(), cross.getY(), cross.getRight(), cross.getBottom(), 1.3f);
             g.drawLine(cross.getX(), cross.getBottom(), cross.getRight(), cross.getY(), 1.3f);
         }
@@ -296,7 +296,7 @@ public:
         // resulting shape is what makes the edge gesture discoverable.
         if (dragActive_)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.10f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.10f));
             g.fillRect(highlightBounds());
             g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.8f));
             g.drawRect(highlightBounds(), 2);
@@ -306,7 +306,7 @@ public:
         // reads as a rendering failure.
         if (panels_.empty())
         {
-            g.setColour(juce::Colours::white.withAlpha(0.35f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.setFont(13.0f);
             g.drawFittedText("No panes open\nReopen one from the View menu",
                              getLocalBounds().reduced(12), juce::Justification::centred, 2);

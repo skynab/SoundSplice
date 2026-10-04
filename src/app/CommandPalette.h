@@ -148,7 +148,7 @@ public:
 
     CommandPalette()
     {
-        search_.setTextToShowWhenEmpty("Type a command...", juce::Colours::white.withAlpha(0.4f));
+        search_.setTextToShowWhenEmpty("Type a command...", theme::colour(*this, theme::textFaintId));
         search_.setFont(juce::FontOptions(16.0f));
         search_.addKeyListener(this);
         search_.onTextChange = [this] { refilter(); };
@@ -213,7 +213,7 @@ public:
         const auto area = getLocalBounds().toFloat();
         g.setColour(theme::surface(*this, theme::popupId));
         g.fillRoundedRectangle(area, 6.0f);
-        g.setColour(juce::Colours::white.withAlpha(0.18f));
+        g.setColour(theme::colour(*this, theme::dividerId));
         g.drawRoundedRectangle(area.reduced(0.5f), 6.0f, 1.0f);
     }
 
@@ -302,13 +302,13 @@ private:
         const float alpha = entry.enabled ? 1.0f : 0.4f;
 
         g.setFont(juce::FontOptions(12.0f));
-        g.setColour(juce::Colours::white.withAlpha(0.55f * alpha));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.55f * alpha));
         if (entry.shortcut.isNotEmpty())
             g.drawText(entry.shortcut, area.removeFromRight(130), juce::Justification::centredRight);
         g.drawText(entry.category, area.removeFromRight(80), juce::Justification::centredRight);
 
         g.setFont(juce::FontOptions(14.0f));
-        g.setColour(juce::Colours::white.withAlpha(alpha));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(alpha));
         g.drawText((entry.ticked ? juce::String::fromUTF8("\xe2\x9c\x93 ") : juce::String()) + entry.name,
                    area, juce::Justification::centredLeft, true);
     }

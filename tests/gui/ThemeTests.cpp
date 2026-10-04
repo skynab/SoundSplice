@@ -85,6 +85,18 @@ TEST_CASE("Panes take their signal, warn and danger colours from the theme", "[g
         REQUIRE(theme::colour(pane, theme::accentId) == t.accent);
         REQUIRE(theme::colour(pane, theme::okId) == t.ok);
         REQUIRE(theme::colour(pane, theme::clipTopId) == t.clipTop);
+        REQUIRE(theme::colour(pane, theme::textId) == t.text);
+        REQUIRE(theme::colour(pane, theme::textMutedId) == t.textMuted);
+        REQUIRE(theme::colour(pane, theme::textFaintId) == t.textFaint);
+        REQUIRE(theme::colour(pane, theme::dividerId) == t.divider);
+        REQUIRE(theme::colour(pane, theme::dividerSoftId) == t.dividerSoft);
+
+        // Each step of text reads over the pane, and a step down is fainter.
+        const auto onPane = [&](juce::Colour c) { return t.pane.overlaidWith(c).getPerceivedBrightness(); };
+        REQUIRE(onPane(t.text) > onPane(t.textMuted));
+        REQUIRE(onPane(t.textMuted) > onPane(t.textFaint));
+        REQUIRE(onPane(t.divider) > onPane(t.dividerSoft));
+        REQUIRE(onPane(t.textMuted) > t.pane.getPerceivedBrightness() + 0.3f);
 
         // Drawn on the panes, so they have to stand off them.
         for (const auto c : { t.signal, t.signalInk, t.warn, t.dangerText, t.ok })

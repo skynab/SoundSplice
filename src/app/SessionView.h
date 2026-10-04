@@ -134,7 +134,7 @@ public:
 
         if (trackCount == 0 || sceneCount == 0)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.45f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.setFont(juce::FontOptions(13.0f));
             g.drawText(sceneCount == 0 ? "No scenes yet - click + Scene to add one"
                                        : "No tracks yet",
@@ -198,7 +198,7 @@ private:
             g.fillRect(header.reduced(1));
 
             const auto& t = song_.tracks[(size_t) track];
-            g.setColour(juce::Colours::white.withAlpha(0.85f));
+            g.setColour(theme::colour(*this, theme::textId));
             g.drawText(t.name.empty() ? ("Track " + juce::String(track + 1)) : juce::String(t.name),
                        header.reduced(6, 0), juce::Justification::centredLeft);
         }
@@ -212,7 +212,7 @@ private:
         if (clip == nullptr)
         {
             // An empty cell still reads as a cell, so the grid stays legible.
-            g.setColour(juce::Colours::white.withAlpha(0.04f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.04f));
             g.fillRoundedRectangle(bounds.toFloat(), 3.0f);
             return;
         }
@@ -223,14 +223,14 @@ private:
 
         if (playing)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.9f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.9f));
             g.drawRoundedRectangle(bounds.toFloat().reduced(0.5f), 3.0f, 1.5f);
         }
 
         // A play triangle for a clip that's sounding, a square for one that's
         // merely loaded — the same shorthand every session grid uses.
         auto marker = bounds.reduced(6).removeFromLeft(10).withSizeKeepingCentre(8, 8).toFloat();
-        g.setColour(juce::Colours::white.withAlpha(playing ? 0.95f : 0.6f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(playing ? 0.95f : 0.6f));
         if (playing)
         {
             juce::Path triangle;
@@ -244,7 +244,7 @@ private:
             g.fillRect(marker);
         }
 
-        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        g.setColour(theme::colour(*this, theme::textId));
         g.setFont(juce::FontOptions(11.0f));
         g.drawText(juce::String(clip->pattern.notes.size()) + " notes",
                    bounds.reduced(22, 0), juce::Justification::centredLeft);
@@ -258,7 +258,7 @@ private:
 
         g.setColour(juce::Colour(0xff33333a));
         g.fillRect(bounds.reduced(2));
-        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.setColour(theme::colour(*this, theme::textId));
         g.setFont(juce::FontOptions(11.0f));
 
         const auto& name = song_.scenes[(size_t) scene].name;
@@ -270,9 +270,9 @@ private:
     {
         const juce::Rectangle<int> bounds((int) song_.tracks.size() * kTrackWidth,
                                           sceneRowsBottom(), kSceneWidth, kRowHeight);
-        g.setColour(juce::Colours::white.withAlpha(0.06f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.06f));
         g.fillRect(bounds.reduced(2));
-        g.setColour(juce::Colours::white.withAlpha(0.65f));
+        g.setColour(theme::colour(*this, theme::textMutedId));
         g.setFont(juce::FontOptions(11.0f));
         g.drawText("+ Scene", bounds.reduced(8, 0), juce::Justification::centredLeft);
     }
@@ -283,10 +283,10 @@ private:
         {
             const juce::Rectangle<int> bounds(track * kTrackWidth, sceneRowsBottom(),
                                               kTrackWidth, kStopRowHeight);
-            g.setColour(juce::Colours::white.withAlpha(0.06f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.06f));
             g.fillRect(bounds.reduced(2));
 
-            g.setColour(juce::Colours::white.withAlpha(0.7f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.7f));
             const auto square = bounds.withSizeKeepingCentre(8, 8).toFloat();
             g.fillRect(square);
         }

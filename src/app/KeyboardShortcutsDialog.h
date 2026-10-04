@@ -4,6 +4,8 @@
 #include <memory>
 
 #include <juce_gui_basics/juce_gui_basics.h>
+
+#include "Theme.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 
 #include "ShortcutSets.h"
@@ -32,7 +34,7 @@ public:
 
         hint_.setText("Click + beside a command to give it a key, or a key to change or remove it.",
                       juce::dontSendNotification);
-        hint_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        hint_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(hint_);
 
         importButton_.onClick = [this] { importSet(); };

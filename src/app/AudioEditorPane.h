@@ -122,7 +122,7 @@ public:
     {
         placeholderLabel_.setText("Select an Audio clip to edit it", juce::dontSendNotification);
         placeholderLabel_.setJustificationType(juce::Justification::centred);
-        placeholderLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
+        placeholderLabel_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(placeholderLabel_);
 
         selectionLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -583,7 +583,7 @@ public:
             paintSpectrogram(g, spectrogram);
         if (! samples.isEmpty() && ! spectrogram.isEmpty())
         {
-            g.setColour(juce::Colours::white.withAlpha(0.25f));
+            g.setColour(theme::colour(*this, theme::dividerId));
             g.drawHorizontalLine(spectrogram.getY(), (float) area.getX(), (float) area.getRight());
         }
 
@@ -702,7 +702,7 @@ public:
     {
         if (peaks_.isEmpty() || peaksSampleRate_ <= 0.0)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.35f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText("Reading waveform...", area, juce::Justification::centred);
             return;
         }
@@ -825,7 +825,7 @@ public:
     {
         if (! spectrogram_.isValid() || spectrogramSeconds_ <= 0.0)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.35f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText("Reading spectrogram...", area, juce::Justification::centred);
             return;
         }
@@ -860,9 +860,9 @@ public:
             if (hz >= spectrogramNyquist_)
                 continue;
             const float y = yForHz(hz, area);
-            g.setColour(juce::Colours::white.withAlpha(0.18f));
+            g.setColour(theme::colour(*this, theme::dividerId));
             g.drawHorizontalLine((int) y, (float) area.getX(), (float) area.getRight());
-            g.setColour(juce::Colours::white.withAlpha(0.6f));
+            g.setColour(theme::colour(*this, theme::textMutedId));
             g.drawText(hz >= 1000.0 ? juce::String((int) (hz / 1000.0)) + " kHz" : juce::String((int) hz) + " Hz",
                        juce::Rectangle<float>((float) area.getX() + 3.0f, y - 12.0f, 60.0f, 11.0f),
                        juce::Justification::centredLeft);
@@ -1250,7 +1250,7 @@ private:
         for (float db : dbScale_ ? dbLines : linearLines)
         {
             const float fraction = waveformscale::heightFor(juce::Decibels::decibelsToGain(db), dbScale_);
-            g.setColour(juce::Colours::white.withAlpha(0.07f));
+            g.setColour(theme::colour(*this, theme::dividerSoftId));
             for (float sign : { -1.0f, 1.0f })
                 g.drawHorizontalLine((int) (centreY + sign * fraction * halfH),
                                      (float) lane.getX(), (float) lane.getRight());
@@ -1258,14 +1258,14 @@ private:
 
         // Full scale, drawn brighter — the line the gained waveform must not
         // cross.
-        g.setColour(juce::Colours::white.withAlpha(0.16f));
+        g.setColour(theme::colour(*this, theme::dividerId));
         g.drawHorizontalLine(lane.getY(), (float) lane.getX(), (float) lane.getRight());
         g.drawHorizontalLine(lane.getBottom() - 1, (float) lane.getX(), (float) lane.getRight());
 
         // Centre line, so a silent passage is visibly silent rather than
         // merely thin — the whole judgement being made when picking a noise
         // print.
-        g.setColour(juce::Colours::white.withAlpha(0.14f));
+        g.setColour(theme::colour(*this, theme::dividerId));
         g.drawHorizontalLine((int) centreY, (float) lane.getX(), (float) lane.getRight());
 
         const double secondsPerPixel = geometry_.secondsPerPixel > 0.0 ? geometry_.secondsPerPixel : 1.0e-9;
@@ -1302,7 +1302,7 @@ private:
             // quieter waveform just looks like a quieter recording.
             if (showGhost)
             {
-                g.setColour(juce::Colours::white.withAlpha(0.16f));
+                g.setColour(theme::colour(*this, theme::dividerId));
                 g.drawVerticalLine(x, centreY - height(bin.maximum) * halfH, centreY - height(bin.minimum) * halfH);
             }
 
@@ -1328,7 +1328,7 @@ private:
             const float rmsBottom = centreY - height(juce::jmax(-level, bottom)) * halfH;
             if (level > 0.0f && rmsBottom > rmsTop)
             {
-                g.setColour(juce::Colours::white.withAlpha(0.45f));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.45f));
                 g.drawVerticalLine(x, rmsTop, rmsBottom);
             }
         }

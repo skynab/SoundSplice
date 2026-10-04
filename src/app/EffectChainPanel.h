@@ -106,7 +106,7 @@ public:
 
         placeholder_.setText("Select a track to edit its effects", juce::dontSendNotification);
         placeholder_.setJustificationType(juce::Justification::centred);
-        placeholder_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
+        placeholder_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(placeholder_);
 
         addButton_.setButtonText("+ Add");
@@ -293,8 +293,8 @@ public:
             const auto  row  = rowBounds(i);
             const auto& slot = chain_[(size_t) i];
 
-            g.setColour(i == selected_ ? juce::Colours::white.withAlpha(0.10f)
-                                       : juce::Colours::white.withAlpha(0.04f));
+            g.setColour(i == selected_ ? theme::colour(*this, theme::textId).withAlpha(0.10f)
+                                       : theme::colour(*this, theme::textId).withAlpha(0.04f));
             g.fillRect(row);
 
             if (i == selected_)
@@ -306,10 +306,10 @@ public:
             // Bypass indicator: filled when active, hollow when bypassed —
             // the same meaning for a plugin as for a built-in.
             const auto dot = juce::Rectangle<int>(row.getX() + 8, row.getCentreY() - 5, 10, 10).toFloat();
-            g.setColour(slot.enabled ? theme::colour(*this, theme::signalId) : juce::Colours::white.withAlpha(0.25f));
+            g.setColour(slot.enabled ? theme::colour(*this, theme::signalId) : theme::colour(*this, theme::textId).withAlpha(0.25f));
             slot.enabled ? g.fillEllipse(dot) : g.drawEllipse(dot, 1.2f);
 
-            g.setColour(juce::Colours::white.withAlpha(slot.enabled ? 0.9f : 0.45f));
+            g.setColour(slot.enabled ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textFaintId));
             g.drawText(slotLabel(slot), row.getX() + kBypassWidth, row.getY(),
                        row.getWidth() - kBypassWidth - 6, row.getHeight(),
                        juce::Justification::centredLeft);
@@ -317,7 +317,7 @@ public:
 
         if (chain_.empty())
         {
-            g.setColour(juce::Colours::white.withAlpha(0.45f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText("No effects - use + Add", listArea(), juce::Justification::centred);
         }
     }
@@ -737,7 +737,7 @@ private:
             {
                 row.label = std::make_unique<juce::Label>(juce::String(), param.name);
                 row.label->setFont(juce::FontOptions(12.0f));
-                row.label->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+                row.label->setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
                 row.label->setTooltip(tooltip);
                 row.label->setInterceptsMouseClicks(false, false);
                 paramsContent_.addAndMakeVisible(*row.label);

@@ -161,7 +161,7 @@ public:
                                   ownMode ? juce::Colours::steelblue.withAlpha(0.6f)
                                           : getLookAndFeel().findColour(juce::TextButton::buttonColourId));
         autoModeButton_.setColour(juce::TextButton::textColourOffId,
-                                  juce::Colours::white.withAlpha(ownMode ? 1.0f : 0.55f));
+                                  (ownMode ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textMutedId)));
     }
     /** Shows where the output goes, by name. */
     void setOutputName(const juce::String& name) { outputButton_.setButtonText("Out: " + name); }
@@ -214,7 +214,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         auto area = getLocalBounds().toFloat();
-        g.setColour(selected_ ? juce::Colours::white.withAlpha(0.10f) : juce::Colours::black.withAlpha(0.15f));
+        g.setColour(selected_ ? theme::colour(*this, theme::textId).withAlpha(0.10f) : juce::Colours::black.withAlpha(0.15f));
         g.fillRoundedRectangle(area, 4.0f);
 
         if (selected_)

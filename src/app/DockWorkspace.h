@@ -33,7 +33,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.fillAll(theme::surface(*this, theme::workspaceId));
-        g.setColour(juce::Colours::white.withAlpha(hovered_ ? 0.30f : 0.10f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(hovered_ ? 0.30f : 0.10f));
 
         // A short grip mark in the middle, so the bar reads as draggable.
         auto centre = getLocalBounds().toFloat().getCentre();

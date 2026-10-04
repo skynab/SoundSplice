@@ -389,7 +389,7 @@ public:
         const int    numBars   = (int) std::ceil(totalBeats() / qpb);
 
         // Ruler + bar lines.
-        g.setColour(juce::Colours::white.withAlpha(0.06f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.06f));
         g.fillRect(0.0f, 0.0f, width, geometry_.rulerHeight);
         g.setFont(juce::FontOptions(12.0f));
         if (timeDisplay_.format != app::TimeFormat::BarsBeats)
@@ -406,7 +406,7 @@ public:
             const float beatSpacing = ppb;
             if (beatSpacing >= kMinGridSpacing)
             {
-                g.setColour(juce::Colours::white.withAlpha(0.07f));
+                g.setColour(theme::colour(*this, theme::dividerSoftId));
                 const int totalBeatLines = (int) std::ceil(totalBeats());
                 for (int beat = 0; beat <= totalBeatLines; ++beat)
                 {
@@ -421,9 +421,9 @@ public:
             for (int bar = 0; bar <= numBars; ++bar)
             {
                 const float x = geometry_.xForBeat((double) bar * qpb);
-                g.setColour(juce::Colours::white.withAlpha(0.16f));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.16f));
                 g.fillRect(x, 0.0f, 1.0f, height);
-                g.setColour(juce::Colours::white.withAlpha(0.5f));
+                g.setColour(theme::colour(*this, theme::textMutedId));
                 g.drawText(juce::String(bar + 1), (int) x + 4, 2, 40, (int) geometry_.rulerHeight - 4,
                            juce::Justification::centredLeft);
             }
@@ -444,7 +444,7 @@ public:
 
             if (rowOfTrack_[(size_t) i] % 2 == 0)
             {
-                g.setColour(juce::Colours::white.withAlpha(0.03f));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.03f));
                 g.fillRect(0.0f, y, width, geometry_.laneHeight);
             }
 
@@ -462,9 +462,9 @@ public:
             const auto tagArea = juce::Rectangle<float>(tagLeft(i), y + geometry_.laneHeight * 0.5f - 8.0f,
                                                         32.0f, 16.0f);
             paintFolderMarks(g, i, y);
-            g.setColour(juce::Colours::white.withAlpha(0.12f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.12f));
             g.fillRoundedRectangle(tagArea, 3.0f);
-            g.setColour(juce::Colours::white.withAlpha(track.muted ? 0.35f : 0.7f));
+            g.setColour(track.muted ? theme::colour(*this, theme::textFaintId) : theme::colour(*this, theme::textMutedId));
             g.setFont(juce::FontOptions(10.0f));
             g.drawText(trackTypeTag(track.type), tagArea, juce::Justification::centred);
 
@@ -473,7 +473,7 @@ public:
             const float nameX     = tagArea.getRight() + 6.0f;
             const float nameWidth = muteButtonBounds(i).getX() - nameX - 4.0f;
 
-            g.setColour(juce::Colours::white.withAlpha(track.muted ? 0.35f : 0.85f));
+            g.setColour(track.muted ? theme::colour(*this, theme::textFaintId) : theme::colour(*this, theme::textId));
             g.setFont(juce::FontOptions(13.0f));
             g.drawText(track.name.empty() ? ("Track " + juce::String(i + 1)) : juce::String(track.name),
                        (int) nameX, (int) y, (int) juce::jmax(10.0f, nameWidth),
@@ -485,7 +485,7 @@ public:
 
                 if (i == hoveredMuteTrack_)
                 {
-                    g.setColour(juce::Colours::white.withAlpha(0.10f));
+                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.10f));
                     g.fillRoundedRectangle(bounds.expanded(2.0f), 3.0f);
                 }
 
@@ -511,7 +511,7 @@ public:
 
                 if (i == hoveredGearTrack_)
                 {
-                    g.setColour(juce::Colours::white.withAlpha(0.10f));
+                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.10f));
                     g.fillRoundedRectangle(bounds.expanded(2.0f), 3.0f);
                 }
 
@@ -562,7 +562,7 @@ public:
                 // visible rather than only discoverable by hovering.
                 if (r.getWidth() > 3.0f * kResizeEdgePixels)
                 {
-                    g.setColour(juce::Colours::white.withAlpha(0.18f));
+                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.18f));
                     g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + 2.0f,
                                kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
 
@@ -582,7 +582,7 @@ public:
             // empty; a track with nothing arranged deserves the same.
             if (track.clips.empty())
             {
-                g.setColour(juce::Colours::white.withAlpha(track.muted ? 0.2f : 0.35f));
+                g.setColour(track.muted ? theme::colour(*this, theme::textFaintId) : theme::colour(*this, theme::textFaintId));
                 g.setFont(juce::FontOptions(12.0f));
                 g.drawText(track.type == model::TrackType::Bus
                                ? "Bus - mixes the tracks routed or sent to it (Out and Sends on their mixer strips)"
@@ -634,7 +634,7 @@ public:
 
                 if (r.getWidth() > 3.0f * kResizeEdgePixels)
                 {
-                    g.setColour(juce::Colours::white.withAlpha(0.18f));
+                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.18f));
                     g.fillRect(r.getRight() - kResizeEdgePixels, r.getY() + 2.0f,
                                kResizeEdgePixels - 1.0f, r.getHeight() - 4.0f);
                 }
@@ -645,7 +645,7 @@ public:
         }
 
         // Gutter separator.
-        g.setColour(juce::Colours::white.withAlpha(0.12f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.12f));
         g.fillRect(timelineX - 1.0f, 0.0f, 1.0f, height);
 
         // Playhead.
@@ -904,7 +904,7 @@ private:
 
             g.setColour(juce::Colours::black.withAlpha(0.35f));
             g.fillPath(shaded);
-            g.setColour(juce::Colours::white.withAlpha(0.7f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.7f));
             g.strokePath(curve, juce::PathStrokeType(1.0f));
         };
 
@@ -916,7 +916,7 @@ private:
         const auto [inX, outX] = fadeHandleXs(clip);
         const float maxX       = bounds.getRight() - kFadeHandleSize;
 
-        g.setColour(juce::Colours::white.withAlpha(0.8f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.8f));
         g.fillRect(juce::jlimit(left, maxX, inX), top, kFadeHandleSize, kFadeHandleSize);
         g.fillRect(juce::jlimit(left, maxX, outX - kFadeHandleSize), top, kFadeHandleSize, kFadeHandleSize);
     }
@@ -1008,12 +1008,12 @@ private:
                 triangle.addTriangle(c.x - 3.0f, c.y - 5.0f, c.x - 3.0f, c.y + 5.0f, c.x + 4.0f, c.y);
             else
                 triangle.addTriangle(c.x - 5.0f, c.y - 3.0f, c.x + 5.0f, c.y - 3.0f, c.x, c.y + 4.0f);
-            g.setColour(juce::Colours::white.withAlpha(0.75f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.75f));
             g.fillPath(triangle);
         }
         else if (model::folderedit::parentIndexOf(song_, trackIndex) >= 0)
         {
-            g.setColour(juce::Colours::white.withAlpha(0.18f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.18f));
             g.fillRect(12.0f, y, 2.0f, geometry_.laneHeight);
         }
     }
@@ -1074,7 +1074,7 @@ private:
         const auto area = bounds.reduced(4.0f, 3.0f).removeFromBottom(12.0f);
         g.setColour(juce::Colours::black.withAlpha(0.45f));
         g.fillRect(area.withWidth(juce::jmin(area.getWidth(), 8.0f + 6.0f * (float) label.length())));
-        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.setColour(theme::colour(*this, theme::textId));
         g.drawText(label, area.reduced(3.0f, 0.0f), juce::Justification::centredLeft, true);
     }
 
@@ -1108,7 +1108,7 @@ private:
 
             if (playing)
             {
-                g.setColour(juce::Colours::white.withAlpha(0.14f));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.14f));
                 g.fillRect(row);
             }
 
@@ -1125,7 +1125,7 @@ private:
             if (lanes.rowHeight >= 12.0f && row.getWidth() > 40.0f)
             {
                 g.setFont(juce::FontOptions(9.5f));
-                g.setColour(juce::Colours::white.withAlpha(playing ? 0.85f : 0.5f));
+                g.setColour(playing ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textMutedId));
                 g.drawText(takeLabel(clip, t), row.reduced(4.0f, 0.0f), juce::Justification::centredLeft, true);
             }
 
@@ -1140,7 +1140,7 @@ private:
         {
             const int playing = juce::jlimit(0, (int) clip.takes.size() - 1, clip.activeTake);
             g.setFont(juce::FontOptions(9.5f));
-            g.setColour(juce::Colours::white.withAlpha(0.8f));
+            g.setColour(theme::colour(*this, theme::textId));
             g.drawText(takeLabel(clip, playing) + " / " + juce::String((int) clip.takes.size()),
                        header.reduced(kFadeHandleSize + 4.0f, 0.0f), juce::Justification::centredLeft, true);
         }
@@ -1192,7 +1192,7 @@ private:
         if (blocks.empty())
             return;
 
-        g.setColour(juce::Colours::white.withAlpha(0.55f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.55f));
 
         for (const auto& block : blocks)
         {
@@ -2151,7 +2151,7 @@ private:
         const auto [major, minor]   = secondsGridSteps();
         const double totalSeconds   = clock_.secondsAt(totalBeats());
 
-        g.setColour(juce::Colours::white.withAlpha(0.07f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.07f));
         const int minorLines = (int) std::ceil(totalSeconds / minor);
         for (int i = 0; i <= minorLines; ++i)
             g.fillRect(geometry_.xForBeat(clock_.beatAt((double) i * minor)), geometry_.rulerHeight,
@@ -2163,9 +2163,9 @@ private:
             const double seconds = (double) i * major;
             const float  x       = geometry_.xForBeat(clock_.beatAt(seconds));
 
-            g.setColour(juce::Colours::white.withAlpha(0.16f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.16f));
             g.fillRect(x, 0.0f, 1.0f, height);
-            g.setColour(juce::Colours::white.withAlpha(0.5f));
+            g.setColour(theme::colour(*this, theme::textMutedId));
             g.drawText(juce::String(app::gridLabel(timeDisplay_, seconds, major)), (int) x + 4, 2,
                        (int) app::minLabelSpacing(timeDisplay_.format) - 6, (int) geometry_.rulerHeight - 4,
                        juce::Justification::centredLeft);
@@ -2505,7 +2505,7 @@ private:
         juce::Graphics::ScopedSaveState saved(g);
         g.reduceClipRegion(box.toNearestInt());
 
-        g.setColour(juce::Colours::white.withAlpha(0.15f));
+        g.setColour(theme::colour(*this, theme::dividerId));
         g.drawHorizontalLine((int) app::yForGain(1.0f, box.getY(), box.getHeight()), box.getX(), box.getRight());
 
         juce::Path curve;
@@ -2743,15 +2743,15 @@ private:
 
             if (right - left >= 1.0f)
             {
-                g.setColour(juce::Colours::white.withAlpha(0.18f));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.18f));
                 g.fillRect(left, y, right - left, geometry_.laneHeight);
-                g.setColour(juce::Colours::white.withAlpha(0.55f));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.55f));
                 g.fillRect(left, y, 1.0f, geometry_.laneHeight);
                 g.fillRect(right - 1.0f, y, 1.0f, geometry_.laneHeight);
             }
             else
             {
-                g.setColour(juce::Colours::white.withAlpha(0.8f));
+                g.setColour(theme::colour(*this, theme::textId).withAlpha(0.8f));
                 g.fillRect(left, y, 1.0f, geometry_.laneHeight);
             }
         }

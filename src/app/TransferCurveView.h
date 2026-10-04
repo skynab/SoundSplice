@@ -76,15 +76,15 @@ public:
         g.setFont(juce::FontOptions(9.0f));
         for (float db : { -80.0f, -60.0f, -40.0f, -20.0f })
         {
-            g.setColour(juce::Colours::white.withAlpha(0.08f));
+            g.setColour(theme::colour(*this, theme::dividerSoftId));
             g.drawVerticalLine((int) xForDb(db), area.getY(), area.getBottom());
             g.drawHorizontalLine((int) yForDb(db), area.getX(), area.getRight());
-            g.setColour(juce::Colours::white.withAlpha(0.35f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText(juce::String((int) db), juce::Rectangle<float>(xForDb(db) + 2.0f, area.getBottom() - 11.0f, 30.0f, 10.0f),
                        juce::Justification::centredLeft);
         }
 
-        g.setColour(juce::Colours::white.withAlpha(0.2f));
+        g.setColour(theme::colour(*this, theme::dividerId));
         g.drawLine(area.getX(), area.getBottom(), area.getRight(), area.getY(), 1.0f); // no change
 
         juce::Path line;

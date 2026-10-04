@@ -6,6 +6,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include "model/Song.h"
 
 namespace soundsplice
@@ -40,7 +42,7 @@ public:
 
         coverLabel_.setText("Cover", juce::dontSendNotification);
         addAndMakeVisible(coverLabel_);
-        coverPath_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+        coverPath_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         coverPath_.setMinimumHorizontalScale(0.6f);
         addAndMakeVisible(coverPath_);
         chooseCover_.onClick = [this] { chooseCover(); };
@@ -55,7 +57,7 @@ public:
         hint_.setText("Written into exported files as tags: ID3 in MP3, Vorbis comments in FLAC and Ogg, INFO and bext in WAV. "
                       "Markers become chapters.",
                       juce::dontSendNotification);
-        hint_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        hint_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(hint_);
 
         saveButton_.onClick   = [this] { if (onSave) onSave(read()); };

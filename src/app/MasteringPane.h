@@ -238,7 +238,7 @@ public:
         g.fillRoundedRectangle(curve, 3.0f);
 
         const float zeroY = yForDb(0.0f, curve);
-        g.setColour(juce::Colours::white.withAlpha(0.25f));
+        g.setColour(theme::colour(*this, theme::dividerId));
         g.drawLine(curve.getX(), zeroY, curve.getRight(), zeroY);
 
         // Built from the same ShelfPeakFilter the rack runs, so the drawing
@@ -261,7 +261,7 @@ public:
         }
 
         g.setColour(settings_.enabled ? theme::colour(*this, theme::signalId).withAlpha(0.9f)
-                                      : juce::Colours::white.withAlpha(0.25f));
+                                      : theme::colour(*this, theme::dividerId));
         g.strokePath(path, juce::PathStrokeType(1.5f));
 
         // Gain-reduction meter, in the strip under the curve — both are
@@ -281,7 +281,7 @@ public:
                 g.fillRoundedRectangle(meter.withWidth(meter.getWidth() * amount), 2.0f);
             }
 
-            g.setColour(juce::Colours::white.withAlpha(0.75f));
+            g.setColour(theme::colour(*this, theme::textMutedId));
             g.setFont(juce::FontOptions(10.0f));
             g.drawText(juce::String(reductionDb_, 1) + " dB", meter, juce::Justification::centred);
         }
@@ -400,7 +400,7 @@ private:
     {
         label.setText(text, juce::dontSendNotification);
         label.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
-        label.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.85f));
+        label.setColour(juce::Label::textColourId, theme::colour(*this, theme::textId));
         label.setInterceptsMouseClicks(false, false);
         content_.addAndMakeVisible(label);
     }

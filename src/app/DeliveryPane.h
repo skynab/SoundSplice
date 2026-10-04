@@ -49,7 +49,7 @@ public:
 
         summary_.setFont(juce::FontOptions(15.0f, juce::Font::bold));
         addAndMakeVisible(summary_);
-        description_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        description_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(description_);
 
         auto& header = table_.getHeader();
@@ -137,7 +137,7 @@ private:
         if (selected)
             g.fillAll(juce::Colours::steelblue.withAlpha(0.35f));
         else if (row % 2 == 1)
-            g.fillAll(juce::Colours::white.withAlpha(0.03f));
+            g.fillAll(theme::colour(*this, theme::textId).withAlpha(0.03f));
     }
 
     void paintCell(juce::Graphics& g, int row, int column, int width, int height, bool) override
@@ -160,7 +160,7 @@ private:
             case 5: text = r.pass ? juce::String() : juce::String(r.advice); break;
             default: break;
         }
-        g.setColour(juce::Colours::white.withAlpha(column == 5 ? 0.7f : 0.95f));
+        g.setColour(column == 5 ? theme::colour(*this, theme::textMutedId) : theme::colour(*this, theme::textId));
         g.drawText(text, 4, 0, width - 8, height, juce::Justification::centredLeft, true);
     }
 

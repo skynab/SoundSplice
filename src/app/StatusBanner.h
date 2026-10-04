@@ -75,10 +75,10 @@ public:
         g.setColour(theme::surface(*this, theme::popupId).withAlpha(0.94f * opacity_));
         g.fillRoundedRectangle(area, 5.0f);
 
-        g.setColour((isError_ ? theme::colour(*this, theme::dangerTextId) : juce::Colours::white).withAlpha(0.45f * opacity_));
+        g.setColour((isError_ ? theme::colour(*this, theme::dangerTextId) : theme::colour(*this, theme::textId)).withAlpha(0.45f * opacity_));
         g.drawRoundedRectangle(area.reduced(0.5f), 5.0f, 1.0f);
 
-        g.setColour(juce::Colours::white.withAlpha((isError_ ? 0.98f : 0.85f) * opacity_));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha((isError_ ? 0.98f : 0.85f) * opacity_));
         g.setFont(font());
         g.drawText(message_, getLocalBounds().reduced(kPadding, 0), juce::Justification::centred, false);
     }

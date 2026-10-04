@@ -211,7 +211,7 @@ public:
         drawCurve(g, lane, range);
         drawPlayhead(g, lane);
 
-        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.setColour(theme::colour(*this, theme::textMutedId));
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
         g.drawText(juce::String(range.topLabel), lane.getX() + 4, lane.getY() + 2, 120, 14,
                    juce::Justification::centredLeft);
@@ -410,11 +410,11 @@ private:
         // flat lane sits on, and the one a curve is read as departing from.
         const float defaultY = automation_.yForValue(range.defaultValue, range,
                                                    (float) lane.getY(), (float) lane.getHeight());
-        g.setColour(juce::Colours::white.withAlpha(0.12f));
+        g.setColour(theme::colour(*this, theme::dividerSoftId));
         g.drawHorizontalLine((int) defaultY, (float) lane.getX(), (float) lane.getRight());
 
         // Bar lines, matching the arrangement's.
-        g.setColour(juce::Colours::white.withAlpha(0.06f));
+        g.setColour(theme::colour(*this, theme::dividerSoftId));
         for (int bar = 0; ; ++bar)
         {
             const float x = timeline_.xForBeat((double) bar * 4.0);
@@ -506,7 +506,7 @@ private:
         if (x < (float) lane.getX() || x > (float) lane.getRight())
             return;
 
-        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.5f));
         g.drawVerticalLine((int) x, (float) lane.getY(), (float) lane.getBottom());
     }
 

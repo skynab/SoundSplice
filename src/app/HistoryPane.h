@@ -48,8 +48,8 @@ public:
             if (step.now)
                 g.fillAll(juce::Colours::steelblue.withAlpha(0.35f));
             if (selected)
-                g.fillAll(juce::Colours::white.withAlpha(0.12f));
-            g.setColour(juce::Colours::white.withAlpha(step.future ? 0.45f : 0.95f));
+                g.fillAll(theme::colour(*this, theme::textId).withAlpha(0.12f));
+            g.setColour(step.future ? theme::colour(*this, theme::textFaintId) : theme::colour(*this, theme::textId));
             g.setFont(juce::FontOptions(14.0f, step.now ? juce::Font::bold : juce::Font::plain));
             g.drawText(juce::String(row) + ".  " + step.label + (step.now ? "   (now)" : ""), 8, 0, w - 16, h,
                        juce::Justification::centredLeft, true);
@@ -67,8 +67,8 @@ public:
         {
             const auto& branch = branchList_[(size_t) row];
             if (selected)
-                g.fillAll(juce::Colours::white.withAlpha(0.12f));
-            g.setColour(juce::Colours::white.withAlpha(branch.from >= 0 ? 0.9f : 0.4f));
+                g.fillAll(theme::colour(*this, theme::textId).withAlpha(0.12f));
+            g.setColour(branch.from >= 0 ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textFaintId));
             g.setFont(juce::FontOptions(13.0f));
             g.drawText(branch.label + "  (" + juce::String(branch.steps) + (branch.steps == 1 ? " step" : " steps")
                            + (branch.from >= 0 ? ", from step " + juce::String(branch.from) : juce::String(", off this line")) + ")",
@@ -100,7 +100,7 @@ public:
             addAndMakeVisible(*button);
 
         branchHeading_.setText("Branches set aside by an edit after an undo", juce::dontSendNotification);
-        branchHeading_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        branchHeading_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(branchHeading_);
 
         comparison_.setMultiLine(true);

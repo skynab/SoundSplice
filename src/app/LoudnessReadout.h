@@ -76,12 +76,12 @@ public:
         {
             auto box = area.removeFromLeft(width);
             g.setFont(juce::Font(juce::FontOptions(10.0f)));
-            g.setColour(juce::Colours::white.withAlpha(0.5f));
+            g.setColour(theme::colour(*this, theme::textMutedId));
             g.drawText(cell.name, box.removeFromLeft(juce::jmin(26.0f, box.getWidth() * 0.4f)),
                        juce::Justification::centredLeft, false);
 
             g.setFont(juce::Font(juce::FontOptions(12.0f)));
-            g.setColour(cell.warn ? theme::colour(*this, theme::dangerTextId) : juce::Colours::white.withAlpha(0.9f));
+            g.setColour(cell.warn ? theme::colour(*this, theme::dangerTextId) : theme::colour(*this, theme::textId));
             g.drawText(cell.value, box, juce::Justification::centredLeft, true);
         }
     }

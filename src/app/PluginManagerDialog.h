@@ -153,7 +153,7 @@ private:
         if (selected)
             g.fillAll(theme::colour(*this, theme::accentId).withAlpha(0.3f));
         else if (row % 2 == 0)
-            g.fillAll(juce::Colours::white.withAlpha(0.03f));
+            g.fillAll(theme::colour(*this, theme::textId).withAlpha(0.03f));
     }
 
     void paintCell(juce::Graphics& g, int row, int column, int width, int height, bool) override
@@ -171,7 +171,7 @@ private:
             default:      break;
         }
 
-        g.setColour(juce::Colours::white.withAlpha(entry.state == Row::State::On ? 0.9f : 0.5f));
+        g.setColour(entry.state == Row::State::On ? theme::colour(*this, theme::textId) : theme::colour(*this, theme::textMutedId));
         g.setFont(juce::FontOptions(13.0f));
         g.drawText(text, 4, 0, width - 8, height, juce::Justification::centredLeft, true);
     }

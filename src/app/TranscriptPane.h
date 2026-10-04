@@ -54,7 +54,7 @@ public:
         pausesButton_.setTooltip("Select every pause over a second; Delete shortens each to under half a second");
         for (auto* button : { &transcribeButton_, &fillersButton_, &pausesButton_, &deleteButton_ })
             addAndMakeVisible(*button);
-        status_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        status_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(status_);
 
         text_.setWantsKeyboardFocus(true);
@@ -156,7 +156,7 @@ private:
         {
             if (owner->tokens_.empty())
             {
-                g.setColour(juce::Colours::white.withAlpha(0.5f));
+                g.setColour(theme::colour(*this, theme::textMutedId));
                 g.setFont(juce::FontOptions(14.0f));
                 g.drawFittedText(owner->emptyMessage_, getLocalBounds().reduced(8), juce::Justification::topLeft, 4);
                 return;
@@ -173,10 +173,10 @@ private:
                 }
                 else if (i == owner->playing_)
                 {
-                    g.setColour(juce::Colours::white.withAlpha(0.15f));
+                    g.setColour(theme::colour(*this, theme::textId).withAlpha(0.15f));
                     g.fillRoundedRectangle(t.box.expanded(1.0f, 0.0f), 3.0f);
                 }
-                auto colour = juce::Colours::white;
+                auto colour = theme::colour(*this, theme::textId);
                 if (t.pause)
                     colour = juce::Colour(0xff8fb6d9);
                 else if (t.filler)

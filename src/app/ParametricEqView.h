@@ -92,16 +92,16 @@ public:
         for (float hz : { 100.0f, 1000.0f, 10000.0f })
         {
             const float x = xForHz(hz);
-            g.setColour(juce::Colours::white.withAlpha(0.1f));
+            g.setColour(theme::colour(*this, theme::dividerSoftId));
             g.drawVerticalLine((int) x, area.getY(), area.getBottom());
-            g.setColour(juce::Colours::white.withAlpha(0.4f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText(hz >= 1000.0f ? juce::String((int) (hz / 1000.0f)) + "k" : juce::String((int) hz),
                        juce::Rectangle<float>(x + 2.0f, area.getBottom() - 11.0f, 30.0f, 10.0f),
                        juce::Justification::centredLeft);
         }
         for (float db : { -12.0f, 0.0f, 12.0f })
         {
-            g.setColour(juce::Colours::white.withAlpha(db == 0.0f ? 0.25f : 0.1f));
+            g.setColour(db == 0.0f ? theme::colour(*this, theme::dividerId) : theme::colour(*this, theme::dividerSoftId));
             g.drawHorizontalLine((int) yForDb(db), area.getX(), area.getRight());
         }
 

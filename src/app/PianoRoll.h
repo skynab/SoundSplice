@@ -528,7 +528,7 @@ public:
         if (noClipSelected_)
         {
             g.fillAll(theme::surface(*this, theme::paneId));
-            g.setColour(juce::Colours::white.withAlpha(0.45f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.setFont(juce::FontOptions(13.0f));
             g.drawText("Select a track and clip to edit its notes",
                        getLocalBounds(), juce::Justification::centred);
@@ -564,14 +564,14 @@ public:
             // Gutter cell: the row's pitch name.
             g.setColour(black ? juce::Colour(0xff222226) : juce::Colour(0xff35353a));
             g.fillRect(juce::Rectangle<float>(0.0f, y, gx, ch));
-            g.setColour(juce::Colours::white.withAlpha(black ? 0.55f : 0.85f));
+            g.setColour(black ? theme::colour(*this, theme::textMutedId) : theme::colour(*this, theme::textId));
             g.drawText(labelForRow(r), 4, (int) y, (int) gx - 6, (int) ch,
                        juce::Justification::centredLeft);
 
             // Grid lane for this row.
-            g.setColour(hovered ? juce::Colours::white.withAlpha(0.10f)
+            g.setColour(hovered ? theme::colour(*this, theme::textId).withAlpha(0.10f)
                                 : (black ? juce::Colours::black.withAlpha(0.28f)
-                                         : juce::Colours::white.withAlpha(0.05f)));
+                                         : theme::colour(*this, theme::textId).withAlpha(0.05f)));
             g.fillRect(juce::Rectangle<float>(gx, y, w - gx, ch));
         }
 
@@ -587,7 +587,7 @@ public:
             const bool bar  = (s % stepsPerBar) == 0;
             const bool beat = (s % stepsPerBeat) == 0;
 
-            g.setColour(juce::Colours::white.withAlpha(bar ? 0.38f : (beat ? 0.20f : 0.07f)));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(bar ? 0.38f : (beat ? 0.20f : 0.07f)));
             g.fillRect(geometry_.xForStep(s, w), 0.0f, bar ? 2.0f : 1.0f, h);
         }
 
@@ -595,11 +595,11 @@ public:
         for (int r = 0; r <= geometry_.numRows; ++r)
         {
             const bool heavy = (pitchForRow(std::min(r, geometry_.numRows - 1)) % 12) == 0;
-            g.setColour(juce::Colours::white.withAlpha(heavy ? 0.18f : 0.06f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(heavy ? 0.18f : 0.06f));
             g.fillRect(0.0f, geometry_.yForRow(r, h), w, heavy ? 2.0f : 1.0f);
         }
 
-        g.setColour(juce::Colours::white.withAlpha(0.16f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.16f));
         g.fillRect(gx - 1.0f, 0.0f, 1.0f, h);
 
         paintPlayhead(g, w, h);
@@ -834,10 +834,10 @@ private:
 
         g.setColour(juce::Colour(0xff1a1a1e));
         g.fillRect(juce::Rectangle<float>(0.0f, top, w, height));
-        g.setColour(juce::Colours::white.withAlpha(0.16f));
+        g.setColour(theme::colour(*this, theme::textId).withAlpha(0.16f));
         g.fillRect(0.0f, top, w, 1.0f);
 
-        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.setColour(theme::colour(*this, theme::textMutedId));
         g.setFont(juce::FontOptions(10.0f));
         g.drawText("Vel", 4, (int) top, (int) gutter - 6, (int) height, juce::Justification::centredLeft);
 

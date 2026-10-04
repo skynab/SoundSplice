@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include "model/Effects.h"
 
 #include "EffectChainPanel.h"
@@ -205,7 +207,7 @@ public:
         hintLabel_.setText("Effects are rendered into the selected audio, not left on the track.",
                            juce::dontSendNotification);
         hintLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
-        hintLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        hintLabel_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         hintLabel_.setInterceptsMouseClicks(false, false);
         addAndMakeVisible(hintLabel_);
 

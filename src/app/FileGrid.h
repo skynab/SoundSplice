@@ -3,6 +3,8 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include <algorithm>
 #include <functional>
 #include <map>
@@ -262,7 +264,7 @@ private:
             return;
         if (rowIsSelected)
         {
-            g.fillAll(juce::Colours::white.withAlpha(0.16f));
+            g.fillAll(theme::colour(*this, theme::textId).withAlpha(0.16f));
             return;
         }
         const auto kind = classifyFile(entries_[(size_t) rowNumber]);
@@ -309,7 +311,7 @@ private:
             default: break;
         }
 
-        g.setColour(columnId == 2 ? colourForFileKind(kind) : juce::Colours::white.withAlpha(0.85f));
+        g.setColour(columnId == 2 ? colourForFileKind(kind) : theme::colour(*this, theme::textId));
         g.drawFittedText(text, 4, 0, width - 8, height, juce::Justification::centredLeft, 1);
     }
 

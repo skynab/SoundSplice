@@ -101,7 +101,7 @@ public:
 
         if (spectrum_.isEmpty())
         {
-            g.setColour(juce::Colours::white.withAlpha(0.4f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText("Select audio and press Analyse", area, juce::Justification::centred);
             return;
         }
@@ -180,10 +180,10 @@ private:
         for (float hz : { 100.0f, 1000.0f, 10000.0f })
         {
             const float x = area.getX() + proportionForHz(hz) * area.getWidth();
-            g.setColour(juce::Colours::white.withAlpha(0.10f));
+            g.setColour(theme::colour(*this, theme::dividerSoftId));
             g.drawVerticalLine((int) x, area.getY(), area.getBottom());
 
-            g.setColour(juce::Colours::white.withAlpha(0.45f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText(hz >= 1000.0f ? juce::String((int) (hz / 1000.0f)) + "k"
                                      : juce::String((int) hz),
                        juce::Rectangle<float>(x + 2.0f, area.getBottom() - 12.0f, 30.0f, 11.0f),
@@ -193,10 +193,10 @@ private:
         for (float db : { 0.0f, -24.0f, -48.0f, -72.0f })
         {
             const float y = yForDb(db, area);
-            g.setColour(juce::Colours::white.withAlpha(db == 0.0f ? 0.22f : 0.08f));
+            g.setColour(db == 0.0f ? theme::colour(*this, theme::dividerId) : theme::colour(*this, theme::dividerSoftId));
             g.drawHorizontalLine((int) y, area.getX(), area.getRight());
 
-            g.setColour(juce::Colours::white.withAlpha(0.4f));
+            g.setColour(theme::colour(*this, theme::textFaintId));
             g.drawText(juce::String((int) db),
                        juce::Rectangle<float>(area.getX() + 2.0f, y - 11.0f, 30.0f, 11.0f),
                        juce::Justification::centredLeft);

@@ -44,6 +44,13 @@ namespace theme
         clipTopId     = 0x5e51000e, // a clip's body on the timeline, shaded down
         clipBottomId  = 0x5e51000f, // to this
         okId          = 0x5e510010, // a pass, a healthy reading: always beside a word
+
+        // Text and rules: what was white at one strength or another.
+        textId        = 0x5e510011, // anything read: names, values, the selected tab
+        textMutedId   = 0x5e510012, // secondary text, hints, idle labels
+        textFaintId   = 0x5e510013, // axis labels and kickers: nothing anyone must act on
+        dividerId     = 0x5e510014, // pane borders, the 0 dB line, separators
+        dividerSoftId = 0x5e510015, // grid lines, rules between rows
     };
 
     struct Theme
@@ -67,6 +74,15 @@ namespace theme
         juce::Colour clipTop    { 0xff033d44 }; // color-clip-top
         juce::Colour clipBottom { 0xff00282f }; // color-clip-bottom
         juce::Colour ok         { 0xff8ed09c }; // color-ok
+
+        // The design system's text and rules are its text colour at a strength,
+        // so a tint of text over any pane reads the same; High Contrast's are
+        // solid, its text at 7:1 or better and its rules at 3:1 on black.
+        juce::Colour text        { 0xffe9e9ed }; // color-text
+        juce::Colour textMuted   { 0x8ce9e9ed }; // color-text-muted, 55%
+        juce::Colour textFaint   { 0x61e9e9ed }; // color-text-faint, 38%
+        juce::Colour divider     { 0x29e9e9ed }; // color-divider, 16%
+        juce::Colour dividerSoft { 0x12e9e9ed }; // color-divider-soft, 7%
     };
 
     inline const std::vector<Theme>& all()
@@ -100,7 +116,9 @@ namespace theme
               juce::Colour(0xffffd400), true,
               juce::Colour(0xff00ebff), juce::Colour(0xffffffff), juce::Colour(0xffffd400),
               juce::Colour(0xffff4040), juce::Colour(0xffff6b6b),
-              juce::Colour(0xff002f33), juce::Colour(0xff001a1d), juce::Colour(0xff7dff8a) },
+              juce::Colour(0xff002f33), juce::Colour(0xff001a1d), juce::Colour(0xff7dff8a),
+              juce::Colour(0xffffffff), juce::Colour(0xffd6d6d6), juce::Colour(0xffbdbdbd),
+              juce::Colour(0xffffffff), juce::Colour(0xff8a8a8a) },
         };
         return themes;
     }
@@ -159,6 +177,11 @@ namespace theme
             case clipTopId:     return nocturne.clipTop;
             case clipBottomId:  return nocturne.clipBottom;
             case okId:          return nocturne.ok;
+            case textId:        return nocturne.text;
+            case textMutedId:   return nocturne.textMuted;
+            case textFaintId:   return nocturne.textFaint;
+            case dividerId:     return nocturne.divider;
+            case dividerSoftId: return nocturne.dividerSoft;
             default:            return nocturne.pane;
         }
     }
@@ -199,6 +222,11 @@ public:
         setColour(theme::clipTopId, theme.clipTop);
         setColour(theme::clipBottomId, theme.clipBottom);
         setColour(theme::okId, theme.ok);
+        setColour(theme::textId, theme.text);
+        setColour(theme::textMutedId, theme.textMuted);
+        setColour(theme::textFaintId, theme.textFaint);
+        setColour(theme::dividerId, theme.divider);
+        setColour(theme::dividerSoftId, theme.dividerSoft);
 
         // The accent where JUCE's own widgets show something on or chosen.
         setColour(juce::TextButton::buttonOnColourId, chosen.withMultipliedSaturation(0.8f).darker(0.2f));

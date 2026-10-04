@@ -43,7 +43,7 @@ public:
         offset_.setTooltip("Where in the song the video's first frame is");
         addAndMakeVisible(offset_);
 
-        status_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        status_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(status_);
         video_.onErrorOccurred = [this](const juce::String& error) { status_.setText("Can't play it: " + error, juce::dontSendNotification); };
         show({}, 0.0);

@@ -4,6 +4,8 @@
 #include <memory>
 
 #include <juce_gui_basics/juce_gui_basics.h>
+
+#include "Theme.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 
 #include "Scripting.h"
@@ -51,7 +53,7 @@ public:
         for (auto* button : { &runButton_, &openButton_, &saveButton_, &helpButton_ })
             addAndMakeVisible(*button);
         addAndMakeVisible(nameLabel_);
-        nameLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        nameLabel_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         setName({});
     }
 

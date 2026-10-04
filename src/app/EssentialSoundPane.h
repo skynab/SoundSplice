@@ -8,6 +8,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Theme.h"
+
 #include "model/EssentialSound.h"
 
 namespace soundsplice
@@ -69,7 +71,7 @@ public:
 
         for (auto* label : { &heading_, &tasksHeading_, &loudnessHeading_, &duckHeading_ })
         {
-            label->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.65f));
+            label->setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
             addAndMakeVisible(*label);
         }
         tasksHeading_.setText("Tasks", juce::dontSendNotification);

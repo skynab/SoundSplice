@@ -97,7 +97,7 @@ public:
             {
                 const auto light = horizontal_ ? bar.removeFromRight(juce::jmin(8.0f, bar.getWidth() * 0.2f))
                                                : bar.removeFromTop(juce::jmin(6.0f, bar.getHeight() * 0.2f));
-                g.setColour(clipped_[ch] ? theme::colour(*this, theme::dangerId) : juce::Colours::white.withAlpha(0.12f));
+                g.setColour(clipped_[ch] ? theme::colour(*this, theme::dangerId) : theme::colour(*this, theme::textId).withAlpha(0.12f));
                 g.fillRect(light.reduced(horizontal_ ? 1.0f : 0.0f, horizontal_ ? 0.0f : 1.0f));
             }
 
@@ -109,7 +109,7 @@ public:
             else
                 g.fillRect(bar.getX(), bar.getBottom() - bar.getHeight() * levelNorm, bar.getWidth(), bar.getHeight() * levelNorm);
 
-            g.setColour(juce::Colours::white.withAlpha(0.85f));
+            g.setColour(theme::colour(*this, theme::textId).withAlpha(0.85f));
             if (horizontal_)
                 g.fillRect(bar.getX() + bar.getWidth() * holdNorm - 1.0f, bar.getY(), 2.0f, bar.getHeight());
             else

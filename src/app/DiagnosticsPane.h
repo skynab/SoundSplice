@@ -51,7 +51,7 @@ public:
             addAndMakeVisible(button);
 
         summary_.setText("Select an audio clip and Scan", juce::dontSendNotification);
-        summary_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        summary_.setColour(juce::Label::textColourId, theme::colour(*this, theme::textMutedId));
         addAndMakeVisible(summary_);
         updateButtons();
     }
@@ -151,7 +151,7 @@ private:
                                        theme::colour(*this, theme::signalId), juce::Colours::violet };
         g.setColour(colours[(int) rows_[(size_t) row].issue.kind]);
         g.fillEllipse(6.0f, (float) height * 0.5f - 4.0f, 8.0f, 8.0f);
-        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        g.setColour(theme::colour(*this, theme::textId));
         g.setFont(juce::FontOptions(13.0f));
         g.drawText(describe(rows_[(size_t) row]), 22, 0, width - 26, height, juce::Justification::centredLeft, true);
     }
