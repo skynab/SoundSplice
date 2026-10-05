@@ -173,6 +173,7 @@ void MainComponent::toggleRecording()
 
         recordingFile_        = file;
         audioTake_.mainTrack = targets.front();
+        showLiveTake();
 
         audioTake_.running = true;
         recordButton.setToggleState(true, juce::dontSendNotification); // swaps to the stop square
@@ -206,6 +207,12 @@ void MainComponent::finishRecordingIfReady()
     if (! audioTake_.running || ! engine_.isRecordingFinished())
         return;
     audioTake_.running = false;
+
+    // The editor drew the take as it came in; the clip it becomes is read
+    // afresh, so its peaks are the file's. Whatever was selected before is
+    // too, should the take come to nothing: the live one drew over it.
+    audioEditor_.endLiveTake();
+    waveformPeaksKey_.clear();
 
     // However it ended. A take that stopped itself on silence also stops the
     // transport, as the Stop button would have.
@@ -269,6 +276,7 @@ void MainComponent::finishRecordingIfReady()
 
     if (placed == 0)
     {
+        refreshAudioEditorForSelected();
         showError("Recording was empty (no input captured)");
         return;
     }
@@ -305,6 +313,31 @@ void MainComponent::finishRecordingIfReady()
         showStatus("Recorded " + juce::String(placed) + " tracks");
     else
         showStatus("Recorded: " + file.getFileName());
+}
+
+/** Shows the main take in the waveform editor as it's recorded, on the
+    track it's going onto. */
+void MainComponent::showLiveTake()
+{
+    const auto& song  = history_.current();
+    const int   track = audioTake_.mainTrack;
+    const bool  known = track >= 0 && track < (int) song.tracks.size();
+    livePeaks_.clear();
+    livePeaks_.reserve(4096);
+    audioEditor_.beginLiveTake(known ? juce::String(song.tracks[(size_t) track].name) + " - recording"
+                                     : juce::String("New track - recording"),
+                               known ? song.tracks[(size_t) track].colour : 0,
+                               engine_.recordedChannels(), engine_.sampleRate());
+}
+
+/** From the UI timer: hands the editor what the take has recorded since. */
+void MainComponent::feedLiveTake()
+{
+    if (! audioEditor_.showsLiveTake())
+        return;
+    livePeaks_.clear();
+    engine_.takeLivePeaks(livePeaks_);
+    audioEditor_.appendLiveTake(livePeaks_);
 }
 
 /** The record format for a take onto @p trackIndex: the Recording Format

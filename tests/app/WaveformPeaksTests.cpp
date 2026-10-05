@@ -221,3 +221,37 @@ TEST_CASE("A zero or negative bin size is corrected, not divided by", "[app][wav
     REQUIRE_FALSE(peaks.isEmpty());
     REQUIRE_FALSE(peaks.range(0, 0, 100).isEmpty());
 }
+
+TEST_CASE("Bins added one at a time read as a build of the same samples", "[app][waveformpeaks]")
+{
+    // How a take being recorded is drawn: its bins arrive summed up already,
+    // and must draw just as the file they become will.
+    const auto samples = ramp(16, -1.0f, 1.0f);
+
+    WaveformPeaks built;
+    built.build({ samples, samples }, 4);
+
+    WaveformPeaks live;
+    live.start(2, 4);
+    REQUIRE(live.isEmpty());
+    REQUIRE(live.numChannels() == 2);
+    for (int b = 0; b < 4; ++b)
+    {
+        PeakBin bins[2];
+        float   squares[2] {};
+        bins[0] = bins[1] = built.range(0, b * 4, b * 4 + 4);
+        for (int i = b * 4; i < b * 4 + 4; ++i)
+            squares[0] = squares[1] = squares[0] + samples[(size_t) i] * samples[(size_t) i];
+        live.appendBin(bins, squares);
+    }
+
+    REQUIRE(live.totalSamples() == built.totalSamples());
+    REQUIRE(live.samplesPerBin() == 4);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int from = 0; from < 16; from += 3)
+        {
+            REQUIRE(live.range(ch, from, from + 5).minimum == built.range(ch, from, from + 5).minimum);
+            REQUIRE(live.range(ch, from, from + 5).maximum == built.range(ch, from, from + 5).maximum);
+            REQUIRE(std::abs(live.rms(ch, from, from + 5) - built.rms(ch, from, from + 5)) < 1.0e-5f);
+        }
+}

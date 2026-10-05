@@ -276,6 +276,13 @@ public:
     /** Where the transport was when capture began, in samples, or -1. */
     int64_t recordedTakeStartSample() const noexcept { return recorder_.startPlayheadSamples(); }
 
+    /** The main take's peaks recorded since last asked, appended to @p out,
+        for drawing it as it's recorded. Message thread. */
+    void takeLivePeaks(std::vector<AudioRecorder::LivePeak>& out) { recorder_.takeLivePeaks(out); }
+
+    /** Channels the main take is written with, 1 or 2. */
+    int recordedChannels() const noexcept { return recorder_.numChannels(); }
+
     /** How late a recording is against what was playing, as the device
         reports it: its input latency plus its output latency - the sound
         leaves late, is played along to, and comes back in late. 0 with no

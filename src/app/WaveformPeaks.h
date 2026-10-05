@@ -152,6 +152,31 @@ public:
         totalSamples_ += chunkLength;
     }
 
+    /** Empties the summary to @p channels channels of @p samplesPerBin
+        samples a bin, for appendBin to add to as audio arrives - a take
+        being recorded, summed up on the audio thread. */
+    void start(int channels, int samplesPerBin)
+    {
+        clear();
+        samplesPerBin_ = std::max(1, samplesPerBin);
+        bins_.resize((size_t) std::max(1, channels));
+        squares_.resize(bins_.size());
+    }
+
+    /** Adds one whole bin at the end: for each channel, @p bins[ch] its
+        lowest and highest sample and @p squares[ch] the sum of their
+        squares. For a summary from start(), which always ends on a bin
+        boundary. */
+    void appendBin(const PeakBin* bins, const float* squares)
+    {
+        for (size_t ch = 0; ch < bins_.size(); ++ch)
+        {
+            bins_[ch].push_back(bins[ch]);
+            squares_[ch].push_back(squares[ch]);
+        }
+        totalSamples_ += samplesPerBin_;
+    }
+
     void clear()
     {
         bins_.clear();

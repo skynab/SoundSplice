@@ -1048,6 +1048,7 @@ void MainComponent::timerCallback()
         return;
 
     engine_.pump();
+    feedLiveTake();
     finishRecordingIfReady();
     refreshHistoryPane();
     refreshTranscriptPane();

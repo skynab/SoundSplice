@@ -117,6 +117,82 @@ TEST_CASE("A take is recorded in the chosen format, from the chosen input", "[gu
     thread.stopThread(1000);
 }
 
+TEST_CASE("A take hands over its peaks as it's recorded, for drawing it live", "[gui][recording]")
+{
+    juce::TimeSliceThread thread("Test writer");
+    thread.startThread();
+
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getNonexistentChildFile("SoundSpliceLivePeaksTest", ".wav");
+
+    AudioRecorder recorder;
+    recorder.keepLivePeaks();
+    recorder.prepare(48000.0, 2);
+    recorder.setFormat({ 24, 1, 0 }); // mono: its one channel fills both sides
+    REQUIRE(recorder.arm(file, thread));
+
+    // A ramp, so each bin's lowest and highest are its first and last.
+    constexpr int      kBin = AudioRecorder::kLivePeakSamples;
+    std::vector<float> block(100);
+    const float*       channels[] { block.data() };
+    for (int b = 0; b < 3; ++b)
+    {
+        for (int n = 0; n < 100; ++n)
+            block[(size_t) n] = (float) (b * 100 + n) / 1000.0f;
+        recorder.process(channels, 1, 100, true, b * 100);
+    }
+
+    // 300 samples are four whole bins; the fifth is still filling.
+    std::vector<AudioRecorder::LivePeak> peaks;
+    recorder.takeLivePeaks(peaks);
+    REQUIRE(peaks.size() == 300 / kBin);
+    for (size_t i = 0; i < peaks.size(); ++i)
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            REQUIRE(peaks[i].minimum[ch] == (float) ((int) i * kBin) / 1000.0f);
+            REQUIRE(peaks[i].maximum[ch] == (float) ((int) i * kBin + kBin - 1) / 1000.0f);
+        }
+
+    // Collected once: asking again brings only what's new.
+    peaks.clear();
+    recorder.takeLivePeaks(peaks);
+    REQUIRE(peaks.empty());
+
+    recorder.disarm();
+    recorder.process(channels, 1, 100, true, 300);
+    REQUIRE(recorder.finishTake() == file);
+    file.deleteFile();
+    thread.stopThread(1000);
+}
+
+TEST_CASE("Without keepLivePeaks a take queues no peaks", "[gui][recording]")
+{
+    juce::TimeSliceThread thread("Test writer");
+    thread.startThread();
+
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getNonexistentChildFile("SoundSpliceNoLivePeaksTest", ".wav");
+
+    AudioRecorder recorder;
+    recorder.prepare(48000.0, 1);
+    REQUIRE(recorder.arm(file, thread));
+
+    std::vector<float> block(1024, 0.5f);
+    const float*       channels[] { block.data() };
+    recorder.process(channels, 1, 1024, true, 0);
+    REQUIRE(recorder.recordedSampleCount() == 1024);
+
+    std::vector<AudioRecorder::LivePeak> peaks;
+    recorder.takeLivePeaks(peaks);
+    REQUIRE(peaks.empty());
+
+    recorder.disarm();
+    recorder.process(channels, 1, 1024, true, 1024);
+    REQUIRE(recorder.finishTake() == file);
+    file.deleteFile();
+    thread.stopThread(1000);
+}
+
 TEST_CASE("A sound-activated take waits for sound, and stops itself on silence", "[gui][recording]")
 {
     juce::TimeSliceThread thread("Test writer");

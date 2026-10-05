@@ -8,6 +8,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "Theme.h"
+#include "engine/AudioRecorder.h"
 #include "engine/ClipSpectralEdits.h"
 #include "model/Track.h"
 
@@ -291,6 +292,8 @@ public:
                  const juce::String& trackName, juce::uint32 trackColour,
                  double windowStartSeconds = 0.0)
     {
+        endLive(); // the take is a clip now, or something else is on show
+
         // A trimmed or split clip can be a different stretch of the same
         // file, which moves every position in it just as a new file would.
         const bool sameWindow    = std::abs(windowStartSeconds - windowStartSeconds_) <= 1.0e-9
@@ -341,11 +344,84 @@ public:
 
     void setNoAudioClipSelected(const juce::String& why = "Select an Audio clip to edit it")
     {
+        endLive();
         file_      = juce::File{};
         selection_ = {};
         placeholderLabel_.setText(why, juce::dontSendNotification);
         setContentVisible(false);
     }
+
+    /** Shows a take as it's being recorded onto @p trackName: its waveform
+        grows from the left as appendLiveTake brings its peaks, with the
+        playhead at its end and the view widening as it fills, so all of it
+        is in view. Nothing can be selected or edited until it's a clip -
+        showing one, or endLiveTake, ends this. */
+    void beginLiveTake(const juce::String& trackName, juce::uint32 trackColour, int channels, double sampleRate)
+    {
+        file_               = juce::File{};
+        windowStartSeconds_ = 0.0;
+        trackName_          = trackName;
+        trackColour_        = trackColour;
+        selection_          = {};
+        brush_.clear();
+        bandLowHz_ = bandHighHz_ = 0.0;
+        noisePrintCaptured_ = false;
+        storedEdits_.clear();
+        clearSpectrogram();
+        sampleDetail_ = {};
+
+        updating_ = true;
+        gainSlider_.setValue(0.0, juce::dontSendNotification);
+        updating_ = false;
+        gainDb_   = 0.0f;
+
+        peaks_.start(channels, engine::AudioRecorder::kLivePeakSamples);
+        peaksSampleRate_            = sampleRate > 0.0 ? sampleRate : 48000.0;
+        geometry_.fileLengthSeconds = 0.0;
+        geometry_.viewLengthSeconds = kLiveViewSeconds;
+        playheadSeconds_            = 0.0;
+        playing_                    = true;
+
+        live_ = true;
+        setContentVisible(true);
+        for (auto* control : managedControls())
+            control->setEnabled(false);
+        zoomToFit();
+    }
+
+    /** Adds the peaks recorded since the last call to the take on show. */
+    void appendLiveTake(const std::vector<engine::AudioRecorder::LivePeak>& peaks)
+    {
+        if (! live_ || peaks.empty())
+            return;
+
+        for (const auto& peak : peaks)
+        {
+            const PeakBin bins[2] { { peak.minimum[0], peak.maximum[0] }, { peak.minimum[1], peak.maximum[1] } };
+            peaks_.appendBin(bins, peak.squares);
+        }
+        geometry_.fileLengthSeconds = (double) peaks_.totalSamples() / peaksSampleRate_;
+        playheadSeconds_            = geometry_.fileLengthSeconds;
+
+        // Half as long again each time the take reaches the edge: all of it
+        // stays in view without the scale shifting under it every frame.
+        if (geometry_.fileLengthSeconds > geometry_.viewLengthSeconds)
+        {
+            geometry_.viewLengthSeconds = geometry_.fileLengthSeconds * 1.5;
+            zoomToFit();
+        }
+        repaint();
+    }
+
+    /** The take has stopped: back to no clip, until the owner shows the one
+        it became. */
+    void endLiveTake()
+    {
+        if (live_)
+            setNoAudioClipSelected();
+    }
+
+    bool showsLiveTake() const noexcept { return live_; }
 
     /** The current selection, or an empty range. Read by the owner when an
         action fires rather than tracked separately. */
@@ -553,6 +629,9 @@ public:
         A position outside the clip simply falls off either edge of the view. */
     void setPlaybackState(bool playing, double positionSeconds)
     {
+        if (live_)
+            return; // the playhead is the take's end, which appendLiveTake keeps
+
         const bool stateChanged = playing != playing_;
         if (! stateChanged && std::abs(positionSeconds - playheadSeconds_) < 1.0e-4)
             return;
@@ -755,7 +834,7 @@ public:
         if (peaks_.isEmpty() || peaksSampleRate_ <= 0.0)
         {
             g.setColour(theme::colour(*this, theme::textFaintId));
-            g.drawText("Reading waveform...", area, juce::Justification::centred);
+            g.drawText(live_ ? "Recording..." : "Reading waveform...", area, juce::Justification::centred);
             return;
         }
 
@@ -997,6 +1076,9 @@ public:
 
     void mouseDown(const juce::MouseEvent& e) override
     {
+        if (live_)
+            return; // nothing to select in a take still being recorded
+
         if (contentVisible_ && overviewArea().contains(e.getPosition()))
         {
             overviewDragging_ = true;
@@ -1464,6 +1546,9 @@ private:
         lost in empty space. */
     static constexpr double kTailRoomSeconds = 2.0;
 
+    // How much a take being recorded starts with room for.
+    static constexpr double kLiveViewSeconds = 10.0;
+
     /** Below this the waveform stops being something you can select in, so
         control rows are dropped rather than eating into it further. */
     static constexpr int kMinWaveformHeight = 60;
@@ -1909,7 +1994,7 @@ private:
     {
         positionSelectionActions(); // every change of view passes through here
         const auto area = waveformArea();
-        if (! contentVisible_ || area.isEmpty() || ! onSampleDetailNeeded
+        if (live_ || ! contentVisible_ || area.isEmpty() || ! onSampleDetailNeeded
             || ! SampleDetail::wanted(geometry_.secondsPerPixel, peaksSampleRate_))
             return;
 
@@ -1938,6 +2023,18 @@ private:
                  &noiseFloorLabel_, &noiseFloorSlider_ };
     }
 
+    /** Leaves a live take, giving the controls back. */
+    void endLive()
+    {
+        if (! live_)
+            return;
+        live_    = false;
+        playing_ = false;
+        for (auto* control : managedControls())
+            control->setEnabled(true);
+        updateNoiseControls();
+    }
+
     void setContentVisible(bool visible)
     {
         contentVisible_ = visible;
@@ -1960,6 +2057,7 @@ private:
     juce::String trackName_;
     juce::uint32 trackColour_    = 0;
     bool         contentVisible_ = false;
+    bool         live_           = false; // a take being recorded - see beginLiveTake
     bool         updating_       = false;
     bool         dragging_       = false;
     double       dragAnchorSeconds_ = 0.0;

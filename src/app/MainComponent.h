@@ -847,6 +847,9 @@ private:
     // it goes round or punches into the selection. See MainComponent_Recording.cpp.
     app::recording::AudioTake audioTake_;
     juce::File                recordingFile_; // the main take's, kept from the audio clean-up while it records
+    std::vector<engine::AudioRecorder::LivePeak> livePeaks_; // collected each tick for the editor's live take
+    void                      showLiveTake();
+    void                      feedLiveTake();
 
     app::recording::TimerRecord timerRecord_;
 

@@ -34,6 +34,11 @@ const model::Clip* MainComponent::selectedAudioClip() const
 void MainComponent::refreshAudioEditorForSelected()
 {
     refreshEssentialSoundForSelected();
+
+    // A take being recorded keeps the editor until it ends.
+    if (audioEditor_.showsLiveTake())
+        return;
+
     const auto* clip = selectedAudioClip();
 
     // Whatever the editor shows is open, however it got there.

@@ -24,6 +24,7 @@ AudioEngine::AudioEngine(bool openDevice)
     // nothing is recording, and spinning a thread up at the instant the user
     // hits record is exactly the wrong moment to be doing it.
     recordWriterThread_.startThread(juce::Thread::Priority::normal);
+    recorder_.keepLivePeaks(); // the main take is drawn as it's recorded
     streamThread_.startThread(juce::Thread::Priority::normal);
 
     // Each player reports where it's reading a stream in a slot of its own;

@@ -2,8 +2,11 @@
 
 #include <atomic>
 #include <memory>
+#include <vector>
 
 #include <juce_audio_formats/juce_audio_formats.h>
+
+#include "rt/SpscRingBuffer.h"
 
 namespace soundsplice::engine
 {
@@ -45,7 +48,32 @@ public:
         bool operator==(const Format&) const = default;
     };
 
+    /** A stretch of a take as it's recorded, for drawing it before the file
+        is finished: each channel's lowest and highest sample and the sum of
+        their squares over kLivePeakSamples samples. A mono take repeats its
+        one channel in both. */
+    struct LivePeak
+    {
+        float minimum[2] {};
+        float maximum[2] {};
+        float squares[2] {};
+    };
+
+    /** Samples a LivePeak sums up - the waveform editor's own bin size, so
+        a live take's peaks are those of the file it becomes. */
+    static constexpr int kLivePeakSamples = 64;
+
     ~AudioRecorder() { discardWriter(); }
+
+    /** Has takes queue LivePeaks for takeLivePeaks to collect. Off by
+        default, since only the main take is drawn live and the queue is the
+        better part of a megabyte. Message thread, before the audio thread
+        first runs. */
+    void keepLivePeaks()
+    {
+        if (livePeaks_ == nullptr)
+            livePeaks_ = std::make_unique<rt::SpscRingBuffer<LivePeak>>(32768);
+    }
 
     void prepare(double sampleRate, int numChannels)
     {
@@ -124,6 +152,12 @@ public:
 
         if (writer == nullptr)
             return false;
+
+        // A last take's peaks nobody collected. Nothing pushes between takes
+        // (no writer), so this side may drain the queue.
+        if (livePeaks_ != nullptr)
+            for (LivePeak stale; livePeaks_->pop(stale);)
+                ;
 
         // Buffered samples per channel. Big enough that a slow disk or a
         // momentarily busy background thread can't stall a take, small enough
@@ -212,6 +246,20 @@ public:
 
     double sampleRate() const noexcept { return sampleRate_; }
 
+    /** Channels the take is written with, 1 or 2. */
+    int numChannels() const noexcept { return numChannels_; }
+
+    /** Message thread: appends to @p out the live peaks recorded since the
+        last call. Those the queue had no room for (nobody collecting them for
+        seconds) are lost, which only the drawing notices - the file has
+        them. */
+    void takeLivePeaks(std::vector<LivePeak>& out)
+    {
+        if (livePeaks_ != nullptr)
+            for (LivePeak peak; livePeaks_->pop(peak);)
+                out.push_back(peak);
+    }
+
     // ---- audio thread ----
     /** @p inputChannelData may be nullptr (no input device) or have fewer
         channels than the writer expects - handled gracefully either way. */
@@ -266,7 +314,10 @@ public:
             return;
 
         if (startPlayhead_.load(std::memory_order_relaxed) < 0)
+        {
             startPlayhead_.store(playheadSamples, std::memory_order_relaxed);
+            liveFill_ = 0; // the take's first block: its peaks start here
+        }
 
         // The writer wants exactly the channel count it was created with. A
         // device offering fewer means duplicating what there is rather than
@@ -287,7 +338,11 @@ public:
             return;
 
         if (writer->write(channels, numSamples))
+        {
             writePosition_.fetch_add(numSamples, std::memory_order_relaxed);
+            if (livePeaks_ != nullptr)
+                addLivePeaks(channels, numSamples);
+        }
         else
             droppedSamples_.fetch_add(numSamples, std::memory_order_relaxed);
 
@@ -324,6 +379,35 @@ private:
         return peak;
     }
 
+    /** Audio thread: sums @p numSamples just written into LivePeaks, each
+        queued as it fills. */
+    void addLivePeaks(const float* const* channels, int numSamples) noexcept
+    {
+        for (int n = 0; n < numSamples; ++n)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const float* source = channels[juce::jmin(ch, numChannels_ - 1)];
+                const float  s      = source != nullptr ? source[n] : 0.0f;
+                if (liveFill_ == 0)
+                {
+                    liveBin_.minimum[ch] = s;
+                    liveBin_.maximum[ch] = s;
+                    liveBin_.squares[ch] = 0.0f;
+                }
+                liveBin_.minimum[ch]  = juce::jmin(liveBin_.minimum[ch], s);
+                liveBin_.maximum[ch]  = juce::jmax(liveBin_.maximum[ch], s);
+                liveBin_.squares[ch] += s * s;
+            }
+
+            if (++liveFill_ == kLivePeakSamples)
+            {
+                livePeaks_->push(liveBin_); // full: dropped, see takeLivePeaks
+                liveFill_ = 0;
+            }
+        }
+    }
+
     /** Message thread. Stops the audio thread seeing the writer first, then
         destroys it - which flushes the FIFO and closes the file. */
     void discardWriter()
@@ -354,6 +438,12 @@ private:
     std::atomic<bool>    waitingForSound_  { false };
     std::atomic<bool>    stoppedOnSilence_ { false };
     int64_t              silentRun_ = 0; // audio-thread only
+
+    // About 40 s of peaks at 48 kHz, for the UI to collect several times a
+    // second; none unless keepLivePeaks() asked for them.
+    std::unique_ptr<rt::SpscRingBuffer<LivePeak>> livePeaks_;
+    LivePeak liveBin_;      // audio-thread only: the one filling
+    int      liveFill_ = 0; // audio-thread only: samples in it
     bool   wasRecording_ = false;                // audio-thread only
     double sampleRate_   = 48000.0;
     int    numChannels_  = 2;
