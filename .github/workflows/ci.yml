@@ -1,10 +1,27 @@
 name: CI
 
+# Builds, tests and packages SoundSplice on Windows, Linux and macOS.
+#
+#   - Every push to dev/main and every pull request: build + test, and upload
+#     each platform's package as a workflow artifact (Actions run > Artifacts).
+#   - A pushed tag named v* (e.g. v0.1.0): the same, then a GitHub Release is
+#     created for the tag with all three packages attached.
+#   - Run workflow (workflow_dispatch): a manual build of any branch.
+
 on:
   push:
-    branches: [ main, "phase-*" ]
+    branches: [ dev, main ]
+    tags: [ "v*" ]
   pull_request:
   workflow_dispatch:
+
+# A newer push to the same branch or PR supersedes a build still running.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -14,12 +31,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: macOS,   os: macos-latest }
-          - { name: Windows, os: windows-latest }
-          - { name: Linux,   os: ubuntu-latest }
+          - { name: Windows, os: windows-latest, platform: windows-x64 }
+          - { name: Linux,   os: ubuntu-latest,  platform: linux-x64 }
+          - { name: macOS,   os: macos-latest,   platform: macos-arm64 }
 
     env:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+      # Build for macOS 12 and later rather than only the runner's own version.
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -33,15 +56,27 @@ jobs:
             libfreetype-dev libfontconfig1-dev \
             libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
             libxinerama-dev libxrandr-dev libxrender-dev \
-            libglu1-mesa-dev mesa-common-dev
+            libglu1-mesa-dev mesa-common-dev \
+            xvfb
 
-      # Cache the CPM-downloaded sources (JUCE, Catch2) between runs.
+      # The CPM-downloaded sources (JUCE, Catch2, whisper.cpp, codecs, ...).
       - name: Cache CPM sources
         uses: actions/cache@v4
         with:
           path: ${{ env.CPM_SOURCE_CACHE }}
-          key: cpm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/get_cpm.cmake') }}
+          key: cpm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
           restore-keys: cpm-${{ runner.os }}-
+
+      # Tag builds are named after the tag; everything else after the commit.
+      - name: Package name
+        id: meta
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="dev-${GITHUB_SHA::7}"
+          fi
+          echo "package=SoundSplice-${version}-${{ matrix.platform }}" >> "$GITHUB_OUTPUT"
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -49,5 +84,71 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      # The GUI tests create components, which on Linux needs an X display.
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            xvfb-run -a ctest --test-dir build -C Release --output-on-failure
+          else
+            ctest --test-dir build -C Release --output-on-failure
+          fi
+
+      - name: Package
+        run: |
+          pkg="${{ steps.meta.outputs.package }}"
+          app=build/src/app/SoundSplice_artefacts/Release
+          cli=build/tools/cli/soundsplice_cli_artefacts/Release
+          mkdir -p dist "stage/$pkg"
+          cp LICENSE README.md "stage/$pkg/"
+
+          case "$RUNNER_OS" in
+            Windows)
+              cp "$app/SoundSplice.exe" "$cli/soundsplice-cli.exe" "stage/$pkg/"
+              (cd stage && 7z a -tzip "../dist/$pkg.zip" "$pkg")
+              ;;
+            Linux)
+              cp "$app/SoundSplice" "$cli/soundsplice-cli" "stage/$pkg/"
+              tar -C stage -czf "dist/$pkg.tar.gz" "$pkg"
+              ;;
+            macOS)
+              cp -R "$app/SoundSplice.app" "$cli/soundsplice-cli" "stage/$pkg/"
+              # Apple Silicon refuses to run unsigned code; an ad-hoc signature
+              # is enough to launch (after right-click > Open, as it isn't
+              # notarized).
+              codesign --force --deep --sign - "stage/$pkg/SoundSplice.app"
+              codesign --force --sign - "stage/$pkg/soundsplice-cli"
+              ln -s /Applications "stage/$pkg/Applications"
+              hdiutil create -volname SoundSplice -srcfolder "stage/$pkg" \
+                -fs HFS+ -format UDZO "dist/$pkg.dmg"
+              ;;
+          esac
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.package }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SoundSplice $GITHUB_REF_NAME" \
+            --generate-notes \
+            $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)

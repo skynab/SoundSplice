@@ -115,6 +115,26 @@ cmake --build build-tests --parallel
 ctest --test-dir build-tests --output-on-failure
 ```
 
+## CI and releases
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) builds and tests a Release build on
+Windows (x64), Linux (x64) and macOS (Apple Silicon) for every push to `dev`/`main` and every pull
+request, and uploads a package per platform as a run artifact: a `.zip` for Windows, a `.tar.gz`
+for Linux and a `.dmg` for macOS, each with the app and `soundsplice-cli`.
+
+To cut a release, push a tag beginning with `v`. The same build runs, then a GitHub Release
+for the tag is created with all three packages attached. A tag with a hyphen, like `v0.2.0-beta1`,
+is marked as a pre-release.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The macOS app is ad-hoc signed, not notarized, so the first launch needs right-click > Open.
+The Windows build needs the Microsoft Visual C++ 2015–2022 redistributable, which most machines
+already have.
+
 ## Troubleshooting
 
 **macOS: `error: Please upgrade to Xcode 15.1 or higher`.** JUCE refuses to build with the
