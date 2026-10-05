@@ -1217,7 +1217,6 @@ std::vector<prefs::Page> MainComponent::preferencePages()
                       {
                           settings_.setValue("paths.recordings", folder.getFullPathName());
                           settings_.saveIfNeeded();
-                          fileBrowser_.setRecordingsDirectory(recordingsDirectory());
                       },
                       "Where takes go until a project is saved; then they're kept beside it."),
         prefs::folder("Edits", [this] { return editsDirectory(); },

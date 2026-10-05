@@ -11,8 +11,11 @@ namespace soundsplice
 {
 /**
     The Open Files pane: the audio open in the editor (app/OpenFiles.h), one
-    row each, with the one showing highlighted. Click a row to edit it,
-    right-click one to close it, or use the buttons along the top.
+    row each, with the one showing highlighted. Click a row to edit it;
+    right-click one to find it on the timeline or in the Files browser, or
+    to close it; or use the buttons along the top. Every entry is a clip in
+    the project already, so nothing has to be moved for Multitrack to have
+    it.
 
     Holds only what it was handed to draw; MainComponent owns the list and
     decides what choosing or closing an entry does.
@@ -32,6 +35,8 @@ public:
     std::function<void(int clipId)> onChosen;
     std::function<void(int clipId)> onClosed;
     std::function<void()>           onCloseAll;
+    std::function<void(int clipId)> onShowInMultitrack; // right-click: the clip on the timeline
+    std::function<void(int clipId)> onRevealInFiles;    // right-click: its file in the Files browser
 
     OpenFilesPane()
     {
@@ -95,7 +100,8 @@ public:
         {
             g.setColour(theme::colour(*this, theme::textFaintId));
             g.setFont(juce::Font(juce::FontOptions(12.0f)));
-            g.drawFittedText("Audio clips opened in the Audio editor are listed here.",
+            g.drawFittedText("Audio clips opened in the Audio editor are listed here. Each is on the "
+                             "Multitrack timeline too - right-click one to go to it.",
                              list_.getBounds().reduced(12), juce::Justification::centred, 3);
         }
     }
@@ -155,6 +161,9 @@ private:
         if (event.mods.isPopupMenu())
         {
             juce::PopupMenu menu;
+            menu.addItem(3, "Show in Multitrack");
+            menu.addItem(4, "Reveal in Files");
+            menu.addSeparator();
             menu.addItem(1, "Close");
             menu.addItem(2, "Close All");
             menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&list_),
@@ -166,6 +175,10 @@ private:
                                        safe->onClosed(clipId);
                                    else if (result == 2 && safe->onCloseAll)
                                        safe->onCloseAll();
+                                   else if (result == 3 && safe->onShowInMultitrack)
+                                       safe->onShowInMultitrack(clipId);
+                                   else if (result == 4 && safe->onRevealInFiles)
+                                       safe->onRevealInFiles(clipId);
                                });
             return;
         }

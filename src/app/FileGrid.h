@@ -107,6 +107,27 @@ public:
 
     bool showingFavorites() const noexcept { return showingFavorites_; }
 
+    /** Selects @p file's row and scrolls to it. False if it isn't listed. */
+    bool selectFile(const juce::File& file)
+    {
+        for (int row = 0; row < (int) entries_.size(); ++row)
+            if (entries_[(size_t) row] == file)
+            {
+                table_.selectRow(row);
+                table_.scrollToEnsureRowIsOnscreen(row);
+                return true;
+            }
+        table_.deselectAllRows();
+        return false;
+    }
+
+    /** The selected row's file, or none. */
+    juce::File selectedFile() const
+    {
+        const int row = table_.getSelectedRow();
+        return row >= 0 && row < (int) entries_.size() ? entries_[(size_t) row] : juce::File {};
+    }
+
     int  rowCountForTesting() const noexcept { return (int) entries_.size(); }
     void toggleFavoriteForTesting(const juce::File& file) { toggleFavorite(file); }
     double sampleRateForTesting(const juce::File& file) { return infoFor(file).sampleRate; }

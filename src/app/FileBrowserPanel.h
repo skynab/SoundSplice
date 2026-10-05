@@ -69,14 +69,19 @@ public:
     std::function<void()>                  onBookmarksChanged; // added or removed one
     std::function<void()>                  onFavoritesChanged; // starred or unstarred a file in the grid
 
+    /** Where the Recordings button goes. Asked on each press, because where
+        takes are written changes - a saved project keeps them beside it.
+        The home folder until set. */
+    std::function<juce::File()> recordingsFolder;
+
     FileBrowserPanel()
         : audioFilter_("*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.m4a;*.mp4", "*", "Audio files"),
           directoryList_(&audioFilter_, fileThread_),
           fileTree_(directoryList_)
     {
         fileThread_.startThread();
-        recordingsDirectory_ = juce::File::getSpecialLocation(juce::File::userHomeDirectory);
-        directoryList_.setDirectory(recordingsDirectory_, true, true);
+        const auto home = juce::File::getSpecialLocation(juce::File::userHomeDirectory);
+        directoryList_.setDirectory(home, true, true);
 
         // A plain marker distinguishing "dragging a file" from a DockRegion
         // tab-header drag (which uses the panel's own name as its
@@ -94,7 +99,7 @@ public:
         fileGrid_.onRightClick       = [this](const juce::File& file) { showContextMenuFor(file); };
         fileGrid_.onFavoritesChanged = [this] { if (onFavoritesChanged) onFavoritesChanged(); };
         addAndMakeVisible(fileGrid_);
-        fileGrid_.setDirectory(recordingsDirectory_);
+        fileGrid_.setDirectory(home);
 
         projectRootButton_.onClick = [this] { showDirectory(projectRootFolder_); };
         addAndMakeVisible(projectRootButton_);
@@ -104,7 +109,12 @@ public:
         {
             showDirectory(juce::File::getSpecialLocation(juce::File::userHomeDirectory));
         };
-        recordingsButton_.onClick = [this] { showDirectory(recordingsDirectory_); };
+        recordingsButton_.setTooltip("The folder new recordings are saved in");
+        recordingsButton_.onClick = [this]
+        {
+            showDirectory(recordingsFolder ? recordingsFolder()
+                                           : juce::File::getSpecialLocation(juce::File::userHomeDirectory));
+        };
         addAndMakeVisible(homeButton_);
         addAndMakeVisible(recordingsButton_);
 
@@ -148,10 +158,15 @@ public:
         fileThread_.stopThread(2000);
     }
 
-    // "Places" bookmark target for the Recordings button — defaults to the
-    // user's home directory until the owner points it at the actual
-    // recordings folder (MainComponent::recordingsDirectory()).
-    void setRecordingsDirectory(const juce::File& dir) { recordingsDirectory_ = dir; }
+    /** Shows @p file's folder with @p file selected in the grid. */
+    void revealFile(const juce::File& file)
+    {
+        showDirectory(file.getParentDirectory());
+        fileGrid_.selectFile(file);
+    }
+
+    /** The file selected in the grid, or none. */
+    juce::File selectedFile() const { return fileGrid_.selectedFile(); }
 
     void showDirectory(const juce::File& dir)
     {
@@ -400,7 +415,6 @@ private:
     juce::DrawableButton toggleTreeButton_ { "ToggleTree", juce::DrawableButton::ImageFitted };
     juce::DrawableButton newFolderButton_  { "NewFolder", juce::DrawableButton::ImageFitted };
     bool             treeVisible_ = true;
-    juce::File       recordingsDirectory_;
     juce::File       projectRootFolder_;
 
     std::vector<juce::File>            bookmarks_;

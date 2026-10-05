@@ -235,6 +235,9 @@ public:
         to the view (see app/TimelineZoom.h). */
     const TimelineGeometry& geometry() const noexcept { return geometry_; }
 
+    /** The top of track @p trackIndex's lane, in this view's coordinates. */
+    float trackTop(int trackIndex) const { return laneTop(trackIndex); }
+
     /** Where the last clip ends, in beats: what Fit Project fits. */
     double arrangedEndBeats() const { return contentEndBeats(); }
 

@@ -68,3 +68,28 @@ TEST_CASE("Favorites lists every starred file, wherever it is", "[gui][files]")
     REQUIRE_FALSE(grid.showingFavorites());
     root.deleteRecursively();
 }
+
+TEST_CASE("A file can be picked out in the list, as Reveal in Files does", "[gui][files]")
+{
+    JuceFixture fixture;
+    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("soundsplice-select-test");
+    folder.deleteRecursively();
+    folder.createDirectory();
+    const auto first  = folder.getChildFile("Recording.wav");
+    const auto second = folder.getChildFile("Recording (2).wav");
+    writeSilence(first, 1, 48000.0, 16);
+    writeSilence(second, 1, 48000.0, 16);
+
+    FileGrid grid;
+    grid.setDirectory(folder);
+    REQUIRE(grid.selectedFile() == juce::File {});
+
+    REQUIRE(grid.selectFile(second));
+    REQUIRE(grid.selectedFile() == second);
+
+    // One that isn't listed clears the selection rather than leaving the
+    // last one looking chosen.
+    REQUIRE_FALSE(grid.selectFile(folder.getChildFile("elsewhere.wav")));
+    REQUIRE(grid.selectedFile() == juce::File {});
+    folder.deleteRecursively();
+}

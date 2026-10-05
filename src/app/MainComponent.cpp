@@ -556,6 +556,8 @@ MainComponent::MainComponent(bool headless)
     openFilesPane_.onChosen   = [this](int clipId) { showOpenFile(clipId); };
     openFilesPane_.onClosed   = [this](int clipId) { closeOpenFile(clipId); };
     openFilesPane_.onCloseAll = [this] { closeAllOpenFiles(); };
+    openFilesPane_.onShowInMultitrack = [this](int clipId) { showOpenFileInMultitrack(clipId); };
+    openFilesPane_.onRevealInFiles    = [this](int clipId) { revealOpenFileInFiles(clipId); };
 
     automationPane_.onLaneEdited = [this](const AutomationTarget& target, const model::AutomationLane& lane)
     {
@@ -715,8 +717,10 @@ MainComponent::MainComponent(bool headless)
     workspace_.registerPanel("Master", masterPanel_);
     loadDockLayout(); // last session's arrangement, or the default one
 
-    fileBrowser_.setRecordingsDirectory(recordingsDirectory());
-    fileBrowser_.showDirectory(recordingsDirectory());
+    // Where takes are actually written: the scratch folder, or the saved
+    // project's audio folder.
+    fileBrowser_.recordingsFolder = [this] { return audioDirectoryFor(recordingsDirectory()); };
+    fileBrowser_.showDirectory(fileBrowser_.recordingsFolder());
     // Double-clicking a file imports it rather than "previewing" it. The
     // preview loaded the file into the transport-slaved player, which only
     // sounds while the song is already rolling — so double-clicking a file

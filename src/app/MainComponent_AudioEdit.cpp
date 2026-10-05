@@ -190,6 +190,60 @@ void MainComponent::showOpenFile(int clipId)
         workspace_.revealPanel("Audio");
 }
 
+/** Open Files' Show in Multitrack: switches to the Multitrack workspace
+    with the clip selected and scrolled into view, at the zoom it was. */
+void MainComponent::showOpenFileInMultitrack(int clipId)
+{
+    const auto where = app::OpenFiles::locate(history_.current(), clipId);
+    if (! where.isValid())
+    {
+        updateOpenFilesPane();
+        return;
+    }
+
+    if (activeWorkspace_ != layouts::Workspace::MusicCreation)
+    {
+        applyWorkspaceLayout(layouts::Workspace::MusicCreation);
+        layoutToolbar();
+    }
+    if (! workspace_.isPanelOpen("Tracks"))
+        workspace_.openPanel("Tracks");
+    workspace_.revealPanel("Tracks");
+
+    selectTrackAndClip(where.track, where.clip);
+
+    const auto& clip = history_.current().tracks[(size_t) where.track].clips[(size_t) where.clip];
+    const int   x    = app::scrollToShow(clip.startBeats, clip.lengthBeats, arrangementView_.geometry());
+    const int   y    = juce::jmax(0, (int) arrangementView_.trackTop(where.track)
+                                         - (int) arrangementView_.geometry().rulerHeight);
+    arrangementViewport_.setViewPosition(x, y);
+}
+
+/** Open Files' Reveal in Files: the clip's file, selected in the Files
+    browser. */
+void MainComponent::revealOpenFileInFiles(int clipId)
+{
+    const auto& song  = history_.current();
+    const auto  where = app::OpenFiles::locate(song, clipId);
+    if (! where.isValid())
+    {
+        updateOpenFilesPane();
+        return;
+    }
+
+    const juce::File file(song.tracks[(size_t) where.track].clips[(size_t) where.clip].audioFile);
+    if (! file.existsAsFile())
+    {
+        showError("The clip's file is missing: " + file.getFullPathName());
+        return;
+    }
+
+    if (! workspace_.isPanelOpen("Files"))
+        workspace_.openPanel("Files");
+    workspace_.revealPanel("Files");
+    fileBrowser_.revealFile(file);
+}
+
 void MainComponent::closeOpenFile(int clipId)
 {
     const auto* showing = selectedAudioClip();

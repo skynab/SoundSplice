@@ -339,6 +339,8 @@ private:
     /** Removes @p clipId from the list; if it was showing, the editor moves to
         the next open file, or to nothing. */
     void                   closeOpenFile(int clipId);
+    void                   showOpenFileInMultitrack(int clipId);
+    void                   revealOpenFileInFiles(int clipId);
     void                   closeAllOpenFiles();
     void                   stepOpenFile(int direction);
     void                   updateMasteringControls();
