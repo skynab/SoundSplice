@@ -2,6 +2,7 @@
 
 #include <model/History.h>
 
+#include <algorithm>
 #include <vector>
 
 using soundsplice::model::History;

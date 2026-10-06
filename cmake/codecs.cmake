@@ -4,7 +4,7 @@
 # libopus and libwavpack each build as one library with their encoder inside;
 # the tests use those encoders to make files to read back.
 #
-#   libogg 1.3.5      BSD-3  the container Opus files are in
+#   libogg 1.3.6      BSD-3  the container Opus files are in
 #   libopus 1.5.2     BSD-3  the codec
 #   opusfile 0.12     BSD-3  seeking and decoding an Ogg Opus file
 #   WavPack 5.8.1     BSD-3
@@ -15,7 +15,7 @@
 CPMAddPackage(
   NAME ogg
   GITHUB_REPOSITORY xiph/ogg
-  GIT_TAG v1.3.5
+  GIT_TAG v1.3.6
   OPTIONS
     "BUILD_SHARED_LIBS OFF"
     "INSTALL_DOCS OFF"

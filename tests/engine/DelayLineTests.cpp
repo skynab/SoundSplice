@@ -3,6 +3,7 @@
 
 #include <engine/DelayLine.h>
 
+#include <cmath>
 #include <vector>
 
 using Catch::Approx;

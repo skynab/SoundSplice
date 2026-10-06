@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <random>
+#include <tuple>
 
 using namespace soundsplice::engine;
 using Catch::Matchers::WithinAbs;

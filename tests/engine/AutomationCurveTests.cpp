@@ -3,6 +3,8 @@
 #include <engine/AutomationCurve.h>
 #include <model/AutomationLane.h>
 
+#include <utility>
+
 using namespace soundsplice;
 
 namespace
