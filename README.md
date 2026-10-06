@@ -122,18 +122,24 @@ Windows (x64), Linux (x64) and macOS (Apple Silicon) for every push to `dev`/`ma
 request, and uploads a package per platform as a run artifact: a `.zip` for Windows, a `.tar.gz`
 for Linux and a `.dmg` for macOS, each with the app and `soundsplice-cli`.
 
-To cut a release, push a tag beginning with `v`. The same build runs, then a GitHub Release
-for the tag is created with all three packages attached. A tag with a hyphen, like `v0.2.0-beta1`,
-is marked as a pre-release.
+To cut a release, set `project(VERSION)` in `CMakeLists.txt`, commit, and push a matching tag
+beginning with `v`. A tag that doesn't match the version fails the build straight away, since
+that version is what the app reports. The same build runs, then a GitHub Release for the tag is
+created with all three packages and a `SHA256SUMS.txt` attached. A tag with a hyphen, like
+`v0.2.0-beta1` (matching `0.2.0`), is marked as a pre-release.
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
+Builds use Ninja and ccache on every platform, so a push rebuilds only what it changed. Docs-only
+changes don't trigger a build.
+
 The macOS app is ad-hoc signed, not notarized, so the first launch needs right-click > Open.
 The Windows build needs the Microsoft Visual C++ 2015–2022 redistributable, which most machines
-already have.
+already have. The Linux build is made on Ubuntu 22.04, so it runs on distributions with glibc
+2.35 or later, and needs ALSA, FreeType, Fontconfig and the X11 libraries installed.
 
 ## Troubleshooting
 
