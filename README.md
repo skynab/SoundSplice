@@ -79,6 +79,18 @@ CMake options, all `ON` by default:
 | `SOUNDSPLICE_BUILD_TESTS` | the unit and GUI tests (pulls Catch2) |
 | `SOUNDSPLICE_BUILD_TOOLS` | `soundsplice-cli` and the headless `soundsplice_bounce` render/smoke-test tool (needs the app) |
 
+And two that only change how long a build takes, also `ON` by default:
+
+| Option | Does |
+| --- | --- |
+| `SOUNDSPLICE_PCH` | precompiles the JUCE and Catch2 headers once per target, rather than parsing them in every file |
+| `SOUNDSPLICE_LTO` | link-time optimisation for a Release build of the app. It makes the final link take minutes even after a one-file change, so turn it off (`-DSOUNDSPLICE_LTO=OFF`) for day-to-day Release builds, or build `RelWithDebInfo`, which never uses it |
+
+On Windows, Ninja (`-G Ninja`) tends to build faster than the Visual Studio generator: it schedules
+every file of every target across the cores, where Visual Studio compiles in parallel only within
+targets that ask for it (JUCE's do, the headless tests and third-party libraries don't). Run it from
+an *x64 Native Tools Command Prompt* so it finds the compiler.
+
 ## Command line
 
 `soundsplice-cli` converts, analyzes and processes audio, and renders projects, with no window:

@@ -123,9 +123,16 @@ add_executable(soundsplice_tests
 target_link_libraries(soundsplice_tests
   PRIVATE
     soundsplice::rt
+    soundsplice::model
     Catch2::Catch2WithMain)
 
 target_compile_features(soundsplice_tests PRIVATE cxx_std_20)
+
+# See cmake/pch.cmake.
+soundsplice_precompile(soundsplice_tests
+  <catch2/catch_test_macros.hpp>
+  <catch2/catch_approx.hpp>
+  <catch2/matchers/catch_matchers_floating_point.hpp>)
 
 # Register each Catch2 TEST_CASE with CTest.
 list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
@@ -214,6 +221,7 @@ if (SOUNDSPLICE_BUILD_APP)
   target_link_libraries(soundsplice_gui_tests
     PRIVATE
       soundsplice::rt
+      soundsplice::model
       lame::mp3
       opusfile::opusfile
       WavPack::WavPack
@@ -227,5 +235,11 @@ if (SOUNDSPLICE_BUILD_APP)
       soundsplice_no_float_equal_warning)
 
   target_compile_features(soundsplice_gui_tests PRIVATE cxx_std_20)
+
+  soundsplice_precompile(soundsplice_gui_tests
+    <juce_audio_utils/juce_audio_utils.h>
+    <catch2/catch_test_macros.hpp>
+    <catch2/catch_approx.hpp>
+    <catch2/matchers/catch_matchers_floating_point.hpp>)
   catch_discover_tests(soundsplice_gui_tests)
 endif()

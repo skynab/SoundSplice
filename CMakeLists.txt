@@ -34,15 +34,23 @@ endif()
 option(SOUNDSPLICE_BUILD_APP   "Build the SoundSplice application (pulls JUCE)" ON)
 option(SOUNDSPLICE_BUILD_TESTS "Build unit tests (pulls Catch2)"                 ON)
 option(SOUNDSPLICE_BUILD_TOOLS "Build command-line tools (needs JUCE)"          ON)
+# JUCE's link-time optimisation, for Release builds of the app. It moves the
+# app's code generation into the link, which then takes minutes after even a
+# one-file change; CI turns it off for everything but release tags.
+option(SOUNDSPLICE_LTO "Link-time optimisation for the app's Release build" ON)
 
 enable_testing()
 
 include(cmake/get_cpm.cmake)
+include(cmake/pch.cmake)
 
 # ---- Framework-independent layers -------------------------------------------
 # The real-time primitives are pure C++ with no JUCE dependency, so they build
 # and test fast and in isolation. Everything on the audio thread trusts them.
 add_subdirectory(src/rt)
+
+# The model's few compiled tables - see src/model/CMakeLists.txt.
+add_subdirectory(src/model)
 
 # Time-stretching and pitch-shifting (MIT, header-only) - see cmake/stretch.cmake.
 include(cmake/stretch.cmake)

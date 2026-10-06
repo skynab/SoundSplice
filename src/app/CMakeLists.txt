@@ -97,6 +97,7 @@ target_compile_options(soundsplice_no_float_equal_warning INTERFACE
 target_link_libraries(SoundSplice
   PRIVATE
     soundsplice::rt
+    soundsplice::model
     lame::mp3
     opusfile::opusfile
     WavPack::WavPack
@@ -107,6 +108,14 @@ target_link_libraries(SoundSplice
     juce::juce_video
   PUBLIC
     juce::juce_recommended_config_flags
-    juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
     soundsplice_no_float_equal_warning)
+
+if(SOUNDSPLICE_LTO)
+  target_link_libraries(SoundSplice PUBLIC juce::juce_recommended_lto_flags)
+endif()
+
+# See cmake/pch.cmake.
+soundsplice_precompile(SoundSplice
+  <juce_audio_utils/juce_audio_utils.h>
+  <juce_video/juce_video.h>)

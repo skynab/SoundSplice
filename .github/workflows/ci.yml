@@ -46,6 +46,10 @@ jobs:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
       # Build for macOS 12 and later rather than only the runner's own version.
       MACOSX_DEPLOYMENT_TARGET: "12.0"
+      # What ccache needs to cache compiles that use a precompiled header
+      # (see cmake/pch.cmake): it can't see inside one, so it's told not to
+      # worry about macros or timestamps the header might change.
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
 
     defaults:
       run:
@@ -136,12 +140,16 @@ jobs:
           key: ${{ matrix.platform }}
           max-size: 1G
 
-      # Ninja on every platform: the Visual Studio generator compiles a
-      # project's files one at a time, Ninja keeps every core busy.
+      # Ninja on every platform: it schedules every file of every target across
+      # the cores, where the Visual Studio generator parallelises only within
+      # targets that ask for /MP (JUCE's do; the tests and libraries don't).
+      # Link-time optimisation only for release tags: it makes the app's link
+      # take minutes and can't be cached, and a dev build doesn't need it.
       - name: Configure
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DSOUNDSPLICE_LTO=${{ startsWith(github.ref, 'refs/tags/') && 'ON' || 'OFF' }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 

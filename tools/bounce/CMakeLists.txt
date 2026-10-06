@@ -25,6 +25,7 @@ target_compile_definitions(soundsplice_bounce PRIVATE
 target_link_libraries(soundsplice_bounce
   PRIVATE
     soundsplice::rt
+    soundsplice::model
     lame::mp3
     opusfile::opusfile
     WavPack::WavPack
@@ -34,6 +35,11 @@ target_link_libraries(soundsplice_bounce
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags
     soundsplice_no_float_equal_warning)
+
+# See cmake/pch.cmake.
+soundsplice_precompile(soundsplice_bounce
+  <juce_audio_formats/juce_audio_formats.h>
+  <juce_audio_processors_headless/juce_audio_processors_headless.h>)
 
 # Register as a smoke test: it renders audio and exits non-zero if the output is
 # silent, so CI verifies the track render path on every platform.
