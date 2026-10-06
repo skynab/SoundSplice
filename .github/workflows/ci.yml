@@ -52,7 +52,7 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Tag builds are named after the tag; everything else after the commit.
       # Checked first so a mistagged release fails in seconds, not after a build.
@@ -100,13 +100,29 @@ jobs:
           echo "CXX=cl" >> "$GITHUB_ENV"
 
       # Ninja needs cl.exe on PATH, which the Visual Studio generator found itself.
+      # Runs Visual Studio's own vcvars64.bat and carries over what it changed
+      # (PATH, INCLUDE, LIB, ...) - ilammy/msvc-dev-cmd did this, but is
+      # unmaintained and still on the deprecated Node 20 runtime.
       - name: Set up MSVC
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+            -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          if (-not $vs) { throw "No Visual Studio with the x64 C++ tools found" }
+          $before = @{}
+          Get-ChildItem env: | ForEach-Object { $before[$_.Name] = $_.Value }
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$' -and $before[$matches[1]] -ne $matches[2]) {
+              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            }
+          }
+          if ($LASTEXITCODE -ne 0) { throw "vcvars64.bat failed" }
 
       # The CPM-downloaded sources (JUCE, Catch2, whisper.cpp, codecs, ...).
       - name: Cache CPM sources
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.CPM_SOURCE_CACHE }}
           key: cpm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
@@ -115,7 +131,7 @@ jobs:
       # Compiled objects, so a push rebuilds only what it changed rather than
       # all of JUCE and whisper.cpp. PR builds start from dev's cache.
       - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.24
         with:
           key: ${{ matrix.platform }}
           max-size: 1G
@@ -178,7 +194,7 @@ jobs:
           esac
           ls -l dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.meta.outputs.package }}
           path: dist/*
@@ -195,7 +211,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
