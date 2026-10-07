@@ -173,13 +173,33 @@ jobs:
           cat errors.txt
 
       # The GUI tests create components, which on Linux needs an X display.
+      # The log is kept, like the build's, for the step below.
       - name: Test
         run: |
           if [[ "$RUNNER_OS" == Linux ]]; then
-            xvfb-run -a ctest --test-dir build --output-on-failure
+            xvfb-run -a ctest --test-dir build --output-on-failure 2>&1 | tee test.log
           else
-            ctest --test-dir build --output-on-failure
+            ctest --test-dir build --output-on-failure 2>&1 | tee test.log
           fi
+
+      # Each failed check - Catch2's "FAILED:" with the expression and its
+      # expansion, or a crash - as an annotation, so the run's summary page
+      # says why a test failed and not only which.
+      - name: Report test failures
+        if: failure() && hashFiles('test.log') != ''
+        run: |
+          awk '
+            { gsub(/%/, "%25") }
+            /FAILED:|due to a fatal error condition|due to unexpected exception|\*\*\*Exception|SIGSEGV|SIGABRT|Subprocess aborted/ {
+              if (block != "") print block
+              block = $0; left = 8; next
+            }
+            left > 0 { block = block "%0A" $0; left--; if (left == 0) { print block; block = "" } }
+            END { if (block != "") print block }
+          ' test.log | head -n 10 | while IFS= read -r block; do
+            echo "::error::${block:0:3000}"
+          done
+          grep -A2 "tests failed out of" test.log || true
 
       # The WiX Toolset v3 for the Windows installer (cmake/Packaging.cmake).
       # Used from the runner image when it has one; otherwise the official
