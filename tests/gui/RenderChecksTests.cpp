@@ -158,8 +158,8 @@ namespace
         double          bpm     = kBpm;
         const ClipData* clip    = nullptr; // from beat 0; none for no clip
 
-        std::function<void(MixerTrack&)>      setUp;       // before rendering
-        std::function<void(MixerTrack&, int)> beforeBlock; // with the block's start sample
+        std::function<void(MixerTrack&)>      setUp {};       // before rendering
+        std::function<void(MixerTrack&, int)> beforeBlock {}; // with the block's start sample
     };
 
     juce::AudioBuffer<float> render(const TrackRender& spec)
