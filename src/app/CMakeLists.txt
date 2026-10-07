@@ -16,6 +16,9 @@ juce_add_gui_app(SoundSplice
   COMPANY_NAME "Anthony Lazzaro"
   BUNDLE_ID    "com.anthonylazzaro.soundsplice"
   VERSION      "${PROJECT_VERSION}"
+  # The application mark: the .exe's icon on Windows, so the shortcuts the
+  # installer makes (cmake/Packaging.cmake) show it too, and the .app's.
+  ICON_BIG     "${PROJECT_SOURCE_DIR}/resources/branding/SoundSplice-logo-512.png"
   MICROPHONE_PERMISSION_ENABLED TRUE
   MICROPHONE_PERMISSION_TEXT    "SoundSplice needs the microphone to record audio tracks.")
 

@@ -10,8 +10,8 @@ TEST_CASE("An autosave unwraps to the project and the file it came from", "[app]
     const std::string project = "SOUNDSPLICE 1\nsome project text\n";
 
     app::AutosaveContents contents;
-    REQUIRE(app::unwrapAutosave(app::wrapAutosave(project, "C:/Music/My Song.soundsplice"), contents));
-    REQUIRE(contents.originalPath == "C:/Music/My Song.soundsplice");
+    REQUIRE(app::unwrapAutosave(app::wrapAutosave(project, "C:/Music/My Song.splice"), contents));
+    REQUIRE(contents.originalPath == "C:/Music/My Song.splice");
     REQUIRE(contents.projectText == project);
 
     // An untitled project has no file to point back at.
@@ -28,7 +28,7 @@ TEST_CASE("A recovered autosave loads as the same song", "[app][autosave]")
     song.bpm     = 97.0;
 
     app::AutosaveContents contents;
-    REQUIRE(app::unwrapAutosave(app::wrapAutosave(model::serialize(song), "/projects/vocal.soundsplice"),
+    REQUIRE(app::unwrapAutosave(app::wrapAutosave(model::serialize(song), "/projects/vocal.splice"),
                                 contents));
 
     model::Song restored;
@@ -53,7 +53,7 @@ TEST_CASE("Only an autosave unwraps as one", "[app][autosave]")
     // Cut off before any project text: nothing to recover.
     REQUIRE_FALSE(app::unwrapAutosave("", contents));
     REQUIRE_FALSE(app::unwrapAutosave(std::string(app::kAutosaveHeader), contents));
-    REQUIRE_FALSE(app::unwrapAutosave(std::string(app::kAutosaveHeader) + "\nPROJECT /a.soundsplice\n", contents));
+    REQUIRE_FALSE(app::unwrapAutosave(std::string(app::kAutosaveHeader) + "\nPROJECT /a.splice\n", contents));
     REQUIRE_FALSE(app::unwrapAutosave(std::string(app::kAutosaveHeader) + "\nnot the project line\nSOUNDSPLICE 1\n",
                                       contents));
 }
@@ -61,10 +61,10 @@ TEST_CASE("Only an autosave unwraps as one", "[app][autosave]")
 TEST_CASE("An autosave written with Windows line endings still unwraps", "[app][autosave]")
 {
     app::AutosaveContents contents;
-    const std::string text = std::string(app::kAutosaveHeader) + "\r\nPROJECT D:/song.soundsplice\r\nSOUNDSPLICE 1\r\n";
+    const std::string text = std::string(app::kAutosaveHeader) + "\r\nPROJECT D:/song.splice\r\nSOUNDSPLICE 1\r\n";
 
     REQUIRE(app::unwrapAutosave(text, contents));
-    REQUIRE(contents.originalPath == "D:/song.soundsplice");
+    REQUIRE(contents.originalPath == "D:/song.splice");
     REQUIRE(contents.projectText == "SOUNDSPLICE 1\r\n");
 }
 

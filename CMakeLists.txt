@@ -87,6 +87,9 @@ if(SOUNDSPLICE_BUILD_APP)
     add_subdirectory(tools/bounce)
     add_subdirectory(tools/cli)
   endif()
+
+  # The Windows installer - see cmake/Packaging.cmake.
+  include(cmake/Packaging.cmake)
 endif()
 
 # ---- Tests -------------------------------------------------------------------

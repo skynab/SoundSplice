@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  The .exe that carries the MSI.
+
+  Its reason for existing is the icon. A .msi cannot have one: Windows
+  registers the extension to Msi.Package, whose DefaultIcon is msiexec.exe, so
+  every package draws the same generic glyph. An .exe carries an icon in its
+  own resources, which is why nearly every product ships its installer as one.
+
+  So this is a Burn bundle with a chain of exactly one package. It installs
+  nothing the MSI does not, and running the MSI directly still works.
+
+  XML forbids a double hyphen inside a comment, and candle reports it as a
+  parse error at the element after it.
+
+  Configured by cmake/Packaging.cmake; built by scripts/build-msi-bundle.ps1
+  after cpack has produced the MSI.
+-->
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:bal="http://schemas.microsoft.com/wix/BalExtension">
+
+  <!-- The bundle's identity across versions, which must never change. Not the
+       MSI's upgrade GUID: a bundle and the package it carries are two
+       products to Windows, and sharing one makes each look like a downgrade
+       of the other. -->
+  <Bundle Name="@SOUNDSPLICE_BUNDLE_NAME@"
+          Version="@SOUNDSPLICE_BUNDLE_VERSION@"
+          Manufacturer="@SOUNDSPLICE_BUNDLE_VENDOR@"
+          UpgradeCode="2331D668-1E9A-476F-833B-B374909C4E04"
+          IconSourceFile="@SOUNDSPLICE_BUNDLE_ICON@"
+          Compressed="yes">
+
+    <!-- One page: the logo, the name, the licence as a link, Install. The MSI
+         runs with its own UI suppressed, since two wizards in a row for one
+         product is worse than either alone. Anyone who runs the MSI directly
+         still gets WixUI's licence page. -->
+    <BootstrapperApplicationRef Id="WixStandardBootstrapperApplication.HyperlinkLicense">
+      <bal:WixStandardBootstrapperApplication
+          LogoFile="@SOUNDSPLICE_BUNDLE_LOGO@"
+          LicenseUrl="@SOUNDSPLICE_BUNDLE_LICENSE_URL@"
+          SuppressOptionsUI="yes"/>
+    </BootstrapperApplicationRef>
+
+    <Chain>
+      <MsiPackage Id="SoundSplice"
+                  SourceFile="@SOUNDSPLICE_BUNDLE_MSI@"
+                  Vital="yes"
+                  Compressed="yes"/>
+    </Chain>
+  </Bundle>
+</Wix>

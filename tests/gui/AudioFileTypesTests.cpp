@@ -30,7 +30,7 @@ TEST_CASE("Extensions are matched case-insensitively", "[app][audiofiles]")
 
 TEST_CASE("Non-audio files are refused", "[app][audiofiles]")
 {
-    for (const char* name : { "song.soundsplice", "notes.txt", "cover.png", "take", "take.wav.txt" })
+    for (const char* name : { "song.splice", "notes.txt", "cover.png", "take", "take.wav.txt" })
     {
         INFO(name);
         REQUIRE_FALSE(audiofiles::isImportableAudioFile(juce::String(name)));

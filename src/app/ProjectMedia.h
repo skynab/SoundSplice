@@ -13,7 +13,7 @@ namespace soundsplice::app::media
 {
 /**
     A saved project's own audio: the "<Name> Audio" folder beside its
-    .soundsplice file.
+    .splice file.
 
     Recordings and edits belong to a project, but used to be written to two
     app-wide folders under Documents and referred to by full path, so a

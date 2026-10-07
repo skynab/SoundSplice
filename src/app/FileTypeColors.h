@@ -14,7 +14,7 @@ inline FileKind classifyFile(const juce::File& file)
         return FileKind::Folder;
     if (file.hasFileExtension("wav;aiff;aif;flac;ogg;mp3;opus;wv;w64;rf64;bw64;caf;m4a;mp4"))
         return FileKind::Audio;
-    if (file.hasFileExtension("soundsplice"))
+    if (file.hasFileExtension("splice"))
         return FileKind::Project;
     return FileKind::Other;
 }

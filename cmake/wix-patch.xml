@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  Two things the MSI carries that CPack cannot express on its own: a desktop
+  shortcut, and the .splice file association.
+
+  CPACK_CREATE_DESKTOP_LINKS does nothing for WiX (only NSIS and Inno Setup
+  implement it), and the association has no CPack variable at all.
+
+  Everything hangs off #PRODUCT and #PRODUCTFEATURE, the two fragment ids CPack
+  documents as stable, rather than a generated component such as
+  CM_CP_runtime.bin.SoundSplice.exe whose spelling depends on how CPack mangles
+  a path. Paths are written against INSTALL_ROOT, the directory id CPack's own
+  template gives the install location; it expands with a trailing separator.
+
+  The registry roots are decided by ICE57, which refuses any component whose
+  keypath disagrees with where its data lives. The shortcut sits in
+  DesktopFolder, which ICE57 counts as per-user, so it is keyed on HKCU; the
+  association sits in INSTALL_ROOT, which is per-machine, so it is keyed on
+  HKLM. Both are writable because the package installs perMachine, elevated
+  (CPACK_WIX_INSTALL_SCOPE in cmake/Packaging.cmake).
+
+  XML forbids a double hyphen inside a comment, and candle reports it as a
+  parse error at the element after it.
+-->
+
+<CPackWiXPatch>
+
+  <CPackWiXFragment Id="#PRODUCT">
+
+    <!-- WiX 3 does not predefine the standard directories, and CPack never
+         emits this one. -->
+    <DirectoryRef Id="TARGETDIR">
+      <Directory Id="DesktopFolder" Name="Desktop"/>
+    </DirectoryRef>
+
+    <DirectoryRef Id="DesktopFolder">
+      <Component Id="SoundSpliceDesktopShortcut" Guid="72A0A790-987D-43CC-95D4-73175B066CBE">
+        <!-- Non-advertised, so it takes its icon from SoundSplice.exe. -->
+        <Shortcut Id="SoundSpliceDesktopLink"
+                  Name="SoundSplice"
+                  Description="A focused audio editor"
+                  Target="[INSTALL_ROOT]bin\SoundSplice.exe"
+                  WorkingDirectory="INSTALL_ROOT"/>
+        <!-- A shortcut cannot be a key path. No RemoveFolder: the shortcut
+             goes with its component, and the Desktop is not ours to remove. -->
+        <RegistryValue Root="HKCU"
+                       Key="Software\SoundSplice"
+                       Name="DesktopShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="INSTALL_ROOT">
+      <Component Id="SoundSpliceProjectAssociation" Guid="DCDD1FCB-80DF-4A0D-A748-C26FFFBB849B">
+        <!-- Plain registry values rather than ProgId/Extension/Verb, which
+             would need the WiX file id of the installed executable: the
+             generated name this patch exists to avoid depending on. -->
+        <RegistryValue Root="HKLM"
+                       Key="Software\Classes\.splice"
+                       Value="SoundSplice.Project"
+                       Type="string"
+                       KeyPath="yes"/>
+        <RegistryValue Root="HKLM"
+                       Key="Software\Classes\.splice"
+                       Name="Content Type"
+                       Value="application/x-soundsplice-project"
+                       Type="string"/>
+        <RegistryValue Root="HKLM"
+                       Key="Software\Classes\SoundSplice.Project"
+                       Value="SoundSplice Project"
+                       Type="string"/>
+        <!-- The document mark, installed beside the app by
+             cmake/Packaging.cmake. Not SoundSplice.exe,0: that is the
+             application mark, and a project file should not look like the
+             program that opens it. -->
+        <RegistryValue Root="HKLM"
+                       Key="Software\Classes\SoundSplice.Project\DefaultIcon"
+                       Value="[INSTALL_ROOT]bin\SoundSplice-Project.ico,0"
+                       Type="string"/>
+        <!-- %1 reaches the app as its first argument (src/app/Main.cpp).
+             Quoted, for a project in a folder with a space in its name. -->
+        <RegistryValue Root="HKLM"
+                       Key="Software\Classes\SoundSplice.Project\shell\open\command"
+                       Value="&quot;[INSTALL_ROOT]bin\SoundSplice.exe&quot; &quot;%1&quot;"
+                       Type="string"/>
+        <!-- Keeps SoundSplice under Open with for .splice even after the user
+             has picked another default for it. -->
+        <RegistryValue Root="HKLM"
+                       Key="Software\Classes\.splice\OpenWithProgids"
+                       Name="SoundSplice.Project"
+                       Value=""
+                       Type="string"/>
+      </Component>
+    </DirectoryRef>
+
+  </CPackWiXFragment>
+
+  <!-- Nothing is installed until it belongs to a feature. -->
+  <CPackWiXFragment Id="#PRODUCTFEATURE">
+    <ComponentRef Id="SoundSpliceDesktopShortcut"/>
+    <ComponentRef Id="SoundSpliceProjectAssociation"/>
+  </CPackWiXFragment>
+
+</CPackWiXPatch>

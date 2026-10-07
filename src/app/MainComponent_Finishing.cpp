@@ -979,7 +979,7 @@ std::vector<juce::File> MainComponent::userTemplates() const
     std::vector<juce::File> found;
     if (! templatesFolder().isDirectory())
         return found;
-    for (const auto& entry : juce::RangedDirectoryIterator(templatesFolder(), false, "*.soundsplice", juce::File::findFiles))
+    for (const auto& entry : juce::RangedDirectoryIterator(templatesFolder(), false, "*.splice", juce::File::findFiles))
         found.push_back(entry.getFile());
     std::sort(found.begin(), found.end(), [](const juce::File& a, const juce::File& b)
               { return a.getFileName().compareNatural(b.getFileName()) < 0; });
@@ -1004,7 +1004,7 @@ void MainComponent::saveAsTemplate()
 
             const auto folder = templatesFolder();
             folder.createDirectory();
-            const auto file = folder.getChildFile(name + ".soundsplice");
+            const auto file = folder.getChildFile(name + ".splice");
             const auto text = model::serialize(model::templates::asTemplate(history_.current()));
             if (! file.replaceWithText(juce::String::fromUTF8(text.c_str())))
             {

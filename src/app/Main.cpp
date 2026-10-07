@@ -127,6 +127,20 @@ public:
             + " (" + juce::SystemStats::getDeviceDescription() + ")");
 
         mainWindow = std::make_unique<MainWindow>(getApplicationName());
+
+        // A project to open: what Explorer passes when a .splice file is
+        // double-clicked (see cmake/wix-patch.xml), or one named by hand.
+        // Quoted by the shell when its path has a space in it.
+        for (const auto& arg : getCommandLineParameterArray())
+        {
+            const juce::File project(juce::File::getCurrentWorkingDirectory().getChildFile(arg.unquoted()));
+            if (project.hasFileExtension("splice") && project.existsAsFile())
+            {
+                if (auto* main = dynamic_cast<MainComponent*>(mainWindow->getContentComponent()))
+                    main->openProjectFile(project);
+                break;
+            }
+        }
     }
 
     void shutdown() override

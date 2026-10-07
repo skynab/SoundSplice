@@ -246,7 +246,7 @@ void MainComponent::saveProject(std::function<void(bool)> onDone)
 
 void MainComponent::saveProjectAs(std::function<void(bool)> onDone)
 {
-    chooser_ = std::make_unique<juce::FileChooser>("Save project", projectFile_, "*.soundsplice");
+    chooser_ = std::make_unique<juce::FileChooser>("Save project", projectFile_, "*.splice");
     const auto flags = juce::FileBrowserComponent::saveMode
                      | juce::FileBrowserComponent::canSelectFiles
                      | juce::FileBrowserComponent::warnAboutOverwriting;
@@ -261,7 +261,7 @@ void MainComponent::saveProjectAs(std::function<void(bool)> onDone)
             return;
         }
 
-        const bool saved = writeProjectTo(file.withFileExtension("soundsplice"));
+        const bool saved = writeProjectTo(file.withFileExtension("splice"));
         if (onDone)
             onDone(saved);
     });
@@ -326,31 +326,35 @@ void MainComponent::openProject()
 
 void MainComponent::chooseProjectToOpen()
 {
-    chooser_ = std::make_unique<juce::FileChooser>("Open project", projectFile_, "*.soundsplice");
+    chooser_ = std::make_unique<juce::FileChooser>("Open project", projectFile_, "*.splice");
     const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
 
     chooser_->launchAsync(flags, [this](const juce::FileChooser& fc)
     {
         const auto file = fc.getResult();
-        if (file == juce::File{})
-            return;
-
-        model::Song song;
-        std::string error;
-        if (! model::deserialize(file.loadFileAsString().toStdString(), song, &error))
-        {
-            showError("Could not open " + file.getFileName() + ": " + error);
-            return;
-        }
-
-        // Paths inside the project's folder are stored relative to it, so the
-        // project finds its audio wherever the folder has been moved.
-        loadSongIntoEditor(app::media::withResolvedPaths(song, file));
-
-        projectFile_  = file;
-        savedStateId_ = history_.stateId(); // what's on screen is what's on disk
-        updateWindowTitle();
+        if (file != juce::File{})
+            openProjectFile(file);
     });
+}
+
+bool MainComponent::openProjectFile(const juce::File& file)
+{
+    model::Song song;
+    std::string error;
+    if (! model::deserialize(file.loadFileAsString().toStdString(), song, &error))
+    {
+        showError("Could not open " + file.getFileName() + ": " + error);
+        return false;
+    }
+
+    // Paths inside the project's folder are stored relative to it, so the
+    // project finds its audio wherever the folder has been moved.
+    loadSongIntoEditor(app::media::withResolvedPaths(song, file));
+
+    projectFile_  = file;
+    savedStateId_ = history_.stateId(); // what's on screen is what's on disk
+    updateWindowTitle();
+    return true;
 }
 
 /** Makes @p song the whole document: history, tempo and every view. Shared by
@@ -373,7 +377,7 @@ void MainComponent::loadSongIntoEditor(const model::Song& song)
     known limit, and a rare way to use this app. */
 juce::File MainComponent::autosaveFile() const
 {
-    return settings_.getFile().getSiblingFile("Autosave").getChildFile("recovery.soundsplice-autosave");
+    return settings_.getFile().getSiblingFile("Autosave").getChildFile("recovery.splice-autosave");
 }
 
 /** Writes the document to the autosave file when there is something new to

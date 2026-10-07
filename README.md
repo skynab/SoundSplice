@@ -29,7 +29,7 @@ edit and process audio on a multi-track timeline, then export the result.
 - **Workspace** — dockable panes you can rearrange by dragging tabs, with built-in *Multitrack*
   and *Waveform* layouts, and undo/redo for every document edit.
 
-Projects are saved as `.soundsplice` files.
+Projects are saved as `.splice` files.
 
 ## Tech stack
 
@@ -99,8 +99,8 @@ an *x64 Native Tools Command Prompt* so it finds the compiler.
 soundsplice-cli convert take.wav take.flac --rate 44100 --bits 16
 soundsplice-cli analyze mix.wav
 soundsplice-cli apply "Podcast clean-up" raw/ --out cleaned/ --loudness -16
-soundsplice-cli render show.soundsplice show.wav --stems
-soundsplice-cli render show.soundsplice show.mp3 --preset "Podcast MP3" --report
+soundsplice-cli render show.splice show.wav --stems
+soundsplice-cli render show.splice show.mp3 --preset "Podcast MP3" --report
 ```
 
 `apply` runs a macro saved in the app (Tools > Macros) when it's made of effects; `soundsplice-cli
@@ -131,8 +131,23 @@ ctest --test-dir build-tests --output-on-failure
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) builds and tests a Release build on
 Windows (x64), Linux (x64) and macOS (Apple Silicon) for every push to `dev`/`main` and every pull
-request, and uploads a package per platform as a run artifact: a `.zip` for Windows, a `.tar.gz`
-for Linux and a `.dmg` for macOS, each with the app and `soundsplice-cli`.
+request, and uploads a package per platform as a run artifact: for Windows an installer
+(`-setup.exe`) and a `.zip`, a `.tar.gz` for Linux and a `.dmg` for macOS, each with the app and
+`soundsplice-cli`.
+
+The Windows installer puts SoundSplice in Program Files with a Start Menu entry and a desktop
+shortcut, and makes `.splice` project files open in it. To build it locally you need the
+[WiX Toolset v3](https://github.com/wixtoolset/wix3/releases) on `PATH`:
+
+```powershell
+cmake --build build --config Release --parallel
+cpack --config build/CPackConfig.cmake -C Release -B build
+powershell -File scripts/build-msi-bundle.ps1 -BuildDir build
+```
+
+That leaves `SoundSplice-<version>-win64.msi` and the `.exe` wrapped around it (the one to ship,
+since only an `.exe` can carry the installer's icon) in `build/`. See
+[`cmake/Packaging.cmake`](cmake/Packaging.cmake).
 
 To cut a release, set `project(VERSION)` in `CMakeLists.txt`, commit, and push a matching tag
 beginning with `v`. A tag that doesn't match the version fails the build straight away, since
@@ -149,8 +164,8 @@ Builds use Ninja and ccache on every platform, so a push rebuilds only what it c
 changes don't trigger a build.
 
 The macOS app is ad-hoc signed, not notarized, so the first launch needs right-click > Open.
-The Windows build needs the Microsoft Visual C++ 2015–2022 redistributable, which most machines
-already have. The Linux build is made on Ubuntu 22.04, so it runs on distributions with glibc
+The Windows `.zip` needs the Microsoft Visual C++ 2015–2022 redistributable, which most machines
+already have; the installer carries it. The Linux build is made on Ubuntu 22.04, so it runs on distributions with glibc
 2.35 or later, and needs ALSA, FreeType, Fontconfig and the X11 libraries installed.
 
 ## Troubleshooting

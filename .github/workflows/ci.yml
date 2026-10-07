@@ -181,6 +181,23 @@ jobs:
             ctest --test-dir build --output-on-failure
           fi
 
+      # The WiX Toolset v3 for the Windows installer (cmake/Packaging.cmake).
+      # Used from the runner image when it has one; otherwise the official
+      # binaries zip, which needs no install.
+      - name: Install WiX
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Get-Command candle.exe -ErrorAction SilentlyContinue) { exit 0 }
+          if ($env:WIX -and (Test-Path "$env:WIX\bin\candle.exe")) {
+            "$env:WIX\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            exit 0
+          }
+          $dir = Join-Path $env:RUNNER_TEMP "wix"
+          Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile "$dir.zip"
+          Expand-Archive "$dir.zip" -DestinationPath $dir
+          $dir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
       - name: Package
         run: |
           pkg="${{ steps.meta.outputs.package }}"
@@ -193,6 +210,11 @@ jobs:
             Windows)
               cp "$app/SoundSplice.exe" "$cli/soundsplice-cli.exe" "stage/$pkg/"
               (cd stage && 7z a -tzip "../dist/$pkg.zip" "$pkg")
+              # The installer: the MSI, then the .exe around it that is
+              # shipped (scripts/build-msi-bundle.ps1).
+              cpack --config build/CPackConfig.cmake -B build
+              pwsh -NoProfile -File scripts/build-msi-bundle.ps1 -BuildDir build
+              cp build/SoundSplice-*-win64.exe "dist/$pkg-setup.exe"
               ;;
             Linux)
               cp "$app/SoundSplice" "$cli/soundsplice-cli" "stage/$pkg/"

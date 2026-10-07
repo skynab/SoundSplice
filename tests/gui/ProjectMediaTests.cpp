@@ -52,14 +52,14 @@ namespace
 TEST_CASE("A project's audio folder sits beside its file", "[gui][projectmedia]")
 {
     TempFolder temp;
-    const auto project = temp.root.getChildFile("My Song.soundsplice");
+    const auto project = temp.root.getChildFile("My Song.splice");
     REQUIRE(media::audioFolderFor(project) == temp.root.getChildFile("My Song Audio"));
 }
 
 TEST_CASE("Audio inside a project's folder is stored relative, anything else in full", "[gui][projectmedia]")
 {
     TempFolder temp;
-    const auto project = temp.root.getChildFile("song.soundsplice");
+    const auto project = temp.root.getChildFile("song.splice");
     const auto inside  = temp.root.getChildFile("song Audio").getChildFile("take 1.wav");
     const auto outside = temp.root.getParentDirectory().getChildFile("my library.wav");
 
@@ -76,7 +76,7 @@ TEST_CASE("A project moved with its audio folder still finds its audio", "[gui][
     const auto here  = temp.root.getChildFile("here");
     const auto there = temp.root.getChildFile("there");
 
-    const auto project = here.getChildFile("song.soundsplice");
+    const auto project = here.getChildFile("song.splice");
     const auto song    = songUsing(here.getChildFile("song Audio/a.wav"), here.getChildFile("song Audio/b.wav"));
 
     // Written, then read back as if the folder had been moved.
@@ -85,7 +85,7 @@ TEST_CASE("A project moved with its audio folder still finds its audio", "[gui][
     REQUIRE(model::deserialize(model::serialize(media::withStoredPaths(song, project)), loaded, &error));
     REQUIRE(loaded.tracks[0].clips[0].audioFile == "song Audio/a.wav");
 
-    const auto moved = media::withResolvedPaths(loaded, there.getChildFile("song.soundsplice"));
+    const auto moved = media::withResolvedPaths(loaded, there.getChildFile("song.splice"));
     REQUIRE(media::fileFromPath(moved.tracks[0].clips[0].audioFile) == there.getChildFile("song Audio/a.wav"));
     REQUIRE(media::fileFromPath(moved.tracks[0].clips[1].audioFile)
             == there.getChildFile("song Audio/b.wav"));
@@ -234,7 +234,7 @@ TEST_CASE("A reverb's impulse response in the project's folder moves with it", "
 {
     TempFolder temp;
     const auto here    = temp.root.getChildFile("here");
-    const auto project = here.getChildFile("song.soundsplice");
+    const auto project = here.getChildFile("song.splice");
 
     auto song   = songUsing(here.getChildFile("song Audio/a.wav"), here.getChildFile("song Audio/b.wav"));
     auto reverb = model::makeEffectSlot(model::EffectKind::Convolution);
@@ -251,7 +251,7 @@ TEST_CASE("A reverb's impulse response in the project's folder moves with it", "
             == temp.root.getChildFile("library/plate.wav")); // outside: kept in full
 
     const auto there = temp.root.getChildFile("there");
-    const auto moved = media::withResolvedPaths(loaded, there.getChildFile("song.soundsplice"));
+    const auto moved = media::withResolvedPaths(loaded, there.getChildFile("song.splice"));
     REQUIRE(media::fileFromPath(moved.tracks[0].effectChain[0].convolution.irFile)
             == there.getChildFile("Impulses/church.wav"));
 }

@@ -162,7 +162,7 @@ private:
     static constexpr int kBitsColumnId     = 9;
     static constexpr int kTitleColumnId    = 10;
     static constexpr const char* kWildcard =
-        "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.m4a;*.mp4;*.soundsplice";
+        "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3;*.opus;*.wv;*.w64;*.rf64;*.bw64;*.caf;*.m4a;*.mp4;*.splice";
 
     bool isFavorite(const juce::File& file) const { return favorites_.count(file.getFullPathName()) > 0; }
 

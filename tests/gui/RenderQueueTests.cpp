@@ -65,7 +65,7 @@ TEST_CASE("Render presets and queue jobs keep every choice", "[gui][renderqueue]
     choice.range                = app::ExportRange::TimeSelection;
     choice.selectionStartBeats  = 8.0;
     choice.selectionLengthBeats = 16.0;
-    const choices::Job job { juce::File::getCurrentWorkingDirectory().getChildFile("snap.soundsplice"),
+    const choices::Job job { juce::File::getCurrentWorkingDirectory().getChildFile("snap.splice"),
                              juce::File::getCurrentWorkingDirectory().getChildFile("out.flac"), choice, "out.flac (Show)" };
     const auto queue = choices::deserializeQueue(choices::serializeQueue({ job, job }));
     REQUIRE(queue.size() == 2);

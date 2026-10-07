@@ -140,6 +140,12 @@ public:
         — and every destructive path must ask the same question the same way. */
     void confirmDiscardChanges(std::function<void()> onProceed);
 
+    /** Makes @p file the open document, replacing whatever is there without
+        asking. Public for a project handed to the app on its command line -
+        double-clicking a .splice file - where nothing is open yet to lose.
+        Returns false, having said why, when the file isn't a project. */
+    bool openProjectFile(const juce::File& file);
+
     // juce::MenuBarModel
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu   getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) override;

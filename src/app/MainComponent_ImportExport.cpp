@@ -567,7 +567,7 @@ void MainComponent::queueExport(app::ExportChoice choice)
         folder.createDirectory();
         const auto snapshot = folder.getNonexistentChildFile(projectFile_ != juce::File() ? projectFile_.getFileNameWithoutExtension()
                                                                                          : juce::String("Untitled"),
-                                                             ".soundsplice");
+                                                             ".splice");
         if (! snapshot.replaceWithText(juce::String::fromUTF8(model::serialize(history_.current()).c_str())))
         {
             showError("Could not save the project for the queue");
