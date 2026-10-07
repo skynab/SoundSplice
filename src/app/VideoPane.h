@@ -10,6 +10,32 @@
 
 namespace soundsplice
 {
+#if JUCE_LINUX || JUCE_BSD
+/** What the pane plays through where JUCE has no video player. JUCE declares
+    juce::VideoComponent everywhere but implements it only on macOS, Windows,
+    iOS and Android, so on Linux the real one compiles and then fails to
+    link. This opens nothing, and says why. */
+class NoVideoComponent final : public juce::Component
+{
+public:
+    explicit NoVideoComponent(bool) {}
+
+    std::function<void(const juce::String&)> onErrorOccurred;
+
+    juce::Result load(const juce::File&) { return juce::Result::fail("video playback isn't available on Linux"); }
+    void   closeVideo() {}
+    bool   isVideoOpen() const { return false; }
+    double getVideoDuration() const { return 0.0; }
+    void   setAudioVolume(float) {}
+    void   setPlaySpeed(double) {}
+    bool   isPlaying() const { return false; }
+    void   play() {}
+    void   stop() {}
+    double getPlayPosition() const { return 0.0; }
+    void   setPlayPosition(double) {}
+};
+#endif
+
 /**
     The Video pane: a reference video to work to - dubbing, a podcast's
     video, a score - kept in step with the playhead (REAPER's and
@@ -146,7 +172,11 @@ private:
             onOffsetChanged(value);
     }
 
+   #if JUCE_LINUX || JUCE_BSD
+    NoVideoComponent     video_ { false };
+   #else
     juce::VideoComponent video_ { false };
+   #endif
     juce::TextButton     loadButton_ { "Load Video..." }, removeButton_ { "Remove" };
     juce::Label          offsetLabel_, status_;
     juce::TextEditor     offset_;
