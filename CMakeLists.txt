@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(SoundSplice
-  VERSION 0.0.1
+  VERSION 0.7.0
   DESCRIPTION "SoundSplice — a focused audio editor"
   HOMEPAGE_URL "https://github.com/skynab/SoundSplice"
   LANGUAGES C CXX)
