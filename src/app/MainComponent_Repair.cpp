@@ -699,7 +699,9 @@ void MainComponent::showPitchCorrectionDialog()
             const double speedMs      = v.number("pitchCorrection.speedMs");
             const bool   keepFormants = v.choice("speedPitch.keepFormants") == 1;
 
-            constexpr int kHop      = 256;
+            // Static, so the inner lambda can name it without capturing it:
+            // GCC 12 wants a plain local constexpr captured there.
+            static constexpr int kHop = 256;
             bool          tooShort  = false;
             const auto    transform = [&](std::vector<std::vector<float>>& channels, double rate)
             {
