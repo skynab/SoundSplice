@@ -153,8 +153,24 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
+      # The log is kept so a failure's errors can be found among the warnings.
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --parallel 2>&1 | tee build.log
+
+      # A failed compile's errors sit somewhere in thousands of lines of
+      # warnings. Raise the first of them as annotations, which the run's
+      # summary page shows (and the API returns, unlike the log).
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E "FAILED:|[: ]error( [A-Z]+[0-9]+)?:|fatal error|undefined reference|ld: |LNK[0-9]+" build.log \
+            | grep -v "warning" | head -n 40 > errors.txt || true
+          head -n 10 errors.txt | while IFS= read -r line; do
+            line=${line//'%'/'%25'}
+            echo "::error::${line:0:900}"
+          done
+          echo "---- first errors ----"
+          cat errors.txt
 
       # The GUI tests create components, which on Linux needs an X display.
       - name: Test
