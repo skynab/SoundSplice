@@ -54,6 +54,15 @@ target_link_libraries(soundsplice_opusfile PUBLIC opus ogg)
 target_compile_options(soundsplice_opusfile PRIVATE -w)
 set_target_properties(soundsplice_opusfile PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# WavPack enables CMake's ASM-ATT language whenever it finds an assembler, for
+# its x86, x64 and 32-bit ARM routines. On macOS CMake 4 finds Apple's but
+# can't set the language up ("CMAKE_ASM-ATT_COMPILE_OBJECT" missing), and an
+# Apple Silicon build has no use for those routines anyway, so it's told there
+# is no assembler; WavPack then builds its portable C instead.
+if(APPLE)
+  set(CMAKE_ASM-ATT_COMPILER "CMAKE_ASM-ATT_COMPILER-NOTFOUND")
+endif()
+
 CPMAddPackage(
   NAME WavPack
   GITHUB_REPOSITORY dbry/WavPack
@@ -67,3 +76,5 @@ CPMAddPackage(
     "WAVPACK_INSTALL_CMAKE_MODULE OFF"
     "WAVPACK_INSTALL_PKGCONFIG_MODULE OFF"
     "WAVPACK_ENABLE_LIBCRYPTO OFF")
+
+unset(CMAKE_ASM-ATT_COMPILER)
