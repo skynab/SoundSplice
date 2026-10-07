@@ -19,7 +19,8 @@ namespace soundsplice::engine
 */
 namespace audioformats
 {
-    /** registerBasicFormats, and the formats above after it. */
+    /** The formats above, then registerBasicFormats, so ours are tried first
+        for their own extensions. */
     void registerAll(juce::AudioFormatManager& formats);
 
     /** The two formats written by their own libraries rather than a JUCE

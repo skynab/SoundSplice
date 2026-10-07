@@ -19,6 +19,17 @@ namespace
     };
 
     void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
+
+    /** Pumps until @p done, for at most two seconds. A dismissed dialog's
+        callback is a posted message, and a slow machine - a CI Mac, creating
+        and closing a real window - can take longer than one pump to get to it. */
+    template <typename Done>
+    void pumpUntil(Done done)
+    {
+        const auto giveUp = juce::Time::getMillisecondCounter() + 2000;
+        while (! done() && juce::Time::getMillisecondCounter() < giveUp)
+            pump();
+    }
 }
 
 TEST_CASE("A form opens with what was used last, and saves what it's given, clamped", "[gui][formdialog]")
@@ -117,8 +128,11 @@ TEST_CASE("Applying runs the action once the dialog closes; cancelling doesn't",
         previewRun();
         REQUIRE(applied == 1);
 
-        window->exitModalState(result); // deletes it, once the callback runs
-        pump();
+        // Deletes it, once the callback runs; the callback ends the preview
+        // whichever button closed it.
+        const int endedBefore = previewsEnded;
+        window->exitModalState(result);
+        pumpUntil([&] { return previewsEnded > endedBefore; });
         previewRun = nullptr;
     };
 
@@ -147,8 +161,10 @@ TEST_CASE("Nothing runs if the dialog's owner has gone by the time it closes", "
     form.show("Apply", [&](const FormDialog::Values&) { ++applied; });
 
     owner.reset();
+    juce::Component::SafePointer<juce::Component> open(window);
     window->exitModalState(1);
-    pump();
+    pumpUntil([&] { return open == nullptr; }); // the callback has run: it deletes the window
+    REQUIRE(open == nullptr);
 
     REQUIRE(applied == 0);
     REQUIRE(previewsEnded == 0);

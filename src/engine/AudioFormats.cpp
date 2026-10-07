@@ -690,12 +690,17 @@ namespace
 
 void audioformats::registerAll(juce::AudioFormatManager& formats)
 {
-    formats.registerBasicFormats();
+    // Ours first. A file goes to the first registered format that claims its
+    // extension and can open it, and on a Mac registerBasicFormats includes
+    // CoreAudioFormat, which claims .opus and .caf (among others) and would
+    // otherwise take them. Each of ours turns down a file it can't decode -
+    // an ALAC .caf, say - which then still goes on to Core Audio.
     formats.registerFormat(new OpusAudioFormat(), false);
     formats.registerFormat(new WavPackAudioFormat(), false);
     formats.registerFormat(new PcmContainerFormat("Wave64 file", { ".w64" }, pcmcontainer::parseWave64), false);
     formats.registerFormat(new PcmContainerFormat("RF64 file", { ".rf64", ".bw64" }, pcmcontainer::parseRf64), false);
     formats.registerFormat(new PcmContainerFormat("CAF file", { ".caf" }, pcmcontainer::parseCaf), false);
+    formats.registerBasicFormats();
    #if JUCE_WINDOWS
     // Last, so the formats above keep their own files: Media Foundation can
     // read MP3 and WMA too, but JUCE's readers do those already.
