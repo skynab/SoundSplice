@@ -31,6 +31,14 @@ if(MSVC)
   add_compile_definitions(_USE_MATH_DEFINES)
 endif()
 
+# MP3 import on Linux. macOS and Windows read MP3 through the system's
+# decoders (Core Audio, Windows Media), which registerBasicFormats includes;
+# Linux has none, so without JUCE's own decoder - off by default - an .mp3
+# offered for import there simply wouldn't open.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_compile_definitions(JUCE_USE_MP3AUDIOFORMAT=1)
+endif()
+
 option(SOUNDSPLICE_BUILD_APP   "Build the SoundSplice application (pulls JUCE)" ON)
 option(SOUNDSPLICE_BUILD_TESTS "Build unit tests (pulls Catch2)"                 ON)
 option(SOUNDSPLICE_BUILD_TOOLS "Build command-line tools (needs JUCE)"          ON)
