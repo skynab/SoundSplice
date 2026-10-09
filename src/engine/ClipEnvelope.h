@@ -57,7 +57,11 @@ public:
             return (int) (it - points_.begin());
         }
 
-        return (int) (points_.insert(it, point) - points_.begin());
+        // Inserted first, then measured: insert can reallocate, and the order
+        // the two sides of a '-' are evaluated in is unspecified - GCC took
+        // begin() first, from the storage insert then threw away.
+        const auto inserted = points_.insert(it, point);
+        return (int) (inserted - points_.begin());
     }
 
     /** The gain at @p seconds into the source file: 1 with no points. */
@@ -117,7 +121,8 @@ public:
 
         points_.erase(points_.begin() + index);
         const EnvelopePoint moved { std::max(0.0, seconds), clampGain(gain) };
-        return (int) (points_.insert(lowerBound(moved.seconds), moved) - points_.begin());
+        const auto inserted = points_.insert(lowerBound(moved.seconds), moved); // see addPoint
+        return (int) (inserted - points_.begin());
     }
 
     bool operator==(const ClipEnvelope&) const = default;
