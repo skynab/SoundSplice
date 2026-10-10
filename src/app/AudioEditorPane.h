@@ -22,6 +22,7 @@
 #include "SpectrogramImage.h"
 #include "WaveformScale.h"
 #include "WaveformPeaks.h"
+#include "ZoomControl.h"
 
 namespace soundsplice
 {
@@ -70,11 +71,6 @@ public:
         shows the *song* timeline — there is only one — so clicking here is
         the same gesture as clicking the ruler in the Tracks pane. */
     std::function<void(double secondsIntoFile)> onSeekRequested;
-
-    /** Start or stop the song transport. @p fromSeconds is where to start
-        from; a selection plays from its beginning. */
-    std::function<void(double fromSeconds)> onPlayRequested;
-    std::function<void()>                   onStopRequested;
 
     /** The destructive edit actions. Named rather than one callback with an
         enum so the owner's wiring reads as a list of commands, matching how
@@ -172,21 +168,6 @@ public:
         normaliseButton_.setTooltip("Set this clip's gain so its loudest point just reaches full scale");
         normaliseButton_.onClick = [this] { if (onNormaliseRequested) onNormaliseRequested(); };
 
-        playButton_.setButtonText("Play");
-        playButton_.setTooltip("Audition the selection, or the whole clip when nothing is selected");
-        playButton_.onClick = [this]
-        {
-            if (playing_)
-            {
-                if (onStopRequested) onStopRequested();
-                return;
-            }
-            // From the selection's start when there is one, otherwise from
-            // wherever the cursor was last put.
-            if (onPlayRequested)
-                onPlayRequested(selection_.isEmpty() ? playheadSeconds_ : selection_.startSeconds);
-        };
-
         // Two rows of edit commands. Each fires its own callback; the owner
         // decides what they mean and refuses when there's no selection.
         struct EditButtonSpec { juce::TextButton* button; const char* text; std::function<void()>* callback; };
@@ -249,17 +230,18 @@ public:
         noiseFloorLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
         noiseFloorLabel_.setInterceptsMouseClicks(false, false);
 
-        zoomInButton_.setButtonText("+");
-        zoomInButton_.setTooltip("Zoom in");
-        zoomInButton_.onClick = [this] { zoomBy(0.5); };
-
-        zoomOutButton_.setButtonText("-");
-        zoomOutButton_.setTooltip("Zoom out");
-        zoomOutButton_.onClick = [this] { zoomBy(2.0); };
-
-        zoomFitButton_.setButtonText("Fit");
-        zoomFitButton_.setTooltip("Show the whole clip");
-        zoomFitButton_.onClick = [this] { zoomToFit(); };
+        zoom_.setTooltips("Zoom in (or scroll up over the waveform)",
+                          "Zoom out (or scroll down over the waveform)", "Show the whole clip");
+        zoom_.onZoomIn  = [this] { zoomBy(0.5); };
+        zoom_.onZoomOut = [this] { zoomBy(2.0); };
+        zoom_.onFit     = [this] { zoomToFit(); };
+        zoom_.onZoomTo  = [this](double position)
+        {
+            const auto area = waveformArea();
+            if (! area.isEmpty())
+                zoomTo(ZoomControl::logValue(position, fitSecondsPerPixel(), kMinSecondsPerPixel),
+                       (float) area.getCentreX());
+        };
 
         selectAllButton_.setButtonText("Select All");
         selectAllButton_.onClick = [this]
@@ -332,7 +314,6 @@ public:
             noisePrintCaptured_ = false;
             playing_            = false;
             playheadSeconds_    = 0.0;
-            playButton_.setButtonText("Play");
             zoomToFit();
             notifySelection();
         }
@@ -638,10 +619,6 @@ public:
 
         playing_         = playing;
         playheadSeconds_ = positionSeconds;
-
-        if (stateChanged)
-            playButton_.setButtonText(playing_ ? "Stop" : "Play");
-
         repaint();
     }
 
@@ -1079,6 +1056,17 @@ public:
         if (live_)
             return; // nothing to select in a take still being recorded
 
+        // The middle button grabs the view and drags it along, as in most
+        // editors - from anywhere over the waveform, ruler or overview, and
+        // without touching the selection or the cursor.
+        if (contentVisible_ && e.mods.isMiddleButtonDown() && overViewOfClip(e.getPosition()))
+        {
+            panning_          = true;
+            panAnchorSeconds_ = geometry_.visibleStartSeconds;
+            setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+            return;
+        }
+
         if (contentVisible_ && overviewArea().contains(e.getPosition()))
         {
             overviewDragging_ = true;
@@ -1120,6 +1108,17 @@ public:
 
     void mouseDrag(const juce::MouseEvent& e) override
     {
+        if (panning_)
+        {
+            const auto area = waveformArea();
+            geometry_.visibleStartSeconds =
+                geometry_.clampedStart(panAnchorSeconds_ - (double) e.getDistanceFromDragStartX() * geometry_.secondsPerPixel,
+                                       (float) area.getWidth());
+            requestSampleDetailIfZoomedIn();
+            repaint();
+            return;
+        }
+
         if (overviewDragging_)
         {
             scrollToOverview(e.position.x);
@@ -1170,8 +1169,15 @@ public:
         }
     }
 
-    void mouseUp(const juce::MouseEvent&) override
+    void mouseUp(const juce::MouseEvent& e) override
     {
+        if (panning_)
+        {
+            panning_ = false;
+            updateDrawCursor(e.mods, e.getPosition());
+            return;
+        }
+
         if (overviewDragging_)
         {
             overviewDragging_ = false;
@@ -1211,6 +1217,51 @@ public:
     void mouseMove(const juce::MouseEvent& e) override
     {
         updateDrawCursor(e.mods, e.getPosition());
+    }
+
+    /** The wheel zooms, about the point under the mouse so what's there
+        stays there; sideways (a trackpad's swipe, or Shift with a wheel)
+        scrolls along the clip instead. */
+    void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override
+    {
+        const auto area = waveformArea();
+        if (live_ || ! contentVisible_ || area.isEmpty() || ! overViewOfClip(e.getPosition()))
+        {
+            Component::mouseWheelMove(e, wheel);
+            return;
+        }
+
+        const bool  shift    = e.mods.isShiftDown();
+        const float sideways = shift && std::abs(wheel.deltaX) < 1.0e-6f ? wheel.deltaY : wheel.deltaX;
+        const float upDown   = shift ? 0.0f : wheel.deltaY;
+        if (std::abs(sideways) > std::abs(upDown))
+        {
+            const double by = -(double) sideways * (double) area.getWidth() * 0.5 * geometry_.secondsPerPixel;
+            geometry_.visibleStartSeconds =
+                geometry_.clampedStart(geometry_.visibleStartSeconds + by, (float) area.getWidth());
+            requestSampleDetailIfZoomedIn();
+            repaint();
+            return;
+        }
+
+        if (std::abs(upDown) < 1.0e-6f)
+            return;
+
+        // A notch of an ordinary wheel (about 0.25) zooms by about a fifth;
+        // a trackpad's many small deltas add up to the same.
+        const double factor = std::pow(2.0, -(double) upDown * (wheel.isReversed ? -1.0 : 1.0) * 1.2);
+        zoomTo(geometry_.secondsPerPixel * factor,
+               juce::jlimit((float) area.getX(), (float) area.getRight(), e.position.x));
+    }
+
+    /** A pinch on a trackpad zooms as the wheel does. */
+    void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override
+    {
+        const auto area = waveformArea();
+        if (live_ || ! contentVisible_ || area.isEmpty() || scaleFactor <= 0.0f)
+            return;
+        zoomTo(geometry_.secondsPerPixel / (double) scaleFactor,
+               juce::jlimit((float) area.getX(), (float) area.getRight(), e.position.x));
     }
 
     void modifierKeysChanged(const juce::ModifierKeys& mods) override
@@ -1256,9 +1307,9 @@ public:
 
         // Divide what's actually left rather than imposing minimums, so the
         // buttons shrink together instead of the last ones falling off.
-        juce::Component* toolButtons[] { &playButton_,
-                                         &zoomOutButton_, &zoomInButton_, &zoomFitButton_,
-                                         &selectAllButton_, &clearSelectionButton_ };
+        zoom_.setBounds(toolRow.removeFromLeft(juce::jmin(ZoomControl::kIdealWidth, toolRow.getWidth() / 2)));
+        toolRow.removeFromLeft(6);
+        juce::Component* toolButtons[] { &selectAllButton_, &clearSelectionButton_ };
         const int buttonCount = (int) std::size(toolButtons);
         for (int i = 0; i < buttonCount; ++i)
         {
@@ -1537,6 +1588,16 @@ private:
 
     SelectionActions selectionActions_;
     bool             overviewDragging_ = false;
+    bool             panning_          = false; // a middle-button drag of the view
+    double           panAnchorSeconds_ = 0.0;   // where the view started when it was grabbed
+
+    /** Over the waveform, its ruler or the overview: where the wheel zooms
+        and the middle button pans. */
+    bool overViewOfClip(juce::Point<int> position) const
+    {
+        return waveformArea().contains(position) || overviewArea().contains(position)
+            || rulerArea().contains(position);
+    }
 
     /** Travel that turns a click into a drag-select. */
     static constexpr int kDragThresholdPixels = 3;
@@ -1953,6 +2014,15 @@ private:
         keepViewForRedraw_ = false;
     }
 
+    /** As far in as the view goes: a few dozen pixels a sample at any
+        ordinary rate, past where the samples are drawn as points. */
+    static constexpr double kMinSecondsPerPixel = 1.0e-6;
+
+    double fitSecondsPerPixel() const
+    {
+        return juce::jmax(kMinSecondsPerPixel, geometry_.secondsPerPixelToFit((float) waveformArea().getWidth()));
+    }
+
     void zoomBy(double factor)
     {
         const auto area = waveformArea();
@@ -1961,16 +2031,23 @@ private:
 
         // Anchored on the centre of the view, so zooming doesn't wander off
         // whatever the user was looking at.
-        const double centre  = geometry_.visibleStartSeconds
-                             + geometry_.visibleSeconds((float) area.getWidth()) * 0.5;
-        const double fitPerPixel = geometry_.secondsPerPixelToFit((float) area.getWidth());
+        zoomTo(geometry_.secondsPerPixel * factor, (float) area.getCentreX());
+    }
 
-        geometry_.secondsPerPixel =
-            juce::jlimit(1.0e-6, juce::jmax(1.0e-6, fitPerPixel), geometry_.secondsPerPixel * factor);
+    /** Zooms to @p secondsPerPixel, within what the view allows, keeping the
+        time under pixel @p anchorX where it is. */
+    void zoomTo(double secondsPerPixel, float anchorX)
+    {
+        const auto area = waveformArea();
+        if (area.isEmpty())
+            return;
 
+        const double anchored = geometry_.secondsForX(anchorX);
+        geometry_.secondsPerPixel = juce::jlimit(kMinSecondsPerPixel, fitSecondsPerPixel(), secondsPerPixel);
         geometry_.visibleStartSeconds =
-            geometry_.clampedStart(centre - geometry_.visibleSeconds((float) area.getWidth()) * 0.5,
+            geometry_.clampedStart(anchored - (double) (anchorX - geometry_.contentLeft) * geometry_.secondsPerPixel,
                                    (float) area.getWidth());
+        updateZoomControl();
         requestSampleDetailIfZoomedIn();
         repaint();
     }
@@ -1983,8 +2060,14 @@ private:
 
         geometry_.secondsPerPixel     = geometry_.secondsPerPixelToFit((float) area.getWidth());
         geometry_.visibleStartSeconds = 0.0;
+        updateZoomControl();
         requestSampleDetailIfZoomedIn(); // a clip short enough can fit at sample level
         repaint();
+    }
+
+    void updateZoomControl()
+    {
+        zoom_.setPosition(ZoomControl::logPosition(geometry_.secondsPerPixel, fitSecondsPerPixel(), kMinSecondsPerPixel));
     }
 
     /** Asks for the visible samples, and half a view either side so a small
@@ -2011,12 +2094,11 @@ private:
         missed when they are parented or their visibility is toggled. */
     std::vector<juce::Component*> managedControls()
     {
-        return { &playButton_,
-                 &cutButton_, &copyButton_, &pasteButton_, &deleteButton_, &trimButton_,
+        return { &cutButton_, &copyButton_, &pasteButton_, &deleteButton_, &trimButton_,
                  &splitButton_, &silenceButton_, &fadeInButton_, &fadeOutButton_, &reverseButton_,
                  &effectsButton_, &speedPitchButton_,
                  &selectionLabel_, &gainLabel_, &gainSlider_, &normaliseButton_,
-                 &zoomInButton_, &zoomOutButton_, &zoomFitButton_,
+                 &zoom_,
                  &selectAllButton_, &clearSelectionButton_,
                  &captureNoiseButton_, &reduceNoiseButton_,
                  &noiseAmountLabel_, &noiseAmountSlider_,
@@ -2065,9 +2147,9 @@ private:
     juce::Label      placeholderLabel_;
     juce::Label      selectionLabel_, gainLabel_;
     juce::Slider     gainSlider_;
-    juce::TextButton normaliseButton_, zoomInButton_, zoomOutButton_, zoomFitButton_;
+    juce::TextButton normaliseButton_;
+    ZoomControl      zoom_;
     juce::TextButton selectAllButton_, clearSelectionButton_;
-    juce::TextButton playButton_;
     juce::TextButton cutButton_, copyButton_, pasteButton_, deleteButton_, trimButton_;
     juce::TextButton splitButton_, silenceButton_, fadeInButton_, fadeOutButton_, reverseButton_;
     juce::TextButton effectsButton_, speedPitchButton_;

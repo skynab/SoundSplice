@@ -30,8 +30,9 @@ namespace soundsplice::commands
     context-specific command comes first and is enabled only in its context,
     and the general one takes the key everywhere else:
 
-      - Delete Selected Clip comes before Delete Track: the bare delete key
-        removes a selected clip rather than the track it's on.
+      - Delete Audio, then Delete Selected Clip, then Delete Track: the bare
+        delete key removes the selected audio when there is a selection,
+        otherwise a selected clip, and only then the track it's on.
 */
 enum Id : int
 {
@@ -275,7 +276,7 @@ inline const std::vector<Definition>& all()
         { cutAudio,         "Cut Audio",            "Edit", "Cut the arrangement's time selection, or the audio editor's selection, to the clipboard.", { keys::cutAudio } },
         { copyAudio,        "Copy Audio",           "Edit", "Copy the audio editor's selection to the audio clipboard.", { keys::copyAudio } },
         { pasteAudio,       "Paste Audio",          "Edit", "Paste at the arrangement's time selection, or at the audio editor's cursor.", { keys::pasteAudio } },
-        { deleteAudio,      "Delete Audio",         "Edit", "Remove the arrangement's time selection, closing the gap, or the audio editor's selection.", {} },
+        { deleteAudio,      "Delete Audio",         "Edit", "Remove the arrangement's time selection, closing the gap, or the audio editor's selection.", { keys::deleteTrack, keys::deleteTrackAlt } },
         { trimToSelection,  "Trim to Selection",    "Edit", "Cut the clip down to the audio editor's selection.", {} },
         { splitAtCursor,    "Split at Cursor",      "Edit", "Split the clip in two where the selection starts.", {} },
         { silenceAudio,     "Silence Audio",        "Edit", "Silence the arrangement's time selection, or the audio editor's selection.", {} },
@@ -424,7 +425,7 @@ inline const std::vector<Definition>& all()
         { previousClip,     "Previous Clip",        "View", "Select the clip before this one on the track, and move the playhead to it.", { keys::previousClip } },
         { nextClip,         "Next Clip",            "View", "Select the clip after this one on the track, and move the playhead to it.", { keys::nextClip } },
         { whereAmI,         "Where Am I",           "View", "Say where the playhead is, and the selected track, clip and time selection.", { keys::whereAmI } },
-        { showHistory,      "History",              "View", "Every undo step: go to any, compare one with now, and get back work an edit after an undo set aside.", {} },
+        { showHistory,      "Undo History",         "View", "Every undo step: go to any, compare one with now, and get back work an edit after an undo set aside.", {} },
         { resetLayout,      "Reset Layout",         "View", "Put the panes back where this layout starts them.", {} },
         { recordMacro,      "Record Macro",         "Tools", "Start keeping the commands and effects you use, to save as a macro; again to stop and name it.", {} },
         { manageMacros,     "Macros...",            "Tools", "Build, edit and run macros: lists of commands and effects run one after another.", {} },

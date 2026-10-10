@@ -44,6 +44,10 @@
 
 namespace soundsplice
 {
+/** The longest stretch of the open file the Waveform view's transport plays
+    in one go: it's read into memory to play. */
+inline constexpr double kFilePlaybackMaxSeconds = 20.0 * 60.0;
+
 /** View-menu ids for panels start well clear of the fixed commands, so adding
     a pane can never collide with one. */
 inline constexpr int kFirstPanelMenuId = 100;

@@ -47,6 +47,17 @@ MainComponent::MainComponent(bool headless)
     // Stop button is gone rather than kept alongside.
     playPauseButton.onClick = [this]
     {
+        // The Waveform view edits one file, so its transport plays that file
+        // alone; Multitrack plays the song. A file still playing when the
+        // view changes stops first, whichever one is pressed.
+        if (playsOpenFile())
+        {
+            toggleFilePlayback();
+            return;
+        }
+        if (filePlayback_.active)
+            stopFilePlayback(false);
+
         if (engine_.isPlaying())
         {
             post(Cmd::SetPlaying, 0.0);
@@ -69,10 +80,29 @@ MainComponent::MainComponent(bool headless)
         }
     };
 
-    firstFrameButton.onClick    = [this] { seekToBeat(0.0); };
+    firstFrameButton.onClick    = [this]
+    {
+        // In the Waveform view, the start of the file rather than the song.
+        if (playsOpenFile())
+        {
+            stopFilePlayback(false);
+            seekToBeat(songBeatForClipSeconds(0.0));
+            return;
+        }
+        seekToBeat(0.0);
+    };
     previousFrameButton.onClick = [this] { stepByBars(-1); };
     nextFrameButton.onClick     = [this] { stepByBars(+1); };
-    lastFrameButton.onClick     = [this] { seekToBeat(songEndBeats()); };
+    lastFrameButton.onClick     = [this]
+    {
+        if (playsOpenFile())
+        {
+            stopFilePlayback(false);
+            seekToBeat(songBeatForClipSeconds(audioEditor_.lengthSeconds()));
+            return;
+        }
+        seekToBeat(songEndBeats());
+    };
 
     {
         auto play  = icons::fromSvg(icons::kPlay);
@@ -397,17 +427,26 @@ MainComponent::MainComponent(bool headless)
     arrangementViewport_.setViewedComponent(&arrangementView_, false);
     arrangeTab_.addAndMakeVisible(arrangementViewport_);
 
-    // A magnifying glass, a slider and an editable multiplier. The icon says
-    // what the control is without spending width on the word; the slider
-    // makes the whole range reachable in one gesture; the box shows the exact
-    // figure and takes one typed in. Both panes get the same control from one
-    // definition — two copies of this would be two things to keep in step.
-    setUpZoomControls(arrangeTab_, zoomIcon_, zoomSlider_, zoomBox_,
+    // Zoom out, a slider, zoom in and Fit - the Audio pane's control - and an
+    // editable multiplier. The slider makes the whole range reachable in one
+    // gesture; the box shows the exact figure and takes one typed in.
+    setUpZoomControls(arrangeTab_, zoomControl_, zoomBox_,
                       ArrangementView::kMinZoom, ArrangementView::kMaxZoom,
                       withShortcut("Timeline zoom", keys::zoomIn),
                       [this](float zoom) { setTimelineZoom(zoom); });
 
     arrangeTab_.onResized = [this] { layoutArrangeTab(); };
+
+    // Ctrl+scroll zooms about the mouse: the beat under it stays under it,
+    // so zooming in on something doesn't push it out of view.
+    arrangementView_.onZoomWheel = [this](float notches, float anchorX)
+    {
+        const double beat    = arrangementView_.geometry().beatForX(anchorX);
+        const int    onView  = (int) anchorX - arrangementViewport_.getViewPositionX();
+        setTimelineZoom(arrangementView_.zoom() * (float) std::pow(2.0, (double) notches * 1.2));
+        const int    x       = (int) arrangementView_.geometry().xForBeat(beat) - onView;
+        arrangementViewport_.setViewPosition(juce::jmax(0, x), arrangementViewport_.getViewPositionY());
+    };
 
     arrangementView_.onSeek = [this](double beat)
     {
@@ -521,14 +560,16 @@ MainComponent::MainComponent(bool headless)
     // for the editor meant two playheads that disagreed about "now".
     audioEditor_.onSeekRequested = [this](double secondsIntoFile)
     {
+        // A click while the file plays carries on playing from there.
+        const bool restart = filePlayback_.active;
+        stopFilePlayback(false);
         seekToBeat(songBeatForClipSeconds(secondsIntoFile));
+        if (restart)
+        {
+            audioEditor_.setPlaybackState(false, secondsIntoFile);
+            toggleFilePlayback();
+        }
     };
-    audioEditor_.onPlayRequested = [this](double fromSeconds)
-    {
-        seekToBeat(songBeatForClipSeconds(fromSeconds));
-        post(Cmd::SetPlaying, 1.0);
-    };
-    audioEditor_.onStopRequested = [this] { post(Cmd::SetPlaying, 0.0); };
     audioEditor_.onFilesDropped = [this](const juce::Array<juce::File>& files)
     {
         // Each on its own new track, at the start. importAudioFileAtBeat
@@ -558,6 +599,8 @@ MainComponent::MainComponent(bool headless)
     openFilesPane_.onCloseAll = [this] { closeAllOpenFiles(); };
     openFilesPane_.onShowInMultitrack = [this](int clipId) { showOpenFileInMultitrack(clipId); };
     openFilesPane_.onRevealInFiles    = [this](int clipId) { revealOpenFileInFiles(clipId); };
+    openFilesPane_.onRenameRequested  = [this](int clipId) { renameOpenFile(clipId); };
+    openFilesPane_.onMoveRequested    = [this](int clipId) { moveOpenFile(clipId); };
 
     automationPane_.onLaneEdited = [this](const AutomationTarget& target, const model::AutomationLane& lane)
     {
@@ -1125,8 +1168,11 @@ void MainComponent::timerCallback()
         stereoScope_.setReading(scopePairs_, engine_.masterCorrelation());
     }
     masteringPane_.setReductionDb(engine_.masteringReductionDb());
-    audioEditor_.setPlaybackState(engine_.isPlaying(),
-                                  clipSecondsForSongBeat(uiTempoMap_.ppqFromSamples(playhead)));
+    if (filePlayback_.active)
+        followFilePlayback();
+    else
+        audioEditor_.setPlaybackState(engine_.isPlaying(),
+                                      clipSecondsForSongBeat(uiTempoMap_.ppqFromSamples(playhead)));
 
     // An armed track's meter shows its input - what a take would record,
     // which is the level to check before one - and any other its output.

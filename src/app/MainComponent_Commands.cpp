@@ -128,7 +128,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
                                && (! razorAreas_.empty() || timeSelection_.hasTracks())));
             break;
 
+        // Delete Audio shares the bare delete key with Delete Selected Clip,
+        // so the editor's selection counts only while the Audio pane is in
+        // front: a selection left behind in a hidden editor mustn't turn the
+        // key from "remove this clip" into "cut a hole in it".
         case commands::deleteAudio:
+            info.setActive((audioInFront && hasSelection) || ! timeSelection_.isEmpty() || ! razorAreas_.empty());
+            break;
+
         case commands::silenceAudio:
             info.setActive(hasSelection || ! timeSelection_.isEmpty() || ! razorAreas_.empty());
             break;
@@ -884,6 +891,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
     {
         add(commands::undo);
         add(commands::redo);
+        add(commands::showHistory); // every step, to go back to any of them
         menu.addSeparator();
         // Audio, clips and tracks each get their own commands rather than
         // one set whose meaning depends on which pane has focus.

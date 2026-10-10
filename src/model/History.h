@@ -100,6 +100,24 @@ public:
                 fn(entry.state);
     }
 
+    /** Calls @p fn with every state the history holds, to change in place:
+        for a change that has to reach every state the user can get back to
+        and isn't an edit of its own, such as an audio file moved on disk,
+        which every state referring to it has to follow. No undo step is
+        made; the present state counts as changed (see mutableCurrent). */
+    template <typename Fn>
+    void forEachStateMutable(Fn&& fn)
+    {
+        fn(mutableCurrent());
+        for (auto& entry : undo_)
+            fn(entry.state);
+        for (auto& entry : redo_)
+            fn(entry.state);
+        for (auto& branch : branches_)
+            for (auto& entry : branch.entries)
+                fn(entry.state);
+    }
+
     bool canUndo() const noexcept { return ! undo_.empty(); }
     bool canRedo() const noexcept { return ! redo_.empty(); }
 

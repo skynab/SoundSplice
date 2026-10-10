@@ -165,6 +165,9 @@ public:
         fileGrid_.selectFile(file);
     }
 
+    /** The folder being browsed. */
+    juce::File currentDirectory() const { return directoryList_.getDirectory(); }
+
     /** The file selected in the grid, or none. */
     juce::File selectedFile() const { return fileGrid_.selectedFile(); }
 

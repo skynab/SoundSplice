@@ -906,7 +906,9 @@ TEST_CASE("A collapsed folder hides its tracks' lanes, and its triangle toggles 
     REQUIRE(view->trackAtYForTesting(top + lane * 0.5f) == 0);
     REQUIRE(view->trackAtYForTesting(top + lane * 1.5f) == 3);
     REQUIRE(view->trackAtYForTesting(top + lane * 2.5f) == -1);
-    REQUIRE(view->getHeight() == (int) std::ceil(top + lane * 2.0f));
+    // Two lanes, and the empty one below them that files are dropped on to
+    // make a new track.
+    REQUIRE(view->getHeight() == (int) std::ceil(top + lane * 3.0f));
 
     int toggled = -1;
     view->onFolderToggled = [&](int track) { toggled = track; };
@@ -919,4 +921,42 @@ TEST_CASE("A collapsed folder hides its tracks' lanes, and its triangle toggles 
     song.tracks[0].folderCollapsed = false;
     view->setSong(song);
     REQUIRE(view->trackAtYForTesting(top + lane * 2.5f) == 2);
+}
+
+TEST_CASE("A file dragged over the timeline shows which track it will land on", "[gui][arrangement]")
+{
+    JuceFixture fixture;
+    auto view = viewWith(2);
+    auto& target = static_cast<juce::FileDragAndDropTarget&>(*view); // the overrides are private
+
+    const float top  = view->rulerHeightForTesting();
+    const float lane = view->laneHeightForTesting();
+    const int   x    = (int) view->gutterWidthForTesting() + 200;
+    // A drop only takes files that are there; what's in one doesn't matter here.
+    const juce::TemporaryFile take(".wav");
+    REQUIRE(take.getFile().replaceWithText("RIFF"));
+    const juce::StringArray files { take.getFile().getFullPathName() };
+
+    int landed = -2;
+    view->onFileDropped = [&](const juce::File&, double, int trackIndex) { landed = trackIndex; };
+
+    SECTION("over a track's lane: that track")
+    {
+        target.fileDragEnter(files, x, (int) (top + lane * 1.5f));
+        REQUIRE(view->dropTrackForTesting() == 1);
+        target.filesDropped(files, x, (int) (top + lane * 1.5f));
+        REQUIRE(landed == 1);
+    }
+
+    SECTION("in the empty lane below the tracks: a new track")
+    {
+        // There's always that lane to drop onto, however many tracks there are.
+        REQUIRE((float) view->getHeight() >= top + lane * 3.0f);
+
+        target.fileDragEnter(files, x, (int) (top + lane * 1.5f));
+        target.fileDragMove(files, x, (int) (top + lane * 2.5f));
+        REQUIRE(view->dropTrackForTesting() == -1);
+        target.filesDropped(files, x, (int) (top + lane * 2.5f));
+        REQUIRE(landed == -1);
+    }
 }

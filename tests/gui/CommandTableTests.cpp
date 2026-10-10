@@ -90,13 +90,13 @@ TEST_CASE("Every shortcut belongs to a command, and every command key is a named
 TEST_CASE("A shared shortcut goes to its context-specific command first", "[gui][commands]")
 {
     // The command manager gives a key to the first enabled command in table
-    // order. Two commands on one key is only right for the pairs designed
-    // that way, and only with the narrower one first: the other way round,
-    // the bare delete key would take the track a selected clip is on.
+    // order. Several commands on one key is only right for the chains designed
+    // that way, and only narrowest first: the other way round, the bare delete
+    // key would take the track a selected clip is on.
     JuceFixture fixture;
 
-    const std::vector<std::pair<commands::Id, commands::Id>> designedPairs {
-        { commands::deleteSelectedClip, commands::deleteTrack },
+    const std::vector<std::vector<commands::Id>> designedChains {
+        { commands::deleteAudio, commands::deleteSelectedClip, commands::deleteTrack },
     };
 
     std::map<KeyId, std::vector<commands::Id>> owners;
@@ -111,11 +111,10 @@ TEST_CASE("A shared shortcut goes to its context-specific command first", "[gui]
 
         INFO("key " << juce::KeyPress(key.first, juce::ModifierKeys(key.second), 0).getTextDescription()
              << " is shared by " << ids.size() << " commands");
-        REQUIRE(ids.size() == 2);
 
-        const auto pair = std::find_if(designedPairs.begin(), designedPairs.end(),
-                                       [&ids](const auto& p) { return p.first == ids[0] && p.second == ids[1]; });
-        REQUIRE(pair != designedPairs.end());
-        REQUIRE(indexOf(pair->first) < indexOf(pair->second));
+        const auto chain = std::find(designedChains.begin(), designedChains.end(), ids);
+        REQUIRE(chain != designedChains.end());
+        for (size_t i = 1; i < chain->size(); ++i)
+            REQUIRE(indexOf((*chain)[i - 1]) < indexOf((*chain)[i]));
     }
 }

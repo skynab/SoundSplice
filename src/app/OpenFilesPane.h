@@ -12,8 +12,9 @@ namespace soundsplice
 /**
     The Open Files pane: the audio open in the editor (app/OpenFiles.h), one
     row each, with the one showing highlighted. Click a row to edit it;
-    right-click one to find it on the timeline or in the Files browser, or
-    to close it; or use the buttons along the top. Every entry is a clip in
+    right-click one to find it on the timeline or in the Files browser, to
+    rename its file or move it to a folder of your own, or to close it; or
+    use the buttons along the top. Every entry is a clip in
     the project already, so nothing has to be moved for Multitrack to have
     it.
 
@@ -37,6 +38,8 @@ public:
     std::function<void()>           onCloseAll;
     std::function<void(int clipId)> onShowInMultitrack; // right-click: the clip on the timeline
     std::function<void(int clipId)> onRevealInFiles;    // right-click: its file in the Files browser
+    std::function<void(int clipId)> onRenameRequested;  // its file, on disk
+    std::function<void(int clipId)> onMoveRequested;    // its file, to a folder to choose
 
     OpenFilesPane()
     {
@@ -53,6 +56,25 @@ public:
         closeAllButton_.setTooltip("Empty this list. Nothing is removed from the project.");
         closeAllButton_.onClick = [this] { if (onCloseAll) onCloseAll(); };
         addAndMakeVisible(closeAllButton_);
+
+        renameButton_.setButtonText("Rename...");
+        renameButton_.setTooltip("Rename the file showing in the Audio editor");
+        renameButton_.onClick = [this]
+        {
+            if (current_ != 0 && onRenameRequested)
+                onRenameRequested(current_);
+        };
+        addAndMakeVisible(renameButton_);
+
+        moveButton_.setButtonText("Move...");
+        moveButton_.setTooltip("Move the file showing in the Audio editor to a folder of your own - "
+                               "the one the Files browser is showing, to start with");
+        moveButton_.onClick = [this]
+        {
+            if (current_ != 0 && onMoveRequested)
+                onMoveRequested(current_);
+        };
+        addAndMakeVisible(moveButton_);
 
         list_.setModel(this);
         list_.setRowHeight(kRowHeight);
@@ -109,12 +131,16 @@ public:
     void resized() override
     {
         auto area    = getLocalBounds().reduced(6);
-        auto buttons = area.removeFromTop(24);
-        const int width = juce::jmin(90, (buttons.getWidth() - 6) / 2);
-        closeButton_.setBounds(buttons.removeFromLeft(width));
-        buttons.removeFromLeft(6);
-        closeAllButton_.setBounds(buttons.removeFromLeft(width));
-        area.removeFromTop(6);
+        // Two rows: what to do with the file, then closing it.
+        for (auto row : { std::pair { &renameButton_, &moveButton_ }, std::pair { &closeButton_, &closeAllButton_ } })
+        {
+            auto buttons = area.removeFromTop(24);
+            const int width = juce::jmin(90, (buttons.getWidth() - 6) / 2);
+            row.first->setBounds(buttons.removeFromLeft(width));
+            buttons.removeFromLeft(6);
+            row.second->setBounds(buttons.removeFromLeft(width));
+            area.removeFromTop(6);
+        }
         list_.setBounds(area);
     }
 
@@ -164,6 +190,9 @@ private:
             menu.addItem(3, "Show in Multitrack");
             menu.addItem(4, "Reveal in Files");
             menu.addSeparator();
+            menu.addItem(5, "Rename...");
+            menu.addItem(6, "Move to Folder...");
+            menu.addSeparator();
             menu.addItem(1, "Close");
             menu.addItem(2, "Close All");
             menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&list_),
@@ -179,6 +208,10 @@ private:
                                        safe->onShowInMultitrack(clipId);
                                    else if (result == 4 && safe->onRevealInFiles)
                                        safe->onRevealInFiles(clipId);
+                                   else if (result == 5 && safe->onRenameRequested)
+                                       safe->onRenameRequested(clipId);
+                                   else if (result == 6 && safe->onMoveRequested)
+                                       safe->onMoveRequested(clipId);
                                });
             return;
         }
@@ -190,11 +223,14 @@ private:
     void updateButtons()
     {
         closeButton_.setEnabled(current_ != 0 && ! entries_.empty());
+        renameButton_.setEnabled(current_ != 0 && ! entries_.empty());
+        moveButton_.setEnabled(current_ != 0 && ! entries_.empty());
         closeAllButton_.setEnabled(! entries_.empty());
     }
 
     juce::TextButton   closeButton_;
     juce::TextButton   closeAllButton_;
+    juce::TextButton   renameButton_, moveButton_;
     juce::ListBox      list_ { "Open Files" };
     std::vector<Entry> entries_;
     int                current_ = 0;

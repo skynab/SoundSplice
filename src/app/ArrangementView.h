@@ -90,6 +90,11 @@ public:
 
     std::function<void(double)> onSeek; // beat position clicked
 
+    /** Ctrl (Cmd on a Mac) with the wheel over the timeline: zoom by
+        @p notches (up is in) about content x @p anchorX. A plain wheel
+        scrolls the viewport, as it does everywhere. */
+    std::function<void(float notches, float anchorX)> onZoomWheel;
+
     /** Fired when a drag along the ruler starts moving, and when it's let go:
         the owner plays while the ruler is scrubbed, so what's under the mouse
         can be heard. A click without a drag fires neither. */
@@ -674,14 +679,75 @@ public:
             g.fillPath(pin);
         }
 
-        // Drop preview: a file is being dragged over the timeline.
+        // Drop preview: a file is being dragged over the timeline. The lane
+        // it will land on lights up - an audio track it's over, or a new
+        // track below the rest - and says which, so where a drop goes is
+        // never a surprise.
         if (fileDragActive_)
-        {
-            const float dx = geometry_.xForBeat(dropPreviewBeat_);
-            g.setColour(theme::colour(*this, theme::accentId).withAlpha(0.5f));
-            g.fillRect(dx, 0.0f, 2.0f, height);
-        }
+            paintDropPreview(g, height);
     }
+
+    void paintDropPreview(juce::Graphics& g, float height)
+    {
+        const auto  accent = theme::colour(*this, theme::accentId);
+        const float left   = geometry_.gutterWidth;
+        const float width  = juce::jmax(0.0f, (float) getWidth() - left);
+        const float dx     = geometry_.xForBeat(dropPreviewBeat_);
+
+        juce::Rectangle<float> lane;
+        juce::String           label;
+        if (dropTrack_ >= 0)
+        {
+            lane  = { left, laneTop(dropTrack_), width, geometry_.laneHeight };
+            const auto& name = song_.tracks[(size_t) dropTrack_].name;
+            label = "Add to " + (name.empty() ? "track " + juce::String(dropTrack_ + 1) : juce::String::fromUTF8(name.c_str()));
+        }
+        else
+        {
+            lane  = { left, newTrackLaneTop(), width, geometry_.laneHeight };
+            label = "+ New track";
+        }
+
+        g.setColour(accent.withAlpha(0.12f));
+        g.fillRect(lane);
+        if (dropTrack_ >= 0)
+        {
+            g.setColour(accent.withAlpha(0.8f));
+            g.drawRect(lane, 1.5f);
+        }
+        else
+        {
+            juce::Path outline, dashed;
+            outline.addRectangle(lane.reduced(1.0f));
+            const float dashes[] { 6.0f, 4.0f };
+            juce::PathStrokeType(1.5f).createDashedStroke(dashed, outline, dashes, 2);
+            g.setColour(accent.withAlpha(0.8f));
+            g.fillPath(dashed);
+        }
+
+        // Where in time, on that lane: the line the clip will start at, the
+        // full height so it can be read against the ruler.
+        g.setColour(accent.withAlpha(0.5f));
+        g.fillRect(dx, 0.0f, 2.0f, height);
+        g.setColour(accent);
+        g.fillRect(dx - 1.0f, lane.getY(), 4.0f, lane.getHeight());
+
+        const auto font = theme::font(12.0f);
+        const float textWidth = juce::GlyphArrangement::getStringWidth(font, label) + 16.0f;
+        auto pill = juce::Rectangle<float>(dx + 6.0f, lane.getY() + 4.0f, textWidth, 20.0f);
+        if (pill.getRight() > lane.getRight())
+            pill.setX(juce::jmax(lane.getX(), dx - 6.0f - textWidth));
+        g.setColour(accent.withAlpha(0.9f));
+        g.fillRoundedRectangle(pill, 5.0f);
+        g.setColour(juce::Colours::white);
+        g.setFont(font);
+        g.drawText(label, pill, juce::Justification::centred, false);
+    }
+
+    /** Where a dragged file would land if dropped now: an audio track's
+        index, or -1 for a new track. For the tests, which check the preview
+        and the drop agree. */
+    int dropTrackForTesting() const noexcept { return dropTrack_; }
 
     /** Test access to the mute geometry. The GUI tests assert that the
         painting and the hit-testing agree, which is only checkable from
@@ -1886,6 +1952,16 @@ private:
             changeTimeSelection({ from, to, { song_.tracks[(size_t) lane].id } });
     }
 
+    void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override
+    {
+        if (e.mods.isCommandDown() && onZoomWheel && std::abs(wheel.deltaY) > 1.0e-6f)
+        {
+            onZoomWheel(wheel.deltaY * (wheel.isReversed ? -1.0f : 1.0f), e.position.x);
+            return;
+        }
+        Component::mouseWheelMove(e, wheel);
+    }
+
     void mouseMove(const juce::MouseEvent& e) override
     {
         updateMuteHover(muteButtonAt(e.position));
@@ -1967,15 +2043,13 @@ private:
 
     void itemDragEnter(const SourceDetails& details) override
     {
-        fileDragActive_  = true;
-        dropPreviewBeat_ = geometry_.beatForX((float) details.localPosition.x);
-        repaint();
+        fileDragActive_ = true;
+        updateDropPreview(details.localPosition.toFloat());
     }
 
     void itemDragMove(const SourceDetails& details) override
     {
-        dropPreviewBeat_ = geometry_.beatForX((float) details.localPosition.x);
-        repaint();
+        updateDropPreview(details.localPosition.toFloat());
     }
 
     void itemDragExit(const SourceDetails&) override
@@ -2001,7 +2075,7 @@ private:
 
         if (file != juce::File{} && onFileDropped)
             onFileDropped(file, geometry_.beatForX((float) details.localPosition.x),
-                         trackIndexForY((float) details.localPosition.y));
+                         dropTrackForY((float) details.localPosition.y));
     }
 
     // juce::FileDragAndDropTarget — drags from the OS, not from inside the app.
@@ -2010,17 +2084,15 @@ private:
         return audiofiles::containsImportableAudio(files);
     }
 
-    void fileDragEnter(const juce::StringArray&, int x, int /*y*/) override
+    void fileDragEnter(const juce::StringArray&, int x, int y) override
     {
-        fileDragActive_  = true;
-        dropPreviewBeat_ = geometry_.beatForX((float) x);
-        repaint();
+        fileDragActive_ = true;
+        updateDropPreview({ (float) x, (float) y });
     }
 
-    void fileDragMove(const juce::StringArray&, int x, int /*y*/) override
+    void fileDragMove(const juce::StringArray&, int x, int y) override
     {
-        dropPreviewBeat_ = geometry_.beatForX((float) x);
-        repaint();
+        updateDropPreview({ (float) x, (float) y });
     }
 
     void fileDragExit(const juce::StringArray&) override
@@ -2037,7 +2109,7 @@ private:
         if (! onFileDropped)
             return;
 
-        const int    trackIndex = trackIndexForY((float) y);
+        const int    trackIndex = dropTrackForY((float) y);
         const double dropBeat   = geometry_.beatForX((float) x);
 
         // Dropping several files at once lays them end to end rather than
@@ -2063,6 +2135,31 @@ private:
         two short clips don't overlap, and an obvious grid position to nudge
         from afterwards. */
     static constexpr double kMultiDropSpacingBeats = 4.0;
+
+    /** The track a file dropped at height @p y goes onto: the audio track
+        whose lane it's over, or -1 - a new track - anywhere else (the empty
+        lane below the tracks, the ruler, or a bus or folder, which hold no
+        clips). The owner follows the same rule, so the preview can't promise
+        what the drop then doesn't do. */
+    int dropTrackForY(float y) const
+    {
+        const int track = trackIndexForY(y);
+        return track >= 0 && song_.tracks[(size_t) track].type == model::TrackType::Audio ? track : -1;
+    }
+
+    void updateDropPreview(juce::Point<float> position)
+    {
+        dropPreviewBeat_ = geometry_.beatForX(position.x);
+        dropTrack_       = dropTrackForY(position.y);
+        repaint();
+    }
+
+    /** The top of the empty lane below the last track, where a file is
+        dropped to put it on a new track. */
+    float newTrackLaneTop() const
+    {
+        return geometry_.rulerHeight + (float) trackOfRow_.size() * geometry_.laneHeight;
+    }
 
     /** The track lane @p y falls in, or -1 if it's above the first lane
         (the ruler) or below the last one. */
@@ -2242,8 +2339,10 @@ private:
     void updateContentSize()
     {
         const int numTracks = (int) trackOfRow_.size();
+        // One lane more than the tracks: room below them to drop a file onto
+        // a new track, however many tracks fill the view.
         setSize((int) std::ceil(geometry_.contentWidth(totalBeats())),
-                (int) std::ceil(geometry_.contentHeight(numTracks)));
+                (int) std::ceil(geometry_.contentHeight(numTracks) + geometry_.laneHeight));
     }
 
     static constexpr int kMinimumBars = 16;
@@ -2796,6 +2895,7 @@ private:
     app::TimeDisplay timeDisplay_;
     bool   fileDragActive_  = false;
     double dropPreviewBeat_ = 0.0;
+    int    dropTrack_       = -1; // where a dragged file would land: an audio track, or -1 for a new one
 };
 
 } // namespace soundsplice

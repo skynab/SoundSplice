@@ -109,6 +109,10 @@ public:
     void stopAudition();
     bool isAuditioning() const noexcept { return audition_.isPlaying(); }
 
+    /** How far the audition has played, in samples of the buffer given to
+        startAudition. */
+    double auditionPositionSamples() const noexcept { return audition_.positionSamples(); }
+
     /** Loudness-matched A/B against a reference track (engine/ReferenceAB.h):
         monitoring only, never in an export. */
     ReferenceAB& reference() noexcept { return reference_; }

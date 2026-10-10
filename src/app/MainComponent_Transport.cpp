@@ -234,6 +234,127 @@ void MainComponent::stopAtEndOfArrangement()
     showStatus("Reached the end of the arrangement");
 }
 
+/** Whether the transport plays the open file rather than the song: in the
+    Waveform view, with a file open in it. That view edits one file, and
+    hearing everything else on the timeline under it - or nothing, when the
+    clip sits later in the song than the playhead - isn't hearing the file. */
+bool MainComponent::playsOpenFile() const
+{
+    return activeWorkspace_ == layouts::Workspace::AudioEditing && ! audioTake_.running
+        && selectedAudioClip() != nullptr && ! audioEditor_.showsLiveTake();
+}
+
+/** Plays the open file from the cursor, or the selection, on its own; or,
+    when it's already playing, pauses it where it is. */
+void MainComponent::toggleFilePlayback()
+{
+    if (filePlayback_.active)
+    {
+        stopFilePlayback(false);
+        return;
+    }
+
+    // The song playing under the Waveform view (started from Multitrack)
+    // stops: the file is heard on its own.
+    if (engine_.isPlaying())
+        post(Cmd::SetPlaying, 0.0);
+
+    const auto* clip = selectedAudioClip();
+    ClipAudio   audio;
+    if (clip == nullptr || ! openSelectedClipAudio(audio) || audio.window.isEmpty())
+    {
+        showError("Could not read that clip");
+        return;
+    }
+
+    const double rate     = audio.sequence.sampleRate > 0.0 ? audio.sequence.sampleRate : 48000.0;
+    const double length   = (double) audio.window.length() / rate;
+    const auto   range    = audioEditor_.selection();
+    double       from     = range.isEmpty() ? audioEditor_.cursorSeconds() : range.startSeconds;
+    double       to       = range.isEmpty() ? length : juce::jmin(length, range.endSeconds);
+    if (from >= length - 1.0e-6)
+        from = 0.0; // at the end: play it again, rather than nothing
+    to = juce::jmax(from, to);
+
+    // Held in memory while it plays: a long file plays its first stretch.
+    const bool cut = to - from > kFilePlaybackMaxSeconds;
+    to = juce::jmin(to, from + kFilePlaybackMaxSeconds);
+
+    const int  first    = (int) std::llround(from * rate);
+    const int  last     = (int) std::llround(to * rate);
+    const auto channels = readClipAudio(audio, first, last);
+    if (channels.empty() || last <= first)
+    {
+        showError("Could not read " + audio.file.getFileName());
+        return;
+    }
+
+    const int count = (int) channels.front().size();
+    juce::AudioBuffer<float> block((int) channels.size(), count);
+    for (int ch = 0; ch < block.getNumChannels(); ++ch)
+        std::copy(channels[(size_t) ch].begin(), channels[(size_t) ch].end(), block.getWritePointer(ch));
+    // At the level the waveform is drawn at.
+    block.applyGain(juce::Decibels::decibelsToGain(clip->gainDb));
+
+    engine_.startAudition(block, rate);
+    filePlayback_ = { true, clip->id, from, from + (double) count / rate, rate };
+    audioEditor_.setPlaybackState(true, from);
+    if (cut)
+        showStatus("Playing the first " + juce::String((int) (kFilePlaybackMaxSeconds / 60.0))
+                   + " minutes from the cursor");
+}
+
+/** Stops the open file playing. Paused, the cursor stays where it got to,
+    as the song's transport leaves its playhead; played out, it goes back to
+    where playing started, so play plays the same stretch again. */
+void MainComponent::stopFilePlayback(bool backToStart)
+{
+    if (! filePlayback_.active)
+        return;
+
+    const double at = backToStart ? filePlayback_.fromSeconds : filePlaybackSeconds();
+    engine_.stopAudition();
+    filePlayback_.active = false;
+
+    // The cursor is the song's playhead seen from the clip (one timeline;
+    // see onSeekRequested), so it's put there by moving that.
+    if (const auto* clip = selectedAudioClip(); clip != nullptr && clip->id == filePlayback_.clipId)
+        seekToBeat(songBeatForClipSeconds(at));
+    audioEditor_.setPlaybackState(false, at);
+}
+
+/** Where the open file is playing, or the cursor when it isn't, in seconds
+    into the clip. */
+double MainComponent::filePlaybackSeconds() const
+{
+    if (! filePlayback_.active)
+        return audioEditor_.cursorSeconds();
+    return juce::jmin(filePlayback_.toSeconds,
+                      filePlayback_.fromSeconds + engine_.auditionPositionSamples() / filePlayback_.sampleRate);
+}
+
+/** The UI timer's half of file playback: the editor's playhead follows it,
+    and it ends when the audio does, or when the clip it was playing is no
+    longer the one on show. */
+void MainComponent::followFilePlayback()
+{
+    const auto* clip = selectedAudioClip();
+    if (clip == nullptr || clip->id != filePlayback_.clipId)
+    {
+        engine_.stopAudition();
+        filePlayback_.active = false;
+        return;
+    }
+
+    if (! engine_.isAuditioning())
+    {
+        stopFilePlayback(true);
+        return;
+    }
+
+    audioEditor_.setPlaybackState(true, filePlaybackSeconds());
+}
+
 double MainComponent::songEndBeats() const
 {
     double end = 0.0;

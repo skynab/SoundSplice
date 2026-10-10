@@ -197,35 +197,25 @@ void MainComponent::applyWorkspaceLayout(layouts::Workspace workspace)
     showStatus("Layout: " + juce::String(layouts::workspaceTitle(workspace)));
 }
 
-/** Builds one of the zoom controls: icon, slider and editable multiplier.
-
-    The tracks pane's: built in one place so the control reads the same way
-    wherever it appears. */
-void MainComponent::setUpZoomControls(juce::Component& parent, juce::DrawableButton& icon,
-                                      juce::Slider& slider, juce::Slider& box,
+/** Builds the tracks pane's zoom controls: the zoom control, and an
+    editable multiplier beside it. */
+void MainComponent::setUpZoomControls(juce::Component& parent, ZoomControl& zoom, juce::Slider& box,
                                       double minZoom, double maxZoom,
                                       const juce::String& tooltip,
                                       std::function<void(float)> onZoom)
 {
-    // A DrawableButton in ImageFitted mode, as every other SVG in this app
-    // uses. Clicks are switched off: this labels the slider, it isn't a
-    // control.
-    auto magnifier = icons::fromSvg(icons::kMagnifier);
-    icon.setImages(magnifier.get());
-    icon.setInterceptsMouseClicks(false, false);
-    icon.setColour(juce::DrawableButton::backgroundColourId, juce::Colours::transparentBlack);
-    parent.addAndMakeVisible(icon);
-
-    slider.setSliderStyle(juce::Slider::LinearHorizontal);
-    slider.setRange(minZoom, maxZoom, 0.0);
-    // Zoom is multiplicative, so a linear track would put x1 a fifth of the
-    // way along and give most of the travel to zooming in. Skewing about the
-    // midpoint puts x1 in the middle, where it belongs.
-    slider.setSkewFactorFromMidPoint(1.0);
-    slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    slider.setTooltip(tooltip);
-    slider.onValueChange = [&slider, onZoom] { onZoom((float) slider.getValue()); };
-    parent.addAndMakeVisible(slider);
+    // Zoom is multiplicative, so the slider is logarithmic: each doubling is
+    // the same distance along it, and x1 sits in the middle of this range.
+    zoom.setTooltips(withShortcut("Zoom in", keys::zoomIn) + " - or Ctrl+scroll over the timeline",
+                     withShortcut("Zoom out", keys::zoomOut), "Fit the whole arrangement in view");
+    zoom.onZoomTo  = [onZoom, minZoom, maxZoom](double position)
+    {
+        onZoom((float) ZoomControl::logValue(position, minZoom, maxZoom));
+    };
+    zoom.onZoomIn  = [this] { setTimelineZoom(arrangementView_.zoom() * 1.25f); };
+    zoom.onZoomOut = [this] { setTimelineZoom(arrangementView_.zoom() / 1.25f); };
+    zoom.onFit     = [this] { fitProjectInView(); };
+    parent.addAndMakeVisible(zoom);
 
     box.setSliderStyle(juce::Slider::LinearBar); // a text field with a drag, not a track
     box.setRange(minZoom, maxZoom, 0.0);
@@ -303,7 +293,7 @@ void MainComponent::fitTracksVertically()
 void MainComponent::updateZoomControls()
 {
     const double zoom = arrangementView_.zoom();
-    zoomSlider_.setValue(zoom, juce::dontSendNotification);
+    zoomControl_.setPosition(ZoomControl::logPosition(zoom, ArrangementView::kMinZoom, ArrangementView::kMaxZoom));
     zoomBox_.setValue(zoom, juce::dontSendNotification);
 }
 
@@ -313,9 +303,7 @@ void MainComponent::layoutArrangeTab()
 
     auto toolbar = area.removeFromTop(28).reduced(4, 2);
 
-    zoomIcon_.setBounds(toolbar.removeFromLeft(24));
-    toolbar.removeFromLeft(2);
-    zoomSlider_.setBounds(toolbar.removeFromLeft(120));
+    zoomControl_.setBounds(toolbar.removeFromLeft(juce::jmin(ZoomControl::kIdealWidth, toolbar.getWidth() / 2)));
     toolbar.removeFromLeft(6);
     zoomBox_.setBounds(toolbar.removeFromLeft(56));
 

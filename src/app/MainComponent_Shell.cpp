@@ -113,7 +113,7 @@ void MainComponent::setUpShell()
     // start - the two halves of what a separate stop button is for.
     transportBar_.stop.onClick = [this]
     {
-        if (engine_.isPlaying())
+        if (engine_.isPlaying() || filePlayback_.active)
             playPauseButton.triggerClick();
         else
             firstFrameButton.triggerClick();
@@ -257,11 +257,15 @@ void MainComponent::updateShell()
 
     // ---- transport ----
     const double sampleRate = engine_.sampleRate() > 0.0 ? engine_.sampleRate() : 48000.0;
-    const double playhead   = (double) engine_.playheadSamples() / sampleRate;
+    // In the Waveform view the clock is the open file's: where its cursor
+    // is, counted from its start, as the transport plays it.
+    const bool   fileClock  = playsOpenFile() || filePlayback_.active;
+    const double playhead   = fileClock ? filePlaybackSeconds() : (double) engine_.playheadSamples() / sampleRate;
     transportBar_.setTime(timeDisplay_.format == app::TimeFormat::BarsBeats
                               ? seconds(playhead)
                               : juce::String(app::formatPosition(timeDisplay_, playhead)));
-    transportBar_.play.setGlyph(engine_.isPlaying() ? glyphs::Glyph::pause : glyphs::Glyph::play);
+    const bool rolling = fileClock ? filePlayback_.active : engine_.isPlaying();
+    transportBar_.play.setGlyph(rolling ? glyphs::Glyph::pause : glyphs::Glyph::play);
     transportBar_.record.setGlyph(recordButton.getToggleState() ? glyphs::Glyph::stop : glyphs::Glyph::record);
     transportBar_.loop.setLit(loopButton.getToggleState());
     transportBar_.setLevels(engine_.masterPeak(0), engine_.masterPeak(1));

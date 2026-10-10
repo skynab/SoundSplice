@@ -772,3 +772,95 @@ TEST_CASE("Ctrl-Shift-drag on the spectrogram lassoes a shape", "[gui][audioedit
     REQUIRE(pane->selection().startSeconds > 0.5);
     REQUIRE(std::abs(pane->selection().endSeconds / pane->selection().startSeconds - 2.0) < 0.05);
 }
+
+namespace
+{
+    juce::MouseEvent eventWith(juce::Component& target, juce::Point<float> position,
+                               juce::Point<float> mouseDownPosition, juce::ModifierKeys mods)
+    {
+        const auto source = juce::Desktop::getInstance().getMainMouseSource();
+        const auto now    = juce::Time::getCurrentTime();
+        return juce::MouseEvent(source, position, mods, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &target, &target,
+                                now, mouseDownPosition, now, 1, false);
+    }
+
+    juce::MouseWheelDetails wheelBy(float deltaY, float deltaX = 0.0f)
+    {
+        juce::MouseWheelDetails wheel;
+        wheel.deltaX     = deltaX;
+        wheel.deltaY     = deltaY;
+        wheel.isReversed = false;
+        wheel.isSmooth   = false;
+        wheel.isInertial = false;
+        return wheel;
+    }
+}
+
+TEST_CASE("There is no Play button on the Audio pane: the transport plays", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto pane = makeReadyPane(800, 400, 60.0);
+    REQUIRE(findButton(*pane, "Play") == nullptr);
+    REQUIRE(findButton(*pane, "+") != nullptr);
+    REQUIRE(findButton(*pane, "-") != nullptr);
+    REQUIRE(findButton(*pane, "Fit") != nullptr);
+}
+
+TEST_CASE("Scrolling over the waveform zooms about the mouse", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto pane = makeReadyPane(800, 400, 60.0);
+
+    const auto [fromBefore, toBefore] = pane->visibleSeconds();
+    const auto at      = waveformPoint(*pane, 0.25f);
+    const auto area    = pane->samplesArea();
+    const double under = fromBefore + (toBefore - fromBefore) * ((at.x - (float) area.getX()) / (float) area.getWidth());
+
+    static_cast<juce::Component&>(*pane).mouseWheelMove(eventAt(*pane, at, at), wheelBy(0.5f));
+
+    const auto [from, to] = pane->visibleSeconds();
+    REQUIRE(to - from < (toBefore - fromBefore) * 0.75); // in
+    // Still the same moment under the mouse, give or take a pixel.
+    const double nowUnder = from + (to - from) * ((at.x - (float) area.getX()) / (float) area.getWidth());
+    REQUIRE(std::abs(nowUnder - under) < (to - from) / (double) area.getWidth() * 2.0);
+
+    SECTION("and back out, no further than the whole clip")
+    {
+        for (int i = 0; i < 10; ++i)
+            static_cast<juce::Component&>(*pane).mouseWheelMove(eventAt(*pane, at, at), wheelBy(-0.5f));
+        const auto [outFrom, outTo] = pane->visibleSeconds();
+        REQUIRE(std::abs((outTo - outFrom) - (toBefore - fromBefore)) < 1.0e-6);
+    }
+}
+
+TEST_CASE("The middle button drags the view along without selecting", "[gui][audioeditor]")
+{
+    JuceFixture fixture;
+    auto pane = makeReadyPane(800, 400, 60.0);
+
+    // Zoomed in, so there's somewhere to pan to.
+    const auto centre = waveformPoint(*pane, 0.5f);
+    for (int i = 0; i < 3; ++i)
+        static_cast<juce::Component&>(*pane).mouseWheelMove(eventAt(*pane, centre, centre), wheelBy(0.5f));
+
+    bool selectionReported = false;
+    bool seeked            = false;
+    pane->onSelectionChanged = [&](AudioRange) { selectionReported = true; };
+    pane->onSeekRequested    = [&](double) { seeked = true; };
+
+    const auto [fromBefore, toBefore] = pane->visibleSeconds();
+    const juce::ModifierKeys middle(juce::ModifierKeys::middleButtonModifier);
+    const auto start = waveformPoint(*pane, 0.6f);
+    const auto end   = waveformPoint(*pane, 0.4f); // dragged left: the view moves on, later
+
+    sendMouseDown(*pane, eventWith(*pane, start, start, middle));
+    sendMouseDrag(*pane, eventWith(*pane, end, start, middle));
+    sendMouseUp(*pane, eventWith(*pane, end, start, juce::ModifierKeys()));
+
+    const auto [from, to] = pane->visibleSeconds();
+    REQUIRE(from > fromBefore);
+    REQUIRE(std::abs((to - from) - (toBefore - fromBefore)) < 1.0e-6); // same zoom
+    REQUIRE(pane->selection().isEmpty());
+    REQUIRE_FALSE(selectionReported);
+    REQUIRE_FALSE(seeked);
+}

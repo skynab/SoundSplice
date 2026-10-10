@@ -51,7 +51,10 @@ public:
     {
         auto* raw = clip.release();
         if (inbox_.push(raw))
+        {
+            played_.store(0.0, std::memory_order_relaxed);
             playing_.store(raw != nullptr, std::memory_order_relaxed);
+        }
         else
             delete raw;
     }
@@ -64,6 +67,10 @@ public:
 
     /** True from play() until the buffer has played out or stop() is called. */
     bool isPlaying() const noexcept { return playing_.load(std::memory_order_relaxed); }
+
+    /** How far into the buffer playing has got, in its own samples: for a
+        playhead to follow. Updated once a block. */
+    double positionSamples() const noexcept { return played_.load(std::memory_order_relaxed); }
 
     /** Frees buffers the audio thread has finished with. */
     void collectRetired()
@@ -114,6 +121,8 @@ public:
             position_ += ratio;
         }
 
+        played_.store(position_, std::memory_order_relaxed);
+
         if (position_ >= (double) length)
             playing_.store(false, std::memory_order_relaxed);
     }
@@ -123,6 +132,7 @@ private:
     ClipData*         current_          = nullptr; // audio-thread owned
     double            position_         = 0.0;     // in source samples
     std::atomic<bool> playing_ { false };
+    std::atomic<double> played_ { 0.0 };           // position_, for the message thread
 
     rt::SpscRingBuffer<ClipData*> inbox_   { 8 };  // message -> audio
     rt::SpscRingBuffer<ClipData*> reclaim_ { 16 }; // audio -> message

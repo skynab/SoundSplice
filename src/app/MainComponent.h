@@ -84,6 +84,7 @@
 #include "TrackColours.h"
 #include "ShellBars.h"
 #include "StatusBanner.h"
+#include "ZoomControl.h"
 
 namespace soundsplice
 {
@@ -347,6 +348,9 @@ private:
     void                   closeOpenFile(int clipId);
     void                   showOpenFileInMultitrack(int clipId);
     void                   revealOpenFileInFiles(int clipId);
+    void                   renameOpenFile(int clipId);
+    void                   moveOpenFile(int clipId);
+    bool                   relocateAudioFile(const juce::File& from, const juce::File& to);
     void                   closeAllOpenFiles();
     void                   stepOpenFile(int direction);
     void                   updateMasteringControls();
@@ -524,6 +528,23 @@ private:
     /** Converts between the audio editor's seconds (from the selected clip's
         start) and song beats — the one place that mapping lives. */
     double                 songBeatForClipSeconds(double secondsIntoFile) const;
+
+    // The Waveform view's transport: the open file on its own, rather than
+    // the song - see MainComponent_Transport.cpp.
+    bool                   playsOpenFile() const;
+    void                   toggleFilePlayback();
+    void                   stopFilePlayback(bool backToStart);
+    void                   followFilePlayback();
+    double                 filePlaybackSeconds() const;
+    struct FilePlayback
+    {
+        bool   active      = false;
+        int    clipId      = 0;
+        double fromSeconds = 0.0; // into the clip, where it started
+        double toSeconds   = 0.0; // where it stops by itself
+        double sampleRate  = 48000.0;
+    };
+    FilePlayback           filePlayback_;
     double                 clipSecondsForSongBeat(double beat) const;
 
     void                   captureNoisePrint();
@@ -818,8 +839,7 @@ private:
     void                   saveDockLayout();
     void                   layoutMixerView();
     void                   layoutMasterPanel();
-    void                   setUpZoomControls(juce::Component& parent, juce::DrawableButton& icon,
-                                             juce::Slider& slider, juce::Slider& box,
+    void                   setUpZoomControls(juce::Component& parent, ZoomControl& zoom, juce::Slider& box,
                                              double minZoom, double maxZoom,
                                              const juce::String& tooltip,
                                              std::function<void(float)> onZoom);
@@ -1106,10 +1126,9 @@ private:
     CallbackComponent                  arrangeTab_;
     juce::Viewport                     arrangementViewport_;
     ArrangementView                    arrangementView_;
-    // Timeline zoom: a magnifying glass labelling a slider, with an editable
-    // multiplier beside it. Replaced a pair of unlabelled +/- buttons.
-    juce::DrawableButton               zoomIcon_ { "Zoom", juce::DrawableButton::ImageFitted };
-    juce::Slider                       zoomSlider_;
+    // Timeline zoom: the same zoom out / slider / zoom in / Fit control as
+    // the Audio pane's, with an editable multiplier beside it.
+    ZoomControl                        zoomControl_;
     juce::Slider                       zoomBox_;
 
     CallbackComponent                  mixerView_;

@@ -244,6 +244,194 @@ void MainComponent::revealOpenFileInFiles(int clipId)
     fileBrowser_.revealFile(file);
 }
 
+namespace
+{
+    /** The file an open clip plays, or none if the clip has gone. */
+    juce::File openClipFile(const model::Song& song, int clipId)
+    {
+        const auto where = app::OpenFiles::locate(song, clipId);
+        if (! where.isValid())
+            return {};
+        return juce::File(juce::String::fromUTF8(song.tracks[(size_t) where.track].clips[(size_t) where.clip].audioFile.c_str()));
+    }
+}
+
+/** Renames the file an open clip plays, on disk, keeping its extension. */
+void MainComponent::renameOpenFile(int clipId)
+{
+    const auto file = openClipFile(history_.current(), clipId);
+    if (! file.existsAsFile())
+    {
+        showError(file == juce::File{} ? juce::String("That clip is no longer in the project")
+                                       : "The clip's file is missing: " + file.getFullPathName());
+        updateOpenFilesPane();
+        return;
+    }
+
+    dialog("Rename File", "Renames " + file.getFileName() + " on disk. Every clip playing it follows.")
+        .text("name", "Name:", file.getFileNameWithoutExtension())
+        .unsaved()
+        .show("Rename", [this, file](const FormDialog::Values& v)
+        {
+            const auto name = juce::File::createLegalFileName(v.text("name").trim());
+            if (name.isEmpty() || name == file.getFileNameWithoutExtension())
+                return;
+
+            const auto target = file.getSiblingFile(name + file.getFileExtension());
+            if (target.exists())
+            {
+                showError(target.getFileName() + " already exists there");
+                return;
+            }
+
+            if (relocateAudioFile(file, target))
+                showStatus("Renamed to " + target.getFileName());
+        });
+}
+
+/** Moves the file an open clip plays into a folder of the user's own -
+    starting from the one the Files browser shows, which is where it's then
+    revealed. A recording otherwise lives in the app's recordings folder or
+    the project's audio folder, neither of which is somewhere anyone browses
+    to. */
+void MainComponent::moveOpenFile(int clipId)
+{
+    const auto file = openClipFile(history_.current(), clipId);
+    if (! file.existsAsFile())
+    {
+        showError(file == juce::File{} ? juce::String("That clip is no longer in the project")
+                                       : "The clip's file is missing: " + file.getFullPathName());
+        updateOpenFilesPane();
+        return;
+    }
+
+    auto start = fileBrowser_.currentDirectory();
+    if (! start.isDirectory() || start == file.getParentDirectory())
+        start = juce::File::getSpecialLocation(juce::File::userMusicDirectory);
+
+    chooser_ = std::make_unique<juce::FileChooser>("Move " + file.getFileName() + " to...", start);
+    chooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                          [this, file](const juce::FileChooser& fc)
+    {
+        const auto folder = fc.getResult();
+        if (folder == juce::File{} || ! folder.isDirectory())
+            return;
+        if (folder == file.getParentDirectory())
+        {
+            showStatus(file.getFileName() + " is already there");
+            return;
+        }
+
+        // A sequence becomes one WAV of what it plays: its blocks are kept
+        // beside it, so it can't travel on its own.
+        const bool render = engine::sequencefile::isSequenceFile(file);
+        const auto target = folder.getNonexistentChildFile(file.getFileNameWithoutExtension(),
+                                                           render ? juce::String(".wav") : file.getFileExtension());
+        if (! relocateAudioFile(file, target))
+            return;
+
+        if (! workspace_.isPanelOpen("Files"))
+            workspace_.openPanel("Files");
+        workspace_.revealPanel("Files");
+        fileBrowser_.revealFile(target);
+        showStatus("Moved to " + target.getFullPathName());
+    });
+}
+
+/** Puts the audio of @p from at @p to - moved, or rendered to a WAV for a
+    sequence going to another folder - and points everything that played
+    @p from at @p to instead: every clip and take, in the document and in
+    every state the undo history holds, so neither an undo nor a redo can
+    bring back a clip whose file has gone. The same audio at a new path,
+    like collecting a project's audio on save, so no undo step is made.
+
+    Copied rather than moved when anything else still reads the file - an
+    edited clip's sequence can play stretches of the recording it was made
+    from - or when it can't be moved (the engine may have it open). */
+bool MainComponent::relocateAudioFile(const juce::File& from, const juce::File& to)
+{
+    const bool toOtherFolder = from.getParentDirectory() != to.getParentDirectory();
+
+    if (engine::sequencefile::isSequenceFile(from) && toOtherFolder)
+    {
+        juce::AudioFormatManager formats;
+        engine::sequencefile::registerFormats(formats);
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(from));
+
+        auto stream = std::make_unique<juce::FileOutputStream>(to);
+        if (reader == nullptr || stream->failedToOpen())
+        {
+            showError("Could not write " + to.getFullPathName());
+            return false;
+        }
+
+        std::unique_ptr<juce::OutputStream> out = std::move(stream);
+        const auto options = juce::AudioFormatWriterOptions{}
+                                 .withSampleRate(reader->sampleRate)
+                                 .withNumChannels(juce::jmax(1, (int) reader->numChannels))
+                                 .withBitsPerSample(32)
+                                 .withSampleFormat(juce::AudioFormatWriterOptions::SampleFormat::floatingPoint);
+        juce::WavAudioFormat wav;
+        auto writer = wav.createWriterFor(out, options);
+        const bool written = writer != nullptr && writer->writeFromAudioReader(*reader, 0, -1);
+        writer.reset();
+        if (! written)
+        {
+            to.deleteFile();
+            showError("Could not write " + to.getFullPathName());
+            return false;
+        }
+    }
+    else
+    {
+        // Read by another file, in any state the history holds: a sequence
+        // whose spans come from it. Those keep reading it where it is.
+        bool readByOthers = false;
+        history_.forEachState([&](const model::Song& song)
+        {
+            app::media::forEachAudioPath(song, [&](const std::string& path)
+            {
+                const auto audio = app::media::fileFromPath(path);
+                if (audio != from && engine::sequencefile::filesUsedBy(audio).contains(from))
+                    readByOthers = true;
+            });
+        });
+
+        const bool moved = ! readByOthers && from.moveFileTo(to);
+        if (! moved && ! from.copyFileTo(to))
+        {
+            showError("Could not write " + to.getFullPathName());
+            return false;
+        }
+    }
+
+    const auto toPath = app::media::pathOf(to);
+    const auto relink = [&from, &toPath](std::string& path)
+    {
+        if (! path.empty() && app::media::fileFromPath(path) == from)
+            path = toPath;
+    };
+    history_.forEachStateMutable([&relink](model::Song& song)
+    {
+        for (auto& track : song.tracks)
+        {
+            for (auto& clip : track.clips)
+            {
+                relink(clip.audioFile);
+                for (auto& take : clip.takes)
+                    relink(take.audioFile);
+            }
+        }
+    });
+
+    // Same audio at a new path: the engine and the panes follow the document.
+    syncEngineTracks();
+    arrangementView_.setSong(history_.current());
+    refreshAudioEditorForSelected();
+    updateOpenFilesPane();
+    return true;
+}
+
 void MainComponent::closeOpenFile(int clipId)
 {
     const auto* showing = selectedAudioClip();
